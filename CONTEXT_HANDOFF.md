@@ -1,0 +1,113 @@
+# Project Context Handoff — Interview Question Bank + Search Backend
+
+## Goal
+Build a searchable interview-prep question bank (target **1,000 questions now, ~30,000 later**) that any human or LLM can search in **milliseconds**. Topics span: .NET/C#/ASP.NET Core, Angular, React, SQL & stored-procedure optimization, Azure (Entra ID, API Management, Redis [hashset vs KVP], Service Bus queue/topic, Logic Apps, Function Apps [http/timer/event triggers], Blob [block/append/page], Hangfire), MongoDB, microservices, event-driven architecture, Semantic Kernel / AI agents / AI orchestration, REST APIs, auth/security, Docker/K8s, CI/CD, logging/monitoring, testing (incl. Cucumber/BDD, Selenium, Karate, TestNG, Jest), Clean Architecture & SOLID, Power BI/SSIS/ETL, JS/TS, system design, and behavioral.
+
+## User's deployment stack (FINAL — build for this)
+- **Frontend:** React (hosting mentioned: Netlify)
+- **Backend:** .NET (Web API)
+- **Database:** PostgreSQL on **Supabase** (free tier)
+- Scale plan: 1,000 rows now, 30,000 confirmed soon.
+
+## FINAL ARCHITECTURE DECISION (agreed)
+Use **PostgreSQL full-text search (FTS) on Supabase, queried through the .NET API.**
+Rationale: they already have Postgres; FTS with a GIN index handles 30k (and millions) in ~1–5 ms; no new infrastructure; no data movement. Rejected alternatives: shipping SQLite to browser, client-side JSON search (fine ≤10k but 30k JSON is too big to ship), and managed search (Algolia/Typesense/Azure AI Search = overkill at this scale).
+
+### Verified benchmark (ran real PostgreSQL 16 at 30,415 rows)
+- FTS query WITH GIN index: **~2.2 ms** (plan = Bitmap Index Scan on `questions_search_idx`).
+- Same query WITHOUT index (≈ plain LIKE, seq scan): **~23 ms** (~10× slower; gap widens with size).
+- Trigram typo tolerance (`pg_trgm`): misspelled "kubernets" matched in ~7 ms via `questions_trgm_idx`.
+- Stemming confirmed: "redis eviction policy" → tsquery `redi & evict & polici`.
+
+### CRITICAL implementation rule
+The .NET query MUST use the FTS operator to hit the index:
+```sql
+where search @@ websearch_to_tsquery('english', @q)
+```
+In EF Core: `x.Search.Matches(EF.Functions.WebSearchToTsQuery("english", q))`.
+Do NOT use `LIKE '%..%'` / `.Contains()` — it bypasses the index and drops to the slow ~23 ms path.
+
+## Database schema (Supabase / PostgreSQL) — already designed & tested
+```sql
+create extension if not exists pg_trgm;
+
+create table questions (
+  id          bigint generated always as identity primary key,
+  category    text,
+  subcategory text,
+  difficulty  text,
+  question    text not null,
+  answer      text not null,
+  tags        text,
+  search tsvector generated always as (
+    setweight(to_tsvector('english', coalesce(question,'')), 'A') ||
+    setweight(to_tsvector('english', coalesce(tags,'')),     'B') ||
+    setweight(to_tsvector('english', coalesce(answer,'')),   'C') ||
+    setweight(to_tsvector('english', coalesce(category,'')), 'D')
+  ) stored
+);
+create index questions_search_idx on questions using gin(search);
+create index questions_trgm_idx   on questions using gin(question gin_trgm_ops);
+create index questions_cat_idx    on questions(category);
+create index questions_diff_idx   on questions(difficulty);
+```
+Weights: question=A (highest rank), tags=B, answer=C, category=D. `search` column is auto-generated — never maintained manually.
+
+### Canonical search query (ranked, user-friendly syntax)
+```sql
+select id, category, question, answer,
+       ts_rank_cd(search, websearch_to_tsquery('english', $1)) as rank
+from questions
+where search @@ websearch_to_tsquery('english', $1)
+  and ($2 is null or category = $2)
+order by rank desc
+limit 20;
+```
+
+## Current deliverables (state)
+Content authored: **1,502 questions** (real Q&A, each with a full answer), stored as JSON source split by topic across data/*.json (files 01–57).
+
+Category breakdown (approx): C#/.NET 257, Azure 154, Architecture 132, SQL 118, DevOps 100, React 91, Angular 88, AI/LLM (Semantic Kernel/RAG/agents) 79, Security 61, Testing 61, CS Fundamentals 58, Data/BI (Power BI/SSIS/ETL/Python) 46, REST APIs 39, JS/TypeScript 37, System Design 36, MongoDB 35, Behavioral 33, Frontend (HTML/CSS) 32, Observability 28, Databases/caching 17.
+
+Files produced:
+- `data/*.json` — **source of truth** (17 topic files; where questions get added/extended).
+- `build.py` — compiles `data/` → `interview_qbank.json` (merged) + `interview_qbank.sqlite` (SQLite FTS5, used only for local dev/testing, NOT for production).
+- `gen_sql.py` — generates `supabase_setup_and_seed.sql` (schema + indexes + all INSERTs) from the JSON.
+- `schema.sql` — schema-only migration (structure + indexes, no data).
+- `search.py` — local CLI to test search over the SQLite build.
+- `supabase_setup_and_seed.sql` — **the file to run in Supabase** (creates table + indexes + inserts all 553 rows). ~297 KB. Regenerate after adding questions.
+- `README.md`, `.gitignore`.
+
+Row schema per question object in JSON: `{category, subcategory, difficulty, question, answer, tags[]}` (id assigned at build time).
+
+## Git / GitHub status
+- Repo: **https://github.com/srai54/Questionbank** (public).
+- Uploaded so far (via web UI): `.gitignore, LICENSE (Apache-2.0), README.md, build.py, gen_sql.py, schema.sql, search.py`.
+- **MISSING on GitHub: the `data/` folder** (the actual questions) — user needs to upload it (Add file → Upload files → drag `data` folder in Chrome/Edge). Non-blocking for the app.
+- Version-control policy decided: **track source + scripts only** (`data/`, `*.py`, `schema.sql`, README, .gitignore). **Do NOT track generated artifacts** (`interview_qbank.sqlite`, `interview_qbank.json`, `supabase_setup_and_seed.sql`) — they're rebuilt from `data/` and are already in `.gitignore`.
+- NOTE: Agent could not push directly — this session's egress proxy blocks writes to repos not in the authorized set (403 policy denial), independent of any token. User must upload manually or authorize the repo as a session source. A PAT was shared in chat and user was advised to REVOKE it.
+
+## Extend-later workflow
+1. Add questions to a `data/*.json` file.
+2. Run `python build.py` and `python gen_sql.py` (regenerates artifacts + Supabase seed).
+3. Commit only `data/` changes to Git.
+4. Re-run the seed SQL on Supabase (script does `drop table if exists questions` then recreates — safe to re-run), OR insert only new rows for large sets.
+
+## PENDING / next steps (not yet done)
+1. **.NET search endpoint** — e.g. `GET /api/questions/search?q=&category=&page=` using Npgsql/EF Core with the FTS operator above; keyset or offset pagination; return ranked results. (Not yet written.)
+2. **React search component** — search box calling that endpoint, debounced input, renders ranked Q&A. (Not yet written.)
+3. User to run the seed in Supabase (SQL Editor → paste `supabase_setup_and_seed.sql` → Run) and verify `select count(*) from questions;` returns 1502.
+4. To extend the bank: add entries to a `data/*.json` file (same object schema), then run `python build.py` and `python gen_sql.py`, and re-run the seed in Supabase.
+
+## Regenerating artifacts (for a future agent)
+- `python build.py` → rebuilds `interview_qbank.json` (merged) + `interview_qbank.sqlite` (FTS5, local testing only).
+- `python gen_sql.py` → rebuilds `supabase_setup_and_seed.sql` from the JSON.
+- `python search.py "your query"` → local millisecond search over the SQLite build (uses FTS5 BM25).
+- Each `data/*.json` entry: `{ "category", "subcategory", "difficulty", "question", "answer", "tags": [] }` (id auto-assigned at build).
+
+## Supabase operational notes
+- Enable `pg_trgm` extension (the seed script does `create extension if not exists`).
+- Connection pooling: use Supabase pooler (port **6543**, transaction mode) for serverless/autoscaling .NET, or session pooler / direct (5432) for a long-running App Service; keep Npgsql pooling on. This matters more than search tuning at scale.
+- Free tier (500 MB) is ample for 1k and 30k rows.
+- Redis/managed search NOT needed at this scale.
+- If backend is later hosted: prefer Azure App Service/Container Apps over Render free tier (Render free tier cold-starts 30–50s).
