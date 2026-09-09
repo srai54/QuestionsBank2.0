@@ -1,5 +1,7 @@
 import json
-rows = json.load(open("interview_qbank.json", encoding="utf-8"))
+import os
+_src = "questions.json" if os.path.exists("questions.json") else "interview_qbank.json"
+rows = json.load(open(_src, encoding="utf-8"))
 
 def esc(s):
     if s is None: return ''

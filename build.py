@@ -1,31 +1,34 @@
 #!/usr/bin/env python3
-"""Compile all topic JSON files into a searchable SQLite (FTS5) DB + a merged JSON file.
+"""Compile the question bank into a searchable SQLite (FTS5) DB + a merged JSON file.
+
+Source of truth: questions.json (a single JSON array of all questions).
+(For backward compatibility, if questions.json is absent it falls back to data/*.json.)
 
 Usage: python3 build.py
 Outputs:
   interview_qbank.sqlite   -> table `questions` + FTS5 index `questions_fts`
-  interview_qbank.json     -> merged array of all questions
+  interview_qbank.json     -> merged/normalized array of all questions (with ids)
 """
 import json, glob, os, sqlite3, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SINGLE = os.path.join(HERE, "questions.json")
 DATA_DIR = os.path.join(HERE, "data")
 
 def load():
     rows = []
-    for fp in sorted(glob.glob(os.path.join(DATA_DIR, "*.json"))):
-        with open(fp, encoding="utf-8") as f:
-            try:
-                items = json.load(f)
-            except json.JSONDecodeError as e:
-                print(f"JSON error in {fp}: {e}", file=sys.stderr); raise
-        for it in items:
-            it.setdefault("category", "General")
-            it.setdefault("subcategory", "")
-            it.setdefault("difficulty", "Medium")
-            it.setdefault("tags", [])
-            rows.append(it)
-    # assign stable ids
+    if os.path.exists(SINGLE):
+        with open(SINGLE, encoding="utf-8") as f:
+            rows = json.load(f)
+    else:
+        for fp in sorted(glob.glob(os.path.join(DATA_DIR, "*.json"))):
+            with open(fp, encoding="utf-8") as f:
+                rows.extend(json.load(f))
+    for r in rows:
+        r.setdefault("category", "General")
+        r.setdefault("subcategory", "")
+        r.setdefault("difficulty", "Medium")
+        r.setdefault("tags", [])
     for i, r in enumerate(rows, 1):
         r["id"] = i
     return rows
@@ -51,7 +54,6 @@ def build_sqlite(rows):
     cur.execute("CREATE INDEX idx_cat ON questions(category)")
     cur.execute("CREATE INDEX idx_sub ON questions(subcategory)")
     cur.execute("CREATE INDEX idx_diff ON questions(difficulty)")
-    # FTS5 full-text index for millisecond search across question/answer/tags/category
     cur.execute("""
         CREATE VIRTUAL TABLE questions_fts USING fts5(
             question, answer, tags, category, subcategory,
@@ -74,7 +76,6 @@ if __name__ == "__main__":
     rows = load()
     j = build_json(rows)
     s = build_sqlite(rows)
-    # summary
     from collections import Counter
     c = Counter(r["category"] for r in rows)
     print(f"Total questions: {len(rows)}")
