@@ -57156,5 +57156,2017 @@
    "practices"
   ],
   "id": 4080
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "How do you structure a codebase around LLM calls so it stays testable?",
+  "answer": "Separate prompt construction, the model call behind an interface, response parsing and business logic into distinct units. Then prompts can be snapshot-tested, parsing tested with recorded responses, and logic tested with no model at all - leaving only a small evaluation suite that actually calls the provider.",
+  "tags": [
+   "ai",
+   "architecture",
+   "testing",
+   "dotnet"
+  ],
+  "id": 4081
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "Where should retry logic live for LLM calls?",
+  "answer": "In a resilience layer around the client handling transient errors and rate limits with backoff, separate from application logic that decides whether a semantically poor response should be regenerated. Conflating them means a validation failure triggers the same backoff as a throttle, which wastes time and money.",
+  "tags": [
+   "ai",
+   "resilience",
+   "architecture",
+   "engineering"
+  ],
+  "id": 4082
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "How do you handle a response that fails schema validation?",
+  "answer": "Retry once with the validation error appended so the model can correct itself, then fall back to a deterministic default or an error rather than looping. Log every occurrence with the prompt version, because a rising repair rate is the earliest signal that a prompt or model change has degraded output.",
+  "tags": [
+   "ai",
+   "structured-output",
+   "reliability",
+   "engineering"
+  ],
+  "id": 4083
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "How do you stream a response while still validating it?",
+  "answer": "Stream tokens to the user for perceived responsiveness but validate the complete result before acting on it - never execute a tool call or persist data from a partial stream. For structured output, stream the human-readable part and produce the machine-readable part as a separate non-streamed field or call.",
+  "tags": [
+   "ai",
+   "streaming",
+   "validation",
+   "ux"
+  ],
+  "id": 4084
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "What should you cache in an LLM application?",
+  "answer": "Embeddings, which are deterministic per model and text; retrieval results for repeated queries; and completions for identical prompts where staleness is acceptable. Cache keys must include the model and prompt version, otherwise an upgrade silently serves responses from the old configuration.",
+  "tags": [
+   "ai",
+   "caching",
+   "cost",
+   "engineering"
+  ],
+  "id": 4085
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "How do you handle very long documents that exceed the context window?",
+  "answer": "Chunk and retrieve the relevant parts, or summarise hierarchically - summarise sections, then summarise the summaries - depending on whether the task needs specific passages or overall understanding. Map-reduce over chunks works for extraction; it loses cross-chunk reasoning, which is where the approach fails.",
+  "tags": [
+   "ai",
+   "context",
+   "summarisation",
+   "design"
+  ],
+  "id": 4086
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "What is the difference between stuffing, map-reduce and refine strategies for long input?",
+  "answer": "Stuffing puts everything in one prompt - simple, limited by context. Map-reduce processes chunks independently then combines, parallelisable but loses cross-chunk relationships. Refine passes an accumulating answer through chunks sequentially, preserving continuity at the cost of serialisation and drift over many chunks.",
+  "tags": [
+   "ai",
+   "summarisation",
+   "patterns",
+   "design"
+  ],
+  "id": 4087
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "How do you evaluate whether retrieval or the prompt is responsible for a bad answer?",
+  "answer": "Log the retrieved context with each response, then manually check whether the correct information was present. If it was, the problem is generation - prompt, model or context length. If not, it is retrieval. Without logging the context, this is unanswerable and teams tune prompts to fix retrieval failures.",
+  "tags": [
+   "ai",
+   "rag",
+   "diagnostics",
+   "evaluation"
+  ],
+  "id": 4088
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "What is a reasonable first architecture for an internal document assistant?",
+  "answer": "Ingest documents to a vector store with metadata and access labels, hybrid retrieval with reranking, a grounded prompt requiring citation, streaming responses, logging of the full trace, and a feedback control. Add agents, tools and multi-step reasoning only once that baseline is measured and insufficient.",
+  "tags": [
+   "ai",
+   "rag",
+   "architecture",
+   "design"
+  ],
+  "id": 4089
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "How do you keep an LLM feature from becoming impossible to change?",
+  "answer": "Version prompts and models explicitly, maintain an evaluation suite that must pass, keep the retrieval index rebuildable, log traces so behaviour is reconstructable, and avoid encoding business rules in prose the model may ignore. Without these, nobody dares change a prompt that currently works.",
+  "tags": [
+   "ai",
+   "maintainability",
+   "evaluation",
+   "practices"
+  ],
+  "id": 4090
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "How do you prepare documents for ingestion into a knowledge base?",
+  "answer": "Extract text with structure preserved, remove boilerplate such as headers and navigation, normalise encoding, split by semantic boundaries, attach metadata including source and effective date, and deduplicate near-identical documents. Ingestion quality determines retrieval quality more than any later tuning.",
+  "tags": [
+   "ai",
+   "rag",
+   "ingestion",
+   "data"
+  ],
+  "id": 4091
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "How do you handle duplicate or near-duplicate content in a retrieval corpus?",
+  "answer": "Deduplicate at ingestion by hashing normalised text and by embedding similarity above a threshold, keeping the most authoritative or recent version. Otherwise retrieval returns several copies of the same passage, wasting context and crowding out the other information the answer needed.",
+  "tags": [
+   "ai",
+   "rag",
+   "deduplication",
+   "data"
+  ],
+  "id": 4092
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "What do you do about documents that contradict each other?",
+  "answer": "Prefer the authoritative or most recent source through metadata filtering and ranking, and where genuine conflict remains, surface both with their sources rather than letting the model silently choose. Conflicting policy documents are common in real corpora and are a governance problem the retrieval layer can only expose, not resolve.",
+  "tags": [
+   "ai",
+   "rag",
+   "data-quality",
+   "design"
+  ],
+  "id": 4093
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "How do you measure the quality of an ingestion pipeline?",
+  "answer": "Extraction fidelity on a sample of representative documents, chunk boundary sanity, metadata completeness, and end-to-end retrieval recall on known question-document pairs. A pipeline that silently drops tables or footnotes produces a knowledge base that is confidently missing exactly the detailed content users ask about.",
+  "tags": [
+   "ai",
+   "rag",
+   "evaluation",
+   "data-quality"
+  ],
+  "id": 4094
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you design an API for a resource with a complex lifecycle?",
+  "answer": "Expose the state explicitly as a field with a documented set of values and transitions, and model transitions as sub-resources or actions rather than allowing arbitrary state assignment. That makes invalid transitions rejectable and gives a natural place to record who changed what and when.",
+  "tags": [
+   "rest",
+   "api-design",
+   "state-machine",
+   "modelling"
+  ],
+  "id": 4095
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Should an API expose internal identifiers?",
+  "answer": "Prefer opaque identifiers that do not reveal volume or ordering and are not tied to your storage - sequential integers leak business information and couple the contract to the database. If you already expose them, adding a public identifier later is a breaking change, so it is worth deciding early.",
+  "tags": [
+   "rest",
+   "api-design",
+   "identifiers",
+   "security"
+  ],
+  "id": 4096
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle an endpoint whose response would be enormous?",
+  "answer": "Paginate by default with a maximum page size, offer field selection, provide an asynchronous export for bulk needs, and consider streaming for genuinely large sequential data. An endpoint that can return a hundred megabytes will eventually be called in a loop by someone and take the service down.",
+  "tags": [
+   "rest",
+   "api-design",
+   "pagination",
+   "reliability"
+  ],
+  "id": 4097
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between filtering, searching and querying in an API?",
+  "answer": "Filtering restricts by exact field values, searching matches text with relevance ranking, and querying implies a general expression language. Each has different performance, caching and injection characteristics, and conflating them produces an endpoint that is simultaneously too limited and too dangerous.",
+  "tags": [
+   "rest",
+   "api-design",
+   "search",
+   "filtering"
+  ],
+  "id": 4098
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you expose aggregated or computed data in a REST API?",
+  "answer": "As its own resource representing the report or summary, with parameters for the dimensions and period, rather than overloading a collection endpoint with aggregation flags. That keeps caching and authorisation coherent and avoids an endpoint whose response shape depends on its query string.",
+  "tags": [
+   "rest",
+   "api-design",
+   "aggregation",
+   "reporting"
+  ],
+  "id": 4099
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How should an API handle a request that is valid but cannot be fulfilled right now?",
+  "answer": "409 for a state conflict, 422 or 400 for a rule violation, 429 for rate limiting, 503 with Retry-After for temporary unavailability - and a body explaining which condition applies and what would change it. Returning a generic 400 for all of them gives the client nothing actionable.",
+  "tags": [
+   "rest",
+   "http-status",
+   "errors",
+   "api-design"
+  ],
+  "id": 4100
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you secure a public API endpoint that must remain unauthenticated?",
+  "answer": "Rate limit aggressively by address and fingerprint, keep the response minimal so it has little value to abuse, add bot detection where warranted, cache heavily at the edge so origin load is bounded, and monitor for scraping patterns. Accept that anything unauthenticated will be scraped and design the data accordingly.",
+  "tags": [
+   "rest",
+   "security",
+   "rate-limiting",
+   "api-design"
+  ],
+  "id": 4101
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "What is the risk of verbose error messages in an API?",
+  "answer": "They reveal stack traces, framework versions, file paths, SQL and internal identifiers that assist an attacker in mapping the system. Return a generic message with a correlation id publicly, and keep the detail in logs. The same detail that helps a developer helps someone probing the service.",
+  "tags": [
+   "rest",
+   "security",
+   "errors",
+   "practices"
+  ],
+  "id": 4102
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you protect against parameter tampering in an API?",
+  "answer": "Never trust client-supplied values that determine authority - price, role, owner, tenant - and re-derive them server-side from the authenticated context or from your own records. Signing values so tampering is detectable is a fallback when a value genuinely must round-trip through the client.",
+  "tags": [
+   "rest",
+   "security",
+   "validation",
+   "api-design"
+  ],
+  "id": 4103
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What should you monitor for a public API?",
+  "answer": "Request rate, error rate and latency per endpoint and per consumer, rate limit rejections, authentication failures, payload sizes, and the version distribution of clients. Per-consumer breakdown is what lets you distinguish one misbehaving integration from a general problem.",
+  "tags": [
+   "rest",
+   "observability",
+   "monitoring",
+   "operations"
+  ],
+  "id": 4104
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you roll out a change to an API used by external consumers?",
+  "answer": "Announce with lead time, deploy additively so nothing breaks, monitor adoption per consumer, provide a sandbox for testing, and only then deprecate the old behaviour with a published sunset date. External consumers cannot be redeployed on your schedule, which is the fundamental constraint.",
+  "tags": [
+   "rest",
+   "versioning",
+   "deployment",
+   "operations"
+  ],
+  "id": 4105
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you handle a consumer that is abusing your API?",
+  "answer": "Identify them through per-key telemetry, apply a targeted rate limit rather than a global one, contact them with specifics, and provide the endpoint or pattern that would meet their need efficiently. Blocking without communication converts a technical problem into a commercial one.",
+  "tags": [
+   "rest",
+   "operations",
+   "rate-limiting",
+   "practices"
+  ],
+  "id": 4106
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you decide whether to add an index in MongoDB?",
+  "answer": "From the queries that actually run - the profiler or slow query log - checking the examined-to-returned ratio and whether a sort is done in memory. Then weigh the write cost and memory footprint. Indexes added speculatively for queries nobody runs cost writes and RAM permanently.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "performance",
+   "tuning"
+  ],
+  "id": 4107
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is index intersection in MongoDB and why is it rarely optimal?",
+  "answer": "The planner can combine two indexes for a query, but it is usually slower than a single compound index because it must fetch and intersect result sets. Its existence is a reason not to assume single-field indexes are sufficient - the compound index matching the query shape is what actually performs.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "query-planner",
+   "performance"
+  ],
+  "id": 4108
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How does the MongoDB query planner choose an index?",
+  "answer": "It trials candidate plans on a sample of work, caches the winner for that query shape, and re-evaluates periodically or after significant changes. That means a plan can be cached from an unrepresentative execution, which is the MongoDB equivalent of parameter sniffing and is cleared by flushing the plan cache.",
+  "tags": [
+   "mongodb",
+   "query-planner",
+   "performance",
+   "internals"
+  ],
+  "id": 4109
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the impact of large documents on performance?",
+  "answer": "Every read transfers and deserialises the whole document unless projected, updates rewrite it if it grows beyond its allocation, and fewer documents fit in cache. Splitting rarely accessed large fields into a separate collection is the standard remedy when documents grow into hundreds of kilobytes.",
+  "tags": [
+   "mongodb",
+   "performance",
+   "documents",
+   "modelling"
+  ],
+  "id": 4110
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you speed up a bulk write in MongoDB?",
+  "answer": "Use bulkWrite with unordered operations so failures do not stop the batch and the driver can parallelise, size batches to stay within the message limit, and drop non-essential indexes during a very large load. Writing documents individually costs a round trip each and dominates the time.",
+  "tags": [
+   "mongodb",
+   "bulk",
+   "performance",
+   "operations"
+  ],
+  "id": 4111
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you add an index to a large production MongoDB collection?",
+  "answer": "Build it in the background on a rolling basis across replica set members, or use the default non-blocking build in recent versions, monitoring the impact on IO and replication lag. Building on a busy primary without care can degrade the whole cluster for the duration.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "operations",
+   "reliability"
+  ],
+  "id": 4112
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What causes replication lag in MongoDB and why does it matter?",
+  "answer": "Heavy write volume, long-running index builds, slow disks on secondaries, or a secondary busy serving reads. It matters because lagged secondaries serve stale reads, cannot be promoted without data loss beyond your RPO, and if lag exceeds the oplog window the member requires a full resync.",
+  "tags": [
+   "mongodb",
+   "replication",
+   "operations",
+   "monitoring"
+  ],
+  "id": 4113
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you plan capacity for a MongoDB deployment?",
+  "answer": "Size memory against the working set including indexes, disk against data plus oplog plus growth and index builds, and IOPS against the write and read rate. The index size is frequently underestimated and is what pushes the working set out of memory as the collection grows.",
+  "tags": [
+   "mongodb",
+   "capacity",
+   "operations",
+   "performance"
+  ],
+  "id": 4114
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What should you check before enabling sharding?",
+  "answer": "Whether vertical scaling and index tuning are genuinely exhausted, whether a shard key exists that distributes both writes and queries, whether your queries can include it, and whether the operational complexity is affordable. Sharding a workload with no good key produces a distributed system that is slower than the single node it replaced.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "scalability",
+   "decision-making"
+  ],
+  "id": 4115
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you model hierarchical data in MongoDB?",
+  "answer": "Parent reference for simple traversal, an array of ancestors for subtree queries in one lookup, materialised path for prefix matching, or nested documents for shallow fixed hierarchies. Choose by which query dominates - finding children, finding all descendants, or finding the path to root.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "hierarchies",
+   "patterns"
+  ],
+  "id": 4116
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you handle schema evolution across millions of existing documents?",
+  "answer": "Version each document, write the new shape going forward, read tolerantly for both, and migrate lazily on access or in a background batch job with a resumable cursor. A single updateMany over millions of documents locks resources and cannot be paused, which is why incremental migration is standard.",
+  "tags": [
+   "mongodb",
+   "migrations",
+   "schema",
+   "operations"
+  ],
+  "id": 4117
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "When should you denormalise in MongoDB and how do you keep copies consistent?",
+  "answer": "When the read pattern requires the data together and the copied fields change rarely. Keep them consistent by making one service own the write, updating copies through change streams or an event, and running a periodic reconciliation - because a missed update leaves a stale copy that nothing detects.",
+  "tags": [
+   "mongodb",
+   "denormalisation",
+   "consistency",
+   "modelling"
+  ],
+  "id": 4118
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "What is the polymorphic pattern in MongoDB?",
+  "answer": "Storing documents of different shapes in one collection with a type discriminator, which suits variations of a common concept queried together - different product categories, different event types. It works because the database does not require a fixed schema, and it needs schema validation to stay disciplined.",
+  "tags": [
+   "mongodb",
+   "patterns",
+   "modelling",
+   "polymorphism"
+  ],
+  "id": 4119
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Warehouse",
+  "difficulty": "Medium",
+  "question": "What is the difference between a data warehouse and an operational data store?",
+  "answer": "A warehouse holds historical, integrated, subject-oriented data optimised for analysis. An operational data store holds current integrated data for operational reporting and lookups, refreshed frequently and not retaining deep history. Using a warehouse for operational lookups produces stale answers with warehouse latency.",
+  "tags": [
+   "data-warehouse",
+   "architecture",
+   "ods",
+   "modelling"
+  ],
+  "id": 4120
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Warehouse",
+  "difficulty": "Medium",
+  "question": "What is a staging layer and why keep it?",
+  "answer": "A landing area holding source data as extracted, before transformation. Keeping it means transformations can be rerun without re-extracting, source changes can be diagnosed by comparing to what actually arrived, and reprocessing after a logic bug does not depend on the source retaining history.",
+  "tags": [
+   "data-warehouse",
+   "etl",
+   "staging",
+   "architecture"
+  ],
+  "id": 4121
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Warehouse",
+  "difficulty": "Medium",
+  "question": "How do you decide the grain when the source data is transactional?",
+  "answer": "Choose the lowest level that answers the questions being asked, usually the transaction line, because aggregating up is always possible and disaggregating is not. Storing pre-aggregated data because it is smaller is the decision teams most often regret when a new question requires detail that was discarded.",
+  "tags": [
+   "data-warehouse",
+   "grain",
+   "modelling",
+   "design"
+  ],
+  "id": 4122
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Warehouse",
+  "difficulty": "Medium",
+  "question": "What is a bridge table and when do you need one?",
+  "answer": "A table resolving a many-to-many relationship between a fact and a dimension - several sales representatives on one order, several diagnoses per admission - often with an allocation weight so measures are not double counted. Without it, joining directly multiplies the fact rows and inflates every total.",
+  "tags": [
+   "data-warehouse",
+   "bridge-table",
+   "modelling",
+   "dimensional"
+  ],
+  "id": 4123
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Warehouse",
+  "difficulty": "Medium",
+  "question": "How do you handle a dimension attribute that arrives after the fact?",
+  "answer": "Create an inferred dimension member with a placeholder when the fact loads, then update it when the real record arrives, keeping the surrogate key stable so the fact does not need rewriting. Rejecting the fact until the dimension exists loses data that may never be reprocessed.",
+  "tags": [
+   "data-warehouse",
+   "late-arriving",
+   "etl",
+   "modelling"
+  ],
+  "id": 4124
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Warehouse",
+  "difficulty": "Medium",
+  "question": "What is the difference between a snapshot fact and a transaction fact?",
+  "answer": "A transaction fact records an event as it happens; a periodic snapshot records state at intervals - daily balances, inventory levels - and an accumulating snapshot tracks a process with milestone dates updated in place. Each answers different questions, and using only transaction facts makes state-at-a-point queries expensive.",
+  "tags": [
+   "data-warehouse",
+   "facts",
+   "modelling",
+   "dimensional"
+  ],
+  "id": 4125
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Warehouse",
+  "difficulty": "Medium",
+  "question": "How do you handle deleted records from a source system?",
+  "answer": "Prefer soft deletes or a change feed exposing deletions; where the source only offers a full extract, detect absence by comparison. Then decide whether the warehouse deletes, marks inactive, or retains for history - which is a business decision about whether reports should change retrospectively.",
+  "tags": [
+   "data-warehouse",
+   "etl",
+   "deletes",
+   "modelling"
+  ],
+  "id": 4126
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Warehouse",
+  "difficulty": "Medium",
+  "question": "What is a surrogate key pipeline and why does key management matter?",
+  "answer": "The process assigning and looking up warehouse keys during loading. It matters because facts must reference the dimension version current at their event time, lookups must be fast at volume, and keys must be stable across reloads - a regenerated key set orphans every previously loaded fact.",
+  "tags": [
+   "data-warehouse",
+   "keys",
+   "etl",
+   "modelling"
+  ],
+  "id": 4127
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you handle outliers in an analysis?",
+  "answer": "Investigate before removing - an outlier is often a data quality problem or the most interesting case rather than noise. If removal is justified, document the rule, apply it consistently, and report both figures. Silently trimming is how an analysis becomes unreproducible and quietly wrong.",
+  "tags": [
+   "bi",
+   "statistics",
+   "analysis",
+   "practices"
+  ],
+  "id": 4128
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "What is survivorship bias in a data analysis?",
+  "answer": "Analysing only the entities that remain - active customers, completed orders, surviving accounts - and drawing conclusions that do not hold for the population. It is common in retention and satisfaction analysis, where the unhappy customers left and are therefore absent from the data being celebrated.",
+  "tags": [
+   "bi",
+   "statistics",
+   "bias",
+   "analysis"
+  ],
+  "id": 4129
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "Why does a metric sometimes change when nothing changed?",
+  "answer": "A definition change, a late-arriving data load, a time zone or boundary shift, a backfill correcting history, or a dimension reclassification. Version metric definitions, timestamp the data load, and make it possible to reproduce yesterday's number - otherwise every such change looks like a data error.",
+  "tags": [
+   "bi",
+   "metrics",
+   "reproducibility",
+   "data-quality"
+  ],
+  "id": 4130
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you make an analysis reproducible?",
+  "answer": "Version the query and the transformation code, pin the data snapshot or record the load timestamp, document the filters and definitions, and keep the output alongside the code that produced it. An analysis reproduced only by the person who wrote it is not a result, it is an opinion with charts.",
+  "tags": [
+   "bi",
+   "reproducibility",
+   "practices",
+   "analysis"
+  ],
+  "id": 4131
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Governance",
+  "difficulty": "Medium",
+  "question": "What is a data steward and what do they actually do?",
+  "answer": "An accountable owner for a data domain who defines terms, sets quality expectations, approves access and resolves conflicts about meaning. The role exists because data quality problems are usually definitional and organisational rather than technical, and technical teams cannot resolve them alone.",
+  "tags": [
+   "data-governance",
+   "roles",
+   "organisation",
+   "practices"
+  ],
+  "id": 4132
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Governance",
+  "difficulty": "Medium",
+  "question": "What belongs in a data catalogue?",
+  "answer": "Datasets with owners, descriptions in business terms, schemas, lineage, freshness and quality indicators, classification, and how to request access. Its value is answering can I trust this and may I use it - a catalogue that lists only technical schemas answers neither.",
+  "tags": [
+   "data-governance",
+   "catalogue",
+   "discovery",
+   "practices"
+  ],
+  "id": 4133
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Governance",
+  "difficulty": "Medium",
+  "question": "How do you control access to analytical data?",
+  "answer": "Role-based access at the dataset level, row-level security for tenant or region restriction, column masking for sensitive fields, and separate environments for masked development data. Granting analysts broad warehouse access because it is convenient is how personal data spreads into spreadsheets.",
+  "tags": [
+   "data-governance",
+   "security",
+   "access-control",
+   "compliance"
+  ],
+  "id": 4134
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Governance",
+  "difficulty": "Medium",
+  "question": "What is the difference between data quality and data observability?",
+  "answer": "Quality is whether the data meets defined expectations; observability is the ability to detect and diagnose when it does not - freshness, volume, schema and distribution monitoring with alerting. Quality rules catch what you predicted; observability catches the upstream change nobody told you about.",
+  "tags": [
+   "data-governance",
+   "data-quality",
+   "observability",
+   "practices"
+  ],
+  "id": 4135
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Governance",
+  "difficulty": "Medium",
+  "question": "How do you handle a request to delete a person's data from a warehouse?",
+  "answer": "Locate every dataset containing it using the catalogue and lineage, delete or anonymise in the source and downstream layers, handle backups through documented retention rather than surgical deletion, and record the action. Systems without lineage cannot answer the request completely, which is the compliance risk.",
+  "tags": [
+   "data-governance",
+   "privacy",
+   "gdpr",
+   "compliance"
+  ],
+  "id": 4136
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "How do you make a pipeline restartable after a mid-run failure?",
+  "answer": "Checkpoint progress at a granularity that makes rerunning cheap, make each step idempotent, write to a staging location and swap atomically on completion, and record the watermark only after a successful commit. Partial writes visible to consumers are what makes a failed run damaging rather than merely inconvenient.",
+  "tags": [
+   "etl",
+   "reliability",
+   "idempotency",
+   "pipelines"
+  ],
+  "id": 4137
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "What is a data contract between a producer and a warehouse team?",
+  "answer": "An agreement on schema, semantics, freshness, volume expectations and change notice, enforced by automated validation at ingestion. It converts the common failure - an upstream team renames a column without warning - from a silent downstream break into a caught contract violation with a named owner.",
+  "tags": [
+   "etl",
+   "data-contracts",
+   "governance",
+   "practices"
+  ],
+  "id": 4138
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "How do you orchestrate dependencies between pipeline jobs?",
+  "answer": "With a scheduler expressing them as a directed acyclic graph so a downstream job runs only when its inputs succeeded, with retries, timeouts and alerting per task. Chaining jobs by scheduling them at fixed times separated by a guess is what produces reports built from yesterday's half-loaded data.",
+  "tags": [
+   "etl",
+   "orchestration",
+   "scheduling",
+   "reliability"
+  ],
+  "id": 4139
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "What is backfilling and what makes it risky?",
+  "answer": "Reprocessing historical periods after a logic change or a failure. The risks are producing duplicates if the load is not idempotent, overwhelming shared resources, and changing published historical numbers without anyone expecting it. Backfills should be partitioned, rate-limited and announced.",
+  "tags": [
+   "etl",
+   "backfill",
+   "operations",
+   "reliability"
+  ],
+  "id": 4140
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "How do you monitor a data pipeline meaningfully?",
+  "answer": "Freshness of the output, row counts against expected ranges, failure and retry rates, run duration trends, and quality check results - with alerting on absence of a run as well as on failure. Duration trending upward is the early warning that a pipeline will eventually miss its window.",
+  "tags": [
+   "etl",
+   "monitoring",
+   "observability",
+   "operations"
+  ],
+  "id": 4141
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "What is the difference between batch and streaming for a given use case?",
+  "answer": "Batch is simpler, cheaper and easier to reprocess, with latency measured in minutes to hours. Streaming gives seconds of latency at the cost of complexity in state, ordering, late data and exactly-once semantics. Choose streaming only when the business decision genuinely depends on freshness at that scale.",
+  "tags": [
+   "etl",
+   "streaming",
+   "architecture",
+   "trade-offs"
+  ],
+  "id": 4142
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "How do you test a change to a transformation that affects historical data?",
+  "answer": "Run the new logic into a parallel output, compare aggregates and a row-level sample against the current output across several periods, and explain every difference before switching. Differences that cannot be explained are either a bug in the new logic or a bug in the old one, and both need resolving.",
+  "tags": [
+   "etl",
+   "testing",
+   "data-quality",
+   "practices"
+  ],
+  "id": 4143
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system to enforce per-tenant quotas across a distributed service?",
+  "answer": "Maintain counters in a shared low-latency store updated atomically, with local pre-aggregation and periodic flushing to reduce round trips, accepting slight over-permission at the edges. Decide the behaviour when the store is unavailable, and expose remaining quota so tenants can self-regulate.",
+  "tags": [
+   "system-design",
+   "quotas",
+   "distributed-systems",
+   "rate-limiting"
+  ],
+  "id": 4144
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design an audit trail that scales to billions of events?",
+  "answer": "Append-only writes to a partitioned immutable store partitioned by time and tenant, with an index for the query patterns you must support, tiered storage moving old data to cheaper tiers, and a retention policy. Querying is the hard part - decide up front which questions must be answerable in seconds.",
+  "tags": [
+   "system-design",
+   "audit",
+   "scale",
+   "storage"
+  ],
+  "id": 4145
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system to process files dropped by external partners?",
+  "answer": "A landing area per partner with access scoped to them, validation on arrival producing a clear rejection with reasons, idempotent processing keyed on file identity, quarantine for failures, and notification of outcome. Partner integrations fail constantly, so the design work is entirely in the error paths.",
+  "tags": [
+   "system-design",
+   "integration",
+   "files",
+   "reliability"
+  ],
+  "id": 4146
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a configuration service used by many applications?",
+  "answer": "Versioned configuration with typed schemas, environment scoping, an audit trail, client caching with a fallback to last known good, and change notification. It must degrade gracefully - applications should start and run with cached values when the service is unavailable, or it becomes the highest-blast-radius component you own.",
+  "tags": [
+   "system-design",
+   "configuration",
+   "reliability",
+   "architecture"
+  ],
+  "id": 4147
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system that must support both real-time and batch consumers of the same data?",
+  "answer": "Publish events to a log that both can read - stream processors consume in real time while batch jobs read partitions on a schedule - with the log as the single source and both derivations rebuildable. That avoids two ingestion paths that inevitably disagree, which is the problem the lambda architecture tried and largely failed to manage.",
+  "tags": [
+   "system-design",
+   "streaming",
+   "batch",
+   "architecture"
+  ],
+  "id": 4148
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design deduplication for an at-least-once event stream?",
+  "answer": "An idempotency key per event checked against a store with a TTL covering the maximum expected redelivery window, sized for the event rate. For very high volume, a bloom filter fronting an exact store bounds memory. The window is the key design decision - too short and duplicates slip through, too long and the store grows unbounded.",
+  "tags": [
+   "system-design",
+   "deduplication",
+   "streaming",
+   "reliability"
+  ],
+  "id": 4149
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design an API gateway's responsibilities in a microservice system?",
+  "answer": "Authentication, TLS termination, routing, rate limiting, request size limits and observability at the edge - with authorisation decisions delegated to services that own the resources. Keeping business logic and per-consumer transformations out is what stops it becoming a shared component every team must change.",
+  "tags": [
+   "system-design",
+   "api-gateway",
+   "microservices",
+   "architecture"
+  ],
+  "id": 4150
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where a single request must call ten downstream services?",
+  "answer": "First question whether it must - aggregation at that fan-out is a design smell. Then parallelise independent calls, set aggressive per-call timeouts within a total budget, return partial results where acceptable, cache what is cacheable, and consider a read model that precomputes the composition asynchronously.",
+  "tags": [
+   "system-design",
+   "fan-out",
+   "latency",
+   "architecture"
+  ],
+  "id": 4151
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Given an array of intervals, find the point covered by the most intervals.",
+  "answer": "Create start and end events, sort them, then sweep incrementing on a start and decrementing on an end, tracking the running maximum. Ties are broken by processing ends before starts at the same coordinate if intervals are half-open. Time O(n log n), space O(n).",
+  "tags": [
+   "arrays",
+   "sweep-line",
+   "intervals",
+   "sorting"
+  ],
+  "id": 4152
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Given a list of meeting intervals, determine whether a person can attend all of them.",
+  "answer": "Sort by start time and check that each interval's start is not before the previous end. Any overlap fails immediately. Time O(n log n), space O(1). The follow-up asking for the minimum rooms needs a heap of end times or a sweep instead.",
+  "tags": [
+   "arrays",
+   "intervals",
+   "sorting",
+   "greedy"
+  ],
+  "id": 4153
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Find the minimum number of platforms needed for a train schedule.",
+  "answer": "Sort arrival and departure times separately and sweep with two pointers, incrementing when the next event is an arrival and decrementing on a departure, tracking the maximum concurrent count. Time O(n log n), space O(1) beyond the sorted arrays.",
+  "tags": [
+   "arrays",
+   "sweep-line",
+   "greedy",
+   "intervals"
+  ],
+  "id": 4154
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Given an array, find the equilibrium index where left sum equals right sum.",
+  "answer": "Compute the total, then sweep maintaining the running left sum; at each index the right sum is total minus left minus the current value. Return the first index where they match. Time O(n), space O(1) - computing both sums per index would be quadratic.",
+  "tags": [
+   "arrays",
+   "prefix-sum",
+   "two-pass"
+  ],
+  "id": 4155
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Rearrange an array so positive and negative numbers alternate.",
+  "answer": "Partition in place with a two-pointer pass, then swap alternate elements from each side, or use two output positions and fill from the separated groups. Handling unequal counts requires deciding where the surplus goes, which is the part the problem statement usually leaves ambiguous.",
+  "tags": [
+   "arrays",
+   "two-pointers",
+   "in-place",
+   "rearrangement"
+  ],
+  "id": 4156
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Given an array of stock prices, find the maximum profit with at most two transactions.",
+  "answer": "Track four running states - after the first buy, first sell, second buy and second sell - updating each in one pass so every state uses the best previous state. Time O(n), space O(1). It generalises to k transactions with a two-dimensional state.",
+  "tags": [
+   "arrays",
+   "dynamic-programming",
+   "state-machine",
+   "stocks"
+  ],
+  "id": 4157
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Find the length of the longest subarray with equal numbers of zeros and ones.",
+  "answer": "Treat zero as minus one and find the longest subarray with sum zero using a prefix sum map storing the first index of each sum. The distance between two equal prefix sums is a balanced subarray. Time O(n), space O(n).",
+  "tags": [
+   "arrays",
+   "prefix-sum",
+   "hashmap",
+   "transformation"
+  ],
+  "id": 4158
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Given an unsorted array, find the smallest positive integer missing using constant space.",
+  "answer": "Place each value v between one and n at index v-1 by cyclic swapping, then scan for the first index whose value does not match. The array itself becomes the presence marker. Time O(n) because each swap places a value permanently, space O(1).",
+  "tags": [
+   "arrays",
+   "in-place",
+   "cyclic-sort",
+   "index-marking"
+  ],
+  "id": 4159
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Given two arrays, find their intersection including duplicate counts.",
+  "answer": "Count occurrences in the smaller array with a hash map, then walk the larger decrementing counts and collecting matches. Time O(m+n), space O(min(m,n)). If both are sorted, two pointers give the same result in constant extra space.",
+  "tags": [
+   "arrays",
+   "hashmap",
+   "two-pointers",
+   "sets"
+  ],
+  "id": 4160
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Find the longest substring with at most one character replaced to make it uniform.",
+  "answer": "A sliding window tracking character counts where the window is valid while its length minus the most frequent count is at most one. Expand right, contract left when invalid, and record the maximum. Time O(n), space O(alphabet).",
+  "tags": [
+   "strings",
+   "sliding-window",
+   "hashmap"
+  ],
+  "id": 4161
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Given a string, find the minimum number of characters to remove to make all characters unique counts.",
+  "answer": "Count frequencies, then process them in descending order decrementing each until it reaches an unused count or zero, accumulating the deletions. A set of used counts makes the check constant time. Time O(n + k log k) for k distinct characters.",
+  "tags": [
+   "strings",
+   "greedy",
+   "counting",
+   "hashset"
+  ],
+  "id": 4162
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Check whether a string can be rearranged into a palindrome.",
+  "answer": "Count character frequencies and verify that at most one has an odd count. A bitmask toggling a bit per character does the same in constant space, with the answer being whether the mask has at most one bit set. Time O(n).",
+  "tags": [
+   "strings",
+   "counting",
+   "bit-manipulation",
+   "palindrome"
+  ],
+  "id": 4163
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Given a list of strings, group them by their character composition ignoring order.",
+  "answer": "Key each string by a canonical form - sorted characters, or a frequency signature which avoids the sort - and group in a hash map. The frequency signature is O(n) per string against O(n log n) for sorting, which matters for long strings.",
+  "tags": [
+   "strings",
+   "hashmap",
+   "grouping",
+   "anagram"
+  ],
+  "id": 4164
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Strings",
+  "difficulty": "Hard",
+  "question": "Find the shortest substring containing all characters of the alphabet present in the string.",
+  "answer": "Sliding window tracking counts of required characters and how many are satisfied, expanding until valid then contracting while it stays valid, recording the shortest. Time O(n), space O(alphabet). It is the minimum window template with the target derived from the input itself.",
+  "tags": [
+   "strings",
+   "sliding-window",
+   "hashmap",
+   "optimisation"
+  ],
+  "id": 4165
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Implement a function to check whether one string is a subsequence of another.",
+  "answer": "Two pointers advancing through both, moving the needle pointer only on a match, returning whether it reached the end. Time O(n), space O(1). For many queries against one long string, precompute next-occurrence tables so each query is proportional to the needle length.",
+  "tags": [
+   "strings",
+   "two-pointers",
+   "subsequence"
+  ],
+  "id": 4166
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Medium",
+  "question": "Given a binary tree, find the sum of nodes at the deepest level.",
+  "answer": "Level-order traversal keeping the sum of each level and returning the last one, or a DFS tracking depth that resets the accumulator when a deeper level is found. Both are O(n) time; BFS uses O(width) space and DFS O(height).",
+  "tags": [
+   "trees",
+   "bfs",
+   "dfs",
+   "traversal"
+  ],
+  "id": 4167
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Medium",
+  "question": "Determine whether a binary tree is a complete binary tree.",
+  "answer": "Level-order traversal including nulls; once a null is seen, no further non-null node may appear. Time O(n), space O(width). Checking by index arithmetic against node count works too but requires computing indices during traversal.",
+  "tags": [
+   "trees",
+   "bfs",
+   "validation",
+   "traversal"
+  ],
+  "id": 4168
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Medium",
+  "question": "Find the second minimum value in a special binary tree where each node is the minimum of its children.",
+  "answer": "The root is the global minimum, so search for the smallest value strictly greater than it, pruning any subtree whose root already exceeds the current candidate. Time O(n) worst case but usually far less due to pruning.",
+  "tags": [
+   "trees",
+   "dfs",
+   "pruning",
+   "search"
+  ],
+  "id": 4169
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Medium",
+  "question": "Given a binary tree, return all root-to-leaf paths as strings.",
+  "answer": "DFS accumulating the path, appending at each leaf, and backtracking by removing the current node after recursion. Passing an immutable string per call is simpler but allocates per node; a mutable list with explicit backtracking is the efficient form. Time O(n times path length).",
+  "tags": [
+   "trees",
+   "dfs",
+   "backtracking",
+   "paths"
+  ],
+  "id": 4170
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Hard",
+  "question": "Serialise a binary tree so it can be reconstructed exactly.",
+  "answer": "Preorder traversal writing a sentinel for null children, which uniquely determines the structure and reconstructs with an index cursor. Level-order with sentinels works equally. Inorder alone is insufficient because different trees share an inorder sequence - a common trap in this question.",
+  "tags": [
+   "trees",
+   "serialisation",
+   "traversal",
+   "design"
+  ],
+  "id": 4171
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Medium",
+  "question": "Find the maximum difference between a node and any of its ancestors.",
+  "answer": "DFS carrying the minimum and maximum seen on the path, updating the answer at each node with the larger of the differences against both. Time O(n), space O(h). Computing ancestors per node separately would be quadratic.",
+  "tags": [
+   "trees",
+   "dfs",
+   "recursion",
+   "paths"
+  ],
+  "id": 4172
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Medium",
+  "question": "Given a BST and a target, find two nodes summing to the target.",
+  "answer": "In-order traversal gives a sorted sequence, so two pointers from both ends work - either materialising it or using two iterators walking forward and backward. Time O(n), space O(h) with iterators rather than O(n) with an array.",
+  "tags": [
+   "trees",
+   "bst",
+   "two-pointers",
+   "iterator"
+  ],
+  "id": 4173
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Medium",
+  "question": "Given a grid of costs, find the minimum cost path from top-left to bottom-right with four-directional movement.",
+  "answer": "Dijkstra with a priority queue over cells, since movement in all directions means dynamic programming over rows is insufficient. With only right and down moves it reduces to simple dynamic programming. Time O(mn log mn) for the general case.",
+  "tags": [
+   "graphs",
+   "dijkstra",
+   "matrix",
+   "shortest-path"
+  ],
+  "id": 4174
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Medium",
+  "question": "Find whether a path exists between two nodes in an undirected graph.",
+  "answer": "BFS or DFS from the source marking visited nodes until the target is reached or the frontier empties. Union-Find is better when many connectivity queries follow, because after building the structure each query is near constant time rather than a fresh traversal.",
+  "tags": [
+   "graphs",
+   "bfs",
+   "union-find",
+   "connectivity"
+  ],
+  "id": 4175
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Hard",
+  "question": "Count the number of distinct islands considering shapes as identical under translation.",
+  "answer": "DFS each island recording the relative offsets of its cells from the starting cell, normalise into a canonical form, and store in a set. The set size is the answer. Time O(mn), and the canonical shape encoding is the part that must be done carefully.",
+  "tags": [
+   "graphs",
+   "dfs",
+   "matrix",
+   "hashing"
+  ],
+  "id": 4176
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Medium",
+  "question": "Given a list of dependencies, detect whether a cycle exists in a directed graph.",
+  "answer": "DFS with three colours - unvisited, in progress and done - where reaching an in-progress node indicates a back edge and therefore a cycle. Alternatively Kahn's topological sort, where leftover nodes indicate a cycle. Both O(V+E).",
+  "tags": [
+   "graphs",
+   "dfs",
+   "cycle-detection",
+   "topological-sort"
+  ],
+  "id": 4177
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Medium",
+  "question": "Find the centre node of a star graph.",
+  "answer": "The centre appears in every edge, so it is the common node between any two edges - checkable in constant time from the first two. Counting degrees works but is unnecessary work. It is a reminder to look for the structural shortcut before writing the general algorithm.",
+  "tags": [
+   "graphs",
+   "observation",
+   "simple",
+   "degree"
+  ],
+  "id": 4178
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Hard",
+  "question": "Find the minimum number of moves for a knight to reach a target square.",
+  "answer": "BFS over board positions with the eight knight moves, since every move has equal cost. Bidirectional BFS from both squares roughly halves the explored area. Time proportional to the reachable board area, and unbounded boards need a bound derived from symmetry.",
+  "tags": [
+   "graphs",
+   "bfs",
+   "shortest-path",
+   "state-space"
+  ],
+  "id": 4179
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Medium",
+  "question": "Count the number of ways to climb stairs with steps of arbitrary allowed sizes.",
+  "answer": "dp[i] is the sum of dp[i minus each allowed step] where the index is non-negative, seeded with dp[0] equal to one. Time O(n times k), space O(n) or O(max step). It is the unbounded knapsack counting form rather than the fixed Fibonacci recurrence.",
+  "tags": [
+   "dynamic-programming",
+   "counting",
+   "combinations"
+  ],
+  "id": 4180
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Medium",
+  "question": "Given a string, find the minimum cuts needed to partition it into palindromes.",
+  "answer": "Precompute palindrome status for every substring with a two-dimensional table, then dp over prefixes taking the minimum cuts where the trailing segment is a palindrome. Time O(n^2), space O(n^2) - reducible with expansion around centres for the palindrome check.",
+  "tags": [
+   "dynamic-programming",
+   "strings",
+   "palindrome",
+   "partitioning"
+  ],
+  "id": 4181
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Medium",
+  "question": "Find the maximum sum of non-adjacent elements in a circular array.",
+  "answer": "Run the linear house-robber twice - once excluding the first element and once excluding the last - and take the maximum, because the first and last cannot both be used in a circle. Time O(n), space O(1).",
+  "tags": [
+   "dynamic-programming",
+   "circular",
+   "arrays",
+   "house-robber"
+  ],
+  "id": 4182
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Hard",
+  "question": "Given two strings, find the length of the longest common substring, not subsequence.",
+  "answer": "dp[i][j] is the length of the common suffix ending at those positions - one plus the diagonal when characters match, zero otherwise - with the answer being the maximum cell. Time O(mn), space O(n) with a rolling row. Unlike subsequence, a mismatch resets to zero.",
+  "tags": [
+   "dynamic-programming",
+   "strings",
+   "substring",
+   "matrix"
+  ],
+  "id": 4183
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Medium",
+  "question": "Determine whether a string can be constructed from a given set of words used any number of times.",
+  "answer": "dp over prefixes where a position is reachable if some word ends there and its start position is reachable, seeded at zero. A trie or a length-bounded lookup avoids checking every dictionary word per position. Time O(n^2) with a hash set of words.",
+  "tags": [
+   "dynamic-programming",
+   "strings",
+   "word-break",
+   "trie"
+  ],
+  "id": 4184
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Hard",
+  "question": "Find the number of ways to reach a score in a game with different point values.",
+  "answer": "Unbounded knapsack counting combinations: iterate point values in the outer loop and scores in the inner, accumulating. The loop order determines whether order matters - values outside counts combinations, scores outside counts sequences, which is the classic distinction to state explicitly.",
+  "tags": [
+   "dynamic-programming",
+   "counting",
+   "knapsack",
+   "combinations"
+  ],
+  "id": 4185
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Greedy",
+  "difficulty": "Medium",
+  "question": "Given job deadlines and profits, schedule to maximise profit with unit-time jobs.",
+  "answer": "Sort by profit descending and place each job in the latest free slot before its deadline, using a disjoint set to find the free slot quickly. Time O(n log n) with union-find, or O(n times d) with a naive scan backwards from the deadline.",
+  "tags": [
+   "greedy",
+   "scheduling",
+   "union-find",
+   "sorting"
+  ],
+  "id": 4186
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Greedy",
+  "difficulty": "Medium",
+  "question": "Given a set of activities with start and end times, select the maximum number that do not overlap.",
+  "answer": "Sort by end time and greedily take each activity that starts after the last selected one ends. Sorting by end rather than start or duration is what makes the greedy choice optimal, provable by an exchange argument. Time O(n log n).",
+  "tags": [
+   "greedy",
+   "intervals",
+   "scheduling",
+   "sorting"
+  ],
+  "id": 4187
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Greedy",
+  "difficulty": "Medium",
+  "question": "Given denominations and an amount, determine whether a greedy coin change is optimal.",
+  "answer": "Greedy is optimal only for canonical systems such as standard currency; for arbitrary denominations it can fail - with coins of one, three and four, making six greedily takes three coins where two suffice. Verifying canonicity requires checking against dynamic programming over a bounded range.",
+  "tags": [
+   "greedy",
+   "coin-change",
+   "correctness",
+   "dynamic-programming"
+  ],
+  "id": 4188
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Greedy",
+  "difficulty": "Medium",
+  "question": "Minimise the maximum difference between the tallest and shortest tower after adjusting each by a fixed amount.",
+  "answer": "Sort, then consider each split point where the prefix is raised and the suffix lowered, tracking the minimum resulting range. The key insight is that the optimal solution raises a prefix and lowers a suffix after sorting. Time O(n log n).",
+  "tags": [
+   "greedy",
+   "sorting",
+   "optimisation",
+   "arrays"
+  ],
+  "id": 4189
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Heap",
+  "difficulty": "Medium",
+  "question": "Merge k sorted streams of unknown length.",
+  "answer": "A min-heap of the current head of each stream with a reference to its source, popping the smallest and pulling the next from that stream. Time O(n log k) overall, space O(k). It works for streams because it never requires knowing the total length in advance.",
+  "tags": [
+   "heap",
+   "streaming",
+   "k-way-merge",
+   "design"
+  ],
+  "id": 4190
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Heap",
+  "difficulty": "Medium",
+  "question": "Find the k most frequent words with ties broken alphabetically.",
+  "answer": "Count frequencies, then use a heap of size k with a comparator ordering by frequency ascending and, for equal frequency, by word descending, so the worst candidate is at the root. Reverse the extracted result. Time O(n + m log k) for m distinct words.",
+  "tags": [
+   "heap",
+   "counting",
+   "sorting",
+   "comparators"
+  ],
+  "id": 4191
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Heap",
+  "difficulty": "Hard",
+  "question": "Find the median of a sliding window over a stream.",
+  "answer": "Two heaps - a max-heap for the lower half and a min-heap for the upper - rebalanced after each insertion, with lazy deletion of elements leaving the window using a map of pending removals. Time O(n log k). The deletion handling is what makes this substantially harder than the streaming median.",
+  "tags": [
+   "heap",
+   "sliding-window",
+   "median",
+   "lazy-deletion"
+  ],
+  "id": 4192
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Design a system to detect duplicate submissions within a time window.",
+  "answer": "A hash map from request signature to timestamp with lazy expiry on access plus a periodic sweep, or a time-bucketed set of two rotating windows so eviction is a bucket drop rather than per-entry. Constant time per check with memory bounded by the window's traffic.",
+  "tags": [
+   "design",
+   "deduplication",
+   "time-window",
+   "hashmap"
+  ],
+  "id": 4193
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Design an autocomplete system returning the top k suggestions for a prefix.",
+  "answer": "A trie where each node caches the top k completions beneath it, updated on insert, so a query walks the prefix and returns the cached list in constant time after the walk. The alternative of collecting all completions and sorting per query is far slower for popular short prefixes.",
+  "tags": [
+   "design",
+   "trie",
+   "autocomplete",
+   "caching"
+  ],
+  "id": 4194
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Design a data structure supporting range sum queries with point updates.",
+  "answer": "A Fenwick tree gives logarithmic update and prefix sum with minimal memory; a segment tree does the same and generalises to other associative operations and range updates with lazy propagation. A prefix sum array alone gives constant queries but linear updates, which fails when updates are frequent.",
+  "tags": [
+   "design",
+   "fenwick-tree",
+   "segment-tree",
+   "range-queries"
+  ],
+  "id": 4195
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Design a rate limiter that allows bursts but enforces an average rate.",
+  "answer": "Token bucket: tokens accumulate at the rate up to a capacity, and each request consumes one, being rejected when none remain. The capacity determines the burst size and the refill rate the average. Storing only the token count and last refill timestamp makes it constant space per key.",
+  "tags": [
+   "design",
+   "rate-limiting",
+   "token-bucket",
+   "algorithms"
+  ],
+  "id": 4196
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Design a structure to find whether a word exists in a dictionary allowing one character difference.",
+  "answer": "Index words by length and by each single-character-deleted variant in a map, so a query generates its own variants and checks for a match. Time proportional to word length per query, at the cost of storing one entry per character position per word.",
+  "tags": [
+   "design",
+   "hashmap",
+   "fuzzy-matching",
+   "strings"
+  ],
+  "id": 4197
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "Implement a countdown latch that releases waiters when a counter reaches zero.",
+  "answer": "A counter guarded by a lock with a condition variable; each countdown decrements and signals all waiters when it hits zero, and waiters loop on the predicate. It is one-shot - once released it cannot be reset, which is what distinguishes it from a barrier.",
+  "tags": [
+   "concurrency",
+   "synchronisation",
+   "latch",
+   "primitives"
+  ],
+  "id": 4198
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "Implement a fixed-size thread pool.",
+  "answer": "A bounded blocking queue of tasks and a fixed set of worker threads looping on take and execute, with a poison pill or cancellation flag for shutdown that lets in-flight work complete. The subtleties are exception handling per task so one failure does not kill a worker, and rejecting or blocking when the queue is full.",
+  "tags": [
+   "concurrency",
+   "thread-pool",
+   "producer-consumer",
+   "design"
+  ],
+  "id": 4199
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "Implement a concurrent counter that scales under contention.",
+  "answer": "Striped counters - an array of independent counters selected by thread or hash, summed on read - so writers rarely collide, padded to separate cache lines to avoid false sharing. A single atomic increment serialises every writer on one cache line, which collapses at high thread counts.",
+  "tags": [
+   "concurrency",
+   "counters",
+   "false-sharing",
+   "performance"
+  ],
+  "id": 4200
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "Implement a lock-free stack.",
+  "answer": "A head pointer updated with compare-and-swap in a retry loop for both push and pop. The hazard is the ABA problem, where the head is popped and re-pushed between the read and the swap, which is addressed with a tagged pointer, hazard pointers or epoch-based reclamation.",
+  "tags": [
+   "concurrency",
+   "lock-free",
+   "cas",
+   "aba-problem"
+  ],
+  "id": 4201
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a function that merges two objects deeply with configurable array handling.",
+  "answer": "Recurse over keys, merging plain objects and applying the chosen strategy for arrays - replace, concatenate or merge by index - and treating other values as replacements. Guard against prototype-polluting keys and cycles, both of which naive implementations miss.",
+  "tags": [
+   "javascript",
+   "practical",
+   "objects",
+   "security"
+  ],
+  "id": 4202
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a simple dependency injection container.",
+  "answer": "A map from token to a factory plus a lifetime, resolving recursively and caching singletons. Detect circular dependencies with a resolution stack, and fail fast with a clear message naming the cycle. The interesting part is lifetime management and disposal ordering, not the map lookup.",
+  "tags": [
+   "practical",
+   "di",
+   "design",
+   "patterns"
+  ],
+  "id": 4203
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a function that batches calls made within a time window into one request.",
+  "answer": "Accumulate keys with their pending promises, schedule a flush on a microtask or a short timer, then issue one batched request and resolve each caller with its portion of the result. This is the data loader pattern, and the important detail is resolving individual failures without failing the batch.",
+  "tags": [
+   "javascript",
+   "practical",
+   "batching",
+   "async"
+  ],
+  "id": 4204
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a circuit breaker.",
+  "answer": "Track failures in a rolling window; when the threshold is crossed move to open and reject immediately for a cool-down, then allow a limited number of trial calls in half-open, closing on success or reopening on failure. Expose the state for monitoring, since a permanently open breaker is otherwise invisible.",
+  "tags": [
+   "practical",
+   "resilience",
+   "circuit-breaker",
+   "patterns"
+  ],
+  "id": 4205
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a function to compute a diff between two arrays of objects by key.",
+  "answer": "Index both by the key into maps, then classify each key as added, removed or - when present in both - changed by comparing the values. Return the three groups. Time O(n+m). Comparing by position instead of key is what produces spurious diffs when order changes.",
+  "tags": [
+   "practical",
+   "diffing",
+   "collections",
+   "algorithms"
+  ],
+  "id": 4206
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a simple state machine with guarded transitions.",
+  "answer": "A map from state to a map of events to target states with optional guard predicates and side effects, plus a dispatch function rejecting undefined transitions. Making invalid transitions impossible rather than merely discouraged is the whole point, so unknown transitions should error rather than be ignored.",
+  "tags": [
+   "practical",
+   "state-machine",
+   "design",
+   "patterns"
+  ],
+  "id": 4207
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement pagination over an in-memory collection with stable ordering.",
+  "answer": "Sort by a deterministic key including a tiebreaker, then slice by offset or filter by cursor. The tiebreaker is essential - without it, equal sort values can appear in different orders between calls, so items are duplicated or skipped across page boundaries.",
+  "tags": [
+   "practical",
+   "pagination",
+   "sorting",
+   "collections"
+  ],
+  "id": 4208
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a function to safely parse JSON with a fallback.",
+  "answer": "Wrap the parse in a try-catch returning a typed result or a default, and validate the parsed shape rather than trusting it - JSON.parse succeeding proves only that the syntax was valid, not that the structure matches expectations. Returning unknown and validating with a schema is the safe pattern.",
+  "tags": [
+   "practical",
+   "json",
+   "validation",
+   "error-handling"
+  ],
+  "id": 4209
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a comparator for sorting objects by several fields with mixed directions.",
+  "answer": "Compose per-field comparators applied in order, returning the first non-zero result, with each handling nulls and direction explicitly. Building the comparator from a specification array keeps it data-driven, and handling nulls consistently is what prevents sorting differing between runs on incomplete data.",
+  "tags": [
+   "practical",
+   "sorting",
+   "comparators",
+   "collections"
+  ],
+  "id": 4210
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement an idempotent operation wrapper keyed by a request identifier.",
+  "answer": "Look up the key in a store; if a completed result exists return it, if a request is in flight wait or reject as conflicting, otherwise record the key as in progress, execute, and store the outcome atomically with the effect. The in-progress state is what prevents concurrent duplicates both executing.",
+  "tags": [
+   "practical",
+   "idempotency",
+   "concurrency",
+   "reliability"
+  ],
+  "id": 4211
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement exponential moving average over a stream of values.",
+  "answer": "Maintain a single running value updated as alpha times the new sample plus one minus alpha times the previous. It needs constant memory unlike a windowed average, weights recent values more heavily, and the alpha parameter determines the effective window - which should be derived from the sampling rate.",
+  "tags": [
+   "practical",
+   "streaming",
+   "statistics",
+   "algorithms"
+  ],
+  "id": 4212
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a bounded in-memory cache with time and size limits.",
+  "answer": "A map for lookup plus a recency structure for eviction, checking expiry on read and evicting the least recently used when over capacity. Sweep expired entries periodically as well, because a key never read again would otherwise occupy space until eviction pressure removes it.",
+  "tags": [
+   "practical",
+   "caching",
+   "lru",
+   "data-structures"
+  ],
+  "id": 4213
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a function that validates and normalises a phone number.",
+  "answer": "Strip formatting, apply the country's expected length and prefix rules, store in a canonical international format, and keep the original input for display. Use a maintained library rather than regular expressions, because national numbering plans change and are far more irregular than they appear.",
+  "tags": [
+   "practical",
+   "validation",
+   "strings",
+   "pragmatics"
+  ],
+  "id": 4214
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement safe number formatting for currency across locales.",
+  "answer": "Use the platform's internationalisation formatter with the currency code and locale rather than string manipulation, and keep the underlying value as a decimal or minor-unit integer. Hand-formatting produces wrong separators, wrong symbol placement and rounding that differs from what the accounting system expects.",
+  "tags": [
+   "practical",
+   "formatting",
+   "i18n",
+   "money"
+  ],
+  "id": 4215
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a retry wrapper that distinguishes retryable from terminal failures.",
+  "answer": "Take a predicate classifying the error, retry only when it returns true, cap attempts and total elapsed time, apply jittered backoff, and propagate cancellation. Retrying a 400 or a validation failure wastes time and can duplicate side effects if the operation is not idempotent.",
+  "tags": [
+   "practical",
+   "resilience",
+   "retry",
+   "error-handling"
+  ],
+  "id": 4216
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a function to detect and break a cycle in an object graph before serialisation.",
+  "answer": "Walk the graph with a set of visited references, replacing a repeat reference with a marker or a path back to the first occurrence. JSON.stringify throws on cycles, and a replacer function using this technique is the standard fix for logging arbitrary objects safely.",
+  "tags": [
+   "practical",
+   "serialisation",
+   "cycles",
+   "recursion"
+  ],
+  "id": 4217
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a simple feature flag evaluator with percentage rollout.",
+  "answer": "Hash a stable identifier such as the user id together with the flag key, map the hash into a bucket from zero to ninety-nine, and enable when the bucket is below the rollout percentage. Hashing with the flag key means different flags select different users rather than always the same cohort.",
+  "tags": [
+   "practical",
+   "feature-flags",
+   "hashing",
+   "design"
+  ],
+  "id": 4218
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement consistent hashing for distributing keys across nodes.",
+  "answer": "Place each node at several points on a hash ring using virtual nodes, then map a key to the first node clockwise from its hash. Adding or removing a node only moves the keys in the affected arcs, and virtual nodes are what keeps the distribution even.",
+  "tags": [
+   "practical",
+   "consistent-hashing",
+   "distributed-systems",
+   "algorithms"
+  ],
+  "id": 4219
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a bloom filter.",
+  "answer": "A bit array with k independent hash functions; insertion sets the bits and a query returns false only if any bit is clear. Sizing follows from the expected element count and the acceptable false positive rate. Standard bloom filters cannot delete, which is what counting variants address.",
+  "tags": [
+   "practical",
+   "bloom-filter",
+   "probabilistic",
+   "data-structures"
+  ],
+  "id": 4220
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a function to compute the difference between two dates in business days.",
+  "answer": "Count whole weeks times five plus the remainder walked day by day, subtracting holidays from a supplied calendar. Time zones and the definition of a business day differ by region, so both must be parameters rather than assumptions baked into the function.",
+  "tags": [
+   "practical",
+   "dates",
+   "business-logic",
+   "edge-cases"
+  ],
+  "id": 4221
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a queue that preserves ordering per key while processing keys in parallel.",
+  "answer": "Maintain a queue per key with a single in-flight task each, dispatching the next item for a key only when its predecessor completes, while different keys proceed concurrently. It gives per-entity ordering with overall parallelism, which is the requirement most message consumers actually have.",
+  "tags": [
+   "practical",
+   "concurrency",
+   "ordering",
+   "queues"
+  ],
+  "id": 4222
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a simple LRU with a time-to-live and a hit rate metric.",
+  "answer": "Combine an ordered map for recency with per-entry expiry checked on read, and count hits and misses to expose a ratio. The metric matters because a cache with a low hit rate adds latency and memory for nothing, and without measuring it nobody discovers that.",
+  "tags": [
+   "practical",
+   "caching",
+   "metrics",
+   "observability"
+  ],
+  "id": 4223
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Practical",
+  "difficulty": "Medium",
+  "question": "Implement a function that safely truncates a string to a display length.",
+  "answer": "Iterate by grapheme clusters rather than code units so emoji and combining characters are not split, append an ellipsis, and account for the ellipsis in the limit. Slicing by index breaks surrogate pairs and produces replacement characters, which is the visible symptom of this bug.",
+  "tags": [
+   "practical",
+   "strings",
+   "unicode",
+   "edge-cases"
+  ],
+  "id": 4224
  }
 ]
