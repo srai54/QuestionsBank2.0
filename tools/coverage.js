@@ -7,19 +7,16 @@
  */
 const { load, SOURCE, countBy } = require('./lib');
 
-// Target plan for 10,000 questions: deepen the established categories and add
-// adjacent areas that appear in the same interviews.
+// Target plan for 10,000 questions, scoped to the stack this bank is for:
+// .NET, Angular, React, Azure, SQL/Mongo and the surrounding practice areas.
+// No AWS or Kafka - deliberately out of scope.
 const PLAN = {
-  // established
-  'C#/.NET': 1000, 'Coding': 900, 'Azure': 650, 'Architecture': 500, 'SQL': 480,
-  'DevOps': 450, 'React': 430, 'AI/LLM': 420, 'Angular': 400, 'Security': 360,
-  'Testing': 350, 'System Design': 350, 'CS Fundamentals': 320, 'JavaScript/TypeScript': 250,
-  'Data/BI': 250, 'Frontend': 240, 'Databases': 220, 'Behavioral': 200,
-  'Observability': 180, 'MongoDB': 170, 'REST APIs': 160,
-  // adjacent
-  'Python': 250, 'AWS': 200, 'Docker/Linux': 180, 'Kafka': 150, 'Java': 150,
-  'Agile/Process': 150, 'Performance': 150, 'Terraform/IaC': 130, 'GraphQL': 120,
-  'Mobile': 120, 'Networking': 120, 'Search': 100, 'Product': 100, 'Scripting': 94,
+  'C#/.NET': 1150, 'Coding': 1000, 'Azure': 750, 'Architecture': 580, 'SQL': 560,
+  'DevOps': 520, 'React': 500, 'AI/LLM': 480, 'Angular': 460, 'Security': 420,
+  'Testing': 410, 'System Design': 400, 'CS Fundamentals': 370, 'JavaScript/TypeScript': 300,
+  'Data/BI': 290, 'Frontend': 280, 'Databases': 250, 'Behavioral': 230,
+  'Observability': 210, 'MongoDB': 200, 'REST APIs': 190, 'Python': 200,
+  'Java': 130, 'Performance': 130,
 };
 
 const rows = load(SOURCE);
