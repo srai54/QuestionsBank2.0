@@ -61310,5 +61310,2035 @@
    "practices"
   ],
   "id": 4377
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What is the difference between a struct's default value and a class's null?",
+  "answer": "A struct always has a value - all fields zeroed - so there is no uninitialised state to guard against, but also no way to represent absence without a nullable wrapper. A class reference can be null, which is representable absence at the cost of needing a null check. That is the core trade when modelling optional values.",
+  "tags": [
+   "csharp",
+   "structs",
+   "nullability",
+   "semantics"
+  ],
+  "id": 4378
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "Why can a struct in a collection behave unexpectedly when modified?",
+  "answer": "Accessing a struct from a list returns a copy, so mutating it changes the copy and not the stored element. That is why mutable structs are discouraged - the code compiles and appears correct while silently doing nothing. Readonly structs make the compiler reject the mutation instead.",
+  "tags": [
+   "csharp",
+   "structs",
+   "mutability",
+   "gotchas"
+  ],
+  "id": 4379
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you decide whether an allocation matters?",
+  "answer": "By the rate, not the size - a small object allocated per request at ten thousand requests per second creates far more collection pressure than a large one allocated at startup. Measure allocations per operation with a memory diagnoser, and act when gen 0 collection frequency is affecting tail latency.",
+  "tags": [
+   "csharp",
+   "performance",
+   "allocation",
+   "gc"
+  ],
+  "id": 4380
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the cost of LINQ in a hot path?",
+  "answer": "Each operator allocates an iterator and a closure, delegate invocation prevents inlining, and chained operators add indirection per element. On a hot path over large collections a manual loop can be several times faster. Elsewhere the clarity is worth more than the difference, which is why this is a profiling decision.",
+  "tags": [
+   "csharp",
+   "linq",
+   "performance",
+   "allocation"
+  ],
+  "id": 4381
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "ASP.NET Core",
+  "difficulty": "Medium",
+  "question": "How do you handle a long-running request that risks a client timeout?",
+  "answer": "Convert it to an asynchronous job returning 202 with a status endpoint, or stream progress if the protocol allows. Keeping the connection open depends on every proxy in the path honouring your timeout, which they generally do not, so the client sees an error while the work continues invisibly.",
+  "tags": [
+   "aspnetcore",
+   "async",
+   "api-design",
+   "reliability"
+  ],
+  "id": 4382
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "ASP.NET Core",
+  "difficulty": "Medium",
+  "question": "What is the difference between MapGet with a lambda and a controller action for testability?",
+  "answer": "A lambda is convenient but harder to test in isolation and can grow inline logic. Extracting the handler into a named method or a class keeps minimal API routing while making the logic unit testable. The routing style is independent of whether the handler is testable, which is the point often missed.",
+  "tags": [
+   "aspnetcore",
+   "minimal-api",
+   "testing",
+   "design"
+  ],
+  "id": 4383
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "EF Core",
+  "difficulty": "Medium",
+  "question": "When should you use a compiled model in EF Core?",
+  "answer": "When startup time matters and the model is large - hundreds of entity types - because model building can take seconds. A compiled model generated at build time removes that cost, which matters most for serverless functions and short-lived processes where startup dominates.",
+  "tags": [
+   "efcore",
+   "performance",
+   "startup",
+   "serverless"
+  ],
+  "id": 4384
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "EF Core",
+  "difficulty": "Medium",
+  "question": "How do you handle a query that EF Core cannot translate?",
+  "answer": "Rewrite it in terms the provider supports, split it so the untranslatable part runs on a materialised subset, map a database function, or drop to raw SQL for that query. Forcing evaluation with AsEnumerable early is the option that silently pulls the whole table into memory.",
+  "tags": [
+   "efcore",
+   "translation",
+   "performance",
+   "query"
+  ],
+  "id": 4385
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "How do you test a minimal API endpoint?",
+  "answer": "Extract the handler so it can be called directly with fakes for unit testing, and use WebApplicationFactory for a smaller set of tests covering routing, binding, filters and serialisation. TypedResults makes the direct call assertable without inspecting an IResult.",
+  "tags": [
+   "dotnet",
+   "testing",
+   "minimal-api",
+   "practices"
+  ],
+  "id": 4386
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Diagnostics",
+  "difficulty": "Medium",
+  "question": "What does a high rate of gen 0 collections indicate?",
+  "answer": "A high allocation rate rather than a leak - short-lived objects being created rapidly. It is usually harmless but contributes to pause time and CPU. Investigate when tail latency correlates with collection frequency, and look for per-request allocations in serialisation, LINQ chains and string handling.",
+  "tags": [
+   "dotnet",
+   "gc",
+   "performance",
+   "diagnostics"
+  ],
+  "id": 4387
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Diagnostics",
+  "difficulty": "Medium",
+  "question": "How do you diagnose an application that becomes slow only after hours of running?",
+  "answer": "Compare metrics over the period for growing memory, growing thread count, growing connection or handle counts, and cache size. Take two snapshots hours apart and compare. Time-dependent degradation is almost always accumulation - a leak, an unbounded cache, or fragmentation - rather than load.",
+  "tags": [
+   "dotnet",
+   "diagnostics",
+   "memory-leak",
+   "performance"
+  ],
+  "id": 4388
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "How do you test an Angular component that uses the router?",
+  "answer": "Use RouterTestingModule or provide a router with a minimal route configuration, then assert on navigation calls or the resulting URL. Mocking the Router entirely tests nothing about the routing configuration, so a small number of tests should use the real router with test routes.",
+  "tags": [
+   "angular",
+   "testing",
+   "routing",
+   "practices"
+  ],
+  "id": 4389
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "How do you avoid brittle Angular component tests?",
+  "answer": "Query by role or test identifier rather than CSS structure, assert on rendered text and behaviour rather than internal component state, avoid asserting on the exact number of DOM nodes, and use harnesses for library components. Structural assertions break on every template refactor.",
+  "tags": [
+   "angular",
+   "testing",
+   "brittleness",
+   "practices"
+  ],
+  "id": 4390
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do signals reduce the need for manual change detection tuning?",
+  "answer": "A signal read in a template registers a fine-grained dependency, so only the affected view is marked for update rather than an entire component subtree being checked. That removes much of the OnPush and markForCheck discipline, though structural decisions about where state lives still matter.",
+  "tags": [
+   "angular",
+   "signals",
+   "change-detection",
+   "performance"
+  ],
+  "id": 4391
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the performance impact of a large form in Angular?",
+  "answer": "Every control's value and status changes propagate through the form tree, and validators run on each change, so a form with hundreds of controls can lag while typing. Mitigate with updateOn blur, splitting into smaller form groups, OnPush on field components, and avoiding expensive validators on every keystroke.",
+  "tags": [
+   "angular",
+   "forms",
+   "performance",
+   "optimisation"
+  ],
+  "id": 4392
+ },
+ {
+  "category": "React",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you diagnose a slow initial page load in a React application?",
+  "answer": "Separate network from execution: check bundle size and request waterfall in the network panel, then look at main thread activity for script evaluation and initial render cost. A large bundle and a data waterfall are the two dominant causes, and they need different fixes.",
+  "tags": [
+   "react",
+   "performance",
+   "diagnostics",
+   "loading"
+  ],
+  "id": 4393
+ },
+ {
+  "category": "React",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the cost of context for performance and how do you measure it?",
+  "answer": "Every consumer re-renders when the value's reference changes, regardless of which part it uses. Measure with the profiler by looking at what re-rendered after a context update. The fix is splitting contexts or moving to a store with selectors, not memoising the consumers.",
+  "tags": [
+   "react",
+   "context",
+   "performance",
+   "profiling"
+  ],
+  "id": 4394
+ },
+ {
+  "category": "React",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "How do you decide between useState and useReducer?",
+  "answer": "useState for independent values; useReducer when several values change together, when the next state depends on the previous in non-trivial ways, or when the transitions form a small set worth naming. A reducer also makes the state machine testable independently of the component.",
+  "tags": [
+   "react",
+   "state",
+   "hooks",
+   "design"
+  ],
+  "id": 4395
+ },
+ {
+  "category": "React",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "What is the risk of storing derived data in a reducer?",
+  "answer": "It must be recomputed on every action that affects its inputs, and any missed action leaves it stale - which is the same duplication problem as derived state in useState, with more places to forget. Derive it in a selector at read time instead, memoised if the computation is expensive.",
+  "tags": [
+   "react",
+   "state",
+   "derived-state",
+   "design"
+  ],
+  "id": 4396
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you decide what to preload, prefetch and preconnect?",
+  "answer": "Preload resources needed for the current page's critical render - the hero image, the font. Prefetch resources for a likely next navigation. Preconnect to origins you will definitely use so the connection cost is paid early. Overusing any of them competes with the critical path for bandwidth.",
+  "tags": [
+   "frontend",
+   "performance",
+   "resource-hints",
+   "optimisation"
+  ],
+  "id": 4397
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the difference between compression and minification?",
+  "answer": "Minification removes characters the parser does not need - whitespace, comments, long names - reducing the source size. Compression such as Brotli encodes the bytes for transfer and is undone by the browser. They compose: minified code compresses better, and both are needed for the smallest transfer.",
+  "tags": [
+   "frontend",
+   "performance",
+   "compression",
+   "build"
+  ],
+  "id": 4398
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Accessibility",
+  "difficulty": "Medium",
+  "question": "What is a skip link and why does it matter?",
+  "answer": "A link at the top of the page, usually visible only on focus, jumping to the main content so keyboard and screen reader users bypass repeated navigation. Without it, every page requires tabbing through the entire header, which is the most common complaint in keyboard accessibility reviews.",
+  "tags": [
+   "accessibility",
+   "keyboard",
+   "navigation",
+   "practices"
+  ],
+  "id": 4399
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Accessibility",
+  "difficulty": "Medium",
+  "question": "How do you make an error summary accessible?",
+  "answer": "Render a summary at the top listing each error as a link to its field, move focus to it on submit, and mark it as an alert region so it is announced. That serves screen reader and keyboard users, and it also helps everyone on a long form where the first error is off-screen.",
+  "tags": [
+   "accessibility",
+   "forms",
+   "errors",
+   "patterns"
+  ],
+  "id": 4400
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Accessibility",
+  "difficulty": "Medium",
+  "question": "What accessibility considerations apply to animations?",
+  "answer": "Respect the reduced motion preference by disabling or simplifying non-essential animation, avoid flashing content that can trigger seizures, keep parallax and auto-playing motion optional, and never convey information by motion alone. A media query check is a few lines and covers most of it.",
+  "tags": [
+   "accessibility",
+   "animation",
+   "motion",
+   "css"
+  ],
+  "id": 4401
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between an interface and an abstract class conceptually across languages?",
+  "answer": "An interface specifies capability with no state and permits multiple implementation; an abstract class provides partial implementation and shared state through single inheritance. Languages differ in details - default methods, multiple inheritance - but the conceptual split between contract and partial implementation is universal.",
+  "tags": [
+   "fundamentals",
+   "oop",
+   "interfaces",
+   "design"
+  ],
+  "id": 4402
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is composition over inheritance and why is it usually preferred?",
+  "answer": "Building behaviour by combining objects rather than extending a base class. It avoids the fragile base class problem, permits changing behaviour at runtime, and does not force a single hierarchy. Inheritance remains right for genuine subtype relationships where the base contract fully applies.",
+  "tags": [
+   "fundamentals",
+   "oop",
+   "composition",
+   "design"
+  ],
+  "id": 4403
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the fragile base class problem?",
+  "answer": "Changes to a base class break subclasses in ways the base author cannot foresee, because subclasses depend on internal call sequences and protected state. It is why libraries seal classes by default and why inheritance across a library boundary is far riskier than within one codebase.",
+  "tags": [
+   "fundamentals",
+   "oop",
+   "inheritance",
+   "design"
+  ],
+  "id": 4404
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a design pattern and what is the risk of learning them as a checklist?",
+  "answer": "A named solution to a recurring design problem with known trade-offs. The risk is applying them because they are known rather than because the problem exists - a factory for a class with one implementation, a strategy for a branch that never varies. The trade-off matters more than the name.",
+  "tags": [
+   "fundamentals",
+   "patterns",
+   "design",
+   "judgement"
+  ],
+  "id": 4405
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the observer pattern and what problems does it create?",
+  "answer": "Subjects notify registered observers of changes, decoupling the source from consumers. The problems are lifetime management causing leaks, unpredictable ordering, cascading updates that are hard to trace, and difficulty reasoning about state at any instant - all of which reactive frameworks spend effort mitigating.",
+  "tags": [
+   "fundamentals",
+   "patterns",
+   "observer",
+   "design"
+  ],
+  "id": 4406
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "When is the singleton pattern justified?",
+  "answer": "When a single instance is a genuine requirement of the resource - a hardware handle, a process-wide cache - and it is provided through dependency injection rather than a static accessor. The static form is what makes testing hard and hides dependencies, not the single-instance property itself.",
+  "tags": [
+   "fundamentals",
+   "patterns",
+   "singleton",
+   "testing"
+  ],
+  "id": 4407
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the adapter pattern and where does it appear in real systems?",
+  "answer": "A wrapper converting one interface into another so incompatible components can work together. It appears at every integration boundary - wrapping a third-party client, presenting a legacy API in modern terms, bridging two libraries' abstractions - and it is the practical form of an anti-corruption layer.",
+  "tags": [
+   "fundamentals",
+   "patterns",
+   "adapter",
+   "integration"
+  ],
+  "id": 4408
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a clustered index scan and a table scan?",
+  "answer": "In an engine where the clustered index is the table, they are the same operation named differently depending on whether the table has a clustered index. Either way it means reading everything, so the distinction matters less than the fact that no seek was possible.",
+  "tags": [
+   "databases",
+   "indexing",
+   "execution-plans",
+   "terminology"
+  ],
+  "id": 4409
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why does a query sometimes get slower after adding rows even with an index?",
+  "answer": "The optimiser may switch plans once the estimated row count crosses a threshold - a seek with lookups becomes more expensive than a scan - or the index no longer fits in memory. Both are expected behaviour, and both are diagnosed by comparing the plan before and after.",
+  "tags": [
+   "databases",
+   "optimizer",
+   "performance",
+   "diagnostics"
+  ],
+  "id": 4410
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a tipping point in query optimisation?",
+  "answer": "The selectivity at which the optimiser stops using a non-covering index because the cost of looking up each matching row exceeds a full scan - often only a few percent of the table. It explains why an index helps for a narrow filter and is ignored for a broader one.",
+  "tags": [
+   "databases",
+   "optimizer",
+   "indexing",
+   "performance"
+  ],
+  "id": 4411
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you decide between an index and a materialised aggregate?",
+  "answer": "An index speeds access to rows; a materialised aggregate removes the work of computing over many rows. When a query aggregates millions of rows to produce a few numbers repeatedly, no index makes it fast - precomputing does, at the cost of maintenance and staleness.",
+  "tags": [
+   "databases",
+   "aggregation",
+   "performance",
+   "design"
+  ],
+  "id": 4412
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you validate that a database restore actually worked?",
+  "answer": "Restore to an isolated environment, check row counts and checksums against expectations, run application smoke tests against it, and record the elapsed time against your recovery objective. A restore that completes without error can still produce a database missing recent data or with broken permissions.",
+  "tags": [
+   "databases",
+   "backup",
+   "recovery",
+   "verification"
+  ],
+  "id": 4413
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is the operational risk of a database with no maintenance plan?",
+  "answer": "Statistics drift so plans degrade, indexes fragment, the transaction log grows unbounded, backups may not be running, and integrity corruption goes undetected until a restore fails. Managed services handle much of this, which is precisely why self-managed instances are where it is forgotten.",
+  "tags": [
+   "databases",
+   "maintenance",
+   "operations",
+   "risk"
+  ],
+  "id": 4414
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a natural join and an explicit join condition?",
+  "answer": "A natural join matches on all identically named columns implicitly, which breaks silently when a column is added or renamed. An explicit condition states the relationship, survives schema change, and is readable. Natural joins are a convenience that costs more than they save.",
+  "tags": [
+   "sql",
+   "joins",
+   "practices",
+   "maintainability"
+  ],
+  "id": 4415
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What does a self-referencing foreign key model and what must you be careful about?",
+  "answer": "A hierarchy such as employee to manager or category to parent. Be careful about cycles, which the constraint does not prevent, cascade behaviour which can delete an entire subtree, and recursive queries needing a depth bound. Enforcing acyclicity usually requires a trigger or application-level check.",
+  "tags": [
+   "sql",
+   "hierarchies",
+   "constraints",
+   "modelling"
+  ],
+  "id": 4416
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you find rows in one table with no match in another?",
+  "answer": "A left join filtered where the right side is null, or NOT EXISTS with a correlated subquery. NOT EXISTS is usually clearer and handles nulls safely, and optimisers typically produce the same anti-join plan for both. NOT IN is the one to avoid because of null semantics.",
+  "tags": [
+   "sql",
+   "joins",
+   "anti-join",
+   "query-design"
+  ],
+  "id": 4417
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a view and a common table expression for reuse?",
+  "answer": "A view is stored and reusable across queries with its own permissions; a CTE exists only within one statement. Use a view for logic reused by several queries or consumers, and a CTE for readability within a single complex statement. A CTE copied into ten queries should have been a view.",
+  "tags": [
+   "sql",
+   "views",
+   "cte",
+   "design"
+  ],
+  "id": 4418
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "How do you choose the right consistency level in Cosmos DB?",
+  "answer": "Strong for read-your-write correctness within a region at higher latency and cost, bounded staleness for a defined lag, session for per-client consistency which is the practical default, and eventual for maximum throughput. Most applications need session, and choosing strong globally is a common expensive default.",
+  "tags": [
+   "azure",
+   "cosmos-db",
+   "consistency",
+   "cost"
+  ],
+  "id": 4419
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "What is the effect of consistency level on Cosmos DB request charges?",
+  "answer": "Stronger consistency costs more request units for reads and constrains where reads can be served from, so a global application on strong consistency pays both in cost and latency. Weakening it where the application tolerates staleness is one of the more effective Cosmos cost reductions.",
+  "tags": [
+   "azure",
+   "cosmos-db",
+   "cost",
+   "consistency"
+  ],
+  "id": 4420
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Compute",
+  "difficulty": "Medium",
+  "question": "How do you handle configuration reload without restarting an Azure-hosted app?",
+  "answer": "Use a provider that supports refresh such as App Configuration with a sentinel key, expose the values through IOptionsMonitor so consumers see updates, and be explicit about which settings are safe to change at runtime. Settings that require reconnection or re-registration need a restart regardless.",
+  "tags": [
+   "azure",
+   "configuration",
+   "operations",
+   "dotnet"
+  ],
+  "id": 4421
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Compute",
+  "difficulty": "Medium",
+  "question": "What is the difference between a deployment slot swap and a blue-green deployment?",
+  "answer": "A slot swap exchanges two environments within one App Service plan, sharing the plan's compute, so it is fast and cheap but not fully isolated. Blue-green usually implies two complete independent environments including infrastructure, giving stronger isolation at double the cost.",
+  "tags": [
+   "azure",
+   "deployment",
+   "blue-green",
+   "app-service"
+  ],
+  "id": 4422
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system that must produce identical results when replayed?",
+  "answer": "Make every input explicit and recorded - including time, random values and external responses - so a replay uses the captured values rather than fresh ones. Determinism requires treating the clock and randomness as injected dependencies, which is the same discipline that makes such systems testable.",
+  "tags": [
+   "system-design",
+   "determinism",
+   "replay",
+   "testing"
+  ],
+  "id": 4423
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a read-heavy system with occasional writes?",
+  "answer": "Cache aggressively with invalidation on write, use read replicas, denormalise for the read pattern, and put the expensive computation on the write path. The design freedom is that a slower write is acceptable, which is exactly what precomputation and cache warming exploit.",
+  "tags": [
+   "system-design",
+   "caching",
+   "read-heavy",
+   "architecture"
+  ],
+  "id": 4424
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a write-heavy system?",
+  "answer": "Append rather than update, batch writes, use a store optimised for sequential writes such as an LSM engine, partition to spread load, and move derived views off the write path to asynchronous projections. The constraint is usually the durability requirement, which determines how much batching is acceptable.",
+  "tags": [
+   "system-design",
+   "write-heavy",
+   "storage",
+   "architecture"
+  ],
+  "id": 4425
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system for GDPR-compliant data deletion?",
+  "answer": "Maintain a registry mapping a subject to every location their data appears, implement deletion per store, handle backups through documented retention windows, propagate deletion to processors, and produce an audit record. The registry is the part that must exist from the start, because reconstructing it later is impractical.",
+  "tags": [
+   "system-design",
+   "gdpr",
+   "privacy",
+   "compliance"
+  ],
+  "id": 4426
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design an integration that must never lose a message even if the consumer is down for a day?",
+  "answer": "Durable queueing with retention exceeding the expected outage, dead-lettering with alerting, consumer offsets or acknowledgement so nothing is dropped on restart, and monitoring on backlog age. The design question is whether the producer should apply backpressure or continue accumulating.",
+  "tags": [
+   "system-design",
+   "messaging",
+   "durability",
+   "reliability"
+  ],
+  "id": 4427
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between designing for change and speculative generality?",
+  "answer": "Designing for change means keeping decisions reversible and boundaries clean so a future change is cheap. Speculative generality means building the future capability now. The first costs almost nothing; the second costs complexity for a requirement that usually arrives different from what was imagined.",
+  "tags": [
+   "architecture",
+   "design",
+   "yagni",
+   "judgement"
+  ],
+  "id": 4428
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you know an abstraction is earning its place?",
+  "answer": "When it hides genuine complexity, when consumers use it without needing to know what is behind it, and when the underlying implementation has changed at least once without breaking them. An abstraction with one implementation whose interface mirrors it exactly has not yet demonstrated value.",
+  "tags": [
+   "architecture",
+   "abstraction",
+   "design",
+   "judgement"
+  ],
+  "id": 4429
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between accidental and deliberate coupling?",
+  "answer": "Deliberate coupling is documented and intended - a service depending on a published contract. Accidental coupling arises from shared assumptions, undocumented behaviour or a shared library used for unrelated reasons. The second is what makes changes break things nobody predicted.",
+  "tags": [
+   "architecture",
+   "coupling",
+   "design",
+   "maintainability"
+  ],
+  "id": 4430
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle a requirement that conflicts with the existing architecture?",
+  "answer": "Quantify what accommodating it would cost in the current design, propose the smallest change that supports it cleanly, and be explicit if the honest answer is that the architecture no longer fits the problem. Bolting it on without acknowledgement is how architectures become incoherent one requirement at a time.",
+  "tags": [
+   "architecture",
+   "change",
+   "communication",
+   "design"
+  ],
+  "id": 4431
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What is the operational cost of adding a new service?",
+  "answer": "A pipeline, environments, monitoring, alerting, on-call knowledge, dependency upgrades, security patching, documentation and an owner - repeated for its lifetime. Counting only the development effort is why organisations end up with more services than they can operate, which shows as unpatched and unmonitored components.",
+  "tags": [
+   "devops",
+   "microservices",
+   "cost",
+   "operations"
+  ],
+  "id": 4432
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you decommission a service safely?",
+  "answer": "Confirm no traffic through telemetry over a full business cycle, announce and wait, disable rather than delete first so it can be restored quickly, then remove infrastructure, data with an archive if required, pipelines, monitors and documentation. Half-decommissioned services are a recurring source of confusion and cost.",
+  "tags": [
+   "devops",
+   "decommissioning",
+   "operations",
+   "practices"
+  ],
+  "id": 4433
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What should happen when a pipeline is red for a long time?",
+  "answer": "It should be treated as an incident - a broken pipeline blocks every deployment including a fix - with someone assigned rather than assumed. A tolerated red build teaches the team to merge anyway, which removes the pipeline's value entirely and is far harder to reverse than fixing the original failure.",
+  "tags": [
+   "devops",
+   "cicd",
+   "culture",
+   "practices"
+  ],
+  "id": 4434
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you test a migration script?",
+  "answer": "Run it against a restored copy of production-sized data, verify the resulting schema and a sample of transformed rows, measure duration and locking, run the application's test suite against the migrated database, and test the rollback. Testing on an empty development database validates only the syntax.",
+  "tags": [
+   "testing",
+   "migrations",
+   "database",
+   "practices"
+  ],
+  "id": 4435
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you write a test for a bug before fixing it?",
+  "answer": "Reproduce the exact conditions in the smallest possible test, confirm it fails for the right reason, then fix and confirm it passes. Writing the test first is what proves the fix addresses the actual cause rather than a symptom - a test written afterwards often passes against the old code too.",
+  "tags": [
+   "testing",
+   "debugging",
+   "regression",
+   "practices"
+  ],
+  "id": 4436
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What is the difference between a test that is slow and a test that is at the wrong level?",
+  "answer": "A slow test does necessary work slowly - starting a container, running a query. A test at the wrong level does unnecessary work - driving a browser to verify a calculation. The remedy differs: optimise the first, rewrite the second at a lower level where it runs in milliseconds.",
+  "tags": [
+   "testing",
+   "strategy",
+   "performance",
+   "practices"
+  ],
+  "id": 4437
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you know whether your instrumentation is sufficient?",
+  "answer": "Run through recent incidents and ask whether the telemetry would have detected each one and explained it. Gaps found that way are concrete and prioritisable, unlike a general instinct that monitoring should be better. Doing it as part of every postmortem keeps coverage aligned with real failure modes.",
+  "tags": [
+   "observability",
+   "instrumentation",
+   "postmortem",
+   "practices"
+  ],
+  "id": 4438
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "What is the difference between a metric being wrong and being misinterpreted?",
+  "answer": "A wrong metric measures the wrong thing or is computed incorrectly; a misinterpreted one is correct but read without its context - an average hiding a distribution, a rate without a denominator, a spike that is a deployment. Both produce bad decisions, and dashboards should carry enough context to prevent the second.",
+  "tags": [
+   "observability",
+   "metrics",
+   "communication",
+   "practices"
+  ],
+  "id": 4439
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you handle telemetry from a client application you do not control at runtime?",
+  "answer": "Version every event, tolerate old clients sending old shapes indefinitely, sample to control volume, and never assume a fix reaches all users quickly. Mobile and desktop clients run old versions for years, so client telemetry schemas must be treated as a permanently versioned contract.",
+  "tags": [
+   "observability",
+   "clients",
+   "versioning",
+   "practices"
+  ],
+  "id": 4440
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you validate a new data source before building on it?",
+  "answer": "Profile it - row counts, distributions, null rates, key uniqueness, date ranges - reconcile a sample against the source system's own reporting, and check refresh behaviour and history availability. Building a model on an unprofiled source is how a fundamental assumption is discovered to be wrong after the dashboards ship.",
+  "tags": [
+   "bi",
+   "data-quality",
+   "profiling",
+   "practices"
+  ],
+  "id": 4441
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What do you do when two systems report different numbers for the same thing?",
+  "answer": "Establish each definition precisely including filters, timing and grain, then reconcile row by row on a sample to find where they diverge. The difference is almost always definitional rather than a bug, and documenting the resolution prevents the same investigation recurring every quarter.",
+  "tags": [
+   "bi",
+   "reconciliation",
+   "data-quality",
+   "communication"
+  ],
+  "id": 4442
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you handle a stakeholder request for a metric that would be misleading?",
+  "answer": "Explain specifically how it would mislead and what decision it could distort, propose an alternative that answers the underlying question, and if it is still required, publish it with the caveat attached to the metric rather than in a document nobody reads.",
+  "tags": [
+   "bi",
+   "communication",
+   "ethics",
+   "stakeholders"
+  ],
+  "id": 4443
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Collaboration",
+  "difficulty": "Medium",
+  "question": "How do you review a large pull request effectively?",
+  "answer": "Ask for it to be split if that is feasible. Otherwise review in passes - structure and approach first, then logic, then details - and focus on what a reviewer can uniquely catch: design, edge cases and missing tests rather than formatting. Say explicitly what you did and did not review.",
+  "tags": [
+   "behavioral",
+   "code-review",
+   "practices",
+   "communication"
+  ],
+  "id": 4444
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Collaboration",
+  "difficulty": "Medium",
+  "question": "How do you make a pull request easy to review?",
+  "answer": "Keep it small and single-purpose, write a description covering what and why with any context the diff cannot show, separate mechanical refactoring from behavioural change into different commits or requests, and self-review first. Reviewer time is the scarce resource, and the author controls how much of it is needed.",
+  "tags": [
+   "behavioral",
+   "code-review",
+   "practices",
+   "communication"
+  ],
+  "id": 4445
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Collaboration",
+  "difficulty": "Medium",
+  "question": "How do you handle a review comment you disagree with?",
+  "answer": "Respond with the reasoning rather than only the conclusion, ask what problem the reviewer is anticipating, and be willing to change your mind. If it remains unresolved after a round or two, move to a call - long comment threads are where disagreement becomes friction disproportionate to the issue.",
+  "tags": [
+   "behavioral",
+   "code-review",
+   "conflict",
+   "communication"
+  ],
+  "id": 4446
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Collaboration",
+  "difficulty": "Medium",
+  "question": "What makes pairing effective rather than exhausting?",
+  "answer": "Agreed goal and timebox, switching roles regularly, thinking aloud, and breaks. It suits complex or unfamiliar work and onboarding, and is wasteful for routine tasks. Treating it as mandatory for everything produces resistance that then blocks its use where it genuinely helps.",
+  "tags": [
+   "behavioral",
+   "pairing",
+   "collaboration",
+   "practices"
+  ],
+  "id": 4447
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Delivery",
+  "difficulty": "Medium",
+  "question": "How do you handle discovering mid-implementation that the approach is wrong?",
+  "answer": "Stop and say so early rather than pushing through - the sunk cost is already spent and continuing adds to it. Describe what you learned, the options now, and your recommendation. Discovering this is normal in non-trivial work; concealing it until the deadline is what turns it into a problem.",
+  "tags": [
+   "behavioral",
+   "delivery",
+   "communication",
+   "judgement"
+  ],
+  "id": 4448
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Delivery",
+  "difficulty": "Medium",
+  "question": "How do you keep quality from slipping under deadline pressure?",
+  "answer": "Cut scope rather than practices - shipping fewer features properly beats shipping all of them with untested error paths and no monitoring. Make the trade-off visible to whoever owns the deadline so it is their decision, and record any deliberate debt with a plan rather than letting it disappear.",
+  "tags": [
+   "behavioral",
+   "quality",
+   "pressure",
+   "communication"
+  ],
+  "id": 4449
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Growth",
+  "difficulty": "Medium",
+  "question": "How do you learn a new domain quickly?",
+  "answer": "Talk to the people who do the work, read the existing artefacts including support tickets and incident reports, build the smallest useful thing early to surface misunderstandings, and write down the vocabulary. Domain confusion shows up as design mistakes, so surfacing it fast matters more than reading thoroughly.",
+  "tags": [
+   "behavioral",
+   "learning",
+   "domain",
+   "practices"
+  ],
+  "id": 4450
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Growth",
+  "difficulty": "Medium",
+  "question": "How do you get better at estimation?",
+  "answer": "Break work down until pieces are comparable to things you have done, record estimates against actuals, and review the gap for patterns - usually forgotten testing, integration and review time rather than the coding itself. Calibration comes from feedback, which most people never collect.",
+  "tags": [
+   "behavioral",
+   "estimation",
+   "growth",
+   "practices"
+  ],
+  "id": 4451
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you restrict which identities can deploy to production?",
+  "answer": "Scope the deployment identity's RBAC to the production resource groups only, gate the pipeline stage behind an environment with required approvers and branch restrictions, and use federated credentials so no long-lived secret exists. Access to the pipeline then becomes the control, which is why pipeline permissions matter as much as cloud permissions.",
+  "tags": [
+   "azure",
+   "security",
+   "cicd",
+   "governance"
+  ],
+  "id": 4452
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "What is Conditional Access and what can it enforce?",
+  "answer": "Policies evaluating signals - user, device compliance, location, application, risk level - to require MFA, block access, or limit the session. It is the practical enforcement point for zero-trust identity, and its main operational risk is locking out administrators, which is why break-glass accounts are excluded.",
+  "tags": [
+   "azure",
+   "entra-id",
+   "conditional-access",
+   "security"
+  ],
+  "id": 4453
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Networking",
+  "difficulty": "Medium",
+  "question": "How do you decide whether a workload needs a virtual network at all?",
+  "answer": "If it only consumes managed services over public endpoints with identity-based authentication and no compliance requirement for network isolation, it may not. A VNet adds address planning, DNS, private endpoints and firewall management - real cost that should be justified by a requirement rather than adopted by default.",
+  "tags": [
+   "azure",
+   "networking",
+   "architecture",
+   "trade-offs"
+  ],
+  "id": 4454
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Networking",
+  "difficulty": "Medium",
+  "question": "What is the practical impact of running out of subnet addresses?",
+  "answer": "New instances cannot be scheduled, AKS pods fail to start with CNI networking, and private endpoints cannot be created - all appearing as capacity errors rather than network errors. Address planning must account for scale-out headroom and platform reservations, and resizing a subnet in use is disruptive.",
+  "tags": [
+   "azure",
+   "networking",
+   "capacity",
+   "troubleshooting"
+  ],
+  "id": 4455
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "How do you decide the throughput model for a new Cosmos container?",
+  "answer": "Serverless for development and spiky low-volume workloads, autoscale when traffic varies through the day, and provisioned when load is steady and predictable enough that the lower per-RU price wins. Start with autoscale unless you have measured usage, since the penalty for under-provisioning is throttled users.",
+  "tags": [
+   "azure",
+   "cosmos-db",
+   "cost",
+   "capacity"
+  ],
+  "id": 4456
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is the difference between Azure Advisor and Defender for Cloud recommendations?",
+  "answer": "Advisor covers cost, performance, reliability and operational excellence; Defender covers security posture and workload protection. Both produce recommendations that need triage rather than blanket adoption - some cost recommendations reduce resilience, and some security ones do not apply to your architecture.",
+  "tags": [
+   "azure",
+   "governance",
+   "recommendations",
+   "operations"
+  ],
+  "id": 4457
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you handle Azure platform maintenance events?",
+  "answer": "Subscribe to planned maintenance and health notifications, design for instances being restarted - which means multiple instances and graceful shutdown - and use maintenance configurations where the service supports scheduling. A single-instance deployment will be interrupted eventually regardless of your own release schedule.",
+  "tags": [
+   "azure",
+   "maintenance",
+   "reliability",
+   "operations"
+  ],
+  "id": 4458
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a multi-region write system with conflict avoidance rather than resolution?",
+  "answer": "Partition ownership by region so each record has one writing region - customers routed to their home region - which avoids conflicts entirely rather than resolving them. It requires routing logic and a plan for moving ownership, but it is far simpler than merging concurrent writes correctly.",
+  "tags": [
+   "system-design",
+   "multi-region",
+   "conflicts",
+   "architecture"
+  ],
+  "id": 4459
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design an API that must remain available when its database is down?",
+  "answer": "Serve reads from a cache with a stale-if-error policy, accept writes into a durable queue and acknowledge as pending, and return a clear degraded status. It changes the contract - writes are no longer immediately consistent - so the product must accept that before the architecture can.",
+  "tags": [
+   "system-design",
+   "availability",
+   "degradation",
+   "design"
+  ],
+  "id": 4460
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to detect and prevent duplicate customer accounts?",
+  "answer": "Normalise and index the identifying attributes, apply deterministic matching on strong identifiers and probabilistic matching on weak ones with a review queue for uncertain matches, and record merge history so a wrong merge can be undone. Automatic merging on fuzzy matches without review is what creates unrecoverable data problems.",
+  "tags": [
+   "system-design",
+   "data-quality",
+   "matching",
+   "design"
+  ],
+  "id": 4461
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system that must prove what a user saw at a point in time?",
+  "answer": "Version the content and record the version identifier with the interaction, rather than reconstructing from current data. Regulatory and dispute scenarios need the exact rendered terms, which a live query cannot reproduce after any change - storing a rendered snapshot is often the pragmatic answer.",
+  "tags": [
+   "system-design",
+   "audit",
+   "versioning",
+   "compliance"
+  ],
+  "id": 4462
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design throttling that is fair between customers?",
+  "answer": "Per-tenant limits rather than a global one so a heavy user cannot starve others, weighted by plan, with a shared overflow capacity if spare. Global-only limiting means the noisiest tenant consumes the allowance and everyone else sees rejections caused by someone they cannot see.",
+  "tags": [
+   "system-design",
+   "rate-limiting",
+   "multitenancy",
+   "fairness"
+  ],
+  "id": 4463
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle a feature that requires data from a service you do not own?",
+  "answer": "Options are calling their API synchronously, subscribing to their events and keeping a local replica, or asking them to expose what you need. Each trades coupling against staleness and effort, and the decision should account for their availability and change cadence, not just the implementation cost today.",
+  "tags": [
+   "architecture",
+   "integration",
+   "coupling",
+   "design"
+  ],
+  "id": 4464
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the risk of a service that only one other service calls?",
+  "answer": "It may not justify being separate - the network hop, deployment pipeline and operational burden buy nothing if the two always change together. It is worth keeping separate only if the scaling, ownership or technology genuinely differ, otherwise merging removes cost with no loss.",
+  "tags": [
+   "architecture",
+   "microservices",
+   "boundaries",
+   "judgement"
+  ],
+  "id": 4465
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle logic that genuinely belongs to two bounded contexts?",
+  "answer": "It usually means the concept means different things in each, so each context should own its own version rather than sharing one implementation. Where the rule is truly identical and stable, a shared library is acceptable - but a rule that must agree across contexts is often a sign that a boundary is misplaced.",
+  "tags": [
+   "architecture",
+   "ddd",
+   "boundaries",
+   "design"
+  ],
+  "id": 4466
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the practical difference between an event and a webhook?",
+  "answer": "An event is an internal publication others may subscribe to; a webhook is an outbound HTTP call to an external consumer's endpoint. Webhooks add delivery guarantees, retries, signing, endpoint health and versioning as your responsibility, which is why they are a product feature rather than an integration detail.",
+  "tags": [
+   "architecture",
+   "events",
+   "webhooks",
+   "integration"
+  ],
+  "id": 4467
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you version a shared internal event schema across teams?",
+  "answer": "A registry with compatibility rules checked in each producer's pipeline, additive-only changes within a version, and a new topic or type for breaking changes with both published during migration. Consumer telemetry showing which version each reads is what makes retiring the old one safe.",
+  "tags": [
+   "architecture",
+   "events",
+   "versioning",
+   "governance"
+  ],
+  "id": 4468
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Kubernetes",
+  "difficulty": "Medium",
+  "question": "How do you decide requests and limits for a workload?",
+  "answer": "Measure actual usage under representative load, set requests near the steady-state usage so scheduling is accurate, and set limits with headroom for spikes - or omit the CPU limit to avoid throttling while keeping the memory limit to bound the blast radius. Guessing produces either waste or throttling.",
+  "tags": [
+   "kubernetes",
+   "resources",
+   "capacity",
+   "performance"
+  ],
+  "id": 4469
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Kubernetes",
+  "difficulty": "Medium",
+  "question": "Why might removing a CPU limit improve performance?",
+  "answer": "CPU limits are enforced by throttling within each scheduling period, so a workload with bursty CPU is paused even when the node has spare capacity, adding latency. Setting requests correctly gives it a guaranteed share; the limit mainly prevents one workload monopolising a node, which requests plus quotas can also address.",
+  "tags": [
+   "kubernetes",
+   "cpu",
+   "throttling",
+   "performance"
+  ],
+  "id": 4470
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Kubernetes",
+  "difficulty": "Medium",
+  "question": "What is the difference between a horizontal pod autoscaler and a vertical one?",
+  "answer": "Horizontal adds replicas, which suits stateless workloads and scales throughput. Vertical adjusts requests and limits for a pod, which suits workloads that cannot be parallelised - and it usually requires a restart to apply. Using both on the same metric conflicts, so they must target different signals.",
+  "tags": [
+   "kubernetes",
+   "autoscaling",
+   "capacity",
+   "operations"
+  ],
+  "id": 4471
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Kubernetes",
+  "difficulty": "Medium",
+  "question": "How do you debug a service that works from inside the cluster but not from outside?",
+  "answer": "Work outward: service endpoints, then ingress rules and the controller's logs, then the external load balancer and DNS, then TLS certificate validity. Each layer is a separate configuration, and the failure is usually a host or path mismatch in the ingress rather than anything in the application.",
+  "tags": [
+   "kubernetes",
+   "networking",
+   "troubleshooting",
+   "ingress"
+  ],
+  "id": 4472
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Kubernetes",
+  "difficulty": "Medium",
+  "question": "What does it mean that Kubernetes is eventually consistent?",
+  "answer": "Applying a manifest records intent; controllers converge the cluster toward it over time and may fail silently. That is why a successful apply does not mean the change took effect, and why deployment automation must wait for readiness and check status rather than treating the apply as completion.",
+  "tags": [
+   "kubernetes",
+   "reconciliation",
+   "deployment",
+   "operations"
+  ],
+  "id": 4473
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "CI/CD",
+  "difficulty": "Medium",
+  "question": "How do you handle flaky infrastructure in a pipeline?",
+  "answer": "Distinguish infrastructure flakiness from test flakiness by tagging failure types, retry only infrastructure steps with backoff, pin tool versions to avoid upstream changes, and cache dependencies so a registry outage does not fail the build. Retrying tests to mask infrastructure problems hides both.",
+  "tags": [
+   "devops",
+   "cicd",
+   "flaky",
+   "reliability"
+  ],
+  "id": 4474
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "CI/CD",
+  "difficulty": "Medium",
+  "question": "What is a matrix build and when is it worth the cost?",
+  "answer": "Running the same pipeline across combinations of versions, platforms or configurations. It is worth it for libraries supporting several runtimes, and wasteful for an application deployed to one environment. Each combination multiplies runtime and cost, so the matrix should reflect what you actually support.",
+  "tags": [
+   "devops",
+   "cicd",
+   "testing",
+   "cost"
+  ],
+  "id": 4475
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you handle testing code that depends on a third-party SDK?",
+  "answer": "Wrap it in a thin adapter you own, test your logic against the adapter interface, and cover the adapter itself with a small number of integration tests against a sandbox or recorded interactions. Mocking the SDK's own types directly couples tests to a dependency's internals that will change.",
+  "tags": [
+   "testing",
+   "third-party",
+   "adapters",
+   "design"
+  ],
+  "id": 4476
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What is the difference between verifying behaviour and verifying state?",
+  "answer": "State verification checks the result or the resulting data; behaviour verification checks that a collaborator was called. State assertions survive refactoring; behaviour assertions are necessary only when the interaction is the observable outcome, such as a message being published. Preferring state is what keeps tests durable.",
+  "tags": [
+   "testing",
+   "assertions",
+   "mocking",
+   "design"
+  ],
+  "id": 4477
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you test idempotency?",
+  "answer": "Execute the operation twice with the same inputs and assert the resulting state matches a single execution, including side effects such as messages published and rows inserted. Asserting only that the second call did not error misses the case where it silently duplicated the effect.",
+  "tags": [
+   "testing",
+   "idempotency",
+   "reliability",
+   "practices"
+  ],
+  "id": 4478
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you test concurrency-sensitive code?",
+  "answer": "Drive the specific interleaving with synchronisation primitives so the race is deterministic, rather than running many threads and hoping. Add a stress test that runs high concurrency repeatedly as a secondary check. A test that fails one time in a hundred proves a bug exists but cannot verify a fix.",
+  "tags": [
+   "testing",
+   "concurrency",
+   "determinism",
+   "practices"
+  ],
+  "id": 4479
+ },
+ {
+  "category": "Security",
+  "subcategory": "AppSec",
+  "difficulty": "Medium",
+  "question": "What is the difference between validation and sanitisation?",
+  "answer": "Validation rejects input that does not meet expectations; sanitisation modifies input to make it safe. Validation is preferable because it is predictable - sanitisation can produce unexpected results and is easy to bypass with encoding. Sanitise only where the input must be accepted, such as rendered HTML.",
+  "tags": [
+   "security",
+   "validation",
+   "sanitisation",
+   "design"
+  ],
+  "id": 4480
+ },
+ {
+  "category": "Security",
+  "subcategory": "AppSec",
+  "difficulty": "Medium",
+  "question": "Why should security controls fail closed?",
+  "answer": "Because a failure in the control - the authorisation service unreachable, the policy fetch failing - should deny access rather than grant it. Failing open converts a dependency outage into an authorisation bypass, which is precisely the moment an attacker would prefer. The exception is availability-critical read paths where the risk is explicitly accepted.",
+  "tags": [
+   "security",
+   "fail-closed",
+   "design",
+   "reliability"
+  ],
+  "id": 4481
+ },
+ {
+  "category": "Security",
+  "subcategory": "AppSec",
+  "difficulty": "Medium",
+  "question": "How do you securely implement remember me functionality?",
+  "answer": "Issue a long-lived random token stored hashed server-side and bound to a device, rotate it on each use with reuse detection, set it as a secure HttpOnly cookie, and require re-authentication for sensitive actions regardless. Encoding the user id and a signature into the cookie without server-side state removes the ability to revoke.",
+  "tags": [
+   "security",
+   "authentication",
+   "sessions",
+   "design"
+  ],
+  "id": 4482
+ },
+ {
+  "category": "Security",
+  "subcategory": "AppSec",
+  "difficulty": "Medium",
+  "question": "What is step-up authentication and when should you use it?",
+  "answer": "Requiring additional verification for a sensitive action even within an authenticated session - changing an email address, transferring funds, viewing full account details. It limits the damage of a hijacked session and is far less intrusive than requiring strong authentication for every interaction.",
+  "tags": [
+   "security",
+   "authentication",
+   "design",
+   "ux"
+  ],
+  "id": 4483
+ },
+ {
+  "category": "Security",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you securely offboard someone with production access?",
+  "answer": "Revoke identity provider access first since it gates most systems, then check for personal access tokens, SSH keys, service accounts they created, shared credentials they knew, and any external service accounts. Rotate anything they could have retained. The gap is always the credentials outside the central identity system.",
+  "tags": [
+   "security",
+   "offboarding",
+   "access-control",
+   "operations"
+  ],
+  "id": 4484
+ },
+ {
+  "category": "Security",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is an access review and how often should one happen?",
+  "answer": "A periodic check that each identity's permissions are still justified, performed by someone who knows the business context rather than by the security team alone. Quarterly for privileged access and at least annually for the rest, plus event-driven reviews on role change - permissions accumulate and are never voluntarily surrendered.",
+  "tags": [
+   "security",
+   "access-review",
+   "governance",
+   "operations"
+  ],
+  "id": 4485
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "How do you decide the temperature for a production feature?",
+  "answer": "Zero or near-zero for extraction, classification, routing and structured output where one answer is right; slightly higher for drafting and creative text where variation is desirable. Then verify against your evaluation set rather than assuming - some tasks measurably degrade at zero due to repetition.",
+  "tags": [
+   "ai",
+   "sampling",
+   "configuration",
+   "evaluation"
+  ],
+  "id": 4486
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "How do you limit the cost of a runaway conversation?",
+  "answer": "Cap the total tokens per conversation and per user per period, truncate or summarise history above a threshold, limit the maximum output tokens, and reject or degrade beyond a budget. Without a cap, one user with a long conversation and a large context can cost more than a thousand ordinary ones.",
+  "tags": [
+   "ai",
+   "cost",
+   "limits",
+   "operations"
+  ],
+  "id": 4487
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "What belongs in a prompt template versus in code?",
+  "answer": "Natural language instruction and examples belong in the template; deterministic logic, data selection, formatting and validation belong in code. Rules the model must not violate should be enforced in code after generation, because a prompt instruction is a strong suggestion rather than a constraint.",
+  "tags": [
+   "ai",
+   "prompting",
+   "architecture",
+   "reliability"
+  ],
+  "id": 4488
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Engineering",
+  "difficulty": "Medium",
+  "question": "How do you handle personally identifiable information in prompts?",
+  "answer": "Minimise what is sent, redact or tokenise identifiers before the call where the task permits, confirm the provider's retention and training position contractually, and log prompts with the same redaction. Sending a full customer record when a single field would do is the common and avoidable exposure.",
+  "tags": [
+   "ai",
+   "privacy",
+   "compliance",
+   "engineering"
+  ],
+  "id": 4489
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Evaluation",
+  "difficulty": "Medium",
+  "question": "How large does an evaluation set need to be?",
+  "answer": "Large enough that a meaningful quality difference is distinguishable from noise, which for a coarse pass-fail judgement is typically tens to low hundreds of well-chosen cases rather than thousands. Coverage of distinct scenarios matters more than volume, and each case should be one you would care about failing.",
+  "tags": [
+   "ai",
+   "evaluation",
+   "statistics",
+   "practices"
+  ],
+  "id": 4490
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Evaluation",
+  "difficulty": "Medium",
+  "question": "How do you evaluate an extraction task?",
+  "answer": "Per-field precision and recall against labelled ground truth, reported separately since a model may be reliable on some fields and poor on others. An aggregate accuracy hides that the one field the business cares about is wrong a fifth of the time, which is the outcome that matters.",
+  "tags": [
+   "ai",
+   "evaluation",
+   "extraction",
+   "metrics"
+  ],
+  "id": 4491
+ },
+ {
+  "category": "React",
+  "subcategory": "Patterns",
+  "difficulty": "Medium",
+  "question": "How do you design a component that must work both controlled and uncontrolled?",
+  "answer": "Accept an optional value with onChange and an optional defaultValue, use internal state only when value is undefined, and warn if the component switches mode during its lifetime. Following the native input contract means it composes with any form library without special handling.",
+  "tags": [
+   "react",
+   "patterns",
+   "components",
+   "api-design"
+  ],
+  "id": 4492
+ },
+ {
+  "category": "React",
+  "subcategory": "Patterns",
+  "difficulty": "Medium",
+  "question": "What is the difference between a wrapper component and a hook for shared behaviour?",
+  "answer": "A hook shares logic and returns values; a wrapper also controls rendering and can inject markup. Prefer a hook unless the shared behaviour needs to render something or wrap children, because a wrapper adds a tree level, affects layout, and complicates ref forwarding.",
+  "tags": [
+   "react",
+   "hooks",
+   "composition",
+   "design"
+  ],
+  "id": 4493
+ },
+ {
+  "category": "React",
+  "subcategory": "Patterns",
+  "difficulty": "Medium",
+  "question": "How do you handle a component that needs both a ref and to be memoised?",
+  "answer": "In React 19 ref is a normal prop so it passes through memo naturally; before that the component must be wrapped in forwardRef and then memo, in that order. Getting the order wrong silently drops the ref, which shows as focus management or measurement failing without an error.",
+  "tags": [
+   "react",
+   "refs",
+   "memoization",
+   "components"
+  ],
+  "id": 4494
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Patterns",
+  "difficulty": "Medium",
+  "question": "How do you implement a plugin architecture in Angular?",
+  "answer": "Define a token for the plugin interface, register implementations as multi providers, and inject the array where they are used. Each plugin can then be contributed by a different feature or lazily loaded module without the consumer knowing about it, which is how validators and interceptors work.",
+  "tags": [
+   "angular",
+   "di",
+   "plugins",
+   "architecture"
+  ],
+  "id": 4495
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Patterns",
+  "difficulty": "Medium",
+  "question": "How do you build a component that adapts its behaviour based on injected configuration?",
+  "answer": "Provide configuration through an injection token with a default, allowing the application to override it at bootstrap or a feature to override it at route level. That keeps the component reusable while letting each context configure it, without configuration inputs repeated at every usage site.",
+  "tags": [
+   "angular",
+   "di",
+   "configuration",
+   "components"
+  ],
+  "id": 4496
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Patterns",
+  "difficulty": "Medium",
+  "question": "How do you handle a service that must be initialised asynchronously?",
+  "answer": "Either an APP_INITIALIZER awaiting it before bootstrap, or exposing a ready promise or signal that consumers await. Constructing it lazily and hoping initialisation completes before first use is the pattern that produces intermittent undefined errors under slow network conditions.",
+  "tags": [
+   "angular",
+   "di",
+   "initialisation",
+   "reliability"
+  ],
+  "id": 4497
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you handle a design that is not technically feasible as specified?",
+  "answer": "Explain the specific constraint - performance, accessibility, platform limitation - propose the closest achievable alternative with a prototype if possible, and involve the designer in the trade-off rather than silently approximating. Silent approximation produces a result nobody signed off and a conversation later.",
+  "tags": [
+   "frontend",
+   "collaboration",
+   "design",
+   "communication"
+  ],
+  "id": 4498
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you keep implementation faithful to a design system?",
+  "answer": "Use tokens rather than hard-coded values, build from the shared component library, review visually against the design, and lint for raw colour and spacing values. Faithfulness degrades through small local exceptions, so making the correct path easier than the exception is what maintains it.",
+  "tags": [
+   "frontend",
+   "design-system",
+   "practices",
+   "quality"
+  ],
+  "id": 4499
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What should happen when a shared component needs a one-off variation?",
+  "answer": "Ask whether the variation is general enough to belong in the system; if not, compose around the component or use its provided extension points rather than adding a prop for one consumer. Each single-use prop makes the component harder to change for everyone else.",
+  "tags": [
+   "frontend",
+   "design-system",
+   "api-design",
+   "practices"
+  ],
+  "id": 4500
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between an invariant, a precondition and a postcondition?",
+  "answer": "An invariant holds throughout an object's lifetime, a precondition must hold when a method is called, and a postcondition holds when it returns. Stating them explicitly is what makes correct usage checkable - most defensive programming is an informal implementation of preconditions.",
+  "tags": [
+   "fundamentals",
+   "contracts",
+   "design",
+   "correctness"
+  ],
+  "id": 4501
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is design by contract?",
+  "answer": "Specifying preconditions, postconditions and invariants as part of the interface, with defined responsibility for checking them - callers meet preconditions, implementations guarantee postconditions. Even without language support, writing them down clarifies whose fault a violation is, which is usually the real ambiguity.",
+  "tags": [
+   "fundamentals",
+   "contracts",
+   "design",
+   "correctness"
+  ],
+  "id": 4502
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a value object and a primitive in modelling?",
+  "answer": "A value object carries meaning and its own validation - an email address that cannot be constructed invalid - while a primitive carries none. Wrapping primitives moves validation to construction and makes signatures self-documenting, at the cost of conversion code at boundaries.",
+  "tags": [
+   "fundamentals",
+   "modelling",
+   "value-objects",
+   "design"
+  ],
+  "id": 4503
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is meant by making illegal states unrepresentable?",
+  "answer": "Designing types so an invalid combination cannot be constructed - a union rather than optional fields, a non-empty list type, a validated wrapper. It converts runtime checks into compile-time guarantees and removes the branch handling a state that can no longer occur.",
+  "tags": [
+   "fundamentals",
+   "types",
+   "design",
+   "correctness"
+  ],
+  "id": 4504
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you decide the refresh frequency for a report?",
+  "answer": "From the decision cadence it supports, not from what is technically possible - a monthly board report does not need hourly refresh, while an operational queue view does. Over-frequent refresh costs source load and money and creates an expectation of real-time accuracy the pipeline cannot guarantee.",
+  "tags": [
+   "bi",
+   "refresh",
+   "cost",
+   "practices"
+  ],
+  "id": 4505
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you handle a report that must show data as of a specific moment?",
+  "answer": "Snapshot the data with the timestamp and report from the snapshot, rather than querying live and hoping nothing changed. Financial and regulatory reporting requires reproducibility, which live queries against a changing source cannot provide even if they are correct at the instant they run.",
+  "tags": [
+   "bi",
+   "reporting",
+   "reproducibility",
+   "compliance"
+  ],
+  "id": 4506
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What is the role of a semantic model in preventing conflicting numbers?",
+  "answer": "It defines each measure once with its filters and business rules, so every report consuming it produces the same number. Without it, each report author reimplements revenue with slightly different assumptions, and the resulting disagreement is discovered in a meeting rather than in a review.",
+  "tags": [
+   "bi",
+   "semantic-layer",
+   "governance",
+   "practices"
+  ],
+  "id": 4507
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you avoid alert duplication across a service and its dependencies?",
+  "answer": "Alert on symptoms at the user-facing boundary and suppress or group downstream alerts caused by the same root event, using dependency-aware grouping in the alerting tool. Otherwise one database problem pages every team whose service touches it, which fragments the response.",
+  "tags": [
+   "observability",
+   "alerting",
+   "incident",
+   "practices"
+  ],
+  "id": 4508
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "What is alert grouping and why does it matter during a large incident?",
+  "answer": "Collapsing related alerts into one notification so responders see an incident rather than a hundred pages. Without it a widespread failure floods every channel, obscures the signal, and can exhaust notification rate limits so the important alert never arrives.",
+  "tags": [
+   "observability",
+   "alerting",
+   "incident",
+   "operations"
+  ],
+  "id": 4509
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you measure the effectiveness of your monitoring?",
+  "answer": "Track what proportion of incidents were detected by monitoring rather than by a customer, the time from onset to alert, and the proportion of alerts that were actionable. Those three numbers describe whether monitoring is doing its job, and most teams measure none of them.",
+  "tags": [
+   "observability",
+   "metrics",
+   "monitoring",
+   "practices"
+  ],
+  "id": 4510
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Interview",
+  "difficulty": "Medium",
+  "question": "How do you approach a coding interview question you have not seen before?",
+  "answer": "Restate the problem and confirm the constraints, work a small example by hand, state a brute-force approach and its complexity, then improve it while thinking aloud. Writing code before agreeing the approach is the most common way candidates go wrong, because a wrong direction costs the whole session.",
+  "tags": [
+   "behavioral",
+   "interview",
+   "problem-solving",
+   "communication"
+  ],
+  "id": 4511
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Interview",
+  "difficulty": "Medium",
+  "question": "What should you do if you get stuck in a technical interview?",
+  "answer": "Say what you are stuck on specifically, state what you have ruled out and why, and ask a targeted question. Interviewers generally want to see how you work through difficulty, and a candidate who reasons openly while stuck usually scores better than one who goes silent and produces nothing.",
+  "tags": [
+   "behavioral",
+   "interview",
+   "communication",
+   "problem-solving"
+  ],
+  "id": 4512
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Interview",
+  "difficulty": "Medium",
+  "question": "How much should you optimise a solution in a coding interview?",
+  "answer": "Get a correct solution first and say you will improve it, then optimise the part that actually matters, stating the complexity before and after. Jumping straight to the optimal approach and failing to finish is worse than a working brute force plus a clear description of the improvement.",
+  "tags": [
+   "behavioral",
+   "interview",
+   "problem-solving",
+   "practices"
+  ],
+  "id": 4513
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Interview",
+  "difficulty": "Medium",
+  "question": "How do you handle an interview question about a technology you have not used?",
+  "answer": "Say so directly, describe the closest thing you have used and what you understand about the differences, and reason about how you would approach learning it. Bluffing familiarity is detected in the follow-up, and it costs credibility on the answers you did know.",
+  "tags": [
+   "behavioral",
+   "interview",
+   "honesty",
+   "communication"
+  ],
+  "id": 4514
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Interview",
+  "difficulty": "Medium",
+  "question": "What makes a strong answer to how would you improve our product?",
+  "answer": "Evidence of having used it, a specific observation rather than a general critique, an understanding of why it might be as it is, and a proposal with the trade-off acknowledged. Generic advice signals no preparation; a specific observation with humility about what you cannot see signals judgement.",
+  "tags": [
+   "behavioral",
+   "interview",
+   "product",
+   "preparation"
+  ],
+  "id": 4515
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Interview",
+  "difficulty": "Medium",
+  "question": "How do you evaluate an offer beyond compensation?",
+  "answer": "The work itself, the people you would learn from, how decisions are made, the state of the codebase and tooling, on-call expectations, growth path, and stability. Compensation is the easiest thing to compare and rarely the thing that determines whether you stay, which is why the other questions are worth asking directly.",
+  "tags": [
+   "behavioral",
+   "career",
+   "interview",
+   "decision-making"
+  ],
+  "id": 4516
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Growth",
+  "difficulty": "Medium",
+  "question": "How do you decide what to learn next?",
+  "answer": "From the gap between what your current or intended work demands and what you can do, weighted toward durable fundamentals over specific tools. Following whatever is currently discussed produces breadth without depth, which is less useful than knowing one area well enough to reason about the next one.",
+  "tags": [
+   "behavioral",
+   "learning",
+   "career",
+   "growth"
+  ],
+  "id": 4517
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Growth",
+  "difficulty": "Medium",
+  "question": "How do you build depth rather than only breadth?",
+  "answer": "Go one level below your working knowledge on something you use daily - read the source, understand the failure modes, learn why it was designed that way. Depth in one area transfers, because the underlying concepts recur, whereas surface familiarity with many tools does not.",
+  "tags": [
+   "behavioral",
+   "learning",
+   "depth",
+   "growth"
+  ],
+  "id": 4518
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Growth",
+  "difficulty": "Medium",
+  "question": "How do you know when you are ready for a more senior role?",
+  "answer": "When you are already doing parts of it - making decisions with wider impact, unblocking others, being consulted on design, owning outcomes rather than tasks. Titles usually follow demonstrated scope, so the useful question is which of those you are not yet doing and why.",
+  "tags": [
+   "behavioral",
+   "career",
+   "growth",
+   "seniority"
+  ],
+  "id": 4519
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Leadership",
+  "difficulty": "Medium",
+  "question": "How do you delegate effectively?",
+  "answer": "Give the outcome and constraints rather than the steps, agree checkpoints, make the level of autonomy explicit, and let them solve it differently from how you would. Delegating tasks while retaining every decision is not delegation, and it teaches nobody anything while still costing your attention.",
+  "tags": [
+   "behavioral",
+   "leadership",
+   "delegation",
+   "management"
+  ],
+  "id": 4520
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Leadership",
+  "difficulty": "Medium",
+  "question": "How do you handle being the technical decision-maker when the team disagrees?",
+  "answer": "Ensure every position has been heard and understood, state the decision with the reasoning and what would change it, record the dissent, and commit publicly. Deciding without hearing people damages trust; refusing to decide because consensus is absent damages delivery.",
+  "tags": [
+   "behavioral",
+   "leadership",
+   "decision-making",
+   "teamwork"
+  ],
+  "id": 4521
+ },
+ {
+  "category": "Behavioral",
+  "subcategory": "Leadership",
+  "difficulty": "Medium",
+  "question": "How do you help a team recover after a difficult incident?",
+  "answer": "Run a genuinely blameless review, make the systemic contributions explicit so no individual carries it, deliver visible improvements from the actions, and acknowledge the effort of the response. Teams recover from incidents; they do not recover from being blamed for them.",
+  "tags": [
+   "behavioral",
+   "leadership",
+   "incident",
+   "culture"
+  ],
+  "id": 4522
  }
 ]
