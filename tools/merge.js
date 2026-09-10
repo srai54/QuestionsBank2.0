@@ -29,9 +29,15 @@ function jaccard(a, b) {
   return union === 0 ? 0 : shared / union;
 }
 
+// A question about the same concept in a different technology is a different
+// question - "shallow vs deep copy" in Python and in JavaScript both belong in
+// the bank. So the similarity threshold only applies within a category; across
+// categories only near-identical text is rejected.
+const CROSS_CATEGORY_THRESHOLD = 0.85;
+
 const existing = load(SOURCE);
 const exact = new Map(existing.map((r, i) => [normalize(r.question), `questions.json[${i}]`]));
-const index = existing.map(r => ({ question: r.question, tokens: tokenize(r.question) }));
+const index = existing.map(r => ({ question: r.question, category: r.category, tokens: tokenize(r.question) }));
 
 const added = [];
 const rejected = [];
@@ -53,16 +59,21 @@ for (const file of incomingFiles()) {
     const tokens = tokenize(row.question);
     let best = { score: 0 };
     for (const other of index) {
+      const limit = other.category === row.category ? THRESHOLD : CROSS_CATEGORY_THRESHOLD;
       const score = jaccard(tokens, other.tokens);
-      if (score > best.score) best = { score, other };
+      // Rank by how far each candidate exceeds its own applicable threshold.
+      if (score >= limit && score - limit > (best.score - (best.limit ?? 0))) {
+        best = { score, limit, other };
+      }
     }
-    if (best.score >= THRESHOLD) {
-      rejected.push({ where, reason: `${best.score.toFixed(2)} similar to: ${best.other.question}`, question: row.question });
+    if (best.other) {
+      const scope = best.other.category === row.category ? 'same category' : 'cross-category';
+      rejected.push({ where, reason: `${best.score.toFixed(2)} ${scope} match: ${best.other.question}`, question: row.question });
       return;
     }
 
     exact.set(key, where);
-    index.push({ question: row.question, tokens });
+    index.push({ question: row.question, category: row.category, tokens });
     added.push({
       category: row.category,
       subcategory: row.subcategory,
