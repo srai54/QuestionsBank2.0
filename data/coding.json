@@ -4823,12 +4823,27 @@
   "subcategory": "Bits",
   "difficulty": "Medium",
   "question": "Sum of two integers without using + or -.",
-  "answer": "Use bitwise operations: sum without carry is a XOR b; carry is (a AND b) shifted left by 1. Repeat until carry is zero (a = a^b, b = (a&b)<<1). Handles addition via bit manipulation. O(number of bits) iterations.",
+  "answer": "**Logic**\n\nAddition splits into two independent parts. XOR gives the sum of each bit position ignoring carries, and AND gives the positions where a carry is generated, which must then be shifted left one place to land in the next column.\n\nRepeat until no carry remains. Each iteration pushes carries further left, and since the width is fixed the loop terminates in at most 32 rounds.\n\nUse `uint` for the intermediate work: shifting a negative signed value left is undefined behaviour territory in some languages and, in C#, overflow in a checked context would throw.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Add(int a, int b)\n    {\n        uint x = (uint)a, y = (uint)b;\n\n        while (y != 0)\n        {\n            uint carry = x & y;    // positions where both bits are 1\n            x ^= y;                // sum without carries\n            y = carry << 1;        // carries move one column left\n        }\n\n        return (int)x;\n    }\n\n    public static int Subtract(int a, int b) => Add(a, Add(~b, 1));   // a + (-b)\n\n    public static void Main()\n    {\n        Console.WriteLine(Add(1, 2));\n        Console.WriteLine(Add(-1, 1));\n        Console.WriteLine(Add(-5, -3));       // both negative\n        Console.WriteLine(Add(0, 0));\n        Console.WriteLine(Add(int.MaxValue, 1));   // wraps, as ordinary + would\n        Console.WriteLine(Subtract(10, 3));\n    }\n}\n```\n\n**Output**\n\n```\n3\n0\n-8\n0\n-2147483648\n7\n```",
   "tags": [
    "bits",
-   "addition",
    "xor",
-   "carry"
+   "carry",
+   "twos-complement",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does this work for negative numbers without any special handling?",
+    "a": "Because two's complement is designed so that addition is the same bit operation regardless of sign. The hardware adder does not know or care whether a bit pattern represents a negative number; the representation was chosen precisely so that one circuit handles both. That is also why subtraction is just addition of the negation, and why the negation itself is bitwise-NOT plus one, which the Subtract method uses."
+   },
+   {
+    "q": "Why use uint for the intermediates?",
+    "a": "Because shifting the carry left can push a bit into the sign position, and in a checked arithmetic context a signed overflow would throw rather than wrap. Using uint makes the operations pure bit manipulation with defined wrapping behaviour. The cast back at the end reinterprets the bits, which is exactly what is wanted. The int.MaxValue plus one test confirms it wraps identically to ordinary addition rather than throwing."
+   },
+   {
+    "q": "Is this ever useful in practice?",
+    "a": "Almost never directly, since the CPU has an adder. It matters conceptually in three places: understanding how hardware adders are built, since this is a ripple-carry adder in software; in constant-time cryptographic code where you sometimes avoid operations with data-dependent timing; and in certain bit-parallel algorithms that add many small values packed into one word at once. As an interview question it is testing whether you understand what addition actually is rather than testing a needed skill."
+   }
   ]
  },
  {
@@ -5038,12 +5053,27 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Count primes up to n (Sieve of Eratosthenes).",
-  "answer": "Create a boolean array of size n; for each prime p starting at 2, mark all multiples of p (from p*p) as non-prime. Count the remaining true entries. O(n log log n) time, O(n) space. Efficient for counting/listing primes below a limit.",
+  "answer": "**Logic**\n\nMark multiples rather than testing divisibility. Start at 2 and cross off every multiple; the next unmarked number is prime, and the process repeats.\n\nTwo standard optimisations. Stop the outer loop at the square root of n, because any composite below n has a factor at or below that. And start crossing off at p squared rather than 2p, since smaller multiples were already handled by smaller primes.\n\nO(n log log n) time, O(n) space, which is close enough to linear that it is the standard method.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int CountPrimes(int n)\n    {\n        if (n < 3) return 0;                  // no primes below 2\n\n        var composite = new bool[n];          // composite[i] == true means \"not prime\"\n        int count = 0;\n\n        for (int p = 2; (long)p * p < n; p++)\n        {\n            if (composite[p]) continue;       // already crossed off: not prime\n\n            // Start at p*p: smaller multiples had a smaller prime factor.\n            for (long multiple = (long)p * p; multiple < n; multiple += p)\n                composite[(int)multiple] = true;\n        }\n\n        for (int i = 2; i < n; i++) if (!composite[i]) count++;\n        return count;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CountPrimes(10));       // 2,3,5,7\n        Console.WriteLine(CountPrimes(2));        // strictly below 2\n        Console.WriteLine(CountPrimes(3));        // just 2\n        Console.WriteLine(CountPrimes(0));\n        Console.WriteLine(CountPrimes(100));\n        Console.WriteLine(CountPrimes(1000000));\n    }\n}\n```\n\n**Output**\n\n```\n4\n0\n1\n0\n25\n78498\n```",
   "tags": [
    "math",
    "sieve",
    "primes",
-   "eratosthenes"
+   "optimisation",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why start crossing off at p squared rather than 2p?",
+    "a": "Because every multiple of p below p squared has a prime factor smaller than p and was therefore already crossed off when that smaller prime was processed. For p equal to 7, the multiples 14, 21, 28 and 35 were handled by 2, 3, 2 and 5 respectively, so the first new one is 49. It is a genuine saving, not just a tidiness point: it removes a large fraction of the redundant writes and is one of the two reasons the sieve is near-linear."
+   },
+   {
+    "q": "Why does the outer loop stop at the square root?",
+    "a": "Because if a number below n is composite, it has at least one factor at or below its own square root, hence at or below the square root of n. So every composite has already been marked by the time p exceeds that bound, and continuing would only re-examine primes with nothing left to cross off. The `(long)p * p` cast matters here: for n near int.MaxValue, computing p squared in int overflows and the loop condition misbehaves."
+   },
+   {
+    "q": "What if n were far too large for an array of n booleans?",
+    "a": "A bool per number wastes eight bits each, so the first step is a bitset, cutting memory eightfold, and skipping even numbers halves it again. Beyond that you use a segmented sieve: sieve the small primes up to the square root once, then process the range in cache-sized blocks, which keeps memory bounded and improves locality dramatically. That is how primes are counted into the billions, and it is the expected answer once the naive array stops fitting."
+   }
   ]
  },
  {
@@ -5051,12 +5081,27 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Pow(x, n): implement fast exponentiation.",
-  "answer": "Exponentiation by squaring: if n is even, x^n = (x^(n/2))^2; if odd, x * x^(n-1). Handle negative n by inverting. Iterative: multiply the result by x when the current bit of n is set, square x each step. O(log n) time.",
+  "answer": "**Logic**\n\nExponentiation by squaring. Halving the exponent squares the base, so `x^n` becomes `(x^2)^(n/2)` for even n, and one extra factor of x for odd n. That reduces n multiplications to log n.\n\nTwo traps. A negative exponent means taking the reciprocal, and negating `int.MinValue` overflows, so widen to `long` before negating. And the loop must accumulate the odd factors rather than only squaring.\n\nO(log n) time, O(1) space iteratively.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static double MyPow(double x, int n)\n    {\n        // Widen BEFORE negating: -int.MinValue overflows an int.\n        long exponent = n;\n\n        if (exponent < 0)\n        {\n            x = 1 / x;\n            exponent = -exponent;\n        }\n\n        double result = 1;\n\n        while (exponent > 0)\n        {\n            if ((exponent & 1) == 1) result *= x;   // odd: take one factor out\n            x *= x;                                  // square the base\n            exponent >>= 1;                          // halve the exponent\n        }\n\n        return result;\n    }\n\n    // Modular version: the shape used constantly in cryptography.\n    public static long PowMod(long baseValue, long exponent, long modulus)\n    {\n        long result = 1;\n        baseValue %= modulus;\n\n        while (exponent > 0)\n        {\n            if ((exponent & 1) == 1) result = result * baseValue % modulus;\n            baseValue = baseValue * baseValue % modulus;\n            exponent >>= 1;\n        }\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MyPow(2, 10));\n        Console.WriteLine(MyPow(2, -2));\n        Console.WriteLine(MyPow(2, 0));\n        Console.WriteLine(MyPow(1, int.MinValue));     // the overflow case\n        Console.WriteLine(MyPow(0.5, 3));\n        Console.WriteLine(PowMod(2, 100, 1000000007));\n    }\n}\n```\n\n**Output**\n\n```\n1024\n0.25\n1\n1\n0.125\n976371285\n```",
   "tags": [
    "math",
-   "fast-exponentiation",
-   "power",
-   "binary"
+   "exponentiation",
+   "overflow",
+   "cryptography",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why widen the exponent to long before negating it?",
+    "a": "Because int.MinValue is -2147483648 and int.MaxValue is 2147483647, so its negation does not fit in an int and wraps back to itself. The loop would then never terminate or would compute the wrong answer. Widening to long before negating gives room for the positive value. It is the classic asymmetry of two's complement, and this problem is where it most often bites, which is why MyPow(1, int.MinValue) is in the tests."
+   },
+   {
+    "q": "Why is this the standard algorithm in cryptography?",
+    "a": "Because RSA and Diffie-Hellman raise numbers to enormous exponents modulo a large prime, and a linear loop would take longer than the age of the universe. Exponentiation by squaring turns a 2048-bit exponent into about 2048 modular multiplications. Real implementations also need it to run in constant time regardless of the exponent's bits, since the branch on odd exponents leaks information through timing, which is a genuine side-channel attack."
+   },
+   {
+    "q": "Why iterative rather than recursive?",
+    "a": "The recursive version is arguably clearer, halving the exponent and squaring the result, and its depth is only log n so there is no stack risk. The iterative version avoids call overhead and makes the accumulation explicit, which matters in the modular variant where it is a hot path. Either is defensible here; I would write the recursive one in an interview for clarity and the iterative one in a library."
+   }
   ]
  },
  {
@@ -5064,12 +5109,27 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Greatest common divisor (Euclidean algorithm).",
-  "answer": "gcd(a, b) = gcd(b, a % b) until b is 0, then a is the GCD. Iterative or recursive, O(log(min(a,b))) time. LCM(a,b) = a / gcd(a,b) * b. Fundamental for fraction reduction and number theory problems.",
+  "answer": "**Logic**\n\nThe greatest common divisor of a and b equals that of b and a modulo b, because any common divisor of a and b also divides their difference and hence the remainder. Repeating until the remainder is zero leaves the answer in the other variable.\n\nIt is remarkably fast: the remainder at least halves every two steps, so it is O(log min(a, b)). The worst case is consecutive Fibonacci numbers, which is a pleasing connection.\n\nLeast common multiple follows as `a / gcd * b`, dividing first to avoid overflow.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static long Gcd(long a, long b)\n    {\n        a = Math.Abs(a);\n        b = Math.Abs(b);\n\n        while (b != 0)\n        {\n            (a, b) = (b, a % b);\n        }\n\n        return a;   // gcd(0, 0) is 0 by convention\n    }\n\n    // Divide before multiplying, or a * b overflows for large inputs.\n    public static long Lcm(long a, long b)\n    {\n        if (a == 0 || b == 0) return 0;\n        return Math.Abs(a) / Gcd(a, b) * Math.Abs(b);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Gcd(48, 18));\n        Console.WriteLine(Gcd(17, 5));        // coprime\n        Console.WriteLine(Gcd(0, 5));\n        Console.WriteLine(Gcd(-12, 18));      // sign ignored\n        Console.WriteLine(Lcm(4, 6));\n        Console.WriteLine(Lcm(1000000000, 999999999));   // would overflow if multiplied first\n    }\n}\n```\n\n**Output**\n\n```\n6\n1\n5\n6\n12\n999999999000000000\n```",
   "tags": [
    "math",
-   "gcd",
    "euclidean",
-   "lcm"
+   "gcd",
+   "overflow",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why divide before multiplying in the LCM?",
+    "a": "Because `a * b` can overflow even when the LCM itself fits comfortably. The last test multiplies two values near a billion, whose product is around 10^18 and only just fits in a long, and slightly larger inputs would wrap silently. Dividing first keeps the intermediate close to the final answer. The division is always exact, since the gcd divides a by definition, so nothing is lost by reordering."
+   },
+   {
+    "q": "What is the worst case for the Euclidean algorithm?",
+    "a": "Consecutive Fibonacci numbers, which produce the maximum number of steps for their size, because each remainder step drops to the previous Fibonacci number rather than falling faster. That is Lamé's theorem, and it is the origin of the O(log min(a,b)) bound. It is a nice result to know because it shows the algorithm is not merely fast in practice but has a proven bound driven by a recognisable family of inputs."
+   },
+   {
+    "q": "What is the extended Euclidean algorithm for?",
+    "a": "It computes not just the gcd but also coefficients x and y such that ax + by equals the gcd. That is how you find a modular multiplicative inverse, which underpins RSA key generation and the Chinese Remainder Theorem. The standard gcd tells you whether an inverse exists, since it exists exactly when the gcd is one; the extended version tells you what it is. That is the usual follow-up once the basic algorithm is written."
+   }
   ]
  },
  {
@@ -5077,12 +5137,27 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Reverse an integer with overflow handling.",
-  "answer": "Pop digits (n % 10) and push into the result (result*10 + digit), updating n /= 10. Before pushing, check whether result would overflow the 32-bit range and return 0 if so. Handle the sign. O(number of digits) time.",
+  "answer": "**Logic**\n\nPeel digits off the right with modulo and division, building the reversed value by multiplying by ten and adding. The whole difficulty is overflow: reversing 1534236469 gives a value beyond int range, and the problem requires returning 0 rather than wrapping.\n\nCheck *before* multiplying. If the accumulated value already exceeds `int.MaxValue / 10`, the next multiplication overflows. At exactly that boundary, the final digit decides. Checking after the fact is too late, because the overflow has already happened and the value is corrupt.\n\nO(number of digits) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Reverse(int n)\n    {\n        int result = 0;\n\n        while (n != 0)\n        {\n            int digit = n % 10;   // C# % keeps the sign, so negatives work unchanged\n            n /= 10;\n\n            // Check BEFORE multiplying: afterwards the damage is done.\n            if (result > int.MaxValue / 10 ||\n                (result == int.MaxValue / 10 && digit > 7)) return 0;\n\n            if (result < int.MinValue / 10 ||\n                (result == int.MinValue / 10 && digit < -8)) return 0;\n\n            result = result * 10 + digit;\n        }\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Reverse(123));\n        Console.WriteLine(Reverse(-123));         // sign preserved\n        Console.WriteLine(Reverse(120));          // trailing zero disappears\n        Console.WriteLine(Reverse(0));\n        Console.WriteLine(Reverse(1534236469));   // overflows: returns 0\n        Console.WriteLine(Reverse(int.MinValue)); // cannot be negated either\n    }\n}\n```\n\n**Output**\n\n```\n321\n-321\n21\n0\n0\n0\n```",
   "tags": [
    "math",
-   "reverse",
    "overflow",
-   "integer"
+   "boundaries",
+   "modulo",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why are the boundary digits 7 and -8?",
+    "a": "Because int.MaxValue is 2147483647 and int.MinValue is -2147483648, so their last digits are 7 and 8. When the accumulated value equals MaxValue / 10, which is 214748364, appending any digit above 7 overflows. The negative side mirrors it with -8. Those magic numbers come straight from the type's limits, and deriving them rather than recalling them is what makes the check convincing in an interview."
+   },
+   {
+    "q": "Why does the negative case need no special handling in the digit extraction?",
+    "a": "Because C#'s modulo keeps the sign of the dividend, so -123 % 10 is -3 rather than 7, and the accumulated result stays negative throughout. That means one loop handles both signs. In Python the modulo floors instead and would give 7, so the same code there needs an explicit sign extraction. It is a genuine portability trap when translating numeric code between the two languages."
+   },
+   {
+    "q": "Could you use a long or checked arithmetic instead?",
+    "a": "Accumulating in a long and comparing against int range at the end is simpler and perfectly correct for 32-bit input, and I would probably write that in production. The problem usually forbids it to force the boundary reasoning. `checked` arithmetic is another option, throwing on overflow and catching it to return 0, though using exceptions for expected control flow is expensive if it happens often. The manual check is the fastest and the one the question is really asking for."
+   }
   ]
  },
  {
@@ -5090,12 +5165,27 @@
   "subcategory": "Math",
   "difficulty": "Hard",
   "question": "Excel column number to title and vice versa (base-26).",
-  "answer": "Title→number: like base-26, number = number*26 + (char - 'A' + 1). Number→title: repeatedly subtract 1, take mod 26 for the letter, divide by 26 (the -1 accounts for 1-indexed, no zero digit). O(length) time. It's a bijective base-26 system.",
+  "answer": "**Logic**\n\nExcel columns look like base 26 but are not: there is no zero digit. A runs to Z, then AA follows Z, so the system is bijective base 26 with digits 1 to 26 rather than 0 to 25.\n\nThat is why converting a number subtracts one before each modulo: it shifts the range from 1-26 down to 0-25 so the remainder maps onto a letter. Forgetting it makes 26 render as A@ or similar nonsense instead of Z.\n\nThe reverse direction is ordinary positional accumulation, multiplying by 26 and adding the letter's value.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    public static string ToTitle(int columnNumber)\n    {\n        if (columnNumber <= 0) throw new ArgumentOutOfRangeException(nameof(columnNumber));\n\n        var sb = new StringBuilder();\n\n        while (columnNumber > 0)\n        {\n            columnNumber--;                                  // shift 1..26 to 0..25\n            sb.Insert(0, (char)('A' + columnNumber % 26));\n            columnNumber /= 26;\n        }\n\n        return sb.ToString();\n    }\n\n    public static int ToNumber(string title)\n    {\n        if (string.IsNullOrEmpty(title)) throw new ArgumentException(\"empty title\");\n\n        int result = 0;\n\n        foreach (char c in title)\n        {\n            if (c < 'A' || c > 'Z') throw new ArgumentException($\"bad character '{c}'\");\n            result = result * 26 + (c - 'A' + 1);            // digits are 1..26\n        }\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ToTitle(1));\n        Console.WriteLine(ToTitle(26));      // Z, not A@\n        Console.WriteLine(ToTitle(27));      // AA\n        Console.WriteLine(ToTitle(701));     // ZY\n        Console.WriteLine(ToNumber(\"AB\"));\n        Console.WriteLine($\"{ToNumber(ToTitle(12345))} round trip\");\n    }\n}\n```\n\n**Output**\n\n```\nA\nZ\nAA\nZY\n28\n12345 round trip\n```",
   "tags": [
    "math",
-   "base-26",
-   "excel",
-   "conversion"
+   "base-conversion",
+   "bijective",
+   "off-by-one",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is this not ordinary base 26?",
+    "a": "Because there is no zero digit. In ordinary base 26 the digits would be 0 to 25 and the sequence after Z would be BA, since A would act as zero and AA would equal A. Excel uses bijective base 26 with digits 1 to 26, so every string maps to exactly one number and vice versa with no leading-zero ambiguity. The decrement before the modulo is what converts between the two conventions, and it is the entire difficulty of the problem."
+   },
+   {
+    "q": "Using Insert(0, ...) in a loop is quadratic. Does it matter?",
+    "a": "Not here, because column titles are at most a few characters: Excel's limit is XFD, three letters. For a general base conversion with long outputs it would matter, and you would append and reverse once at the end, as in the add-binary problem. It is worth noticing the pattern even when the bound makes it harmless, because the same habit applied to a long string is a real performance bug."
+   },
+   {
+    "q": "Where else does bijective numbering appear?",
+    "a": "Anywhere identifiers must be unambiguous with no leading-zero problem: spreadsheet columns, some URL shorteners, and certain invoice or ticket numbering schemes. It also appears in bijective base-k representations used in combinatorics. The general lesson is that 'looks like base k' is worth checking carefully, since the off-by-one between 0-indexed and 1-indexed digit sets is exactly the kind of thing that produces a system working for the first 25 cases and failing on the 26th."
+   }
   ]
  },
  {
@@ -5103,12 +5193,27 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Happy number: does repeatedly summing squares of digits reach 1?",
-  "answer": "Repeatedly replace the number with the sum of the squares of its digits; use Floyd's cycle detection (slow/fast) or a set of seen numbers to detect loops. If it reaches 1, it's happy; if it cycles, it's not. O(log n) work per step.",
+  "answer": "**Logic**\n\nThe process either reaches 1 or falls into a cycle, so detecting repetition is what makes it terminate. A hash set of seen values works, and Floyd's tortoise and hare does the same in O(1) space, since the sequence `x = f(x)` is exactly the shape cycle detection handles.\n\nThe reason it always terminates is that the digit-square sum of any number below 1000 is below 250, so the sequence is trapped in a small range and must repeat.\n\nEvery unhappy number eventually reaches the same cycle beginning at 4, which gives a third, cheeky solution.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private static int SquareDigits(int n)\n    {\n        int sum = 0;\n        while (n > 0)\n        {\n            int digit = n % 10;\n            sum += digit * digit;\n            n /= 10;\n        }\n        return sum;\n    }\n\n    // Floyd's cycle detection: O(1) space, no set required.\n    public static bool IsHappy(int n)\n    {\n        if (n <= 0) return false;\n\n        int slow = n, fast = n;\n\n        do\n        {\n            slow = SquareDigits(slow);\n            fast = SquareDigits(SquareDigits(fast));\n        } while (slow != fast && fast != 1);\n\n        return fast == 1;\n    }\n\n    // The obvious version, for comparison.\n    public static bool IsHappyWithSet(int n)\n    {\n        var seen = new HashSet<int>();\n        while (n != 1 && seen.Add(n)) n = SquareDigits(n);\n        return n == 1;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsHappy(19));      // 19 -> 82 -> 68 -> 100 -> 1\n        Console.WriteLine(IsHappy(2));       // falls into the 4-cycle\n        Console.WriteLine(IsHappy(1));\n        Console.WriteLine(IsHappy(7));\n        Console.WriteLine(IsHappyWithSet(19));\n        Console.WriteLine(IsHappyWithSet(4));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nTrue\nFalse\n```",
   "tags": [
    "math",
+   "floyd",
    "cycle-detection",
    "digits",
-   "happy-number"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is this the same problem as detecting a cycle in a linked list?",
+    "a": "Because both follow an iterated function `x = f(x)` and ask whether the path repeats. In a list, f is 'the next node'; here it is 'the sum of squared digits'. Floyd's algorithm cares only that f is deterministic and the state space finite, not what f means. Recognising that framing is the point of the question, and it is why an interviewer often asks linked-list cycle detection first and this immediately after."
+   },
+   {
+    "q": "Why is the process guaranteed to terminate?",
+    "a": "Because the digit-square sum shrinks large numbers rapidly and then traps them. Any number below 1000 maps to at most 3 times 81, which is 243, so once the sequence drops below 1000 it stays below 250 forever. A finite state space with a deterministic step must eventually repeat, so it either reaches 1 or enters a cycle. That bound is what guarantees the loop ends rather than running indefinitely."
+   },
+   {
+    "q": "Is there a shortcut?",
+    "a": "Yes, and it is a curiosity worth knowing: every unhappy number eventually reaches 4, so you can simply iterate until the value is 1 or 4 and answer accordingly. It relies on an empirical fact about this specific function rather than on a general principle, so it is brittle if the rules change, for instance to cubes of digits. I would mention it as a trick but implement the cycle detection, because the latter generalises and the former does not."
+   }
   ]
  },
  {
@@ -5752,11 +5857,27 @@
   "subcategory": "Matrix",
   "difficulty": "Medium",
   "question": "Game of Life: compute the next generation in place.",
-  "answer": "Encode both old and new states in one cell using two bits - keep the current state in bit zero and write the next in bit one - then shift every cell right at the end. Time O(mn), space O(1). Counting neighbours must read only bit zero.",
+  "answer": "**Logic**\n\nEvery cell's next state depends on the *current* state of its neighbours, so updating in place naively corrupts the computation for cells not yet visited.\n\nThe in-place trick uses a second bit. Keep bit 0 as the current state and write the next state into bit 1, so a cell reads as its old value under `& 1` while carrying its new value. After the whole grid is computed, shift every cell right by one to promote the new state.\n\nO(rows × cols) time, O(1) extra space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void GameOfLife(int[][] board)\n    {\n        if (board == null || board.Length == 0) return;\n\n        int rows = board.Length, cols = board[0].Length;\n\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n            {\n                int live = CountLiveNeighbours(board, r, c, rows, cols);\n                int current = board[r][c] & 1;             // bit 0 is still the old state\n\n                // Survives with 2 or 3 neighbours; a dead cell is born with exactly 3.\n                int next = current == 1\n                    ? (live == 2 || live == 3 ? 1 : 0)\n                    : (live == 3 ? 1 : 0);\n\n                board[r][c] |= next << 1;                  // stash the new state in bit 1\n            }\n\n        // Promote bit 1 to bit 0 once every cell has been computed.\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n                board[r][c] >>= 1;\n    }\n\n    private static int CountLiveNeighbours(int[][] board, int r, int c, int rows, int cols)\n    {\n        int live = 0;\n\n        for (int dr = -1; dr <= 1; dr++)\n            for (int dc = -1; dc <= 1; dc++)\n            {\n                if (dr == 0 && dc == 0) continue;\n                int nr = r + dr, nc = c + dc;\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n\n                live += board[nr][nc] & 1;                 // read the OLD state only\n            }\n\n        return live;\n    }\n\n    private static string Render(int[][] m) =>\n        string.Join(\" / \", Array.ConvertAll(m, r => string.Join(\",\", r)));\n\n    public static void Main()\n    {\n        var blinker = new[] {\n            new[] { 0, 1, 0 },\n            new[] { 0, 1, 0 },\n            new[] { 0, 1, 0 } };\n        GameOfLife(blinker);\n        Console.WriteLine(Render(blinker));      // oscillates to horizontal\n\n        var block = new[] {\n            new[] { 1, 1 },\n            new[] { 1, 1 } };\n        GameOfLife(block);\n        Console.WriteLine(Render(block));        // still life: unchanged\n\n        var dead = new[] { new[] { 0, 0 }, new[] { 0, 0 } };\n        GameOfLife(dead);\n        Console.WriteLine(Render(dead));\n\n        var lonely = new[] { new[] { 1, 0 }, new[] { 0, 0 } };\n        GameOfLife(lonely);\n        Console.WriteLine(Render(lonely));       // dies of underpopulation\n    }\n}\n```\n\n**Output**\n\n```\n0,0,0 / 1,1,1 / 0,0,0\n1,1 / 1,1\n0,0 / 0,0\n0,0 / 0,0\n```",
   "tags": [
    "matrix",
    "in-place",
-   "simulation"
+   "bit-encoding",
+   "simulation",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the two-bit encoding work?",
+    "a": "Because the two states live in different bits and never interfere. Writing the new state into bit 1 leaves bit 0 untouched, so every subsequent neighbour count that masks with `& 1` still sees the original generation regardless of how many cells have already been processed. The final shift promotes every cell at once, which is the atomic swap that a simultaneous update requires. It is a neat use of spare capacity in an int that is only holding a boolean."
+   },
+   {
+    "q": "What if the board were infinite, as Conway intended?",
+    "a": "An array no longer works, so you store only the live cells in a hash set of coordinates. Each generation, count neighbours for every live cell and for every dead cell adjacent to a live one, since no other cell can change. That makes the cost proportional to the population rather than to the area, which is what makes large sparse patterns feasible. Serious implementations go further with HashLife, which memoises repeated subpatterns and can simulate astronomical generation counts."
+   },
+   {
+    "q": "How would you parallelise this?",
+    "a": "The computation is naturally data-parallel, since each cell's next state depends only on the previous generation, so rows or tiles can be processed independently. The catch is the in-place encoding: it is safe here only because the old state survives in bit 0, so concurrent readers still see consistent data. A double-buffered version is simpler to reason about under parallelism and usually preferred, trading O(rc) extra memory for an obviously correct memory model."
+   }
   ]
  },
  {
@@ -5776,11 +5897,27 @@
   "subcategory": "Matrix",
   "difficulty": "Medium",
   "question": "Valid Sudoku: is a partially filled 9x9 board valid?",
-  "answer": "One pass with three sets of seen values - per row, per column, and per 3x3 box indexed by row/3 times 3 plus column/3. Any repeat fails. Time O(81), space O(81). No solving is required, only conflict detection.",
+  "answer": "**Logic**\n\nThree constraint sets: each row, each column and each 3x3 box must contain no repeated digit. Empty cells are ignored, and the board need not be solvable, only free of conflicts.\n\nOne pass suffices with 27 sets, or with three arrays of nine. The box index is the neat part: `(row / 3) * 3 + col / 3` maps each cell to its box number 0 through 8.\n\nO(1) overall, since the board is a fixed 81 cells, though it is O(n²) in the general n×n case.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsValidSudoku(char[][] board)\n    {\n        // Bitmask per row, column and box: bit d set means digit d is present.\n        var rows = new int[9];\n        var cols = new int[9];\n        var boxes = new int[9];\n\n        for (int r = 0; r < 9; r++)\n            for (int c = 0; c < 9; c++)\n            {\n                char value = board[r][c];\n                if (value == '.') continue;               // empty cells are fine\n\n                int bit = 1 << (value - '1');\n                int box = (r / 3) * 3 + c / 3;            // maps a cell to its 3x3 box\n\n                if ((rows[r] & bit) != 0) return false;\n                if ((cols[c] & bit) != 0) return false;\n                if ((boxes[box] & bit) != 0) return false;\n\n                rows[r] |= bit;\n                cols[c] |= bit;\n                boxes[box] |= bit;\n            }\n\n        return true;\n    }\n\n    private static char[][] Parse(params string[] rows)\n    {\n        var b = new char[9][];\n        for (int i = 0; i < 9; i++) b[i] = rows[i].ToCharArray();\n        return b;\n    }\n\n    public static void Main()\n    {\n        var valid = Parse(\n            \"53..7....\", \"6..195...\", \".98....6.\",\n            \"8...6...3\", \"4..8.3..1\", \"7...2...6\",\n            \".6....28.\", \"...419..5\", \"....8..79\");\n        Console.WriteLine(IsValidSudoku(valid));\n\n        var duplicateInBox = Parse(\n            \"83..7....\", \"6..195...\", \".98....6.\",\n            \"8...6...3\", \"4..8.3..1\", \"7...2...6\",\n            \".6....28.\", \"...419..5\", \"....8..79\");\n        Console.WriteLine(IsValidSudoku(duplicateInBox));   // two 8s in the top-left box\n\n        var empty = Parse(\n            \".........\", \".........\", \".........\",\n            \".........\", \".........\", \".........\",\n            \".........\", \".........\", \".........\");\n        Console.WriteLine(IsValidSudoku(empty));\n\n        var duplicateInRow = Parse(\n            \"55.......\", \".........\", \".........\",\n            \".........\", \".........\", \".........\",\n            \".........\", \".........\", \".........\");\n        Console.WriteLine(IsValidSudoku(duplicateInRow));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\n```",
   "tags": [
    "matrix",
-   "hashset",
-   "validation"
+   "bitmask",
+   "constraints",
+   "sudoku",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Explain the box index formula.",
+    "a": "Integer division by three collapses the nine rows into three bands and the nine columns into three stacks, so `r / 3` and `c / 3` each give 0, 1 or 2. Multiplying the band by three and adding the stack numbers the boxes 0 to 8 in reading order. It is the same flattening as converting two-dimensional coordinates to a one-dimensional index, and deriving it rather than recalling it is quick once you see that it is just a base-three pair."
+   },
+   {
+    "q": "Why bitmasks rather than HashSets?",
+    "a": "Because there are only nine possible digits, so a single int holds the whole set with one bit per digit, and membership is one AND rather than a hash lookup. It removes 27 allocations and all hashing. For a fixed nine-digit alphabet it is clearly better; for a generalised n by n Sudoku with large n you would move to a bitset or a HashSet. The readability cost is small and the comment carries the intent."
+   },
+   {
+    "q": "How would you extend this to actually solving the puzzle?",
+    "a": "Backtracking: find an empty cell, try each digit that does not conflict, recurse, and undo on failure. The validity check here becomes the constraint test inside the loop, and the bitmasks become incrementally maintained state rather than being rebuilt. The big win is ordering: always filling the most constrained cell first, the minimum-remaining-values heuristic, turns a slow search into a fast one. That is the natural escalation once the validator works."
+   }
   ]
  },
  {
@@ -5788,11 +5925,27 @@
   "subcategory": "Matrix",
   "difficulty": "Medium",
   "question": "01 matrix: distance of each cell to the nearest zero.",
-  "answer": "Multi-source BFS starting from every zero simultaneously, filling distances level by level. Time O(mn), space O(mn). A two-pass dynamic programming sweep - top-left then bottom-right - achieves the same in O(1) extra space.",
+  "answer": "**Logic**\n\nMulti-source BFS. Seed the queue with every zero cell at distance 0, then expand outward; the first time a cell is reached is by the shortest path from the nearest zero, because BFS explores in distance order.\n\nRunning a separate search from each one-cell would be far slower, and a naive per-cell scan is worse still. Starting from all sources at once computes every answer in a single traversal.\n\nO(rows × cols) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[][] UpdateMatrix(int[][] matrix)\n    {\n        int rows = matrix.Length, cols = matrix[0].Length;\n        var distance = new int[rows][];\n        var queue = new Queue<(int r, int c)>();\n\n        for (int r = 0; r < rows; r++)\n        {\n            distance[r] = new int[cols];\n            for (int c = 0; c < cols; c++)\n            {\n                if (matrix[r][c] == 0) queue.Enqueue((r, c));   // every zero is a source\n                else distance[r][c] = -1;                        // -1 marks \"not yet reached\"\n            }\n        }\n\n        int[] dr = { -1, 1, 0, 0 };\n        int[] dc = { 0, 0, -1, 1 };\n\n        while (queue.Count > 0)\n        {\n            var (r, c) = queue.Dequeue();\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = r + dr[d], nc = c + dc[d];\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n                if (distance[nr][nc] != -1) continue;            // already reached, and sooner\n\n                distance[nr][nc] = distance[r][c] + 1;\n                queue.Enqueue((nr, nc));\n            }\n        }\n\n        return distance;\n    }\n\n    private static string Render(int[][] m) =>\n        string.Join(\" / \", Array.ConvertAll(m, r => string.Join(\",\", r)));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(UpdateMatrix(new[] {\n            new[] { 0, 0, 0 }, new[] { 0, 1, 0 }, new[] { 0, 0, 0 } })));\n\n        Console.WriteLine(Render(UpdateMatrix(new[] {\n            new[] { 0, 0, 0 }, new[] { 0, 1, 0 }, new[] { 1, 1, 1 } })));\n\n        Console.WriteLine(Render(UpdateMatrix(new[] { new[] { 0 } })));\n        Console.WriteLine(Render(UpdateMatrix(new[] { new[] { 0, 1, 1, 1, 1 } })));\n    }\n}\n```\n\n**Output**\n\n```\n0,0,0 / 0,1,0 / 0,0,0\n0,0,0 / 0,1,0 / 1,2,1\n0\n0,1,2,3,4\n```",
   "tags": [
    "matrix",
    "bfs",
-   "dynamic-programming"
+   "multi-source",
+   "distance",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why use -1 as the unvisited marker rather than a separate visited array?",
+    "a": "Because 0 is a legitimate distance, for the zero cells themselves, so it cannot double as 'unvisited'. Using -1 keeps one array instead of two and makes the check a single comparison. It is a safe in-band sentinel here because distances are never negative, which is the test any such sentinel must pass. Using int.MaxValue would also work and is what you would need if -1 were meaningful data."
+   },
+   {
+    "q": "Could this be solved with dynamic programming instead?",
+    "a": "Yes, with two passes. Sweep top-left to bottom-right taking the minimum of the cell above and to the left plus one, then bottom-right to top-left taking the minimum of below and right plus one. That is O(rc) with no queue and is often faster in practice due to sequential memory access. It works because the shortest path in a four-directional grid can be decomposed into these two directional sweeps, and it is a genuinely good alternative answer."
+   },
+   {
+    "q": "What if the distance were Euclidean rather than Manhattan?",
+    "a": "BFS no longer applies, because diagonal steps would cost the square root of two rather than one, so the graph becomes weighted and Dijkstra would be needed. For a true Euclidean distance transform there are specialised O(rc) algorithms operating per row and per column using parabola intersections. It is worth flagging that 'nearest' depends entirely on the metric, and that the four-directional assumption is what makes the cheap BFS valid."
+   }
   ]
  },
  {
@@ -5800,11 +5953,27 @@
   "subcategory": "Matrix",
   "difficulty": "Easy",
   "question": "Flood fill: change the colour of a connected region starting from a pixel.",
-  "answer": "DFS or BFS from the start pixel, recolouring cells that match the original colour. Guard against the case where the new colour equals the original, which otherwise loops forever. Time O(mn), space O(mn) worst case for the stack.",
+  "answer": "**Logic**\n\nA traversal from the starting pixel, recolouring every orthogonally connected cell that shares the original colour. BFS or DFS both work since every step costs the same.\n\nThe essential guard is the case where the new colour equals the original. Without it, recoloured cells still match the target colour, so the traversal revisits them forever. An early return handles it.\n\nRecolouring on enqueue rather than on dequeue prevents a cell from entering the queue several times.\n\nO(rows × cols) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[][] FloodFill(int[][] image, int startRow, int startCol, int newColour)\n    {\n        if (image == null || image.Length == 0) return image;\n\n        int original = image[startRow][startCol];\n\n        // Without this, recoloured cells still match and the traversal never ends.\n        if (original == newColour) return image;\n\n        int rows = image.Length, cols = image[0].Length;\n        var queue = new Queue<(int r, int c)>();\n\n        image[startRow][startCol] = newColour;\n        queue.Enqueue((startRow, startCol));\n\n        int[] dr = { -1, 1, 0, 0 };\n        int[] dc = { 0, 0, -1, 1 };\n\n        while (queue.Count > 0)\n        {\n            var (r, c) = queue.Dequeue();\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = r + dr[d], nc = c + dc[d];\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n                if (image[nr][nc] != original) continue;\n\n                image[nr][nc] = newColour;   // recolour on enqueue\n                queue.Enqueue((nr, nc));\n            }\n        }\n\n        return image;\n    }\n\n    private static string Render(int[][] m) =>\n        string.Join(\" / \", Array.ConvertAll(m, r => string.Join(\",\", r)));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(FloodFill(new[] {\n            new[] { 1, 1, 1 }, new[] { 1, 1, 0 }, new[] { 1, 0, 1 } }, 1, 1, 2)));\n\n        // Same colour: must return immediately rather than loop forever.\n        Console.WriteLine(Render(FloodFill(new[] {\n            new[] { 0, 0 }, new[] { 0, 0 } }, 0, 0, 0)));\n\n        Console.WriteLine(Render(FloodFill(new[] { new[] { 1 } }, 0, 0, 5)));\n\n        // Diagonals do not connect.\n        Console.WriteLine(Render(FloodFill(new[] {\n            new[] { 1, 0 }, new[] { 0, 1 } }, 0, 0, 3)));\n    }\n}\n```\n\n**Output**\n\n```\n2,2,2 / 2,2,0 / 2,0,1\n0,0 / 0,0\n5\n3,0 / 0,1\n```",
   "tags": [
    "matrix",
-   "dfs",
-   "bfs"
+   "bfs",
+   "flood-fill",
+   "termination",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the same-colour check essential rather than an optimisation?",
+    "a": "Because without it the algorithm does not terminate. A cell recoloured to the original colour still satisfies the 'matches the original' condition, so neighbours keep re-enqueuing each other indefinitely and the queue grows without bound. It is not a performance issue but an infinite loop, and it is the single most common failure in this problem. The second test exists to pin it down."
+   },
+   {
+    "q": "Why BFS rather than the recursive DFS most people write?",
+    "a": "Because a large uniform region recurses once per cell, so a 1000 by 1000 image of one colour would attempt a million stack frames and overflow. .NET cannot catch a StackOverflowException, so the process dies. BFS with an explicit queue has no such limit, using heap memory proportional to the frontier instead. For small grids either is fine, and for anything user-supplied the iterative version is the responsible choice."
+   },
+   {
+    "q": "How does a real paint-bucket tool differ from this?",
+    "a": "Several ways. It usually works on a tolerance rather than exact equality, so nearby shades are included, which means the 'matches the original' test becomes a distance in colour space. It often needs anti-aliased edges rather than a hard boundary. And for large images the scanline fill is preferred, which fills whole horizontal runs at a time and enqueues only the spans above and below, dramatically reducing the number of queue operations and improving cache locality."
+   }
   ]
  },
  {
@@ -7303,12 +7472,27 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Shuffle an array uniformly at random.",
-  "answer": "Fisher-Yates: iterate from the end swapping each element with a uniformly chosen index at or before it. Every permutation is equally likely. The common wrong version chooses from the whole array each time, which biases the distribution in a way that is invisible without testing.",
+  "answer": "**Logic**\n\nFisher-Yates. Walk from the last index down, swapping each element with a uniformly chosen index from 0 up to and including the current position. Every permutation is then equally likely, and it runs in O(n) with no extra allocation.\n\nThe classic bug is choosing the swap partner from the whole array rather than from the unshuffled prefix. That produces n^n equally likely execution paths mapping onto n! permutations, and since n^n is not divisible by n! the distribution is measurably biased.\n\nSorting with a random comparator is also wrong, and additionally violates the comparer contract.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void Shuffle(int[] array, Random rng)\n    {\n        for (int i = array.Length - 1; i > 0; i--)\n        {\n            // Range is 0..i INCLUSIVE: an element may stay where it is.\n            int j = rng.Next(i + 1);\n            (array[i], array[j]) = (array[j], array[i]);\n        }\n    }\n\n    public static void Main()\n    {\n        var rng = new Random(42);   // fixed seed: reproducible output\n\n        var a = new[] { 1, 2, 3, 4, 5 };\n        Shuffle(a, rng);\n\n        // Assert it is a permutation, not one specific order: the output of a\n        // seeded Random is an implementation detail and is not guaranteed\n        // stable across .NET versions.\n        var sorted = (int[])a.Clone();\n        Array.Sort(sorted);\n        Console.WriteLine(string.Join(\",\", sorted));\n\n        // Distribution check: with 6 permutations of 3 elements and 60,000 trials,\n        // each should appear roughly 10,000 times.\n        var counts = new System.Collections.Generic.Dictionary<string, int>();\n        var check = new Random(1);\n\n        for (int t = 0; t < 60000; t++)\n        {\n            var arr = new[] { 1, 2, 3 };\n            Shuffle(arr, check);\n            string key = string.Join(\"\", arr);\n            counts[key] = counts.TryGetValue(key, out int c) ? c + 1 : 1;\n        }\n\n        Console.WriteLine(counts.Count);                       // all 6 permutations seen\n\n        int min = int.MaxValue, max = 0;\n        foreach (var (_, c) in counts) { min = Math.Min(min, c); max = Math.Max(max, c); }\n\n        // Within 10% of the expected 10,000 each: consistent with uniformity.\n        Console.WriteLine(min > 9000 && max < 11000);\n\n        var single = new[] { 7 };\n        Shuffle(single, rng);\n        Console.WriteLine(string.Join(\",\", single));\n\n        var empty = Array.Empty<int>();\n        Shuffle(empty, rng);\n        Console.WriteLine(empty.Length);\n    }\n}\n```\n\n**Output**\n\n```\n1,2,3,4,5\n6\nTrue\n7\n0\n```",
   "tags": [
    "math",
-   "randomisation",
-   "shuffle",
-   "algorithms"
+   "fisher-yates",
+   "randomness",
+   "bias",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must the random index include the current position?",
+    "a": "Because an element must be able to stay where it is; excluding its own index would make a fixed point impossible and bias the result away from permutations that leave anything in place. Using `rng.Next(i)` instead of `rng.Next(i + 1)` produces a derangement-biased shuffle. It is a one-character error that yields output looking plausibly random while being provably wrong, which is why the distribution check is in the test rather than a single eyeballed shuffle."
+   },
+   {
+    "q": "What is wrong with sorting by a random key?",
+    "a": "Two things. `list.OrderBy(_ => rng.Next())` is actually acceptable in .NET because the key is evaluated once per element and the sort is stable, though it is O(n log n) and allocates. What is genuinely broken is `Sort((a, b) => rng.Next(-1, 2))`, which violates the comparer contract by being inconsistent, and can throw 'IComparer.Compare() method returns inconsistent results' or silently produce a badly skewed order. Introsort assumes a total order and misbehaves without one."
+   },
+   {
+    "q": "When would System.Random be the wrong generator?",
+    "a": "Whenever the shuffle must be unpredictable to an adversary: shuffling a deck in a real card game, drawing lottery numbers, or generating tokens. System.Random is a deterministic PRNG whose state can be inferred from a modest number of outputs, so an observer can predict the rest. Use RandomNumberGenerator from System.Security.Cryptography there. Note also that rng.Next has a slight modulo bias for ranges not dividing the generator's period evenly, which matters only in the cryptographic case."
+   }
   ]
  },
  {
@@ -7316,11 +7500,27 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Count trailing zeroes in n factorial.",
-  "answer": "Zeroes come from factors of ten, and fives are scarcer than twos, so count the multiples of five, then twenty-five, then one hundred and twenty-five, summing the integer divisions. Time O(log n), space O(1) - computing the factorial itself would overflow immediately.",
+  "answer": "**Logic**\n\nA trailing zero comes from a factor of ten, which is two times five. In any factorial, factors of two are far more plentiful than factors of five, so the count of fives is the binding constraint.\n\nCount them by repeated division: `n/5` numbers contribute at least one five, `n/25` contribute a second, `n/125` a third, and so on. Summing those gives the total.\n\nO(log n) time, and it never computes the factorial itself, which would overflow almost immediately.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static long TrailingZeroes(long n)\n    {\n        if (n < 0) throw new ArgumentOutOfRangeException(nameof(n));\n\n        long count = 0;\n\n        // n/5 numbers give one five, n/25 give another, and so on.\n        for (long divisor = 5; divisor <= n; divisor *= 5)\n            count += n / divisor;\n\n        return count;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(TrailingZeroes(3));       // 6, no zeros\n        Console.WriteLine(TrailingZeroes(5));       // 120\n        Console.WriteLine(TrailingZeroes(10));      // 3628800\n        Console.WriteLine(TrailingZeroes(25));      // 25 contributes two fives\n        Console.WriteLine(TrailingZeroes(0));\n        Console.WriteLine(TrailingZeroes(1000000000000));\n    }\n}\n```\n\n**Output**\n\n```\n0\n1\n2\n6\n0\n249999999997\n```",
   "tags": [
    "math",
-   "number-theory",
-   "factorial"
+   "factorial",
+   "legendre",
+   "counting",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why count fives rather than twos?",
+    "a": "Because every second number contributes a factor of two while only every fifth contributes a five, so twos always outnumber fives and the number of complete pairs is limited by the fives. Counting twos would give a much larger, irrelevant number. The general form of this reasoning is Legendre's formula, which gives the exponent of any prime p in n factorial as the sum of n divided by successive powers of p."
+   },
+   {
+    "q": "Why does 25 contribute two fives?",
+    "a": "Because 25 is 5 squared, so it brings two factors of five rather than one, and 125 brings three. The loop captures that by dividing by successive powers: a number divisible by 25 is counted once in the n/5 term and again in the n/25 term. Stopping after a single division by five is the standard error, and it makes TrailingZeroes(25) return 5 instead of 6, which is the test case that catches it."
+   },
+   {
+    "q": "Why not just compute the factorial and count the zeros?",
+    "a": "Because 21 factorial already exceeds a signed 64-bit integer, and the problem is routinely posed for n in the billions. You would need arbitrary-precision arithmetic and the number would have billions of digits, so computing it is not merely slow but impossible in any practical sense. That is the real lesson: the question looks like it is about factorials and is actually about recognising that you must never compute one."
+   }
   ]
  },
  {
@@ -9767,12 +9967,27 @@
   "subcategory": "Bits",
   "difficulty": "Medium",
   "question": "Determine whether a number is a power of two, and of four.",
-  "answer": "A power of two has exactly one set bit, so n and n minus one is zero for positive n. A power of four additionally has that bit in an even position, checked by masking against the alternating pattern. Both are constant time with no loop.",
+  "answer": "**Logic**\n\nA power of two has exactly one set bit, so `n & (n - 1)` clears it and leaves zero. Guard against zero and negatives first, since zero passes the bit test but is not a power of two.\n\nA power of four is a power of two whose single bit sits at an even position. Two ways to check: mask against `0x55555555`, which has bits only at even positions, or note that powers of four leave remainder one modulo three.\n\nBoth tests are O(1).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Exactly one set bit, and positive.\n    public static bool IsPowerOfTwo(int n) => n > 0 && (n & (n - 1)) == 0;\n\n    // A power of two whose bit sits at an even position.\n    public static bool IsPowerOfFour(int n) =>\n        IsPowerOfTwo(n) && (n & 0x55555555) != 0;\n\n    // Alternative: powers of four are congruent to 1 modulo 3.\n    public static bool IsPowerOfFourMod(int n) =>\n        IsPowerOfTwo(n) && n % 3 == 1;\n\n    public static void Main()\n    {\n        Console.WriteLine($\"{IsPowerOfTwo(1)} {IsPowerOfTwo(16)} {IsPowerOfTwo(0)} {IsPowerOfTwo(-16)}\");\n        Console.WriteLine($\"{IsPowerOfTwo(3)} {IsPowerOfTwo(1073741824)}\");\n\n        Console.WriteLine($\"{IsPowerOfFour(1)} {IsPowerOfFour(4)} {IsPowerOfFour(8)} {IsPowerOfFour(16)}\");\n        Console.WriteLine($\"{IsPowerOfFourMod(1)} {IsPowerOfFourMod(4)} {IsPowerOfFourMod(8)} {IsPowerOfFourMod(16)}\");\n        Console.WriteLine(IsPowerOfFour(0));\n        Console.WriteLine(IsPowerOfFour(64));\n    }\n}\n```\n\n**Output**\n\n```\nTrue True False False\nFalse True\nTrue True False True\nTrue True False True\nFalse\nTrue\n```",
   "tags": [
    "bits",
-   "powers",
-   "math",
-   "tricks"
+   "power-of-two",
+   "masks",
+   "modulo",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the n > 0 guard necessary?",
+    "a": "Because zero satisfies the bit test: 0 & -1 is 0, so without the guard zero would be reported as a power of two, which it is not. Negative numbers are also a problem: int.MinValue has exactly one set bit, the sign bit, so it would pass the test despite being negative. The guard handles both, and it is the single most common omission in this two-line function."
+   },
+   {
+    "q": "Why does the modulo-three test work for powers of four?",
+    "a": "Because 4 is congruent to 1 modulo 3, so any power of 4 is congruent to 1^k, which is 1. Powers of two that are not powers of four are 2 times a power of 4, so they are congruent to 2 modulo 3. That cleanly separates the two cases. It is a neat result, though the mask version is faster since it avoids a division, and I would use the mask in a hot path while keeping the modulo version as the more explainable one."
+   },
+   {
+    "q": "Where do power-of-two checks matter in real code?",
+    "a": "Hash table and buffer sizes are usually powers of two so that a modulo can be replaced by a bitwise AND with size minus one, which is far cheaper. Memory alignment checks are the same test. Ring buffers rely on it for the wraparound. .NET's Dictionary historically used prime sizes instead to reduce clustering, which is a deliberate trade-off in the other direction, and knowing why each choice was made is more interesting than the bit trick itself."
+   }
   ]
  },
  {
