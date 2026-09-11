@@ -21285,13 +21285,33 @@
   "subcategory": "Arrays",
   "difficulty": "Easy",
   "question": "Best Time to Buy and Sell Stock: max profit from one buy and one later sell.",
-  "answer": "Track the minimum price seen so far and the max profit. For each price, update minPrice = min(minPrice, price) and maxProfit = max(maxProfit, price - minPrice). Single pass O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nThe buy must happen before the sell, so walking left to right, the best profit achievable when selling on day `i` is `prices[i]` minus the cheapest price seen on any earlier day. Carry two values: the minimum price so far, and the best profit so far. Update the minimum first only if the current price is lower, otherwise try selling today. One pass, O(n) time, O(1) space.\n\nThe brute force compares every pair, which is O(n^2). The key realisation that removes the inner loop is that you never need the full history, only its minimum.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxProfit(int[] prices)\n    {\n        if (prices == null || prices.Length < 2) return 0;\n\n        int minPrice = prices[0];\n        int best = 0;\n\n        for (int i = 1; i < prices.Length; i++)\n        {\n            // Selling today: profit is today's price minus the cheapest day so far.\n            int profit = prices[i] - minPrice;\n            if (profit > best) best = profit;\n\n            // Then consider today as a future buy point.\n            if (prices[i] < minPrice) minPrice = prices[i];\n        }\n\n        return best;   // 0 when prices only fall: no transaction is allowed to lose money\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxProfit(new[] { 7, 1, 5, 3, 6, 4 }));  // buy at 1, sell at 6\n        Console.WriteLine(MaxProfit(new[] { 7, 6, 4, 3, 1 }));     // only falls\n        Console.WriteLine(MaxProfit(new[] { 2, 4, 1 }));           // buy at 2, sell at 4\n        Console.WriteLine(MaxProfit(new[] { 5 }));                 // one day, no sell\n    }\n}\n```\n\n**Output**\n\n```\n5\n0\n2\n0\n```",
   "tags": [
    "arrays",
    "greedy",
-   "stock"
+   "one-pass",
+   "stock",
+   "csharp"
   ],
-  "id": 1504
+  "id": 1504,
+  "followups": [
+   {
+    "q": "What if unlimited transactions are allowed?",
+    "a": "It collapses to a much simpler problem: sum every positive daily difference, `max(0, prices[i] - prices[i-1])`, because any profitable multi-day run is exactly the sum of its consecutive upward steps. Still one pass, O(n) time, O(1) space, and no need to track buy and sell points at all. Candidates often reach for dynamic programming here, which works but is unnecessary."
+   },
+   {
+    "q": "What if at most two transactions are allowed?",
+    "a": "Now the greedy break down and you need state. Track four values in one pass: the best balance after a first buy, after a first sell, after a second buy and after a second sell, updating each from the previous one. It stays O(n) time and O(1) space. That generalises to the k-transaction version as a two-dimensional DP over day and transaction count, which is O(nk), and when k exceeds n/2 it degenerates to the unlimited case above."
+   },
+   {
+    "q": "What would you return for an empty array, and why not throw?",
+    "a": "Returning 0 is the right call because 'no transaction' is a legal outcome of the problem, not an error: the same reasoning that returns 0 for a strictly falling price series applies to an empty one. Throwing would force every caller into a try/catch for a case that has a perfectly sensible answer. A null input is more arguable, since that usually signals a caller bug rather than a real empty market, and some teams would want an ArgumentNullException there."
+   },
+   {
+    "q": "Why update the profit before updating the minimum?",
+    "a": "Because buying and selling on the same day must yield 0, not a negative number. If the minimum is updated first and then used, the two values can refer to the same index, which is harmless here since the profit would be exactly 0, but the ordering makes the buy-strictly-before-sell constraint explicit rather than accidental. It matters more in the variants where the same slip produces a genuinely wrong answer."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21543,40 +21563,91 @@
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "Check if a string is a palindrome (ignoring non-alphanumerics and case).",
-  "answer": "Two pointers from both ends: skip non-alphanumeric characters, compare lowercased characters; if any mismatch return false. Move inward until pointers meet. O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nTwo pointers from both ends moving inward. Skip anything that is not a letter or digit, compare the rest case-insensitively, and stop when the pointers meet. O(n) time and O(1) extra space.\n\nThe tempting alternative, filtering into a new string and comparing it to its reverse, is simple to write but allocates two extra strings. The two-pointer version allocates nothing, which is the reason it is the expected answer.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsPalindrome(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return true;\n\n        int left = 0, right = s.Length - 1;\n\n        while (left < right)\n        {\n            // Skip the characters the problem says do not count.\n            while (left < right && !char.IsLetterOrDigit(s[left])) left++;\n            while (left < right && !char.IsLetterOrDigit(s[right])) right--;\n\n            if (char.ToLowerInvariant(s[left]) != char.ToLowerInvariant(s[right]))\n                return false;\n\n            left++;\n            right--;\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsPalindrome(\"A man, a plan, a canal: Panama\"));\n        Console.WriteLine(IsPalindrome(\"race a car\"));\n        Console.WriteLine(IsPalindrome(\"\"));\n        Console.WriteLine(IsPalindrome(\".,\"));\n        Console.WriteLine(IsPalindrome(\"0P\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nFalse\n```\n\nThe last case is the one that catches naive solutions: `'0'` and `'P'` differ by 32 in ASCII, so code that lowercases by flipping a bit or by adding 32 wrongly reports them equal.",
   "tags": [
    "strings",
-   "two-pointer",
-   "palindrome"
+   "two-pointers",
+   "palindrome",
+   "culture",
+   "csharp"
   ],
-  "id": 1522
+  "id": 1522,
+  "followups": [
+   {
+    "q": "Why ToLowerInvariant rather than ToLower?",
+    "a": "Because `ToLower` uses the current culture, and in Turkish the uppercase of `i` is a dotted capital, not `I`. That means the same string can be judged a palindrome on one machine and not on another purely from the thread's culture setting. Any comparison that is about character identity rather than about presenting text to a user should be culture-invariant or ordinal. It is a classic production bug, not a theoretical one."
+   },
+   {
+    "q": "What if the string can contain characters outside the basic multilingual plane, like emoji?",
+    "a": "Then indexing by `char` is wrong, because a `char` in .NET is a UTF-16 code unit and such characters occupy a surrogate pair. Reversing or comparing by code unit would split the pair and produce nonsense. The fix is to iterate by rune, using `StringInfo.GetTextElementEnumerator` or `System.Text.Rune`, which also handles combining marks where one visible character is several code points. For the alphanumeric-only version here the point is somewhat academic, since surrogates are not letters or digits in the ASCII sense, but it is the right thing to raise."
+   },
+   {
+    "q": "How would you check whether a linked list is a palindrome, where you cannot index?",
+    "a": "Find the middle with a slow and fast pointer, reverse the second half in place, then walk the two halves together comparing values. That is O(n) time and O(1) space. The courteous touch is to restore the list by reversing the second half back before returning, since a predicate that silently mutates its input is a nasty surprise. The alternative of copying values into a list and using two pointers is O(n) space and usually considered the weaker answer."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "Check if two strings are anagrams.",
-  "answer": "Count character frequencies (array of 26 for lowercase letters, or a hash map for Unicode). Increment for one string, decrement for the other; all counts must be zero. Or sort both and compare. Counting is O(n); sorting is O(n log n).",
+  "answer": "**Logic**\n\nTwo strings are anagrams when they contain the same characters with the same counts. Different lengths mean an immediate no. Otherwise count each character of the first string, then decrement for each character of the second; if any count goes negative, or the strings differ in length, they are not anagrams. One pass over each string, O(n) time.\n\nSorting both and comparing also works and is a fine answer to give, but it is O(n log n) and allocates. Counting is O(n), and over a fixed alphabet the counter is a small fixed array rather than a dictionary.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool IsAnagram(string s, string t)\n    {\n        if (s == null || t == null) return s == t;\n        if (s.Length != t.Length) return false;   // cheapest possible rejection\n\n        var counts = new Dictionary<char, int>();\n\n        foreach (char c in s)\n            counts[c] = counts.TryGetValue(c, out int n) ? n + 1 : 1;\n\n        foreach (char c in t)\n        {\n            if (!counts.TryGetValue(c, out int n) || n == 0) return false;\n            counts[c] = n - 1;\n        }\n\n        // Lengths are equal and nothing went negative, so every count is back to zero.\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsAnagram(\"anagram\", \"nagaram\"));\n        Console.WriteLine(IsAnagram(\"rat\", \"car\"));\n        Console.WriteLine(IsAnagram(\"a\", \"ab\"));\n        Console.WriteLine(IsAnagram(\"\", \"\"));\n        Console.WriteLine(IsAnagram(\"aacc\", \"ccac\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nFalse\nTrue\nFalse\n```\n\nThe final case is the one that breaks solutions which only check that both strings use the same set of characters without comparing counts.",
   "tags": [
    "strings",
    "hashmap",
+   "counting",
    "anagram",
-   "counting"
+   "csharp"
   ],
-  "id": 1523
+  "id": 1523,
+  "followups": [
+   {
+    "q": "If the input is guaranteed lowercase ASCII, can you do better?",
+    "a": "Yes: replace the dictionary with `int[26]` indexed by `c - 'a'`. That removes hashing entirely, fits in a cache line, and typically runs several times faster for short strings. It is the answer worth giving when the interviewer states the constraint, but say out loud that it is only valid because of that constraint, since silently assuming a 26-letter alphabet is exactly the kind of thing that breaks on real input."
+   },
+   {
+    "q": "How does this change for Unicode?",
+    "a": "Two ways. First, counting by `char` breaks for characters outside the basic multilingual plane, so you would count runes instead. Second, and more subtly, the same visible text can have several encodings: 'é' as one code point, or as 'e' plus a combining accent. Two strings that look identical would then count differently. The fix is to normalise both with `string.Normalize(NormalizationForm.FormC)` before counting, which is a detail almost nobody raises unprompted and lands well when you do."
+   },
+   {
+    "q": "You need to group many strings into anagram sets. What changes?",
+    "a": "Pairwise comparison is O(n^2) comparisons, so instead compute a canonical key per string and group on it. The sorted characters make a serviceable key, at O(k log k) per string, or a 26-entry count vector rendered to a string gives an O(k) key. Then a single dictionary from key to list does the grouping in one pass. That is the Group Anagrams problem, and recognising that it is the same counting insight applied as a key is the point."
+   },
+   {
+    "q": "Why check the lengths first when the counting loop would catch it anyway?",
+    "a": "Because it would not, in general. The decrementing loop only detects that `t` has a character `s` lacks; if `s` were longer, every character of `t` could still be present and the method would wrongly return true, since nothing verifies the counts ended at zero. The length check is what makes the final `return true` sound, which is worth stating rather than treating it as a mere optimisation."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Longest substring without repeating characters.",
-  "answer": "Sliding window with a hash map/set of last-seen indices. Expand the right pointer; when a repeat is found, move the left pointer past the previous occurrence. Track the max window length. O(n) time, O(min(n, charset)) space.",
+  "answer": "**Logic**\n\nA sliding window with a map from character to its last index. Extend the window to the right one character at a time; when the incoming character was seen inside the current window, jump the left edge to just past that previous occurrence. Record the best width as you go. Each character is visited once, so O(n) time and O(k) space where k is the alphabet size.\n\nThe important detail is the phrase *inside the current window*. A previous index that lies before the left edge is stale and must be ignored, otherwise the window moves backwards and the answer is too large.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int LengthOfLongestSubstring(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        var lastSeen = new Dictionary<char, int>();\n        int best = 0, left = 0;\n\n        for (int right = 0; right < s.Length; right++)\n        {\n            char c = s[right];\n\n            // Only move left forward, never backward: an older index outside the\n            // window has already been excluded and must not pull it back.\n            if (lastSeen.TryGetValue(c, out int prev) && prev >= left)\n                left = prev + 1;\n\n            lastSeen[c] = right;\n            best = Math.Max(best, right - left + 1);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LengthOfLongestSubstring(\"abcabcbb\"));  // \"abc\"\n        Console.WriteLine(LengthOfLongestSubstring(\"bbbbb\"));      // \"b\"\n        Console.WriteLine(LengthOfLongestSubstring(\"pwwkew\"));     // \"wke\"\n        Console.WriteLine(LengthOfLongestSubstring(\"\"));\n        Console.WriteLine(LengthOfLongestSubstring(\"abba\"));       // the stale-index trap\n        Console.WriteLine(LengthOfLongestSubstring(\"dvdf\"));       // \"vdf\"\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n3\n0\n2\n3\n```\n\n`\"abba\"` is the case that exposes the bug: without the `prev >= left` guard the left edge jumps back to index 1 when the final `a` arrives, and the answer comes out as 3 instead of 2.",
   "tags": [
    "strings",
    "sliding-window",
-   "hashmap"
+   "hashmap",
+   "two-pointers",
+   "csharp"
   ],
-  "id": 1524
+  "id": 1524,
+  "followups": [
+   {
+    "q": "How would you return the substring itself rather than its length?",
+    "a": "Record the start index whenever the best length improves, then slice once at the end with `s.Substring(bestStart, best)`. Two extra integers, no change in complexity. The thing to avoid is building the candidate substring on every iteration, which quietly turns an O(n) algorithm into O(n^2) through allocation and copying, and is a common way to fail a follow-up that looks trivial."
+   },
+   {
+    "q": "What if at most k distinct characters were allowed rather than zero repeats?",
+    "a": "The window becomes count-based instead of index-based: hold a dictionary of character to count within the window, and while the dictionary has more than k entries, shrink from the left, decrementing counts and removing entries that reach zero. Still O(n), since each character enters and leaves at most once. It is the same sliding-window skeleton, and recognising that the two problems share it is more valuable than either solution alone."
+   },
+   {
+    "q": "Could you avoid the dictionary entirely?",
+    "a": "If the alphabet is bounded, yes: an `int[128]` or `int[256]` of last-seen indices, initialised to -1, removes all hashing and is noticeably faster. State the assumption when you do it, because it silently breaks on non-ASCII input. For arbitrary Unicode the dictionary is the honest choice, and if surrogate pairs are in play you would be iterating runes rather than chars anyway."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21610,13 +21681,33 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Valid parentheses: check if brackets are balanced.",
-  "answer": "Use a stack: push opening brackets; on a closing bracket, check the top matches the corresponding opening (pop) else invalid. At the end the stack must be empty. O(n) time, O(n) space. A map of closing→opening simplifies matching.",
+  "answer": "**Logic**\n\nA stack, because the closing bracket must match the most recently opened one, which is last-in-first-out by definition. Push every opening bracket; on a closing bracket, the stack must be non-empty and its top must be the matching opener, so pop and compare. At the end the stack must be empty, otherwise something was never closed. O(n) time, O(n) space in the worst case of all openers.\n\nThe two failure modes to handle explicitly are a closing bracket arriving when the stack is empty, and leftovers at the end. Solutions that only count brackets pass `([)]`, which is why counting is not enough.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool IsValid(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return true;\n\n        var pairs = new Dictionary<char, char> { [')'] = '(', [']'] = '[', ['}'] = '{' };\n        var stack = new Stack<char>();\n\n        foreach (char c in s)\n        {\n            if (pairs.ContainsValue(c))\n            {\n                stack.Push(c);\n            }\n            else if (pairs.TryGetValue(c, out char opener))\n            {\n                // A closer with nothing open, or the wrong thing open, is invalid.\n                if (stack.Count == 0 || stack.Pop() != opener) return false;\n            }\n        }\n\n        return stack.Count == 0;   // anything still open was never closed\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsValid(\"()\"));\n        Console.WriteLine(IsValid(\"()[]{}\"));\n        Console.WriteLine(IsValid(\"(]\"));\n        Console.WriteLine(IsValid(\"([)]\"));\n        Console.WriteLine(IsValid(\"{[]}\"));\n        Console.WriteLine(IsValid(\"(\"));\n        Console.WriteLine(IsValid(\")\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nFalse\nTrue\nFalse\nFalse\n```",
   "tags": [
    "strings",
    "stack",
-   "parentheses"
+   "parentheses",
+   "validation",
+   "csharp"
   ],
-  "id": 1527
+  "id": 1527,
+  "followups": [
+   {
+    "q": "The ContainsValue call is O(n) on the dictionary. Does that matter?",
+    "a": "Here the dictionary has three entries, so it is a constant with a small factor and the method is still O(n) overall. But it is sloppy, and an interviewer may well probe it. The clean fix is a `switch` on the three opening characters, or a second small set of openers, which makes the classification O(1) and reads better. It is worth noticing out loud even when the cost is negligible, because the habit is what is being assessed."
+   },
+   {
+    "q": "What if the string also contains ordinary text, not only brackets?",
+    "a": "The code above already handles it: a character that is neither an opener nor a closer falls through both branches and is ignored. That is deliberate and worth pointing out, since a version written with `else return false` would reject any real expression. If the requirement is stricter and only bracket characters are legal input, then the explicit rejection belongs there instead, and the difference should be a stated assumption rather than an accident."
+   },
+   {
+    "q": "How would you extend this to report where the error is, as an editor would?",
+    "a": "Push the index alongside the character, so the stack holds positions as well as bracket types. On a mismatch you can then report both the offending closer's index and the index of the opener it failed to match, and on leftovers you report the position of each unclosed opener rather than only that the count was wrong. Same complexity, and it is the shape real parsers use, since a message saying 'unbalanced' with no position is nearly useless in a large file."
+   },
+   {
+    "q": "Could this be done without a stack?",
+    "a": "With a single bracket type, yes: a counter that increments on open and decrements on close, failing if it ever goes negative and requiring zero at the end. With multiple types it cannot, because the counter loses the ordering information that distinguishes `([)]` from `([])`. That contrast is a neat way to show why the problem genuinely needs a stack, which is usually what the interviewer is checking."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21787,13 +21878,33 @@
   "subcategory": "Arrays",
   "difficulty": "Easy",
   "question": "Contains duplicate: does the array have any duplicates?",
-  "answer": "Add elements to a hash set; if an element is already present, return true. Or sort and check adjacent equality. Hash set is O(n) time, O(n) space; sorting is O(n log n) time, O(1) extra space.",
+  "answer": "**Logic**\n\nAdd each element to a hash set; the first time an add fails, a duplicate exists. `HashSet<T>.Add` returns false when the item is already present, so one call does both the lookup and the insert. O(n) time, O(n) space, and it returns early rather than always scanning the whole array.\n\nSorting first and comparing neighbours is O(n log n) time with O(1) extra space if sorting in place is allowed, which is the better answer when memory is the binding constraint or when the caller does not mind the input being reordered.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool ContainsDuplicate(int[] nums)\n    {\n        if (nums == null || nums.Length < 2) return false;\n\n        var seen = new HashSet<int>(nums.Length);   // presized: no rehashing\n\n        foreach (int n in nums)\n            if (!seen.Add(n)) return true;          // Add is false when already present\n\n        return false;\n    }\n\n    // O(1) extra space, at the cost of reordering the caller's array.\n    public static bool ContainsDuplicateSorted(int[] nums)\n    {\n        if (nums == null || nums.Length < 2) return false;\n        Array.Sort(nums);\n        for (int i = 1; i < nums.Length; i++)\n            if (nums[i] == nums[i - 1]) return true;\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ContainsDuplicate(new[] { 1, 2, 3, 1 }));\n        Console.WriteLine(ContainsDuplicate(new[] { 1, 2, 3, 4 }));\n        Console.WriteLine(ContainsDuplicate(new[] { 1, 1, 1, 3, 3, 4, 3, 2, 4, 2 }));\n        Console.WriteLine(ContainsDuplicate(new int[0]));\n        Console.WriteLine(ContainsDuplicateSorted(new[] { 5, 3, 5 }));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nTrue\n```",
   "tags": [
    "arrays",
    "hashset",
-   "duplicates"
+   "sorting",
+   "duplicates",
+   "csharp"
   ],
-  "id": 1540
+  "id": 1540,
+  "followups": [
+   {
+    "q": "Which would you actually ship, the set or the sort?",
+    "a": "The set, in almost every case. It returns as soon as it finds a duplicate, which on real data with an early duplicate is dramatically faster than sorting the whole array, and it does not mutate the caller's input. Sorting wins when memory is genuinely tight, when the array is already sorted, or when the caller wanted it sorted anyway. The mutation point matters more than people expect: a predicate named `ContainsDuplicate` that reorders its argument is a nasty side effect to discover in production."
+   },
+   {
+    "q": "What if the array is far too large to fit in memory?",
+    "a": "External sort and scan for adjacent equals is the exact answer. If an approximate answer is acceptable, a Bloom filter gives a large memory saving with a controllable false-positive rate, meaning it can wrongly report a duplicate but never miss one, so a positive can be confirmed with a second pass. Alternatively, partition by hash so equal values always land in the same partition, then check each partition independently in memory, which parallelises cleanly."
+   },
+   {
+    "q": "What if you must find a duplicate in an array of n+1 integers in the range 1..n without modifying it and in O(1) space?",
+    "a": "That is a different problem with a much nicer solution: treat the values as `next` pointers, which by the pigeonhole principle must form a cycle, and run Floyd's tortoise and hare to find its entry. O(n) time, O(1) space, and the input is untouched. It is a favourite follow-up precisely because the hash-set instinct is useless there and the constraints are what point at the answer."
+   },
+   {
+    "q": "Why presize the HashSet?",
+    "a": "A `HashSet<T>` grows by reallocating its bucket array and rehashing every element, so an unsized set filling with n items does about log n of those, each O(current size). Passing the capacity up front makes it one allocation. It does not change the asymptotic complexity, but it is measurable on large inputs and costs nothing to write, which makes it the sort of detail that reads as production experience rather than exam technique."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22060,27 +22171,62 @@
   "subcategory": "LinkedList",
   "difficulty": "Easy",
   "question": "Reverse a singly linked list.",
-  "answer": "Iterative: keep prev=null, curr=head; for each node save next, point curr.next to prev, advance prev=curr, curr=next. Return prev as the new head. O(n) time, O(1) space. Recursive version reverses the rest then fixes pointers (O(n) stack).",
+  "answer": "**Logic**\n\nWalk the list carrying three references: the node before, the node now, and the node after. On each step, point the current node's `next` backwards, then shift all three forward one position. Capturing `next` before overwriting it is the whole trick, because without it the rest of the list is unreachable. One pass, O(n) time, O(1) space.\n\nThe recursive version reads more elegantly but uses O(n) stack, which on a long list is a real stack-overflow risk, so the iterative form is the one to lead with.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static ListNode Reverse(ListNode head)\n    {\n        ListNode prev = null;\n        ListNode current = head;\n\n        while (current != null)\n        {\n            ListNode next = current.Next;  // save it before the link is destroyed\n            current.Next = prev;           // flip the pointer backwards\n            prev = current;                // advance both markers\n            current = next;\n        }\n\n        return prev;   // current is null here, so prev is the old tail = new head\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode head)\n    {\n        var parts = new System.Collections.Generic.List<string>();\n        for (var n = head; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\" -> \", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(Reverse(Build(1, 2, 3, 4, 5))));\n        Console.WriteLine(Render(Reverse(Build(1, 2))));\n        Console.WriteLine(Render(Reverse(Build(7))));\n        Console.WriteLine(Render(Reverse(null)));\n    }\n}\n```\n\n**Output**\n\n```\n5 -> 4 -> 3 -> 2 -> 1\n2 -> 1\n7\n(empty)\n```",
   "tags": [
    "linkedlist",
+   "pointers",
+   "iterative",
    "reverse",
-   "pointers"
+   "csharp"
   ],
-  "id": 1560
+  "id": 1560,
+  "followups": [
+   {
+    "q": "Write the recursive version, and say when you would not use it.",
+    "a": "Recurse to the end to get the new head, then on the way back out set `head.Next.Next = head` and `head.Next = null`, returning the new head unchanged through every frame. It is four lines and reads beautifully. You would not use it when the list length is unbounded or attacker-influenced, because .NET does not eliminate tail calls reliably and a list of a million nodes will overflow the stack. Rule of thumb: recursion is fine on trees, where depth is logarithmic if balanced, and risky on lists, where depth is the full length."
+   },
+   {
+    "q": "How would you reverse only a section, from position m to n?",
+    "a": "Walk to the node before position m and keep it as an anchor, reverse the sublist with the same three-pointer loop while counting to n, then reconnect: the anchor points at the new sub-head, and the old sub-head, which is now the sub-tail, points at the remainder. Use a dummy node before the head so that m equal to 1 needs no special case, which is the usual source of bugs here. Still one pass and O(1) space."
+   },
+   {
+    "q": "Why does this need a singly linked list at all, when List<T> exists?",
+    "a": "In application code it usually does not, and `List<T>` with `Reverse` is the right answer. The structure earns its keep when you need O(1) insertion or removal given a node reference and never need indexing, which is exactly why `LinkedList<T>` underpins an LRU cache. The interview value of the question is different: it tests whether you can manipulate references without losing the list, which is the same skill as not corrupting state in any pointer-like structure."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "LinkedList",
   "difficulty": "Easy",
   "question": "Detect a cycle in a linked list.",
-  "answer": "Floyd's tortoise and hare: slow moves one step, fast two. If they meet, there's a cycle; if fast reaches null, none. O(n) time, O(1) space. To find the cycle start, reset one pointer to head and move both one step until they meet.",
+  "answer": "**Logic**\n\nFloyd's tortoise and hare. Move one pointer one node at a time and another two nodes at a time. If the list ends, the fast pointer reaches null and there is no cycle. If there is a cycle, both pointers are eventually trapped inside it and the fast one gains exactly one position per step on the slow one, so it must land on it rather than step over it. O(n) time, O(1) space.\n\nThe obvious alternative, a hash set of visited nodes, is also O(n) time but O(n) space. Floyd's is preferred because it allocates nothing, and it extends to finding where the cycle begins.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0) { Val = val; }\n}\n\npublic class Solution\n{\n    public static bool HasCycle(ListNode head)\n    {\n        ListNode slow = head, fast = head;\n\n        while (fast != null && fast.Next != null)\n        {\n            slow = slow.Next;        // one step\n            fast = fast.Next.Next;   // two steps\n            if (ReferenceEquals(slow, fast)) return true;\n        }\n\n        return false;   // fast ran off the end, so the list terminates\n    }\n\n    // Where does the cycle start? Reset one pointer to the head and advance both\n    // one step at a time: they meet at the entry point.\n    public static ListNode CycleStart(ListNode head)\n    {\n        ListNode slow = head, fast = head;\n        while (fast != null && fast.Next != null)\n        {\n            slow = slow.Next;\n            fast = fast.Next.Next;\n            if (ReferenceEquals(slow, fast))\n            {\n                slow = head;\n                while (!ReferenceEquals(slow, fast)) { slow = slow.Next; fast = fast.Next; }\n                return slow;\n            }\n        }\n        return null;\n    }\n\n    public static void Main()\n    {\n        var a = new ListNode(3); var b = new ListNode(2);\n        var c = new ListNode(0); var d = new ListNode(-4);\n        a.Next = b; b.Next = c; c.Next = d; d.Next = b;   // cycle back to b\n\n        Console.WriteLine(HasCycle(a));\n        Console.WriteLine(CycleStart(a).Val);\n\n        var x = new ListNode(1); var y = new ListNode(2);\n        x.Next = y;\n        Console.WriteLine(HasCycle(x));\n        Console.WriteLine(HasCycle(null));\n\n        var self = new ListNode(1); self.Next = self;      // one-node cycle\n        Console.WriteLine(HasCycle(self));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\n2\nFalse\nFalse\nTrue\n```",
   "tags": [
    "linkedlist",
+   "two-pointers",
    "floyd",
-   "cycle",
-   "two-pointer"
+   "cycle-detection",
+   "csharp"
   ],
-  "id": 1561
+  "id": 1561,
+  "followups": [
+   {
+    "q": "Why does resetting to the head find the cycle entry? Prove it.",
+    "a": "Let the distance from head to the cycle entry be `a`, from the entry to the meeting point be `b`, and the remainder of the cycle be `c`. When they meet, slow has travelled `a + b` and fast `a + b + k(b + c)` for some number of laps k, and fast has travelled exactly twice as far. Solving gives `a = c + (k-1)(b+c)`, meaning the distance from the head to the entry equals the distance from the meeting point to the entry, modulo whole laps. So two pointers advancing one step each from the head and from the meeting point arrive at the entry together."
+   },
+   {
+    "q": "Why two steps for the fast pointer rather than three?",
+    "a": "Correctness only needs the gap to close by a whole number of positions per step, and larger strides still work, but a stride of two guarantees the fast pointer cannot jump over the slow one, since it gains exactly one position per iteration. With a stride of three it gains two, and in a cycle whose length shares a factor with that gain the pointers can leapfrog for longer before coinciding. Two is also the stride for which the entry-point proof above comes out clean, which is why it is the canonical choice."
+   },
+   {
+    "q": "Where does this pattern show up outside linked lists?",
+    "a": "Any iterated function where you follow `x = f(x)` and need to detect that it repeats without storing history. Cycle detection in a functional graph, Pollard's rho for integer factorisation, detecting a repeating state in a pseudo-random generator, and finding the repeating part of a decimal expansion all use it. The Happy Number problem is the same algorithm applied to digit-square sums, which is why an interviewer may follow this question with that one."
+   },
+   {
+    "q": "Why ReferenceEquals rather than ==?",
+    "a": "For a plain class with no operator overload they are identical, so it is a readability choice here: it states that identity, not value, is what matters. It stops being a stylistic point if the node type ever overloads `==` or `Equals` to compare values, at which point `==` could report true for two distinct nodes holding the same value and the detection would be wrong. `ReferenceEquals` cannot be overridden, so it is immune to that."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22100,14 +22246,29 @@
   "subcategory": "LinkedList",
   "difficulty": "Easy",
   "question": "Merge two sorted linked lists.",
-  "answer": "Use a dummy head and a tail pointer; repeatedly attach the smaller of the two current nodes and advance that list. Attach the remaining list at the end. O(m+n) time, O(1) space. Recursion also works but uses stack space.",
+  "answer": "**Logic**\n\nWalk both lists at once, always appending whichever head is smaller, then advancing that list. When one runs out, attach the remainder of the other wholesale, since it is already sorted. A dummy head node removes the special case for the first element, so there is no need to ask whether the result list is empty on each append. O(n + m) time, O(1) extra space because nodes are relinked rather than copied.\n\nTaking `<=` rather than `<` when the values are equal keeps the relative order of equal elements, which makes the merge stable, the same property that matters in merge sort.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static ListNode Merge(ListNode a, ListNode b)\n    {\n        var dummy = new ListNode();   // avoids a null check on every append\n        var tail = dummy;\n\n        while (a != null && b != null)\n        {\n            if (a.Val <= b.Val) { tail.Next = a; a = a.Next; }   // <= keeps it stable\n            else                { tail.Next = b; b = b.Next; }\n            tail = tail.Next;\n        }\n\n        // Exactly one list is non-empty here, and it is already sorted.\n        tail.Next = a ?? b;\n\n        return dummy.Next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode head)\n    {\n        var parts = new List<string>();\n        for (var n = head; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\" -> \", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(Merge(Build(1, 2, 4), Build(1, 3, 4))));\n        Console.WriteLine(Render(Merge(Build(), Build())));\n        Console.WriteLine(Render(Merge(Build(), Build(0))));\n        Console.WriteLine(Render(Merge(Build(5), Build(1, 2, 3))));\n    }\n}\n```\n\n**Output**\n\n```\n1 -> 1 -> 2 -> 3 -> 4 -> 4\n(empty)\n0\n1 -> 2 -> 3 -> 5\n```",
   "tags": [
    "linkedlist",
    "merge",
-   "sorted",
-   "dummy-node"
+   "two-pointers",
+   "dummy-node",
+   "csharp"
   ],
-  "id": 1563
+  "id": 1563,
+  "followups": [
+   {
+    "q": "Now merge k sorted lists.",
+    "a": "Two good answers. A min-heap holding the current head of each list gives O(N log k) for N total nodes: pop the smallest, append it, push its successor. Or merge pairwise in rounds, halving the number of lists each round, which is the same O(N log k) and needs no heap. Both beat the naive approach of merging one list into an accumulator at a time, which is O(Nk) because the accumulator is re-walked on every merge, and that difference is the point of the follow-up."
+   },
+   {
+    "q": "Why a dummy node rather than handling the first element specially?",
+    "a": "Because without it every append must ask whether the result is still empty, which means a branch inside the hot loop and a separate variable for the head. The dummy makes the first append identical to every other one, then `dummy.Next` is the real head. The same technique removes edge cases whenever the head of a list might change: removing the nth node from the end, deleting by value, reversing a sublist from position 1. It costs one node that is discarded on return."
+   },
+   {
+    "q": "What if the lists are arrays instead?",
+    "a": "The same two-pointer merge, but it needs an output array of size n + m because you cannot relink; that extra allocation is the real difference between merging lists and merging arrays, and it is why merge sort on an array is not in-place while merge sort on a list can be. The .NET variant of this question is usually the in-place one where the first array already has trailing space, and the trick there is to fill from the back, so that writing never overwrites an element still to be read."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23995,13 +24156,29 @@
   "subcategory": "Math",
   "difficulty": "Easy",
   "question": "FizzBuzz.",
-  "answer": "For 1..n: print 'FizzBuzz' if divisible by 15, 'Fizz' if by 3, 'Buzz' if by 5, else the number. Check 15 first (or combine the string). O(n) time. A classic warm-up testing basic control flow and modulo.",
+  "answer": "**Logic**\n\nFor 1 to n print `Fizz` when divisible by 3, `Buzz` when divisible by 5, `FizzBuzz` when divisible by both, otherwise the number. The only trap is ordering: the combined case must be tested first, or a multiple of 15 is caught by the earlier branch and prints only `Fizz`.\n\nThe tidier formulation builds the word by appending, which removes the separate 15 case entirely and generalises to more rules without the branch count exploding. An empty result means no rule matched, so print the number.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    public static void FizzBuzz(int n)\n    {\n        var sb = new StringBuilder();\n\n        for (int i = 1; i <= n; i++)\n        {\n            sb.Clear();\n            if (i % 3 == 0) sb.Append(\"Fizz\");\n            if (i % 5 == 0) sb.Append(\"Buzz\");\n\n            // Nothing appended means no rule applied, so the number itself.\n            Console.WriteLine(sb.Length > 0 ? sb.ToString() : i.ToString());\n        }\n    }\n\n    public static void Main()\n    {\n        FizzBuzz(15);\n    }\n}\n```\n\n**Output**\n\n```\n1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz\n```",
   "tags": [
    "math",
    "modulo",
-   "fizzbuzz"
+   "fizzbuzz",
+   "clean-code",
+   "csharp"
   ],
-  "id": 1697
+  "id": 1697,
+  "followups": [
+   {
+    "q": "How would you make the rules configurable, so a third rule can be added without touching the loop?",
+    "a": "Pass the rules in as data, for example a list of `(int divisor, string word)` ordered by divisor, and have the loop append every word whose divisor divides the number. Adding 'Bang' for 7 is then a one-line data change with no new branches, and the combined cases such as 21 and 105 fall out automatically. That is the actual point of the question in most interviews: not whether you can write it, but whether your first instinct is a chain of if-else that doubles with every new rule."
+   },
+   {
+    "q": "Would you return a collection instead of printing?",
+    "a": "Yes, for anything but a toy. A method that writes to the console is untestable without capturing standard output and unusable from anywhere that is not a console. Returning `IEnumerable<string>`, ideally with `yield return` so it streams and does not materialise n strings at once, separates the computation from the presentation and makes it trivially unit-testable. The console write then lives in `Main`, which is where I/O belongs."
+   },
+   {
+    "q": "Is the modulo worth avoiding for performance?",
+    "a": "You can replace it with two counters that increment and reset at 3 and 5, avoiding the division entirely, and on very large ranges that is measurably faster. But it is almost always the wrong trade: the code gets harder to read for a saving that is invisible next to the cost of writing the output. The honest answer is to say you would keep the modulo, and that if this genuinely were the bottleneck the fix would be to stop doing per-line console writes, which dominate everything else here by orders of magnitude."
+   }
+  ]
  },
  {
   "category": "Coding",

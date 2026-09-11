@@ -1,0 +1,248 @@
+/**
+ * The 200 DSA questions that actually come up in interviews, in rough order of
+ * how often they are asked. These are the rows that get the full treatment:
+ * the logic explained first, then a complete runnable C# program, then its
+ * output - rather than a paragraph describing an algorithm.
+ *
+ *   node tools/top200.js            # progress: how many are done
+ *   node tools/top200.js --todo     # the next ones to write, in order
+ *   node tools/top200.js --missing  # entries that no longer match a row
+ *
+ * Entries are exact question text from questions.json, so a rename there must
+ * be mirrored here - --missing is what catches that.
+ */
+const { SOURCE, normalize, load } = require('./lib');
+
+const TOP200 = [
+  // Tier 1 - the ones almost every interview draws from
+  'Two Sum: given an array and a target, return indices of two numbers that add up to the target.',
+  'Best Time to Buy and Sell Stock: max profit from one buy and one later sell.',
+  "Maximum Subarray (Kadane's algorithm): find the contiguous subarray with the largest sum.",
+  'Check if a string is a palindrome (ignoring non-alphanumerics and case).',
+  'Check if two strings are anagrams.',
+  'Valid parentheses: check if brackets are balanced.',
+  'Reverse a singly linked list.',
+  'Detect a cycle in a linked list.',
+  'Longest substring without repeating characters.',
+  'Contains duplicate: does the array have any duplicates?',
+  'FizzBuzz.',
+  'Merge two sorted linked lists.',
+  'Maximum depth of a binary tree.',
+  'Invert / mirror a binary tree.',
+  'Binary search: find a target in a sorted array.',
+  'Move all zeros to the end while keeping non-zero order.',
+  'Find the missing number in an array containing 0..n with one missing.',
+  'Product of Array Except Self (no division).',
+  'Climbing stairs: how many ways to reach step n taking 1 or 2 steps.',
+  'Number of islands (connected components in a grid).',
+  'Group anagrams together from a list of strings.',
+  'Longest palindromic substring.',
+  'Binary tree level order traversal (BFS).',
+  'Validate a binary search tree.',
+  'Coin change: fewest coins to make an amount.',
+  '3Sum: find all unique triplets that sum to zero.',
+  'Container With Most Water: max area between two vertical lines.',
+  'Trapping Rain Water: compute water trapped between bars.',
+  'Find the majority element (appears more than n/2 times).',
+  'Search in a rotated sorted array.',
+  'Min stack: stack with O(1) getMin.',
+  'Find the middle of a linked list.',
+  'Remove the nth node from the end of a linked list.',
+  'Add two numbers represented as linked lists (digits reversed).',
+  'Check if a linked list is a palindrome.',
+  'Merge k sorted linked lists.',
+  'Find the kth largest element in an array.',
+  'Top K frequent elements.',
+  'Insert Interval / Merge Intervals.',
+  'Meeting rooms II: minimum meeting rooms required.',
+  'Rotate an array to the right by k steps in-place.',
+  'Merge two sorted arrays into one sorted array in-place (nums1 has extra space).',
+  'Longest common prefix among an array of strings.',
+  'Reverse words in a string.',
+  'String to integer (atoi) with edge cases.',
+  'Implement strStr / substring search (find needle in haystack).',
+  'First unique character in a string.',
+  'Longest consecutive sequence in an unsorted array.',
+  'Subarray sum equals k (count subarrays).',
+  'Sort colors (Dutch national flag): sort an array of 0s, 1s, 2s in one pass.',
+
+  // Tier 2 - very common, usually the second or third question
+  'Check if two binary trees are identical.',
+  'Check if a binary tree is symmetric.',
+  'Lowest common ancestor in a BST.',
+  'Lowest common ancestor in a binary tree (not BST).',
+  'Binary tree in-order/pre-order/post-order traversal (iterative).',
+  'Diameter of a binary tree.',
+  'Check if a binary tree is height-balanced.',
+  'Path sum: does a root-to-leaf path sum to a target?',
+  'Binary tree maximum path sum (any node to any node).',
+  'Kth smallest element in a BST.',
+  'Serialize and deserialize a binary tree.',
+  'Right side view of a binary tree.',
+  'Construct a binary tree from preorder and inorder traversals.',
+  'Convert a sorted array to a height-balanced BST.',
+  'Flatten a binary tree to a linked list (preorder, in-place).',
+  'Implement a Trie (prefix tree) with insert, search, startsWith.',
+  'Clone a graph.',
+  'Course schedule: can you finish all courses (cycle detection in a directed graph)?',
+  'Course schedule II: return a valid course order.',
+  'Rotting oranges (multi-source BFS).',
+  'Word ladder: shortest transformation sequence length.',
+  'Surrounded regions: capture \'O\'s not connected to the border.',
+  "Dijkstra's shortest path in a weighted graph.",
+  'Number of connected components in an undirected graph.',
+  'Detect a cycle in an undirected graph (Union-Find).',
+  'Is a graph a valid tree?',
+  'Check if a graph is bipartite.',
+  'Pacific Atlantic water flow.',
+  'House robber: max sum with no two adjacent elements.',
+  'Longest increasing subsequence.',
+  'Longest common subsequence of two strings.',
+  'Edit distance (Levenshtein) between two strings.',
+  'Unique paths in an m×n grid (only right/down moves).',
+  'Minimum path sum in a grid.',
+  'Word break: can a string be segmented into dictionary words?',
+  'Decode ways: count how many ways to decode a digit string to letters (A=1..Z=26).',
+  '0/1 knapsack: maximize value within a weight capacity.',
+  'Partition equal subset sum.',
+  'Coin change II: number of combinations to make an amount.',
+  'Maximal square: largest square of 1s in a binary matrix.',
+  'Jump game: can you reach the last index?',
+  'Jump game II: minimum jumps to reach the end.',
+  'Generate all subsets (the power set).',
+  'Generate all permutations of a list.',
+  'Combination sum: find combinations that sum to a target (reuse allowed).',
+  'Letter combinations of a phone number.',
+  'Generate valid parentheses combinations of n pairs.',
+  'N-Queens: place N queens so none attack each other.',
+  'Word search in a grid (single word).',
+  'Palindrome partitioning: return all palindrome substring partitions.',
+
+  // Tier 3 - regulars, and the ones that separate candidates
+  'Minimum window substring containing all characters of a pattern.',
+  'Find all anagrams of a pattern in a string.',
+  'Sliding window maximum: max in each window of size k.',
+  'Longest repeating character replacement: longest substring of one repeated letter after at most k replacements.',
+  'Permutation in string: does s2 contain a permutation of s1?',
+  'Maximum number of consecutive ones III (flip at most k zeros).',
+  'Find the median of two sorted arrays in O(log(min(m,n))).',
+  'Find first and last position of a target in a sorted array.',
+  'Find minimum in a rotated sorted array.',
+  'Find peak element (any local maximum) in O(log n).',
+  'Search a 2D matrix (rows and columns sorted).',
+  'Koko eating bananas / capacity to ship in D days (binary search on the answer).',
+  'Find the square root of an integer (without built-in).',
+  'Explain and implement quicksort.',
+  'Explain and implement merge sort.',
+  'Quickselect: find the kth smallest/largest in average O(n).',
+  'Count inversions in an array.',
+  'Find the median from a data stream.',
+  'Find the k closest points to the origin.',
+  'Task scheduler: minimum intervals with cooldown n between same tasks.',
+  'Reorganize a string so no two adjacent characters are the same.',
+  'Evaluate Reverse Polish Notation (postfix expression).',
+  'Daily temperatures: days until a warmer temperature.',
+  'Next greater element for each element in an array.',
+  'Largest rectangle in a histogram.',
+  "Decode a string like '3[a2[c]]' → 'accaccacc'.",
+  'Basic calculator (with +, -, parentheses).',
+  'Implement a stack using two queues (or a queue using two stacks).',
+  'Implement a circular queue (ring buffer).',
+  'Longest valid parentheses substring.',
+  'Asteroid collision simulation.',
+  'Simplify a Unix-style absolute path.',
+  'Reorder a linked list (L0→Ln→L1→Ln-1→...).',
+  'Find the intersection node of two singly linked lists.',
+  'Copy a linked list with random pointers.',
+  'Reverse nodes in k-group.',
+  'Remove duplicates from a sorted linked list.',
+  'Rotate a linked list to the right by k places.',
+  'Swap nodes in pairs.',
+  'Sort a linked list in O(n log n).',
+  'Set matrix zeroes: if an element is 0, set its entire row and column to 0, in-place.',
+  'Spiral order traversal of a matrix.',
+  'Rotate an n×n matrix 90 degrees clockwise in-place.',
+  'Maximum product subarray.',
+  'First missing positive integer in O(n) time and O(1) space.',
+  'Gas station: find the starting index to complete a circular route.',
+  'Next permutation: rearrange to the next lexicographically greater permutation.',
+  'Plus one: increment a number represented as a digit array.',
+  'Non-overlapping intervals: minimum removals to make intervals non-overlapping.',
+  'Two Sum II (sorted input): return the two indices.',
+
+  // Tier 4 - still frequently asked, rounding out the set
+  'Find all duplicates in an array where every element is between 1 and n.',
+  'Find the duplicate number in an array of n+1 integers in the range 1..n without modifying it.',
+  'Find all elements that appear more than n/3 times.',
+  'Given an array of stock prices, find the maximum profit with at most two transactions.',
+  'Given prices and a fee, find the maximum profit with unlimited transactions.',
+  'Best time to buy/sell stock with cooldown (or with transaction fee).',
+  'Partition labels: split a string into as many parts as possible so each letter appears in at most one part.',
+  'Minimum number of arrows to burst balloons.',
+  'Remove k digits to make the smallest possible number.',
+  'Candy: distribute sweets so higher-rated children get more than their neighbours, minimising the total.',
+  'Given an array and a value, find the minimum length subarray with sum at least that value.',
+  'Find the maximum sum of any k consecutive elements.',
+  'Count the number of subarrays with exactly k distinct integers.',
+  'Longest substring with at most k distinct characters.',
+  'Find the length of the longest subarray with equal numbers of zeros and ones.',
+  'Subarray sums divisible by k: count subarrays whose sum is divisible by k.',
+  'Given an array, find the length of the shortest subarray that must be sorted to make the whole array sorted.',
+  'Check whether a string can be rearranged into a palindrome.',
+  'Valid palindrome II: can the string be a palindrome after deleting at most one character?',
+  'Isomorphic strings: can characters of s be mapped one-to-one to characters of t preserving order?',
+  "Word pattern: does a string of words follow a pattern like 'abba'?",
+  'String compression: compress a character array in place as counts of repeated characters.',
+  'Check if one string is a rotation of another.',
+  'Check if a string has all unique characters without extra data structures.',
+  'Implement a function to check whether one string is a subsequence of another.',
+  'Multiply two non-negative numbers given as strings without converting to integers.',
+  'Add binary: add two binary strings and return the sum as a string.',
+  'Convert an integer to a Roman numeral and a Roman numeral to an integer.',
+  'Zigzag conversion: write a string in a zigzag on n rows and read it row by row.',
+  'Count and Say / run-length encoding of a string.',
+  'Encode and decode strings (serialize a list of strings).',
+  'Implement the KMP algorithm for substring search.',
+  'Count the number of set bits (Hamming weight).',
+  'Single number: find the element that appears once (others twice).',
+  'Counting bits: number of set bits for every number 0..n.',
+  'Reverse the bits of a 32-bit integer.',
+  'Sum of two integers without using + or -.',
+  'Determine whether a number is a power of two, and of four.',
+  'Count primes up to n (Sieve of Eratosthenes).',
+  'Pow(x, n): implement fast exponentiation.',
+  'Greatest common divisor (Euclidean algorithm).',
+  'Reverse an integer with overflow handling.',
+  'Happy number: does repeatedly summing squares of digits reach 1?',
+  'Excel column number to title and vice versa (base-26).',
+  'Shuffle an array uniformly at random.',
+  'Count trailing zeroes in n factorial.',
+  'Flood fill: change the colour of a connected region starting from a pixel.',
+  '01 matrix: distance of each cell to the nearest zero.',
+  'Valid Sudoku: is a partially filled 9x9 board valid?',
+  'Game of Life: compute the next generation in place.',
+];
+
+const rows = load(SOURCE);
+const byQuestion = new Map(rows.map(r => [normalize(r.question), r]));
+const isDone = r => String(r.answer).includes('```csharp');
+
+const resolved = TOP200.map((q, i) => ({ rank: i + 1, q, row: byQuestion.get(normalize(q)) }));
+const missing = resolved.filter(e => !e.row);
+const present = resolved.filter(e => e.row);
+const done = present.filter(e => isDone(e.row));
+const todo = present.filter(e => !isDone(e.row));
+
+if (process.argv.includes('--missing')) {
+  missing.forEach(e => console.log(`#${e.rank} ${e.q}`));
+  process.exit(0);
+}
+
+if (process.argv.includes('--todo')) {
+  const n = Number(process.argv[process.argv.indexOf('--todo') + 1]) || 12;
+  todo.slice(0, n).forEach(e => console.log(`#${e.rank} [${e.row.subcategory}] ${e.q}`));
+  process.exit(0);
+}
+
+console.log(`top 200: ${done.length} done, ${todo.length} to write, ${missing.length} unmatched`);
+if (missing.length) console.log(`(run --missing to see the ${missing.length} entries with no matching row)`);
