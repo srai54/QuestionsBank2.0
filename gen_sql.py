@@ -66,6 +66,30 @@ lines.append("--   order by ts_rank_cd(search, websearch_to_tsquery('english','r
 lines.append("--   limit 10;")
 lines.append("")
 
+# The Supabase SQL editor rejects very large pastes, and with a full C#
+# program in every answer the seed runs to several megabytes. So write the
+# schema once and split the inserts across numbered files of MAX_BYTES each,
+# to be run in filename order. Re-running is safe: the schema drops first.
+MAX_BYTES = 700_000
+
+open("supabase_01_schema.sql", "w", encoding="utf-8").write(schema)
+
+part, buf, size, written = 1, [], 0, 0
+for stmt in lines[1:]:
+    buf.append(stmt)
+    size += len(stmt)
+    if size >= MAX_BYTES:
+        part += 1
+        open(f"supabase_{part:02d}_seed.sql", "w", encoding="utf-8").write("\n".join(buf))
+        written += 1
+        buf, size = [], 0
+if buf:
+    part += 1
+    open(f"supabase_{part:02d}_seed.sql", "w", encoding="utf-8").write("\n".join(buf))
+    written += 1
+
+# Single-file version as well, for loading through psql rather than the editor.
 open("supabase_setup_and_seed.sql", "w", encoding="utf-8").write("\n".join(lines))
 print("rows:", len(rows))
-print("wrote supabase_setup_and_seed.sql")
+print(f"wrote supabase_01_schema.sql + {written} seed file(s); run them in filename order")
+print("also wrote supabase_setup_and_seed.sql (single file, for psql)")
