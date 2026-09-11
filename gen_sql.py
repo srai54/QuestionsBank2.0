@@ -25,10 +25,12 @@ create table questions (
   question    text not null,
   answer      text not null,
   tags        text,
+  followups   jsonb not null default '[]'::jsonb,
   search tsvector generated always as (
     setweight(to_tsvector('english', coalesce(question,'')), 'A') ||
     setweight(to_tsvector('english', coalesce(tags,'')),     'B') ||
     setweight(to_tsvector('english', coalesce(answer,'')),   'C') ||
+    setweight(to_tsvector('english', coalesce(followups::text,'')), 'C') ||
     setweight(to_tsvector('english', coalesce(category,'')), 'D')
   ) stored
 );
@@ -45,14 +47,15 @@ create index questions_diff_idx   on questions(difficulty);
 lines = [schema]
 # batched multi-row inserts (200 rows per statement)
 B = 200
-cols = "(category, subcategory, difficulty, question, answer, tags)"
+cols = "(category, subcategory, difficulty, question, answer, tags, followups)"
 for i in range(0, len(rows), B):
     chunk = rows[i:i+B]
     lines.append(f"insert into questions {cols} values")
     vals = []
     for r in chunk:
         tags = ", ".join(r.get("tags", []))
-        vals.append(f"  ('{esc(r.get('category'))}', '{esc(r.get('subcategory'))}', '{esc(r.get('difficulty'))}', '{esc(r.get('question'))}', '{esc(r.get('answer'))}', '{esc(tags)}')")
+        followups = json.dumps(r.get("followups", []), ensure_ascii=False)
+        vals.append(f"  ('{esc(r.get('category'))}', '{esc(r.get('subcategory'))}', '{esc(r.get('difficulty'))}', '{esc(r.get('question'))}', '{esc(r.get('answer'))}', '{esc(tags)}', '{esc(followups)}'::jsonb)")
     lines.append(",\n".join(vals) + ";")
 lines.append("")
 lines.append("-- Done. Quick test:")

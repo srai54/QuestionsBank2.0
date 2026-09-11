@@ -29,6 +29,7 @@ def load():
         r.setdefault("subcategory", "")
         r.setdefault("difficulty", "Medium")
         r.setdefault("tags", [])
+        r.setdefault("followups", [])
     for i, r in enumerate(rows, 1):
         r["id"] = i
     return rows
@@ -49,25 +50,27 @@ def build_sqlite(rows):
         CREATE TABLE questions(
             id INTEGER PRIMARY KEY,
             category TEXT, subcategory TEXT, difficulty TEXT,
-            question TEXT, answer TEXT, tags TEXT
+            question TEXT, answer TEXT, tags TEXT,
+            followups TEXT          -- JSON array of {q, a} interviewer follow-ups
         )""")
     cur.execute("CREATE INDEX idx_cat ON questions(category)")
     cur.execute("CREATE INDEX idx_sub ON questions(subcategory)")
     cur.execute("CREATE INDEX idx_diff ON questions(difficulty)")
     cur.execute("""
         CREATE VIRTUAL TABLE questions_fts USING fts5(
-            question, answer, tags, category, subcategory,
+            question, answer, tags, category, subcategory, followups,
             content='questions', content_rowid='id',
             tokenize='porter unicode61'
         )""")
     for r in rows:
         cur.execute(
-            "INSERT INTO questions(id,category,subcategory,difficulty,question,answer,tags) VALUES(?,?,?,?,?,?,?)",
+            "INSERT INTO questions(id,category,subcategory,difficulty,question,answer,tags,followups) VALUES(?,?,?,?,?,?,?,?)",
             (r["id"], r["category"], r["subcategory"], r["difficulty"],
-             r["question"], r["answer"], ", ".join(r["tags"])))
+             r["question"], r["answer"], ", ".join(r["tags"]),
+             json.dumps(r["followups"], ensure_ascii=False)))
     cur.execute("""
-        INSERT INTO questions_fts(rowid,question,answer,tags,category,subcategory)
-        SELECT id,question,answer,tags,category,subcategory FROM questions""")
+        INSERT INTO questions_fts(rowid,question,answer,tags,category,subcategory,followups)
+        SELECT id,question,answer,tags,category,subcategory,followups FROM questions""")
     con.commit()
     con.close()
     return out

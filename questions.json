@@ -30,13 +30,29 @@
   "subcategory": "Memory",
   "difficulty": "Medium",
   "question": "Explain boxing and unboxing and their performance impact.",
-  "answer": "Boxing converts a value type to object (or an interface), allocating a new heap object and copying the value in. Unboxing extracts the value back, with a type check. Both cost allocations/CPU and add GC pressure in hot paths. Avoid by using generics (List<int> not ArrayList), Span<T>, and generic constraints so no object conversion occurs.",
+  "answer": "Boxing wraps a value type in a heap-allocated object so it can be treated as `object` or an interface; unboxing copies the value back out, with a runtime type check. Each box is an allocation, so boxing in a hot loop creates garbage collection pressure rather than just costing a few instructions.\n\n```csharp\nint n = 42;\nobject boxed = n;        // allocation on the heap, value copied in\nint back = (int)boxed;   // type check, then copy out\n\n// The costly version: one box per element, plus a cast on every read.\nArrayList list = new();\nfor (int i = 0; i < 1_000_000; i++) list.Add(i);   // 1,000,000 allocations\n\n// The fix: a generic collection stores int inline, no boxing at all.\nList<int> typed = new(1_000_000);\nfor (int i = 0; i < 1_000_000; i++) typed.Add(i);\n```\n\nBecause the box is a copy, mutating a boxed value type does not affect the original, which is a classic source of silent bugs with mutable structs.",
   "tags": [
+   "csharp",
+   "memory",
    "boxing",
-   "gc",
-   "performance"
+   "performance",
+   "gc"
   ],
-  "id": 3
+  "id": 3,
+  "followups": [
+   {
+    "q": "Where does boxing still sneak in on modern .NET, even with generics everywhere?",
+    "a": "Several places. Calling a non-overridden `ToString`, `Equals` or `GetHashCode` on a struct through `object`. Using a struct through an interface it implements, unless the generic is constrained so the JIT can specialise it. String interpolation and `string.Format` with value-type arguments, though interpolated string handlers in .NET 6+ removed much of that. `params object[]` signatures, which is why logging APIs that take structured arguments matter. And LINQ over value types where a lambda is converted to a non-generic delegate."
+   },
+   {
+    "q": "How does the generic constraint actually prevent it?",
+    "a": "For a value-type argument the JIT compiles a separate specialised instantiation of the method, so calls against a `where T : IComparable<T>` constraint become direct, non-virtual calls on the struct with no box. Without the constraint the value has to be converted to the interface first, which boxes. This is also why `EqualityComparer<T>.Default` is preferred over `object.Equals`: it resolves to the struct's own `IEquatable<T>` implementation without boxing."
+   },
+   {
+    "q": "When is boxing actually not worth worrying about?",
+    "a": "When it is not on a hot path. A boxed int on a request that already made a database call is invisible. Boxes are small and die in generation 0, which is the cheapest thing the GC does. The cases that matter are tight loops, per-element work over large collections, and anything running at high frequency where allocation rate, not the individual cost, is the problem. Measure with allocation profiling or a BenchmarkDotNet `[MemoryDiagnoser]` run before restructuring code to avoid it."
+   }
+  ]
  },
  {
   "category": "C#/.NET",
@@ -21237,13 +21253,32 @@
   "subcategory": "Arrays",
   "difficulty": "Easy",
   "question": "Two Sum: given an array and a target, return indices of two numbers that add up to the target.",
-  "answer": "Use a hash map from value→index. Iterate once; for each num check if (target - num) is in the map, if so return the two indices, else store num→index. Time O(n), space O(n). Brute force is O(n^2) nested loops.",
+  "answer": "Single pass with a hash map from value to index. For each number check whether `target - num` has already been seen; if it has, the pair is found, otherwise record the current number. One pass, O(n) time, O(n) space, versus O(n^2) for the nested-loop brute force.\n\n```csharp\npublic int[] TwoSum(int[] nums, int target)\n{\n    var seen = new Dictionary<int, int>(nums.Length);\n    for (int i = 0; i < nums.Length; i++)\n    {\n        int need = target - nums[i];\n        if (seen.TryGetValue(need, out int j))\n            return new[] { j, i };\n        seen[nums[i]] = i;   // after the lookup, so a value is never paired with itself\n    }\n    return Array.Empty<int>();\n}\n```\n\nNote the ordering: the lookup happens before the insert, which is what stops an element matching itself when `target` is exactly `2 * nums[i]`.",
   "tags": [
    "arrays",
    "hashmap",
-   "two-sum"
+   "two-sum",
+   "csharp"
   ],
-  "id": 1503
+  "id": 1503,
+  "followups": [
+   {
+    "q": "What if the array is already sorted?",
+    "a": "Then the hash map is unnecessary. Two pointers from both ends give O(1) extra space: if the sum is too large move the right pointer left, if too small move the left pointer right. Still O(n) time but no allocation, which also means far better cache behaviour. The catch is that it returns indices into the sorted array, so if the caller needs original indices you must pair values with their positions before sorting, which puts you back at O(n) space anyway."
+   },
+   {
+    "q": "What if there can be more than one valid pair, and you must return all of them without duplicates?",
+    "a": "Sort first, then two-pointer, and when a pair is found advance both pointers past any runs of equal values so the same value pair is not emitted twice. The hash-map variant also works but needs a frequency count rather than a single index, plus a canonical ordering of each pair (smaller value first) to deduplicate. Sorting is O(n log n) but makes the deduplication trivial, so it is usually the cleaner answer here."
+   },
+   {
+    "q": "What if the array does not fit in memory?",
+    "a": "It becomes an external problem. Either external sort into sorted runs and two-pointer stream from both ends, or partition by hash of the value so that a value and its complement always land in the same partition, then solve each partition in memory independently. The second option parallelises well and is the standard map-reduce shape for this class of problem."
+   },
+   {
+    "q": "Why a Dictionary and not a HashSet here?",
+    "a": "Because the problem asks for indices, not values. A HashSet would confirm the complement exists but could not say where it was. If the required output were just a boolean or the value pair, a HashSet would be the better choice since it allocates less per entry."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21263,14 +21298,28 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Maximum Subarray (Kadane's algorithm): find the contiguous subarray with the largest sum.",
-  "answer": "Kadane's: keep currentSum = max(num, currentSum + num) and maxSum = max(maxSum, currentSum) as you iterate. Reset when the running sum drops below the current element. O(n) time, O(1) space. Track start/end indices if you need the subarray itself.",
+  "answer": "Kadane's insight is that the best subarray ending at index i is either the element alone or that element appended to the best subarray ending at i-1. So you carry one running value and one global maximum, in O(n) time and O(1) space.\n\n```csharp\npublic int MaxSubArray(int[] nums)\n{\n    int best = nums[0], current = nums[0];\n    for (int i = 1; i < nums.Length; i++)\n    {\n        // extend the previous subarray, or start fresh at nums[i]\n        current = Math.Max(nums[i], current + nums[i]);\n        best = Math.Max(best, current);\n    }\n    return best;\n}\n```\n\nSeeding both variables with `nums[0]` rather than 0 is what makes the all-negative case correct: with a 0 seed the function would wrongly return 0 for `[-3, -1, -7]`.",
   "tags": [
    "arrays",
-   "dp",
    "kadane",
-   "subarray"
+   "dynamic-programming",
+   "csharp"
   ],
-  "id": 1505
+  "id": 1505,
+  "followups": [
+   {
+    "q": "What if the interviewer asks you to return the subarray itself, not just the sum?",
+    "a": "Track the boundaries alongside the sums. Keep a `start` candidate that resets to `i` whenever `current` restarts from `nums[i]`, and when `best` is updated commit `bestStart = start` and `bestEnd = i`. The algorithm stays O(n) time and O(1) space; only three extra integers are needed. The subtlety is updating the recorded boundaries only when the global best actually improves, not on every iteration."
+   },
+   {
+    "q": "What if the array is circular, so the subarray may wrap around the end?",
+    "a": "The answer is the maximum of two cases: the ordinary non-wrapping Kadane result, and `totalSum - minimumSubarraySum`, because the best wrapping subarray is the complement of the worst non-wrapping one. Run Kadane twice, once for max and once for min. The one trap is an all-negative array, where `totalSum - minSum` is 0 (the empty subarray) and must be rejected in favour of the plain Kadane answer."
+   },
+   {
+    "q": "Could you solve it with divide and conquer, and would you?",
+    "a": "Yes: recursively solve left and right halves, then compute the best subarray crossing the midpoint by scanning outward from the centre, and take the maximum of the three. That is O(n log n). It is worth knowing because it is the shape used for segment-tree range queries, but as a standalone answer it is strictly worse than Kadane's O(n). Mention it as the generalisation, not the solution."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23806,14 +23855,33 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Design an LRU cache with O(1) get and put.",
-  "answer": "Combine a hash map (key→node) with a doubly linked list ordered by recency. get moves the node to the front; put inserts/updates at the front and evicts the tail (least recently used) when over capacity. Both operations O(1). In C#, LinkedList + Dictionary.",
+  "answer": "Combine a dictionary for O(1) lookup with a doubly linked list that keeps entries in recency order: most recent at the head, least recent at the tail. `Get` moves the node to the head, `Put` inserts at the head and evicts from the tail when capacity is exceeded. The list must be doubly linked so a node can be unlinked in O(1) given only the node itself.\n\n```csharp\npublic class LruCache<TKey, TValue>\n{\n    private readonly int _capacity;\n    private readonly Dictionary<TKey, LinkedListNode<(TKey Key, TValue Value)>> _map;\n    private readonly LinkedList<(TKey Key, TValue Value)> _order = new();\n\n    public LruCache(int capacity)\n    {\n        if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity));\n        _capacity = capacity;\n        _map = new Dictionary<TKey, LinkedListNode<(TKey, TValue)>>(capacity);\n    }\n\n    public bool TryGet(TKey key, out TValue value)\n    {\n        if (!_map.TryGetValue(key, out var node)) { value = default!; return false; }\n        _order.Remove(node);          // O(1): we hold the node, not an index\n        _order.AddFirst(node);\n        value = node.Value.Value;\n        return true;\n    }\n\n    public void Put(TKey key, TValue value)\n    {\n        if (_map.TryGetValue(key, out var existing))\n        {\n            _order.Remove(existing);\n            _map.Remove(key);\n        }\n        else if (_map.Count >= _capacity)\n        {\n            var lru = _order.Last!;   // tail is the least recently used\n            _order.RemoveLast();\n            _map.Remove(lru.Value.Key);\n        }\n        _map[key] = _order.AddFirst((key, value));\n    }\n}\n```\n\nStoring the key inside the node value is what makes eviction possible: on eviction you have the node but still need its key to remove the dictionary entry.",
   "tags": [
    "design",
    "lru-cache",
    "hashmap",
-   "doubly-linked-list"
+   "doubly-linked-list",
+   "csharp"
   ],
-  "id": 1690
+  "id": 1690,
+  "followups": [
+   {
+    "q": "How would you make this thread-safe, and what does that cost?",
+    "a": "The simplest correct answer is a single lock around both operations, because even `Get` mutates the recency list, so a reader-writer lock buys nothing. That serialises the cache and makes it a contention point under load. The realistic alternatives are sharding into N independent caches keyed by hash of the key, which cuts contention by roughly N, or switching to an approximate policy such as CLRU or a TinyLFU-style sketch where reads only set a bit and reordering happens in batches off the hot path. Production caches almost always pick approximate recency over exact recency for precisely this reason."
+   },
+   {
+    "q": "What if entries also need a time-to-live?",
+    "a": "Store an expiry timestamp in the node value and treat an expired entry as a miss on read, evicting it lazily at that point. Lazy expiry alone lets dead entries occupy capacity, so pair it with either a periodic sweep or a second structure ordered by expiry, such as a min-heap or a timer wheel, to reclaim proactively. Note that TTL eviction and LRU eviction are independent policies and both must be able to remove a node, which is another reason for the doubly linked list."
+   },
+   {
+    "q": "Why not just use MemoryCache or ConcurrentDictionary?",
+    "a": "In production you generally should: `MemoryCache` already implements size limits, TTL, and eviction callbacks, and is thread-safe. `ConcurrentDictionary` on its own is not a cache, because it has no eviction policy and will grow without bound. The hand-rolled version matters when you need a strict bound with predictable O(1) behaviour and no background scanning, or when you are being asked the question to demonstrate the data-structure reasoning."
+   },
+   {
+    "q": "Your capacity check uses the dictionary count. Is there a case where that is wrong?",
+    "a": "It is correct here only because the map and the list are always mutated together, and the update path removes before it inserts. If a later change added an entry to one structure without the other, or allowed the same key to be present twice in the list, the count would drift from the true size. That invariant, that every dictionary value is a node currently in the list and vice versa, is the thing worth stating explicitly in review."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23835,14 +23903,33 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Design a rate limiter (token bucket).",
-  "answer": "Store tokens and a last-refill timestamp per key. On a request, refill tokens based on elapsed time (rate * elapsed, capped at capacity), then if tokens >= 1 consume one and allow, else reject. Atomic updates (Lua in Redis) for distributed use. O(1) per request.",
+  "answer": "A bucket holds up to `capacity` tokens and refills at a fixed rate. Each request takes a token; if none are available the request is rejected or delayed. Refill is computed lazily from elapsed time rather than by a background timer, which keeps it cheap and correct across idle periods.\n\n```csharp\npublic sealed class TokenBucket\n{\n    private readonly double _capacity;\n    private readonly double _refillPerSecond;\n    private readonly object _gate = new();\n    private double _tokens;\n    private long _lastTicks;\n\n    public TokenBucket(double capacity, double refillPerSecond)\n    {\n        _capacity = capacity;\n        _refillPerSecond = refillPerSecond;\n        _tokens = capacity;                    // start full so a cold client is not penalised\n        _lastTicks = Stopwatch.GetTimestamp(); // monotonic; DateTime.UtcNow can jump\n    }\n\n    public bool TryConsume(double tokens = 1)\n    {\n        lock (_gate)\n        {\n            long now = Stopwatch.GetTimestamp();\n            double elapsed = (now - _lastTicks) / (double)Stopwatch.Frequency;\n            _lastTicks = now;\n\n            _tokens = Math.Min(_capacity, _tokens + elapsed * _refillPerSecond);\n            if (_tokens < tokens) return false;\n            _tokens -= tokens;\n            return true;\n        }\n    }\n}\n```\n\nTwo details matter: `Stopwatch.GetTimestamp` rather than `DateTime.UtcNow`, because a wall-clock adjustment would otherwise grant or destroy tokens; and clamping at `_capacity`, which is what bounds the burst an idle client can accumulate.",
   "tags": [
    "design",
    "rate-limiter",
    "token-bucket",
-   "redis"
+   "concurrency",
+   "csharp"
   ],
-  "id": 1692
+  "id": 1692,
+  "followups": [
+   {
+    "q": "What does capacity actually control versus the refill rate?",
+    "a": "The refill rate sets the sustained throughput, the long-run requests per second a client is allowed. Capacity sets the burst: the largest number of requests that can be served back to back after an idle period. They are tuned separately, and conflating them is the usual bug. A capacity equal to one token gives a strict, evenly spaced limiter with no burst tolerance, which is effectively the leaky-bucket behaviour."
+   },
+   {
+    "q": "How does this change when there are many API instances behind a load balancer?",
+    "a": "Per-instance buckets mean the effective limit is the configured rate multiplied by the instance count, and it shifts every time you scale. The state has to move to something shared, usually Redis, with the read-modify-write performed atomically in a Lua script or via `INCR` on a fixed window. That adds a network round trip to every request and makes the limiter a dependency of availability, so the common compromise is a local bucket sized to the instance's share, refreshed periodically from a central allocator, accepting slightly fuzzy enforcement in exchange for no hot-path dependency."
+   },
+   {
+    "q": "Token bucket versus sliding window: when would you pick the other one?",
+    "a": "Sliding window counts actual requests within a moving time range, so it enforces a hard ceiling with no burst beyond the configured count. Token bucket is smoother and cheaper, but permits a burst up to capacity. Pick sliding window when the limit is contractual, such as a billing quota where 101 requests in a minute genuinely must fail. Pick token bucket when you are protecting a resource and short bursts are harmless. Fixed window is cheapest but suffers the boundary problem, where 2x the limit passes across the seam of two adjacent windows."
+   },
+   {
+    "q": "What should the server return when a request is rejected?",
+    "a": "HTTP 429 with a `Retry-After` header, and ideally `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` so a well-behaved client can pace itself instead of retrying blindly. Computing `Retry-After` from the bucket is straightforward: it is the shortfall in tokens divided by the refill rate. In .NET 7+ this is what the built-in `RateLimiter` middleware gives you, with `TokenBucketRateLimiter` as one of its policies."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -45337,14 +45424,33 @@
   "subcategory": "Design",
   "difficulty": "Hard",
   "question": "How would you design a distributed rate limiter shared across many API instances?",
-  "answer": "Keep counters in a shared store such as Redis, updated atomically with a Lua script implementing token bucket so read, refill and decrement cannot interleave. Accept approximate limits at the edges, use local pre-checks to reduce round trips, and decide fail-open or fail-closed when the store is unreachable - that decision is the real design question.",
+  "answer": "Start by pinning down the requirement: what is the limit keyed on (API key, user, IP, or tenant), is it a protection limit or a billing quota, and is a small overshoot acceptable. That answer determines the whole design, because exactness is what costs money here.\n\nThe centralised design keeps counters in Redis, one key per subject and window, updated atomically so concurrent instances cannot interleave a read-modify-write:\n\n```csharp\n// Atomic in Redis: no interleaving between the increment and the expiry.\nprivate const string Script = @\"\n  local n = redis.call('INCR', KEYS[1])\n  if n == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end\n  return n\";\n\npublic async Task<bool> IsAllowedAsync(string subject, int limit, TimeSpan window)\n{\n    var key = $\"rl:{subject}:{DateTimeOffset.UtcNow.Ticks / window.Ticks}\";\n    var count = (long)await _redis.ScriptEvaluateAsync(\n        Script, new RedisKey[] { key }, new RedisValue[] { (long)window.TotalMilliseconds });\n    return count <= limit;\n}\n```\n\nThe trade-off is that every request now depends on Redis. At high request rates the usual production shape is two tiers: a local token bucket per instance for the common case, with periodic reconciliation against the shared counter, so Redis sees a fraction of the traffic and a Redis outage degrades to local limiting rather than to an outage of your own.\n\nDecide explicitly what happens when the store is unreachable. Fail-open keeps the service available but removes the protection exactly when load is likely abnormal; fail-closed protects the backend but converts a cache failure into a full outage. Protection limiters usually fail open, billing quotas usually fail closed.",
   "tags": [
    "system-design",
    "rate-limiting",
    "redis",
-   "distributed-systems"
+   "distributed-systems",
+   "csharp"
   ],
-  "id": 3233
+  "id": 3233,
+  "followups": [
+   {
+    "q": "The fixed window above has a boundary problem. How do you fix it?",
+    "a": "With a limit of 100 per minute, a client can send 100 at 00:59 and 100 more at 01:00 and pass, having sent 200 in two seconds. The cheap fix is a sliding window counter: keep the current and previous window counts and weight the previous one by how far into the current window you are. That approximates a true sliding window with two counters instead of a sorted set of timestamps, and is what most production limiters actually use."
+   },
+   {
+    "q": "How do you keep this from becoming a latency tax on every request?",
+    "a": "Keep Redis in the same region and use pipelining so the limiter costs one round trip rather than several. Then avoid the round trip where you can: a local bucket that only consults the shared store when it is near its allocated share, or checks asynchronously and lets a small overshoot through, removes it from the hot path. Set an aggressive timeout on the call, single-digit milliseconds, with a defined fallback, because a slow limiter is worse than no limiter when it is holding request threads."
+   },
+   {
+    "q": "How would you test this?",
+    "a": "Unit-test the bucket arithmetic with an injectable clock so time can be advanced deterministically rather than slept through. Integration-test the atomicity by firing concurrent requests against a real Redis, using a container, and asserting the total admitted equals the limit exactly, since that is the property a naive non-atomic implementation breaks. Then load-test at and above the limit to confirm rejection latency stays low, and run a fault test with Redis removed to verify the documented fail-open or fail-closed behaviour actually happens."
+   },
+   {
+    "q": "Where should the limiter live: gateway, service, or both?",
+    "a": "At the gateway or API Management layer for coarse protection, because it sheds load before it reaches your services and is one place to configure. In the service for limits that need application context the gateway does not have, such as per-tenant plan tiers or per-operation cost weighting. Both is common and legitimate, as long as the two layers have clearly different jobs; duplicating the same limit in both just doubles the places to misconfigure it."
+   }
+  ]
  },
  {
   "category": "System Design",

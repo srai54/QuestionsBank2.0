@@ -81,6 +81,7 @@ for (const file of incomingFiles()) {
       question: row.question,
       answer: row.answer,
       tags: row.tags,
+      ...(row.followups ? { followups: row.followups } : {}),
     });
     kept++;
   });

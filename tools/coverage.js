@@ -38,4 +38,14 @@ for (const [cat, target] of Object.entries(PLAN).sort((a, b) => b[1] - a[1])) {
   remaining += todo;
   console.log(`${cat.padEnd(28)} ${String(n).padStart(5)} ${String(target).padStart(7)} ${String(todo).padStart(5)}`);
 }
-console.log(`\ntotal ${rows.length} / 5000 - ${remaining} to write`);
+console.log(`\ntotal ${rows.length} / 10000 - ${remaining} to write`);
+
+// Depth, not just count: how much of the bank is ready for the way an
+// interviewer actually probes - nested follow-ups, and C# code where the
+// question is a coding, low-level-design or algorithm question.
+const needsCode = rows.filter(r => r.category === 'Coding' ||
+  (r.category === 'System Design' && ['Design', 'Concurrency'].includes(r.subcategory)));
+const withCode = needsCode.filter(r => String(r.answer).includes('```csharp'));
+const nested = rows.filter(r => Array.isArray(r.followups) && r.followups.length);
+console.log(`nested  ${nested.length} / ${rows.length} questions have follow-ups - ${rows.length - nested.length} to deepen`);
+console.log(`code    ${withCode.length} / ${needsCode.length} coding/LLD answers have C# - ${needsCode.length - withCode.length} to write`);
