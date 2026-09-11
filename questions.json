@@ -309,27 +309,66 @@
   "subcategory": "Language",
   "difficulty": "Medium",
   "question": "What is the difference between an abstract class and an interface?",
-  "answer": "An abstract class can provide implementation, fields, constructors, and access modifiers, and a class can inherit only one. An interface defines a contract; since C# 8 it can have default implementations but no instance state, and a class can implement many. Use an interface for capability/contract and multiple inheritance of behavior; use an abstract base to share common implementation among related types.",
+  "answer": "**Logic**\n\nAn interface is a contract: it says what a type can do, carries no state, and a class may implement many. An abstract class is a partial implementation: it can hold fields, constructors and shared logic, and a class may inherit only one.\n\nThe rule of thumb is \"can-do\" versus \"is-a\". A type can be comparable, disposable and serialisable at once, so those are interfaces. A type is a specific kind of payment method sharing real behaviour with its siblings, which is an abstract base. Since C# 8 interfaces may carry default implementations, which narrows the gap but does not close it: interfaces still cannot hold instance state.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\n// Capability: many unrelated types can be auditable.\npublic interface IAuditable\n{\n    string AuditLine();\n\n    // C# 8+: a default implementation, so implementers may opt out of writing it.\n    void WriteAudit() => Console.WriteLine($\"[audit] {AuditLine()}\");\n}\n\n// Identity: these ARE payment methods and share real behaviour and state.\npublic abstract class PaymentMethod\n{\n    protected PaymentMethod(string owner) => Owner = owner;   // state + constructor\n\n    public string Owner { get; }\n\n    public abstract decimal Fee(decimal amount);              // each must decide\n\n    // Shared template: the algorithm lives once, the varying step is deferred.\n    public decimal Charge(decimal amount)\n    {\n        decimal total = amount + Fee(amount);\n        Console.WriteLine($\"{Owner} charged {total:F2} via {GetType().Name}\");\n        return total;\n    }\n}\n\npublic class CardPayment : PaymentMethod, IAuditable\n{\n    public CardPayment(string owner) : base(owner) { }\n    public override decimal Fee(decimal amount) => amount * 0.02m;\n    public string AuditLine() => $\"card payment for {Owner}\";\n}\n\npublic class BankTransfer : PaymentMethod\n{\n    public BankTransfer(string owner) : base(owner) { }\n    public override decimal Fee(decimal amount) => 0.50m;\n}\n\n// Unrelated to payments, yet still auditable: that is why it is an interface.\npublic class UserLogin : IAuditable\n{\n    public string AuditLine() => \"user signed in\";\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var methods = new List<PaymentMethod> { new CardPayment(\"Priya\"), new BankTransfer(\"Sam\") };\n        foreach (var m in methods) m.Charge(100m);\n\n        // One interface, two entirely unrelated implementers.\n        var auditable = new List<IAuditable> { new CardPayment(\"Priya\"), new UserLogin() };\n        foreach (var a in auditable) a.WriteAudit();\n    }\n}\n```\n\n**Output**\n\n```\nPriya charged 102.00 via CardPayment\nSam charged 100.50 via BankTransfer\n[audit] card payment for Priya\n[audit] user signed in\n```",
   "tags": [
-   "abstract",
+   "oop",
+   "abstract-class",
    "interface",
-   "oop"
+   "template-method",
+   "csharp"
   ],
-  "id": 23
+  "id": 23,
+  "followups": [
+   {
+    "q": "Since C# 8 gave interfaces default implementations, why keep abstract classes at all?",
+    "a": "Because interfaces still cannot hold instance state or constructors. The PaymentMethod base stores Owner and enforces it at construction, which no interface can do. Default implementations were added mainly to let library authors add members to a published interface without breaking every implementer, not to replace abstract classes. They also cannot be called through the class unless you cast to the interface, which surprises people. So the guidance is unchanged: shared state and a shared constructor mean an abstract class."
+   },
+   {
+    "q": "Suppose you need to add a method to an interface used by fifty implementers across several teams. What do you do?",
+    "a": "Three options, in order of preference. Give it a default implementation so nothing breaks, which is precisely the scenario the feature was designed for. Or declare a second, smaller interface and have callers check for it, which keeps the original contract untouched. Or version the interface outright. Adding a plain abstract member to a published interface is a breaking change, and doing it in a shared library is how you spend a sprint fixing other teams' builds."
+   },
+   {
+    "q": "The Charge method calls the abstract Fee. What pattern is that, and what is its risk?",
+    "a": "It is the Template Method pattern: the base fixes the algorithm and defers the varying step to subclasses. The risk is calling a virtual or abstract member from the base constructor, where the derived class's fields are not yet initialised, so the override runs against a half-built object and sees nulls or zeros. C# will not stop you, and the resulting bug is confusing because the field visibly has a value by the time you inspect it. Never call virtual members from a constructor."
+   },
+   {
+    "q": "Can an interface have static members or private methods now?",
+    "a": "Yes. C# 8 added private and static members to interfaces so a default implementation can share helper logic, and C# 11 added static abstract members, which is what makes generic maths work: you can constrain a generic parameter to a type that provides a static Parse or an operator. It is a significant shift, because an interface can now describe static behaviour that was previously impossible to abstract over. It still does not give interfaces instance state, which remains the dividing line."
+   }
+  ]
  },
  {
   "category": "C#/.NET",
   "subcategory": "OOP",
   "difficulty": "Medium",
   "question": "Explain the four pillars of OOP with C# examples.",
-  "answer": "Encapsulation: hide state behind properties/methods (private fields, public accessors). Inheritance: derive a class from a base to reuse behavior (class Manager : Employee). Polymorphism: same interface, different behavior via virtual/override or interfaces. Abstraction: expose essential behavior via abstract classes/interfaces, hiding implementation detail.",
+  "answer": "**Logic**\n\nEncapsulation hides internal state behind a controlled surface, so invariants cannot be broken from outside. Abstraction exposes what a type does while hiding how. Inheritance shares behaviour between related types. Polymorphism lets one call site invoke different behaviour depending on the runtime type.\n\nThe pillar most often described badly is encapsulation: it is not \"make fields private and add a getter and setter for each\", which exposes exactly as much as a public field did. It means the type owns its invariants.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\n// ENCAPSULATION: the balance cannot go negative, and no caller can force it to.\npublic class Account\n{\n    private decimal _balance;\n\n    public Account(decimal opening)\n    {\n        if (opening < 0) throw new ArgumentOutOfRangeException(nameof(opening));\n        _balance = opening;\n    }\n\n    public decimal Balance => _balance;      // read-only to the outside\n\n    public void Withdraw(decimal amount)\n    {\n        if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));\n        if (amount > _balance) throw new InvalidOperationException(\"insufficient funds\");\n        _balance -= amount;                  // the invariant lives here, once\n    }\n}\n\n// ABSTRACTION: callers know what an employee pays, not how it is worked out.\npublic abstract class Employee\n{\n    protected Employee(string name) => Name = name;\n    public string Name { get; }\n\n    public abstract decimal MonthlyPay();\n\n    public override string ToString() => $\"{Name}: {MonthlyPay():F2}\";\n}\n\n// INHERITANCE: the name, the ToString and the contract are shared.\npublic class Salaried : Employee\n{\n    private readonly decimal _annual;\n    public Salaried(string name, decimal annual) : base(name) => _annual = annual;\n    public override decimal MonthlyPay() => _annual / 12;\n}\n\npublic class Contractor : Employee\n{\n    private readonly decimal _rate;\n    private readonly int _hours;\n    public Contractor(string name, decimal rate, int hours) : base(name)\n    { _rate = rate; _hours = hours; }\n    public override decimal MonthlyPay() => _rate * _hours;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var account = new Account(100m);\n        account.Withdraw(30m);\n        Console.WriteLine(account.Balance);\n\n        try { account.Withdraw(1000m); }\n        catch (InvalidOperationException e) { Console.WriteLine(e.Message); }\n\n        // POLYMORPHISM: one loop, two different MonthlyPay implementations.\n        var staff = new List<Employee>\n        {\n            new Salaried(\"Priya\", 60000m),\n            new Contractor(\"Sam\", 50m, 160),\n        };\n\n        foreach (var e in staff) Console.WriteLine(e);\n\n        decimal total = 0;\n        foreach (var e in staff) total += e.MonthlyPay();\n        Console.WriteLine($\"total {total:F2}\");\n    }\n}\n```\n\n**Output**\n\n```\n70\ninsufficient funds\nPriya: 5000.00\nSam: 8000.00\ntotal 13000.00\n```",
   "tags": [
    "oop",
    "encapsulation",
    "polymorphism",
-   "inheritance"
+   "inheritance",
+   "csharp"
   ],
-  "id": 24
+  "id": 24,
+  "followups": [
+   {
+    "q": "Why is a public getter and setter for every private field not encapsulation?",
+    "a": "Because it provides the same access a public field would, just with more typing. Anyone can set the balance to a negative number, so the invariant is not protected and the class does not own its own consistency. Real encapsulation means the public surface consists of operations that are always valid, such as Withdraw and Deposit, with state exposed read-only if at all. The test is whether a caller can put the object into an invalid state; if they can, it is not encapsulated."
+   },
+   {
+    "q": "Suppose a new pay type shares most of Contractor's logic. Would you inherit from it?",
+    "a": "Almost certainly not. Inheriting from a concrete class couples you to its implementation details and to any future change in them, and it makes a Liskov promise you may not be able to keep. Prefer composition: extract the shared calculation into its own type and have both pay types use it. The usual guidance, favour composition over inheritance, exists because inheritance is the tightest coupling the language offers and is very hard to undo once callers depend on the hierarchy."
+   },
+   {
+    "q": "What is the difference between overriding a method and hiding it with new?",
+    "a": "Override participates in polymorphism: the runtime type decides, so a base-typed reference to a derived object calls the derived method. Hiding with `new` does not: the compile-time type decides, so the same object called through a base reference runs the base version. That makes hiding a frequent source of bugs, because behaviour changes depending on how the variable happens to be typed. C# requires the `new` keyword precisely to make you acknowledge that you are doing something surprising."
+   },
+   {
+    "q": "Where does polymorphism show up in .NET itself?",
+    "a": "Almost everywhere. `ToString`, `Equals` and `GetHashCode` are virtual on object, which is why overriding ToString changed the output above. Stream is an abstract base whose FileStream, MemoryStream and NetworkStream subtypes are interchangeable to any caller that takes a Stream. IEnumerable is the interface-based form that makes LINQ work over arrays, lists and database queries alike. Pointing at framework examples rather than only at Animal and Dog is what makes the answer sound like experience."
+   }
+  ]
  },
  {
   "category": "C#/.NET",
@@ -3826,66 +3865,149 @@
   "subcategory": "SOLID",
   "difficulty": "Medium",
   "question": "What is the Single Responsibility Principle (SRP)?",
-  "answer": "A class should have only one reason to change—one responsibility/actor. Mixing concerns (e.g., business logic + persistence + formatting) makes classes fragile and hard to test/maintain. SRP leads to small, focused, cohesive classes that change independently. Practically: separate concerns into distinct classes/services so a change in one area doesn't ripple into unrelated code.",
+  "answer": "**Logic**\n\nA class should have one reason to change. \"Reason to change\" means a stakeholder or concern, not a method count: a class doing report calculation, formatting and emailing answers to finance, design and infrastructure, so any of the three can force an edit, and a change for one risks breaking the others.\n\nThe practical test is to describe the class in one sentence. If you need \"and\", it probably has more than one responsibility.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic record Order(string Customer, decimal Amount);\n\n// BAD: three responsibilities. Changing the tax rate, the wording of the\n// receipt, or the delivery mechanism all force an edit to this one class.\npublic class OrderProcessorBad\n{\n    public void Process(Order order)\n    {\n        decimal tax = order.Amount * 0.2m;                       // business rule\n        string receipt = $\"Receipt for {order.Customer}: {order.Amount + tax:F2}\";  // formatting\n        Console.WriteLine($\"[email] {receipt}\");                 // delivery\n    }\n}\n\n// GOOD: one reason to change each.\npublic class TaxCalculator\n{\n    public decimal Calculate(Order order) => order.Amount * 0.2m;\n}\n\npublic class ReceiptFormatter\n{\n    public string Format(Order order, decimal tax) =>\n        $\"Receipt for {order.Customer}: {order.Amount + tax:F2}\";\n}\n\npublic interface INotifier { void Send(string message); }\n\npublic class EmailNotifier : INotifier\n{\n    public void Send(string message) => Console.WriteLine($\"[email] {message}\");\n}\n\npublic class SmsNotifier : INotifier\n{\n    public void Send(string message) => Console.WriteLine($\"[sms] {message}\");\n}\n\n// The processor now coordinates; it owns none of the three concerns.\npublic class OrderProcessor\n{\n    private readonly TaxCalculator _tax;\n    private readonly ReceiptFormatter _formatter;\n    private readonly INotifier _notifier;\n\n    public OrderProcessor(TaxCalculator tax, ReceiptFormatter formatter, INotifier notifier)\n    { _tax = tax; _formatter = formatter; _notifier = notifier; }\n\n    public void Process(Order order)\n    {\n        decimal tax = _tax.Calculate(order);\n        _notifier.Send(_formatter.Format(order, tax));\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var order = new Order(\"Priya\", 100m);\n\n        new OrderProcessorBad().Process(order);\n\n        var processor = new OrderProcessor(new TaxCalculator(), new ReceiptFormatter(), new EmailNotifier());\n        processor.Process(order);\n\n        // Switching the delivery mechanism now touches no existing class.\n        new OrderProcessor(new TaxCalculator(), new ReceiptFormatter(), new SmsNotifier()).Process(order);\n\n        // And the tax rule is independently testable, which it was not before.\n        Console.WriteLine(new TaxCalculator().Calculate(new Order(\"Test\", 250m)));\n    }\n}\n```\n\n**Output**\n\n```\n[email] Receipt for Priya: 120.00\n[email] Receipt for Priya: 120.00\n[sms] Receipt for Priya: 120.00\n50.0\n```\n\nNote the deliberate use of `F2` rather than `C`. Currency formatting depends on the thread culture, so `C` would print a different symbol on a developer laptop than on a server in another region - which is itself an argument that formatting is a separate concern with its own rules.",
   "tags": [
    "solid",
    "srp",
-   "single-responsibility"
+   "oop",
+   "design-principles",
+   "csharp"
   ],
-  "id": 285
+  "id": 285,
+  "followups": [
+   {
+    "q": "Doesn't this just create more classes for the sake of it?",
+    "a": "It can, and that is the real risk. Splitting every class until each has one method produces a codebase where following a single request means opening fifteen files, which is its own kind of unmaintainable. The honest guidance is to split when a responsibility has actually changed independently, or when it is blocking testing, rather than pre-emptively. In the example above, the trigger is concrete: the tax rule could not be unit-tested without also exercising formatting and sending an email."
+   },
+   {
+    "q": "Suppose the requirement changes so notifications go to both email and SMS. What do you change?",
+    "a": "Nothing existing. You add a composite notifier holding a list of INotifier and forwarding to each, then pass that in. No existing class is edited, which is the Open/Closed Principle falling out as a consequence of having separated the responsibilities first. That is the usual relationship: SRP is what makes OCP achievable, because you cannot extend without modifying if everything lives in one class."
+   },
+   {
+    "q": "How do you recognise an SRP violation in a code review?",
+    "a": "A few reliable signals: the class name contains 'Manager', 'Helper' or 'Processor' with no further specificity; the unit tests need mocks for unrelated things just to exercise one behaviour; the file keeps appearing in merge conflicts between different teams; and private methods cluster into groups that never call each other. That last one is the strongest, because it usually means two classes are already living inside one file and the seam is visible."
+   }
+  ]
  },
  {
   "category": "Architecture",
   "subcategory": "SOLID",
   "difficulty": "Medium",
   "question": "What is the Open/Closed Principle (OCP)?",
-  "answer": "Software entities should be open for extension but closed for modification—add new behavior by adding new code (via abstractions, polymorphism, strategy pattern) rather than editing existing tested code. This reduces regression risk. Example: instead of a switch over payment types you keep editing, define an IPaymentProcessor and add new implementations. Depend on abstractions to enable extension.",
+  "answer": "**Logic**\n\nSoftware should be open for extension but closed for modification: adding new behaviour should mean adding code, not editing code that already works and is already tested.\n\nThe smell is a switch or if-else chain over a type code. Every new case forces an edit to the same method, so each addition risks breaking the existing cases and re-tests them all. Replacing the chain with polymorphism moves the decision to the type system: a new behaviour is a new class, and nothing existing changes.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\n// BAD: every new shape means editing this method, re-testing every branch.\npublic class AreaCalculatorBad\n{\n    public double Area(object shape) => shape switch\n    {\n        (double w, double h) => w * h,\n        double r => Math.PI * r * r,\n        _ => throw new NotSupportedException(\"unknown shape\"),\n    };\n}\n\n// GOOD: the abstraction is closed, the set of implementations is open.\npublic interface IShape\n{\n    double Area();\n}\n\npublic class Rectangle : IShape\n{\n    private readonly double _w, _h;\n    public Rectangle(double w, double h) { _w = w; _h = h; }\n    public double Area() => _w * _h;\n}\n\npublic class Circle : IShape\n{\n    private readonly double _r;\n    public Circle(double r) { _r = r; }\n    public double Area() => Math.PI * _r * _r;\n}\n\n// Added later. Note that no existing class or method was touched.\npublic class Triangle : IShape\n{\n    private readonly double _b, _h;\n    public Triangle(double b, double h) { _b = b; _h = h; }\n    public double Area() => 0.5 * _b * _h;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var shapes = new List<IShape>\n        {\n            new Rectangle(3, 4),\n            new Circle(1),\n            new Triangle(6, 2),      // the new case needed no edit anywhere\n        };\n\n        double total = 0;\n        foreach (var s in shapes)\n        {\n            Console.WriteLine(s.Area().ToString(\"F2\"));\n            total += s.Area();\n        }\n\n        Console.WriteLine(total.ToString(\"F2\"));\n\n        // The old version throws the moment it meets something it was not edited for.\n        try { new AreaCalculatorBad().Area(\"triangle\"); }\n        catch (NotSupportedException e) { Console.WriteLine(e.Message); }\n    }\n}\n```\n\n**Output**\n\n```\n12.00\n3.14\n6.00\n21.14\nunknown shape\n```",
   "tags": [
    "solid",
    "ocp",
-   "open-closed"
+   "polymorphism",
+   "design-principles",
+   "csharp"
   ],
-  "id": 286
+  "id": 286,
+  "followups": [
+   {
+    "q": "Is a switch statement always an OCP violation?",
+    "a": "No, and treating it that way leads to over-abstraction. A switch over a closed set that genuinely will not grow, such as the days of the week or an enum you own and control, is perfectly fine and clearer than a class hierarchy. The violation is a switch over an open set, one that grows as the business adds products, payment methods or report types. C# even helps here: a switch over an enum will warn on a missing case, whereas a switch over a class hierarchy will not."
+   },
+   {
+    "q": "Suppose the new shape needs a parameter the interface doesn't have, say a unit of measure. Now what?",
+    "a": "That is the pressure point where OCP starts to cost. You either widen the interface, which modifies every existing implementation and is exactly what OCP was meant to avoid, or you introduce a second interface and check for it, which is a partial return to type-testing. The usual resolution is to make the abstraction richer from the start, for instance having Area return a typed quantity rather than a bare double. It is worth admitting that OCP is easy when the abstraction was right and expensive when it was not."
+   },
+   {
+    "q": "How does this look with the strategy pattern or a dictionary of handlers?",
+    "a": "It is the same idea with a different lookup mechanism. A `Dictionary<string, Func<Order, decimal>>` of handlers keyed by type is effectively a switch you can extend at runtime, which suits plugin-style systems where the set of behaviours is not known at compile time. The trade-off against a class hierarchy is that you lose compile-time checking that every case is handled, and gain the ability to register new behaviour without recompiling. Dependency injection containers resolving all implementations of IShape are the middle ground."
+   }
+  ]
  },
  {
   "category": "Architecture",
   "subcategory": "SOLID",
   "difficulty": "Medium",
   "question": "What is the Liskov Substitution Principle (LSP)?",
-  "answer": "Subtypes must be substitutable for their base types without breaking correctness—a derived class shouldn't strengthen preconditions, weaken postconditions, or violate base behavior expectations. Violations: overriding a method to throw NotSupported, or a Square that breaks Rectangle's width/height contract. LSP ensures polymorphism is safe; if a subtype can't honor the contract, the inheritance model is wrong.",
+  "answer": "**Logic**\n\nAnywhere a base type is expected, any derived type must work without the caller noticing. Inheritance is a promise about behaviour, not just about shared fields: a subtype may not strengthen what it demands of callers or weaken what it guarantees in return.\n\nThe classic violation is Square inheriting Rectangle. A rectangle promises that setting width leaves height alone; a square cannot keep that promise. The code compiles and the \"is-a\" reading sounds right, yet any caller written against Rectangle breaks.\n\n**Program**\n\n```csharp\nusing System;\n\n// BAD: Square is-a Rectangle in geometry, but not in behaviour.\npublic class RectangleBad\n{\n    public virtual int Width { get; set; }\n    public virtual int Height { get; set; }\n    public int Area => Width * Height;\n}\n\npublic class SquareBad : RectangleBad\n{\n    public override int Width\n    {\n        get => base.Width;\n        set { base.Width = value; base.Height = value; }   // silently changes Height\n    }\n\n    public override int Height\n    {\n        get => base.Height;\n        set { base.Width = value; base.Height = value; }\n    }\n}\n\n// GOOD: no inheritance claim that cannot be kept. Both are shapes; neither\n// pretends to be substitutable for the other.\npublic interface IShape { int Area { get; } }\n\npublic sealed class Rectangle : IShape\n{\n    public Rectangle(int width, int height) { Width = width; Height = height; }\n    public int Width { get; }\n    public int Height { get; }\n    public int Area => Width * Height;\n}\n\npublic sealed class Square : IShape\n{\n    public Square(int side) { Side = side; }\n    public int Side { get; }\n    public int Area => Side * Side;\n}\n\npublic class Solution\n{\n    // A caller written against RectangleBad. Entirely reasonable expectation.\n    private static void ResizeAndReport(RectangleBad r)\n    {\n        r.Width = 4;\n        r.Height = 5;\n        Console.WriteLine($\"expected 20, got {r.Area}\");\n    }\n\n    public static void Main()\n    {\n        ResizeAndReport(new RectangleBad());   // fine\n        ResizeAndReport(new SquareBad());      // same code, wrong answer\n\n        Console.WriteLine(new Rectangle(4, 5).Area);\n        Console.WriteLine(new Square(4).Area);\n\n        // Immutability removes the problem at the root: with no setters there is\n        // no invariant for a subtype to break.\n        IShape[] shapes = { new Rectangle(2, 3), new Square(3) };\n        foreach (var s in shapes) Console.WriteLine(s.Area);\n    }\n}\n```\n\n**Output**\n\n```\nexpected 20, got 20\nexpected 20, got 25\n20\n16\n6\n9\n```\n\nThe second line is the violation made visible: identical caller code, silently wrong result.",
   "tags": [
    "solid",
    "lsp",
-   "liskov"
+   "inheritance",
+   "substitutability",
+   "csharp"
   ],
-  "id": 287
+  "id": 287,
+  "followups": [
+   {
+    "q": "What are the formal rules a subtype must obey?",
+    "a": "Three. Preconditions may not be strengthened: an override cannot demand more of its inputs than the base did, so rejecting a value the base accepted is a violation. Postconditions may not be weakened: it must guarantee at least what the base promised. And invariants must be preserved, which is what Square breaks by tying width to height when Rectangle promised independence. A fourth, the history constraint, says a subtype must not allow state changes the base forbade, which is how a mutable subtype of an immutable base goes wrong."
+   },
+   {
+    "q": "Suppose you inherit a NotSupportedException-throwing override in a legacy codebase. Is that an LSP violation?",
+    "a": "Yes, and a common one: a read-only collection deriving from a mutable one and throwing on Add strengthens the precondition to 'never call this'. .NET itself has examples, such as arrays exposed through IList with a fixed size. The fix is to split the interface so callers can ask for only what they need, which is Interface Segregation solving a Liskov problem. Where you cannot change the hierarchy, the mitigation is to expose a capability flag such as IsReadOnly so callers can check rather than crash."
+   },
+   {
+    "q": "How does this apply beyond class inheritance, say to an API version upgrade?",
+    "a": "Exactly the same reasoning. A v2 endpoint that clients are meant to move to transparently must not reject inputs v1 accepted, and must not stop returning fields v1 promised. Adding a required field to a request body, or narrowing an accepted enum, is a precondition strengthened, and it breaks every existing caller. Thinking of backwards compatibility as Liskov applied to interfaces over the wire is a genuinely useful lens, and it is a strong answer to give at this level."
+   }
+  ]
  },
  {
   "category": "Architecture",
   "subcategory": "SOLID",
   "difficulty": "Medium",
   "question": "What is the Interface Segregation Principle (ISP)?",
-  "answer": "Clients shouldn't be forced to depend on methods they don't use—prefer small, focused interfaces over large 'fat' ones. A big interface forces implementers to provide irrelevant methods (often throwing NotImplemented). Split it into role-specific interfaces (IReadable, IWritable) so consumers depend only on what they need. This reduces coupling and unnecessary change propagation.",
+  "answer": "**Logic**\n\nNo client should be forced to depend on methods it does not use. A large interface drags every implementer into supporting behaviour it may not have, which produces either meaningless implementations or exceptions thrown from methods that should not have been there.\n\nSplitting a fat interface into focused ones lets each implementer take only what it can honour, and lets each caller depend only on what it actually calls. The knock-on benefit is testing: a mock of a two-method interface is trivial, a mock of a twelve-method interface is a chore.\n\n**Program**\n\n```csharp\nusing System;\n\n// BAD: a printer that cannot fax is forced to implement Fax anyway.\npublic interface IMultiFunctionDevice\n{\n    void Print(string document);\n    void Scan(string document);\n    void Fax(string document);\n}\n\npublic class BasicPrinterBad : IMultiFunctionDevice\n{\n    public void Print(string d) => Console.WriteLine($\"printing {d}\");\n    public void Scan(string d) => throw new NotSupportedException(\"no scanner\");\n    public void Fax(string d) => throw new NotSupportedException(\"no fax\");\n}\n\n// GOOD: small interfaces, composed only where the capability truly exists.\npublic interface IPrinter { void Print(string document); }\npublic interface IScanner { void Scan(string document); }\npublic interface IFax { void Fax(string document); }\n\npublic class BasicPrinter : IPrinter\n{\n    public void Print(string d) => Console.WriteLine($\"printing {d}\");\n}\n\npublic class OfficeMachine : IPrinter, IScanner, IFax\n{\n    public void Print(string d) => Console.WriteLine($\"printing {d}\");\n    public void Scan(string d) => Console.WriteLine($\"scanning {d}\");\n    public void Fax(string d) => Console.WriteLine($\"faxing {d}\");\n}\n\npublic class Solution\n{\n    // The caller states exactly what it needs, so a basic printer is acceptable.\n    private static void PrintReport(IPrinter printer) => printer.Print(\"report.pdf\");\n\n    public static void Main()\n    {\n        PrintReport(new BasicPrinter());\n        PrintReport(new OfficeMachine());\n\n        new OfficeMachine().Fax(\"contract.pdf\");\n\n        // The fat interface only fails at run time, and only for some implementers.\n        try { new BasicPrinterBad().Fax(\"contract.pdf\"); }\n        catch (NotSupportedException e) { Console.WriteLine(\"failed: \" + e.Message); }\n    }\n}\n```\n\n**Output**\n\n```\nprinting report.pdf\nprinting report.pdf\nfaxing contract.pdf\nfailed: no fax\n```",
   "tags": [
    "solid",
    "isp",
-   "interface-segregation"
+   "interfaces",
+   "testability",
+   "csharp"
   ],
-  "id": 288
+  "id": 288,
+  "followups": [
+   {
+    "q": "How is this different from the Single Responsibility Principle?",
+    "a": "SRP is about who can force a class to change; ISP is about what a client is forced to depend on. They often point the same way but not always: a class can have a single responsibility and still expose a fat interface covering every variation of it, and conversely two small interfaces can both be implemented by one class with one responsibility. The distinction worth stating is that SRP looks at the implementation and ISP looks at the contract from the caller's side."
+   },
+   {
+    "q": "Suppose splitting produces a dozen one-method interfaces. Has it gone too far?",
+    "a": "Possibly, though one-method interfaces are more defensible than they look, since they are the basis of delegates, LINQ and most functional composition. The real test is whether callers naturally need the methods together. If every consumer takes IReader and IWriter as a pair, the split added ceremony without decoupling anything, and a combined interface was right. Segregate along the seams where clients actually differ, not along every method boundary."
+   },
+   {
+    "q": "How does ISP change how you write unit tests?",
+    "a": "It is one of its biggest practical payoffs. To test something that needs to print, you mock a one-method IPrinter rather than stubbing twelve members of a device interface, so the test states its requirements precisely and does not break when unrelated methods are added. Test setup bloating over time is often the first visible symptom of a fat interface, and it usually shows up before the design problem is otherwise felt."
+   }
+  ]
  },
  {
   "category": "Architecture",
   "subcategory": "SOLID",
   "difficulty": "Medium",
   "question": "What is the Dependency Inversion Principle (DIP)?",
-  "answer": "High-level modules shouldn't depend on low-level modules; both should depend on abstractions, and abstractions shouldn't depend on details. Depend on interfaces, not concrete implementations, injecting them (DI). This decouples business logic from infrastructure (DB, HTTP), improving testability and flexibility to swap implementations. DIP is the principle DI containers help you apply.",
+  "answer": "**Logic**\n\nHigh-level policy should not depend on low-level detail; both should depend on an abstraction. And the abstraction should be owned by the high-level side, expressed in its language, rather than being a mirror of whatever the database or mail server happens to offer.\n\nConcretely: a service that news up a `SqlRepository` is welded to SQL Server. Taking an `IUserRepository` in its constructor means the same service works against SQL, an in-memory fake, or a cache, and can be tested without a database. The \"inversion\" is that the dependency arrow now points from the detail to the policy rather than the other way round.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic record User(int Id, string Name);\n\n// BAD: the service constructs its own dependency, so it cannot be tested,\n// swapped, or reused without a real database.\npublic class UserServiceBad\n{\n    private readonly SqlUserRepository _repo = new();\n    public string Describe(int id) => _repo.Find(id)?.Name ?? \"not found\";\n}\n\n// The abstraction is defined by the consumer's needs, not the database's shape.\npublic interface IUserRepository\n{\n    User Find(int id);\n}\n\npublic class SqlUserRepository : IUserRepository\n{\n    public User Find(int id)\n    {\n        Console.WriteLine($\"[sql] select * from users where id = {id}\");\n        return id == 1 ? new User(1, \"Priya\") : null;\n    }\n}\n\n// A test double: no database, no network, no configuration.\npublic class InMemoryUserRepository : IUserRepository\n{\n    private readonly Dictionary<int, User> _users;\n    public InMemoryUserRepository(params User[] users)\n    {\n        _users = new Dictionary<int, User>();\n        foreach (var u in users) _users[u.Id] = u;\n    }\n    public User Find(int id) => _users.TryGetValue(id, out var u) ? u : null;\n}\n\n// GOOD: depends on the abstraction and is handed the implementation.\npublic class UserService\n{\n    private readonly IUserRepository _repo;\n    public UserService(IUserRepository repo) => _repo = repo;\n\n    public string Describe(int id) => _repo.Find(id)?.Name ?? \"not found\";\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var production = new UserService(new SqlUserRepository());\n        Console.WriteLine(production.Describe(1));\n        Console.WriteLine(production.Describe(2));\n\n        // The same policy, tested in microseconds with no infrastructure at all.\n        var underTest = new UserService(new InMemoryUserRepository(new User(7, \"Test User\")));\n        Console.WriteLine(underTest.Describe(7));\n        Console.WriteLine(underTest.Describe(99));\n\n        Console.WriteLine(new UserServiceBad().Describe(1));   // always hits SQL\n    }\n}\n```\n\n**Output**\n\n```\n[sql] select * from users where id = 1\nPriya\n[sql] select * from users where id = 2\nnot found\nTest User\nnot found\n[sql] select * from users where id = 1\nPriya\n```",
   "tags": [
    "solid",
    "dip",
-   "dependency-inversion",
-   "di"
+   "dependency-injection",
+   "testability",
+   "csharp"
   ],
-  "id": 289
+  "id": 289,
+  "followups": [
+   {
+    "q": "Is dependency inversion the same thing as dependency injection?",
+    "a": "No, and the distinction is worth being crisp about. Dependency inversion is the design principle: depend on abstractions owned by the high-level module. Dependency injection is one mechanism for supplying those dependencies, usually through the constructor. You can follow DIP with no container at all by passing instances in Main, and you can use a DI container while still violating DIP, for instance by registering and injecting concrete classes everywhere. The container is plumbing; the principle is about which way the dependency arrow points."
+   },
+   {
+    "q": "Suppose there will only ever be one implementation. Is the interface still worth it?",
+    "a": "Often not for swappability, but usually yes for testing, which is the reason that actually pays off. If the single implementation talks to a database, a queue or the clock, the interface is what makes the policy testable without that infrastructure. If the single implementation is pure computation with no I/O, the interface is probably ceremony and I would skip it. The rule of thumb I use is to introduce the abstraction at the boundary where the process talks to the outside world, and not much further in."
+   },
+   {
+    "q": "Who should own the interface, and why does it matter?",
+    "a": "The consumer. If IUserRepository lives in the data-access project and the domain references it, the arrow still points from policy to detail and nothing has been inverted, it has just been given an interface. Putting the interface in the domain project and having the data-access project reference the domain to implement it is what genuinely reverses the dependency. That is the structural difference between a layered architecture and a hexagonal or clean one, and it shows up concretely in which project references which."
+   },
+   {
+    "q": "How does this interact with .NET's built-in DI container and service lifetimes?",
+    "a": "You register the mapping once, typically `services.AddScoped<IUserRepository, SqlUserRepository>()`, and the container supplies it. The trap at this level is lifetime mismatch: injecting a scoped service such as a DbContext into a singleton captures it forever, so the same context is reused across requests and eventually throws or leaks. .NET will detect that particular case at startup if scope validation is enabled, which it is by default in Development, and it is worth knowing that this is why the environment matters."
+   }
+  ]
  },
  {
   "category": "Architecture",
@@ -23394,15 +23516,33 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Construct a binary tree from preorder and inorder traversals.",
-  "answer": "The first preorder element is the root; find it in inorder to split left/right subtrees (use a hash map for O(1) index lookup). Recurse on the corresponding preorder/inorder ranges. O(n) time with the index map, O(n) space.",
+  "answer": "**Logic**\n\nPreorder gives the root first. Finding that root inside the inorder sequence splits it into everything left of the root and everything right, which are exactly the two subtrees. The size of the left part tells you how many of the following preorder values belong to the left subtree, so both sequences can be partitioned and the process repeats.\n\nScanning the inorder array for the root each time is O(n²). Building a value-to-index map once makes each lookup O(1), giving O(n) overall.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0) { Val = val; }\n}\n\npublic class Solution\n{\n    private static Dictionary<int, int> _inorderIndex;\n    private static int _pre;\n\n    public static TreeNode BuildTree(int[] preorder, int[] inorder)\n    {\n        if (preorder == null || preorder.Length == 0) return null;\n\n        // One map instead of a linear scan per node: O(n) rather than O(n^2).\n        _inorderIndex = new Dictionary<int, int>(inorder.Length);\n        for (int i = 0; i < inorder.Length; i++) _inorderIndex[inorder[i]] = i;\n\n        _pre = 0;\n        return Build(preorder, 0, inorder.Length - 1);\n    }\n\n    private static TreeNode Build(int[] preorder, int left, int right)\n    {\n        if (left > right) return null;\n\n        int value = preorder[_pre++];            // preorder hands us the root\n        var node = new TreeNode(value);\n\n        int mid = _inorderIndex[value];          // its position splits inorder\n\n        // Left must be built first: it consumes the preorder values that follow.\n        node.Left = Build(preorder, left, mid - 1);\n        node.Right = Build(preorder, mid + 1, right);\n\n        return node;\n    }\n\n    private static string LevelOrder(TreeNode root)\n    {\n        if (root == null) return \"(empty)\";\n        var outp = new List<string>();\n        var q = new Queue<TreeNode>();\n        q.Enqueue(root);\n        while (q.Count > 0)\n        {\n            var n = q.Dequeue();\n            outp.Add(n.Val.ToString());\n            if (n.Left != null) q.Enqueue(n.Left);\n            if (n.Right != null) q.Enqueue(n.Right);\n        }\n        return string.Join(\",\", outp);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LevelOrder(BuildTree(\n            new[] { 3, 9, 20, 15, 7 },\n            new[] { 9, 3, 15, 20, 7 })));\n\n        Console.WriteLine(LevelOrder(BuildTree(new[] { -1 }, new[] { -1 })));\n        Console.WriteLine(LevelOrder(BuildTree(new int[0], new int[0])));\n\n        // A right-leaning chain: preorder and inorder are identical.\n        Console.WriteLine(LevelOrder(BuildTree(\n            new[] { 1, 2, 3 }, new[] { 1, 2, 3 })));\n\n        // A left-leaning chain: inorder is the reverse.\n        Console.WriteLine(LevelOrder(BuildTree(\n            new[] { 1, 2, 3 }, new[] { 3, 2, 1 })));\n    }\n}\n```\n\n**Output**\n\n```\n3,9,20,15,7\n-1\n(empty)\n1,2,3\n1,2,3\n```\n\nThe last two produce the same level-order string but are different trees: one leans right, the other left. That is a good reminder that level-order alone does not identify a tree either.",
   "tags": [
    "trees",
-   "construct",
-   "preorder",
-   "inorder",
-   "recursion"
+   "traversal",
+   "recursion",
+   "reconstruction",
+   "csharp"
   ],
-  "id": 1602
+  "id": 1602,
+  "followups": [
+   {
+    "q": "Why must the left subtree be built before the right?",
+    "a": "Because the preorder pointer is shared and advances as nodes are consumed. Preorder is root, then the entire left subtree, then the entire right subtree, so the values immediately after the root belong to the left. Building the right first would hand it the left subtree's values. The ordering is not a style choice, it is load-bearing, and it is why the shared `_pre` index works at all without passing explicit ranges for the preorder array."
+   },
+   {
+    "q": "Could you build the tree from inorder and postorder instead? What about preorder and postorder?",
+    "a": "Inorder plus postorder works the same way: postorder gives the root at the *end*, so you consume it backwards and build the right subtree before the left. Preorder plus postorder does not work in general, because without inorder you cannot tell which side a subtree sits on. A node with a single child produces the same preorder and postorder whether that child is on the left or the right, so the tree is ambiguous. It is only unique if the tree is guaranteed full, with every node having zero or two children."
+   },
+   {
+    "q": "Suppose the tree contains duplicate values. What breaks?",
+    "a": "The value-to-index map, because a value no longer identifies a unique position in inorder; the later duplicate silently overwrites the earlier entry and the split happens in the wrong place. Worse, the problem itself becomes ambiguous: with duplicates the two traversals may not determine a unique tree at all. The realistic fix is to work with node identities or positions rather than values, which usually means the traversals must carry index information, and it is worth saying that the standard problem statement quietly guarantees uniqueness for exactly this reason."
+   },
+   {
+    "q": "The static fields make this non-reentrant. Would you ship that?",
+    "a": "No. Two threads calling `BuildTree` at once would trample each other's `_pre` and map, producing corrupted trees with no exception. In an interview it keeps the code short and is worth flagging out loud; in production I would pass the state explicitly or wrap the recursion in a small private class holding the map and the index as instance fields. It is the same argument as passing `best` by ref in the diameter problem rather than using a field."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23626,14 +23766,29 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Flatten a binary tree to a linked list (preorder, in-place).",
-  "answer": "For each node, if it has a left subtree, find the rightmost node of that left subtree, attach the node's right subtree there, move the left subtree to the right, and null the left. Advance to the right. O(n) time, O(1) space (Morris-like).",
+  "answer": "**Logic**\n\nThe result must be a right-leaning chain in preorder sequence, with every left pointer null. Unlike inverting a tree, the traversal order here is load-bearing: only preorder produces the required sequence.\n\nThe elegant O(1)-space solution uses the Morris idea. At each node with a left subtree, find that subtree's rightmost node, which is the last node of the left subtree in preorder, and attach the current right subtree to it. Then move the whole left subtree over to the right and clear the left pointer. Move on to the new right child and repeat.\n\nEach edge is traversed a constant number of times, so O(n) time and O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static void Flatten(TreeNode root)\n    {\n        var node = root;\n\n        while (node != null)\n        {\n            if (node.Left != null)\n            {\n                // The rightmost node of the left subtree is the last node of that\n                // subtree in preorder, so the current right subtree hangs off it.\n                var predecessor = node.Left;\n                while (predecessor.Right != null) predecessor = predecessor.Right;\n\n                predecessor.Right = node.Right;\n                node.Right = node.Left;\n                node.Left = null;\n            }\n\n            node = node.Right;\n        }\n    }\n\n    private static string Chain(TreeNode root)\n    {\n        var parts = new List<string>();\n        for (var n = root; n != null; n = n.Right)\n        {\n            if (n.Left != null) return \"BROKEN: a left pointer survived\";\n            parts.Add(n.Val.ToString());\n        }\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        //     1\n        //    / \\\n        //   2   5\n        //  / \\   \\\n        // 3   4   6\n        var root = new TreeNode(1,\n            new TreeNode(2, new TreeNode(3), new TreeNode(4)),\n            new TreeNode(5, null, new TreeNode(6)));\n        Flatten(root);\n        Console.WriteLine(Chain(root));\n\n        var single = new TreeNode(1);\n        Flatten(single);\n        Console.WriteLine(Chain(single));\n\n        Flatten(null);\n        Console.WriteLine(Chain(null));\n\n        // Left-only chain must end up entirely on the right.\n        var leftOnly = new TreeNode(1, new TreeNode(2, new TreeNode(3), null), null);\n        Flatten(leftOnly);\n        Console.WriteLine(Chain(leftOnly));\n\n        // Already flat: must be left unchanged.\n        var flat = new TreeNode(1, null, new TreeNode(2, null, new TreeNode(3)));\n        Flatten(flat);\n        Console.WriteLine(Chain(flat));\n    }\n}\n```\n\n**Output**\n\n```\n1->2->3->4->5->6\n1\n(empty)\n1->2->3\n1->2->3\n```",
   "tags": [
    "trees",
-   "flatten",
+   "morris",
    "in-place",
-   "preorder"
+   "preorder",
+   "csharp"
   ],
-  "id": 1611
+  "id": 1611,
+  "followups": [
+   {
+    "q": "Why does the traversal order matter here when it did not for inverting a tree?",
+    "a": "Because the output is a sequence, not a set of independent per-node edits. Inverting swaps each node's children, and those swaps commute, so any order works. Flattening must produce nodes in a specific linear order, and only preorder gives root before left before right. Attempting it with postorder or level order yields a chain in the wrong sequence. Knowing which problems are order-sensitive is the transferable lesson, and this pair makes the contrast cleanly."
+   },
+   {
+    "q": "Suppose you are asked for the simplest correct version, not the cleverest. What would you write?",
+    "a": "A reversed-preorder recursion: visit right, then left, then node, keeping a reference to the previously visited node, and at each node set `right = previous` and `left = null`. It is six lines and obviously correct, at the cost of O(h) stack space. I would offer that first, then the O(1) Morris-style version above as the improvement. Leading with the clever one risks spending the interview debugging pointer surgery when the interviewer only wanted to see that you understood preorder."
+   },
+   {
+    "q": "Suppose another thread is reading this tree while Flatten runs. What happens?",
+    "a": "It sees a corrupt structure. Mid-flatten the tree is neither the original nor the result: subtrees have been relocated and some nodes are temporarily reachable by two paths. A concurrent reader could traverse into a partially rewired region and, in the worst case, loop. There is no cheap fix because the operation mutates in place by design; you either take an exclusive lock, flatten a copy, or build an immutable result. That is the general cost of in-place algorithms, and the reason `List<T>` throws if the collection is modified during enumeration."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23654,14 +23809,29 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Convert a sorted array to a height-balanced BST.",
-  "answer": "Recursively pick the middle element as the root (keeps the tree balanced), build the left subtree from the left half and the right subtree from the right half. O(n) time, O(log n) stack. The middle choice guarantees minimal height.",
+  "answer": "**Logic**\n\nTake the middle element as the root, then build the left subtree from the elements before it and the right subtree from those after. Because the array is sorted, the middle element is greater than everything on its left and less than everything on its right, which is exactly the BST property. Halving the range at every step keeps the two sides within one element of each other, so the result is height-balanced by construction.\n\nO(n) time, since each element becomes exactly one node, and O(log n) stack space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0) { Val = val; }\n}\n\npublic class Solution\n{\n    public static TreeNode SortedArrayToBst(int[] nums) =>\n        nums == null ? null : Build(nums, 0, nums.Length - 1);\n\n    private static TreeNode Build(int[] nums, int low, int high)\n    {\n        if (low > high) return null;\n\n        int mid = low + (high - low) / 2;     // overflow-safe, and picks the left middle\n\n        return new TreeNode(nums[mid])\n        {\n            Left = Build(nums, low, mid - 1),\n            Right = Build(nums, mid + 1, high),\n        };\n    }\n\n    private static string LevelOrder(TreeNode root)\n    {\n        if (root == null) return \"(empty)\";\n        var outp = new List<string>();\n        var q = new Queue<TreeNode>();\n        q.Enqueue(root);\n        while (q.Count > 0)\n        {\n            var n = q.Dequeue();\n            outp.Add(n.Val.ToString());\n            if (n.Left != null) q.Enqueue(n.Left);\n            if (n.Right != null) q.Enqueue(n.Right);\n        }\n        return string.Join(\",\", outp);\n    }\n\n    private static int Height(TreeNode n) =>\n        n == null ? 0 : 1 + Math.Max(Height(n.Left), Height(n.Right));\n\n    public static void Main()\n    {\n        var t = SortedArrayToBst(new[] { -10, -3, 0, 5, 9 });\n        Console.WriteLine(LevelOrder(t));\n        Console.WriteLine(Height(t));\n\n        Console.WriteLine(LevelOrder(SortedArrayToBst(new[] { 1, 3 })));\n        Console.WriteLine(LevelOrder(SortedArrayToBst(new[] { 7 })));\n        Console.WriteLine(LevelOrder(SortedArrayToBst(new int[0])));\n\n        // 15 elements: a perfectly balanced tree is height 4.\n        var big = new int[15];\n        for (int i = 0; i < 15; i++) big[i] = i;\n        Console.WriteLine(Height(SortedArrayToBst(big)));\n    }\n}\n```\n\n**Output**\n\n```\n0,-10,5,-3,9\n3\n1,3\n7\n(empty)\n4\n```",
   "tags": [
    "trees",
    "bst",
-   "balanced",
-   "divide-and-conquer"
+   "divide-and-conquer",
+   "balance",
+   "csharp"
   ],
-  "id": 1613
+  "id": 1613,
+  "followups": [
+   {
+    "q": "Is the answer unique?",
+    "a": "No. With an even number of elements there are two middle choices, and either gives a valid height-balanced BST, so a test asserting one exact tree is over-specified. `low + (high - low) / 2` picks the left middle, which is why [1,3] produces 1 as the root with 3 on the right; picking the right middle would produce 3 with 1 on the left. Both are correct. Interview graders usually accept any valid answer, and it is worth saying which convention you chose rather than leaving it implicit."
+   },
+   {
+    "q": "Suppose the input is a sorted linked list instead of an array. What changes?",
+    "a": "You lose O(1) access to the middle, so naively finding it each time costs O(n) per level and the whole build becomes O(n log n). Two better options: walk the list once into an array and use this algorithm for O(n) time and O(n) space, or build bottom-up in O(n) time and O(log n) space by recursing on the *count* of elements and consuming the list in order as the recursion unwinds, which produces the nodes in inorder sequence. The second is the elegant answer and the one an interviewer is fishing for."
+   },
+   {
+    "q": "Why does this guarantee balance, when a normal BST insertion loop would not?",
+    "a": "Because inserting sorted values one at a time always appends to the same side, producing a degenerate chain of height n, which is the classic worst case and the reason self-balancing trees exist. Building from the middle outwards never makes that choice: each recursion splits the remaining range into two halves differing by at most one element, so the height difference at every node is bounded by one automatically. No rotations are needed because the structure is chosen rather than repaired."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23697,114 +23867,236 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Clone a graph.",
-  "answer": "DFS or BFS with a hash map from original node→clone. For each node, create its clone once, then recursively/iteratively clone and connect its neighbors, using the map to avoid re-cloning and handle cycles. O(V+E) time, O(V) space.",
+  "answer": "**Logic**\n\nA deep copy of a graph needs a map from original node to its clone. Traverse from the start node; on reaching a node for the first time, create its clone and record it in the map *before* recursing into its neighbours. That ordering is what stops a cycle from recursing forever: when the traversal comes back around, the map already holds the clone and it is returned immediately.\n\nO(V + E) time and space. The same technique clones any object graph with cycles, which is why serialisers keep an identity map.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Node\n{\n    public int Val;\n    public IList<Node> Neighbors = new List<Node>();\n    public Node(int val) { Val = val; }\n}\n\npublic class Solution\n{\n    public static Node CloneGraph(Node start)\n    {\n        if (start == null) return null;\n        return Clone(start, new Dictionary<Node, Node>());\n    }\n\n    private static Node Clone(Node node, Dictionary<Node, Node> map)\n    {\n        if (map.TryGetValue(node, out var existing)) return existing;\n\n        // Register the clone BEFORE recursing, or a cycle loops forever.\n        var copy = new Node(node.Val);\n        map[node] = copy;\n\n        foreach (var neighbour in node.Neighbors)\n            copy.Neighbors.Add(Clone(neighbour, map));\n\n        return copy;\n    }\n\n    private static string Describe(Node start)\n    {\n        if (start == null) return \"(null)\";\n        var seen = new SortedDictionary<int, List<int>>();\n        var stack = new Stack<Node>();\n        stack.Push(start);\n\n        while (stack.Count > 0)\n        {\n            var n = stack.Pop();\n            if (seen.ContainsKey(n.Val)) continue;\n            seen[n.Val] = n.Neighbors.Select(x => x.Val).OrderBy(x => x).ToList();\n            foreach (var nb in n.Neighbors) stack.Push(nb);\n        }\n\n        return string.Join(\" \", seen.Select(kv => $\"{kv.Key}:[{string.Join(\",\", kv.Value)}]\"));\n    }\n\n    public static void Main()\n    {\n        // 1 - 2\n        // |   |\n        // 4 - 3\n        var n1 = new Node(1); var n2 = new Node(2);\n        var n3 = new Node(3); var n4 = new Node(4);\n        n1.Neighbors = new List<Node> { n2, n4 };\n        n2.Neighbors = new List<Node> { n1, n3 };\n        n3.Neighbors = new List<Node> { n2, n4 };\n        n4.Neighbors = new List<Node> { n1, n3 };\n\n        var copy = CloneGraph(n1);\n        Console.WriteLine(Describe(copy));\n\n        // It must be a genuine copy, not the same objects.\n        Console.WriteLine(ReferenceEquals(copy, n1));\n        Console.WriteLine(ReferenceEquals(copy.Neighbors[0], n2));\n\n        Console.WriteLine(Describe(CloneGraph(new Node(7))));   // no neighbours\n        Console.WriteLine(Describe(CloneGraph(null)));\n\n        var self = new Node(9);\n        self.Neighbors.Add(self);                                // self-loop\n        Console.WriteLine(Describe(CloneGraph(self)));\n    }\n}\n```\n\n**Output**\n\n```\n1:[2,4] 2:[1,3] 3:[2,4] 4:[1,3]\nFalse\nFalse\n7:[]\n(null)\n9:[9]\n```",
   "tags": [
    "graphs",
    "dfs",
-   "clone",
-   "hashmap"
+   "hashmap",
+   "deep-copy",
+   "csharp"
   ],
-  "id": 1615
+  "id": 1615,
+  "followups": [
+   {
+    "q": "What exactly goes wrong if you register the clone after recursing instead of before?",
+    "a": "Infinite recursion on any cycle. Cloning node 1 would recurse into 2, which recurses back into 1, which is not yet in the map, so it clones 1 again and the process never terminates, ending in a stack overflow. Registering first means the second visit finds the partially built clone and returns it, and the neighbour list is filled in as the outer call completes. It is the same fix-up-later technique that object serialisers and dependency injection containers use to handle circular references."
+   },
+   {
+    "q": "Suppose the graph is disconnected. Does this still work?",
+    "a": "Not from a single start node: traversal only reaches the component containing it, so other components are silently missing. The problem statement usually promises connectivity. If it did not, you would need the full node list and a loop that starts a fresh traversal from every unvisited node, accumulating into the same map so shared structure is preserved. That distinction between 'clone reachable from here' and 'clone the whole graph' is worth clarifying before writing anything."
+   },
+   {
+    "q": "Would you use recursion here in production?",
+    "a": "Probably not. Depth is bounded by the number of nodes, so a long chain of ten thousand nodes risks a stack overflow, which in .NET cannot be caught. The iterative version is the same algorithm with an explicit stack or queue: create the clone on first sight, push the original, and wire neighbours when it is processed. Slightly more code, no depth limit. Recursion is fine for balanced trees where depth is logarithmic, and risky for graphs and lists where it is not."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Course schedule: can you finish all courses (cycle detection in a directed graph)?",
-  "answer": "Topological sort via Kahn's algorithm: compute in-degrees, enqueue zero in-degree nodes, repeatedly remove them and decrement neighbors' in-degrees. If all nodes are processed, no cycle (feasible); else a cycle exists. O(V+E) time. DFS with a recursion-stack coloring also detects cycles.",
+  "answer": "**Logic**\n\nCourses with prerequisites form a directed graph, and the schedule is completable exactly when that graph has no cycle. Kahn's algorithm answers it by construction: count how many prerequisites each course has, start with those that have none, and repeatedly remove a course and decrement its dependents. If every course is eventually removed, there was no cycle; if some remain with a non-zero count, they form one.\n\nO(V + E) time and space. The same run also yields a valid ordering, which is the sequel to this problem.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool CanFinish(int numCourses, int[][] prerequisites)\n    {\n        var dependents = new List<int>[numCourses];\n        var indegree = new int[numCourses];\n\n        for (int i = 0; i < numCourses; i++) dependents[i] = new List<int>();\n\n        // pair = [course, prerequisite]: an edge prerequisite -> course.\n        foreach (var pair in prerequisites)\n        {\n            dependents[pair[1]].Add(pair[0]);\n            indegree[pair[0]]++;\n        }\n\n        var ready = new Queue<int>();\n        for (int i = 0; i < numCourses; i++)\n            if (indegree[i] == 0) ready.Enqueue(i);\n\n        int taken = 0;\n        while (ready.Count > 0)\n        {\n            int course = ready.Dequeue();\n            taken++;\n\n            foreach (int next in dependents[course])\n                if (--indegree[next] == 0) ready.Enqueue(next);\n        }\n\n        // Anything left never reached indegree 0, so it sits on a cycle.\n        return taken == numCourses;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CanFinish(2, new[] { new[] { 1, 0 } }));\n        Console.WriteLine(CanFinish(2, new[] { new[] { 1, 0 }, new[] { 0, 1 } }));   // cycle\n        Console.WriteLine(CanFinish(3, Array.Empty<int[]>()));                        // no edges\n        Console.WriteLine(CanFinish(4, new[] {\n            new[] { 1, 0 }, new[] { 2, 1 }, new[] { 3, 2 } }));                       // a chain\n        Console.WriteLine(CanFinish(3, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 } }));                       // 3-cycle\n        Console.WriteLine(CanFinish(1, new[] { new[] { 0, 0 } }));                    // self-loop\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nFalse\nFalse\n```",
   "tags": [
    "graphs",
    "topological-sort",
+   "kahn",
    "cycle-detection",
-   "kahn"
+   "csharp"
   ],
-  "id": 1616
+  "id": 1616,
+  "followups": [
+   {
+    "q": "How does the DFS version detect a cycle, and why are three colours needed?",
+    "a": "DFS marks nodes white for unvisited, grey for on the current recursion stack, and black for fully explored. Meeting a grey node means an edge back into the path you are currently on, which is a cycle. Two states are not enough: meeting an already-visited black node is perfectly normal in a DAG, since two branches can converge on the same node, so treating any revisit as a cycle gives false positives. The grey state is precisely what distinguishes a back edge from a cross edge."
+   },
+   {
+    "q": "Suppose some prerequisites are optional, or courses run in fixed semesters. How does the model change?",
+    "a": "Optional prerequisites mean the graph is no longer a hard constraint set, so you would model them as soft edges and optimise rather than merely validate, which turns it into a scheduling problem rather than a topological sort. Fixed semesters add a capacity constraint: each round you can take at most k courses, so instead of dequeuing one at a time you process whole levels, and the answer becomes the number of rounds. That levelled variant is the 'minimum semesters to finish' problem and falls straight out of the same indegree machinery."
+   },
+   {
+    "q": "Why Kahn's rather than DFS here?",
+    "a": "Both are O(V + E) and both are correct. Kahn's is iterative, so there is no stack-depth risk on a deep dependency chain, it produces the ordering directly rather than as a reversed postorder, and its failure mode is easy to report: the remaining nodes with non-zero indegree are exactly the ones involved in cycles, which is genuinely useful in a build tool or package manager. DFS is more compact and better when you also want the specific cycle path for an error message."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Course schedule II: return a valid course order.",
-  "answer": "Topological sort (Kahn's): repeatedly output zero in-degree nodes and reduce neighbors' in-degrees. The output order is a valid schedule; if it doesn't include all courses, there's a cycle (return empty). O(V+E) time. DFS post-order reversed also yields a topological order.",
+  "answer": "**Logic**\n\nSame algorithm as the yes-or-no version, but record the order in which courses are removed. Kahn's algorithm produces a topological ordering directly: a course is only enqueued once every prerequisite has been taken, so the sequence of removals is always valid.\n\nIf the recorded order is shorter than the course count, a cycle prevented some courses from ever becoming ready, and the problem asks for an empty array in that case. O(V + E) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[] FindOrder(int numCourses, int[][] prerequisites)\n    {\n        var dependents = new List<int>[numCourses];\n        var indegree = new int[numCourses];\n        for (int i = 0; i < numCourses; i++) dependents[i] = new List<int>();\n\n        foreach (var pair in prerequisites)\n        {\n            dependents[pair[1]].Add(pair[0]);   // must take pair[1] before pair[0]\n            indegree[pair[0]]++;\n        }\n\n        var ready = new Queue<int>();\n        for (int i = 0; i < numCourses; i++)\n            if (indegree[i] == 0) ready.Enqueue(i);\n\n        var order = new List<int>(numCourses);\n\n        while (ready.Count > 0)\n        {\n            int course = ready.Dequeue();\n            order.Add(course);                  // the removal order IS the answer\n\n            foreach (int next in dependents[course])\n                if (--indegree[next] == 0) ready.Enqueue(next);\n        }\n\n        // A short order means a cycle blocked the rest.\n        return order.Count == numCourses ? order.ToArray() : Array.Empty<int>();\n    }\n\n    private static string Show(int[] a) => a.Length == 0 ? \"(impossible)\" : string.Join(\",\", a);\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(FindOrder(2, new[] { new[] { 1, 0 } })));\n        Console.WriteLine(Show(FindOrder(4, new[] {\n            new[] { 1, 0 }, new[] { 2, 0 }, new[] { 3, 1 }, new[] { 3, 2 } })));\n        Console.WriteLine(Show(FindOrder(1, Array.Empty<int[]>())));\n        Console.WriteLine(Show(FindOrder(2, new[] { new[] { 0, 1 }, new[] { 1, 0 } })));\n        Console.WriteLine(Show(FindOrder(3, Array.Empty<int[]>())));\n    }\n}\n```\n\n**Output**\n\n```\n0,1\n0,1,2,3\n0\n(impossible)\n0,1,2\n```",
   "tags": [
    "graphs",
    "topological-sort",
+   "kahn",
    "ordering",
-   "kahn"
+   "csharp"
   ],
-  "id": 1617
+  "id": 1617,
+  "followups": [
+   {
+    "q": "The second case could also be 0,2,1,3. Is the answer unique?",
+    "a": "No, and that matters for testing. Any ordering respecting the dependencies is valid, and courses 1 and 2 are independent so either may come first. A unit test asserting one exact array is fragile: it would break if the queue were swapped for a stack, or if the adjacency lists were built in a different order. The right assertion is a property check, that every prerequisite appears before its dependent, which is also a useful two-line helper to offer in the interview."
+   },
+   {
+    "q": "Suppose the interviewer wants the lexicographically smallest valid order.",
+    "a": "Swap the queue for a min-heap. Instead of taking any ready course, always take the smallest-numbered one available. That makes it O((V + E) log V) rather than linear, but guarantees a deterministic, lexicographically minimal ordering. This is exactly what package managers and build systems do when they want reproducible output, since a non-deterministic build order makes caching and debugging much harder."
+   },
+   {
+    "q": "Where does this appear in real systems?",
+    "a": "Everywhere dependencies are resolved. NuGet and npm order package installation this way, MSBuild orders project compilation, database migration tools order schema changes, and Excel uses it to decide the order in which to recalculate cells. The cycle case is what produces the familiar 'circular dependency detected' error, and the fact that the algorithm can also name the offending nodes is why those error messages can list the specific cycle rather than just complaining."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Rotting oranges (multi-source BFS).",
-  "answer": "BFS from all initially rotten oranges simultaneously, tracking minutes as levels. Each minute, rot adjacent fresh oranges. Count fresh oranges; if any remain unreachable after BFS, return -1, else the number of minutes elapsed. O(rows*cols) time.",
+  "answer": "**Logic**\n\nBFS from every rotten orange at once. Seed the queue with all initially rotten cells, then process level by level: each level is one minute, during which every currently rotten orange infects its fresh orthogonal neighbours. The answer is the number of levels processed.\n\nStarting from all sources simultaneously is what makes this correct and linear. Running a separate BFS per source and taking minimums would be far slower and needlessly complex. At the end, any fresh orange left is unreachable, so the answer is -1.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int OrangesRotting(int[][] grid)\n    {\n        int rows = grid.Length, cols = grid[0].Length;\n        var queue = new Queue<(int r, int c)>();\n        int fresh = 0;\n\n        // Seed with EVERY rotten orange: one BFS, many sources.\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n            {\n                if (grid[r][c] == 2) queue.Enqueue((r, c));\n                else if (grid[r][c] == 1) fresh++;\n            }\n\n        if (fresh == 0) return 0;      // nothing to rot: zero minutes, not -1\n\n        int[] dr = { -1, 1, 0, 0 };\n        int[] dc = { 0, 0, -1, 1 };\n        int minutes = 0;\n\n        while (queue.Count > 0 && fresh > 0)\n        {\n            int levelSize = queue.Count;   // one level = one minute\n            minutes++;\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                var (r, c) = queue.Dequeue();\n\n                for (int d = 0; d < 4; d++)\n                {\n                    int nr = r + dr[d], nc = c + dc[d];\n                    if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n                    if (grid[nr][nc] != 1) continue;\n\n                    grid[nr][nc] = 2;      // mark on enqueue\n                    fresh--;\n                    queue.Enqueue((nr, nc));\n                }\n            }\n        }\n\n        return fresh == 0 ? minutes : -1;   // leftovers were unreachable\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(OrangesRotting(Grid(\n            new[] { 2, 1, 1 }, new[] { 1, 1, 0 }, new[] { 0, 1, 1 })));\n\n        Console.WriteLine(OrangesRotting(Grid(\n            new[] { 2, 1, 1 }, new[] { 0, 1, 1 }, new[] { 1, 0, 1 })));   // one is cut off\n\n        Console.WriteLine(OrangesRotting(Grid(new[] { 0, 2 })));          // nothing fresh\n        Console.WriteLine(OrangesRotting(Grid(new[] { 0 })));             // empty grid\n        Console.WriteLine(OrangesRotting(Grid(new[] { 1 })));             // fresh, no source\n        Console.WriteLine(OrangesRotting(Grid(\n            new[] { 2, 2 }, new[] { 1, 1 })));                            // two sources at once\n    }\n}\n```\n\n**Output**\n\n```\n4\n-1\n0\n0\n-1\n1\n```",
   "tags": [
    "graphs",
    "bfs",
    "multi-source",
-   "grid"
+   "grid",
+   "csharp"
   ],
-  "id": 1618
+  "id": 1618,
+  "followups": [
+   {
+    "q": "Why does the fresh == 0 early return matter?",
+    "a": "Because a grid with no fresh oranges takes zero minutes, but without the check the loop would exit immediately with `minutes` at 0 anyway, so it looks redundant. It stops being redundant in the variant where you continue counting while the queue drains: then the final level, in which nothing new rots, would still increment the counter and return one minute too many. Guarding both on the queue and on the remaining fresh count is what keeps the level count honest, which is the usual off-by-one in this problem."
+   },
+   {
+    "q": "Suppose rotting spreads diagonally too, or at different speeds per direction.",
+    "a": "Diagonal spread is a one-line change to eight direction offsets, and the algorithm is unchanged because every edge still has equal weight. Different speeds per direction breaks BFS entirely: the grid becomes a weighted graph, and the shortest time is no longer the fewest steps. You would switch to Dijkstra with a priority queue keyed on elapsed time. That is the cleanest illustration of when BFS stops being valid, and it is a common way for an interviewer to escalate this question."
+   },
+   {
+    "q": "Why is multi-source BFS correct, rather than just convenient?",
+    "a": "Because BFS explores in order of distance from the frontier, and seeding the queue with all sources makes the initial frontier the set of all sources at distance zero. The first time any cell is reached, it is reached by the shortest path from the nearest source, which is exactly the semantics of simultaneous spread. Running separate searches and taking the minimum would give the same answer at k times the cost, so the multi-source version is not an approximation, it is the same result computed once."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Word ladder: shortest transformation sequence length.",
-  "answer": "BFS over words where edges connect words differing by one letter. Precompute generic patterns (e.g., 'h*t') mapping to word lists for fast neighbor lookup. BFS from the start word to the end word gives the shortest path length. O(N * L^2) roughly (N words, L length).",
+  "answer": "**Logic**\n\nEach word is a node, and two words are adjacent when they differ by exactly one letter. The shortest transformation sequence is then the shortest path in an unweighted graph, which is BFS.\n\nBuilding the edges by comparing every pair of words is O(n²·L). The better approach generates neighbours on demand: for each position in the current word, try all 26 letters and keep the candidates present in the dictionary. That is O(26·L) per word and avoids materialising the graph at all.\n\nRemoving a word from the set as soon as it is enqueued serves as the visited marker.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int LadderLength(string begin, string end, IList<string> wordList)\n    {\n        var words = new HashSet<string>(wordList);\n        if (!words.Contains(end)) return 0;      // unreachable by definition\n\n        var queue = new Queue<string>();\n        queue.Enqueue(begin);\n        words.Remove(begin);\n\n        int length = 1;                          // the sequence includes begin\n\n        while (queue.Count > 0)\n        {\n            int levelSize = queue.Count;\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                string word = queue.Dequeue();\n                if (word == end) return length;\n\n                var chars = word.ToCharArray();\n                for (int p = 0; p < chars.Length; p++)\n                {\n                    char original = chars[p];\n\n                    for (char c = 'a'; c <= 'z'; c++)\n                    {\n                        if (c == original) continue;\n                        chars[p] = c;\n\n                        string candidate = new string(chars);\n                        if (words.Remove(candidate))   // Remove doubles as \"visit\"\n                            queue.Enqueue(candidate);\n                    }\n\n                    chars[p] = original;               // restore before the next position\n                }\n            }\n\n            length++;\n        }\n\n        return 0;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LadderLength(\"hit\", \"cog\",\n            new List<string> { \"hot\", \"dot\", \"dog\", \"lot\", \"log\", \"cog\" }));\n\n        Console.WriteLine(LadderLength(\"hit\", \"cog\",\n            new List<string> { \"hot\", \"dot\", \"dog\", \"lot\", \"log\" }));   // cog absent\n\n        Console.WriteLine(LadderLength(\"a\", \"c\", new List<string> { \"a\", \"b\", \"c\" }));\n        Console.WriteLine(LadderLength(\"hot\", \"dog\", new List<string> { \"hot\", \"dog\" }));\n        Console.WriteLine(LadderLength(\"hot\", \"hot\", new List<string> { \"hot\" }));\n    }\n}\n```\n\n**Output**\n\n```\n5\n0\n2\n0\n1\n```",
   "tags": [
    "graphs",
    "bfs",
-   "word-ladder",
-   "shortest-path"
+   "shortest-path",
+   "bidirectional",
+   "csharp"
   ],
-  "id": 1619
+  "id": 1619,
+  "followups": [
+   {
+    "q": "Why generate neighbours instead of precomputing the adjacency list?",
+    "a": "Because comparing every pair of words is quadratic in the dictionary size, which is ruinous for a realistic word list of tens of thousands of entries. Generating candidates costs 26 times the word length per word, which is a small constant and independent of the dictionary size. The trade-off flips only for very long words over a large alphabet, where a wildcard-bucket preprocessing step, grouping words by patterns like `h*t`, becomes the better option."
+   },
+   {
+    "q": "Suppose the dictionary is huge and the path is long. What would you do differently?",
+    "a": "Bidirectional BFS. Search forward from the start and backward from the end simultaneously, always expanding the smaller frontier, and stop when they meet. Because the frontier grows exponentially with depth, meeting in the middle roughly square-roots the number of nodes explored: two searches of depth d/2 instead of one of depth d. It is the standard optimisation for this problem and typically the difference between passing and timing out on the large test cases."
+   },
+   {
+    "q": "Why remove words from the set rather than keeping a separate visited collection?",
+    "a": "It is the same thing with less bookkeeping: a word that has been enqueued must never be enqueued again, and removing it from the candidate set enforces that in the same operation that tests membership. `HashSet.Remove` returns whether the item was present, so one call both checks and marks. The one caveat is that it destroys the caller's collection if you do not copy it first, which is why the code builds its own HashSet from the input list rather than mutating what was passed in."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Pacific Atlantic water flow.",
-  "answer": "Reverse the flow: BFS/DFS inward from ocean-border cells to find cells that can reach each ocean (water flows to equal/lower, so reversed means equal/higher). Cells reachable from both oceans are the answer. O(rows*cols) time.",
+  "answer": "**Logic**\n\nInvert the flow. Asking, for each cell, whether water can reach both oceans means running a search from every cell, which is expensive. Instead start at the oceans and walk *uphill*: from the Pacific border inward, visiting neighbours whose height is greater than or equal to the current cell, and likewise from the Atlantic border. The answer is the intersection of the two reachable sets.\n\nThat inversion turns many searches into two. O(rows × cols) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static IList<int[]> PacificAtlantic(int[][] heights)\n    {\n        var result = new List<int[]>();\n        if (heights == null || heights.Length == 0) return result;\n\n        int rows = heights.Length, cols = heights[0].Length;\n        var pacific = new bool[rows, cols];\n        var atlantic = new bool[rows, cols];\n\n        // Pacific touches the top and left; Atlantic the bottom and right.\n        for (int r = 0; r < rows; r++)\n        {\n            Flow(heights, pacific, r, 0);\n            Flow(heights, atlantic, r, cols - 1);\n        }\n        for (int c = 0; c < cols; c++)\n        {\n            Flow(heights, pacific, 0, c);\n            Flow(heights, atlantic, rows - 1, c);\n        }\n\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n                if (pacific[r, c] && atlantic[r, c])\n                    result.Add(new[] { r, c });\n\n        return result;\n    }\n\n    // Walks uphill from the ocean: water flows down, so reachability runs upward.\n    private static void Flow(int[][] heights, bool[,] seen, int startRow, int startCol)\n    {\n        int rows = heights.Length, cols = heights[0].Length;\n        if (seen[startRow, startCol]) return;\n\n        var stack = new Stack<(int r, int c)>();\n        seen[startRow, startCol] = true;\n        stack.Push((startRow, startCol));\n\n        int[] dr = { -1, 1, 0, 0 };\n        int[] dc = { 0, 0, -1, 1 };\n\n        while (stack.Count > 0)\n        {\n            var (r, c) = stack.Pop();\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = r + dr[d], nc = c + dc[d];\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n                if (seen[nr, nc]) continue;\n                if (heights[nr][nc] < heights[r][c]) continue;   // cannot flow uphill downward\n\n                seen[nr, nc] = true;\n                stack.Push((nr, nc));\n            }\n        }\n    }\n\n    private static string Show(IList<int[]> cells)\n    {\n        var parts = new List<string>();\n        foreach (var c in cells) parts.Add($\"[{c[0]},{c[1]}]\");\n        parts.Sort(StringComparer.Ordinal);\n        return parts.Count == 0 ? \"(none)\" : string.Join(\" \", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(PacificAtlantic(new[] {\n            new[] { 1, 2, 2, 3, 5 },\n            new[] { 3, 2, 3, 4, 4 },\n            new[] { 2, 4, 5, 3, 1 },\n            new[] { 6, 7, 1, 4, 5 },\n            new[] { 5, 1, 1, 2, 4 } })));\n\n        Console.WriteLine(Show(PacificAtlantic(new[] { new[] { 1 } })));\n\n        // A flat grid: every cell reaches both oceans.\n        Console.WriteLine(Show(PacificAtlantic(new[] {\n            new[] { 1, 1 }, new[] { 1, 1 } })));\n    }\n}\n```\n\n**Output**\n\n```\n[0,4] [1,3] [1,4] [2,2] [3,0] [3,1] [4,0]\n[0,0]\n[0,0] [0,1] [1,0] [1,1]\n```",
   "tags": [
    "graphs",
    "dfs",
-   "bfs",
    "grid",
-   "multi-source"
+   "reverse-traversal",
+   "csharp"
   ],
-  "id": 1620
+  "id": 1620,
+  "followups": [
+   {
+    "q": "Why is the comparison >= rather than > when walking uphill?",
+    "a": "Because water flows to a cell of equal or lower height, so reversing that means you may step to a neighbour of equal or greater height. Using a strict greater-than would break on plateaus: a flat region touching the ocean would be marked unreachable beyond its first cell, which the third test case would expose immediately. Equal heights are exactly the case people forget, and flat terrain is common in real input."
+   },
+   {
+    "q": "Why is starting from the oceans better than starting from each cell?",
+    "a": "Starting from each cell means up to rows times cols separate searches, each potentially visiting the whole grid, so O((rc)^2) in the worst case. Starting from the borders runs two traversals total, each visiting every cell at most once, for O(rc). It is the same complement trick as the surrounded-regions problem: the question 'which cells can reach the ocean' is expensive per cell but cheap when asked once from the destination, because reachability is transitive and can be shared."
+   },
+   {
+    "q": "Suppose diagonal flow were allowed, or there were three oceans.",
+    "a": "Diagonal flow is a one-line change to eight offsets, since nothing in the reasoning depends on the number of directions. Three oceans generalise just as cleanly: keep one reachability grid per ocean and intersect all of them, which is why the code uses separate boolean grids rather than a single two-bit mask. The structure of the solution, one reverse traversal per destination followed by an intersection, is what makes it extend without redesign."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Surrounded regions: capture 'O's not connected to the border.",
-  "answer": "Mark border-connected 'O's (DFS/BFS from the edges) as safe. Then flip all remaining 'O's to 'X' (surrounded) and restore safe ones to 'O'. O(rows*cols) time. Any region touching the border is not captured.",
+  "answer": "**Logic**\n\nInvert the problem. Finding every enclosed region is awkward, but finding the *safe* ones is easy: an 'O' survives exactly when it connects to the border. So flood-fill inward from every 'O' on the edge, marking everything reached as safe. Then one sweep flips all remaining 'O's to 'X' and restores the marked ones.\n\nThat inversion turns a hard containment question into a simple reachability one. O(rows × cols) time, and O(1) extra space beyond the traversal if the safe marker is written into the grid itself.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static void Solve(char[][] board)\n    {\n        if (board == null || board.Length == 0) return;\n        int rows = board.Length, cols = board[0].Length;\n\n        // 1. Every border 'O' and everything it touches is safe: mark it 'S'.\n        for (int r = 0; r < rows; r++)\n        {\n            MarkSafe(board, r, 0);\n            MarkSafe(board, r, cols - 1);\n        }\n        for (int c = 0; c < cols; c++)\n        {\n            MarkSafe(board, 0, c);\n            MarkSafe(board, rows - 1, c);\n        }\n\n        // 2. Anything still 'O' was enclosed; anything 'S' goes back to 'O'.\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n                board[r][c] = board[r][c] == 'S' ? 'O' : 'X';\n    }\n\n    // Iterative flood fill: a large all-O board would overflow a recursive one.\n    private static void MarkSafe(char[][] board, int startRow, int startCol)\n    {\n        int rows = board.Length, cols = board[0].Length;\n        if (board[startRow][startCol] != 'O') return;\n\n        var stack = new Stack<(int r, int c)>();\n        board[startRow][startCol] = 'S';\n        stack.Push((startRow, startCol));\n\n        int[] dr = { -1, 1, 0, 0 };\n        int[] dc = { 0, 0, -1, 1 };\n\n        while (stack.Count > 0)\n        {\n            var (r, c) = stack.Pop();\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = r + dr[d], nc = c + dc[d];\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n                if (board[nr][nc] != 'O') continue;\n\n                board[nr][nc] = 'S';\n                stack.Push((nr, nc));\n            }\n        }\n    }\n\n    private static char[][] Parse(params string[] rows)\n    {\n        var g = new char[rows.Length][];\n        for (int i = 0; i < rows.Length; i++) g[i] = rows[i].ToCharArray();\n        return g;\n    }\n\n    private static string Render(char[][] b) =>\n        string.Join(\"/\", Array.ConvertAll(b, r => new string(r)));\n\n    public static void Main()\n    {\n        var b1 = Parse(\"XXXX\", \"XOOX\", \"XXOX\", \"XOXX\");\n        Solve(b1);\n        Console.WriteLine(Render(b1));\n\n        var b2 = Parse(\"X\");\n        Solve(b2);\n        Console.WriteLine(Render(b2));\n\n        var b3 = Parse(\"OOO\", \"OOO\", \"OOO\");     // all connected to the border\n        Solve(b3);\n        Console.WriteLine(Render(b3));\n\n        var b4 = Parse(\"XXXXX\", \"XOOOX\", \"XOXOX\", \"XOOOX\", \"XXXXX\");   // a ring, all enclosed\n        Solve(b4);\n        Console.WriteLine(Render(b4));\n    }\n}\n```\n\n**Output**\n\n```\nXXXX/XXXX/XXXX/XOXX\nX\nOOO/OOO/OOO\nXXXXX/XXXXX/XXXXX/XXXXX/XXXXX\n```",
   "tags": [
    "graphs",
-   "dfs",
+   "flood-fill",
    "grid",
-   "border"
+   "complement",
+   "csharp"
   ],
-  "id": 1621
+  "id": 1621,
+  "followups": [
+   {
+    "q": "Why work from the border inward rather than testing each region for enclosure?",
+    "a": "Because testing a region for enclosure means exploring it fully and checking whether any cell touches an edge, which is the same work but with far more bookkeeping: you must collect each region's cells, decide the verdict, then go back and flip them. Starting from the border makes the property a simple reachability question with a single answer per cell and no grouping at all. It is a good example of solving the complement because the complement has a simpler definition."
+   },
+   {
+    "q": "Suppose the board is enormous and mutating the input is not allowed.",
+    "a": "Then the 'S' marker is unavailable and you need a separate visited structure, typically a bit array of the same dimensions, which is one bit per cell rather than a full copy. The algorithm is otherwise unchanged. It is worth noting that the marker trick is really a way of borrowing the input as scratch space, which is fine for an interview and often unacceptable in production, since callers rarely expect a method named Solve to leave intermediate state behind if it throws part way through."
+   },
+   {
+    "q": "How would union-find solve this instead?",
+    "a": "Create a virtual node representing the outside, union every border 'O' with it, and union each 'O' with its 'O' neighbours. At the end, any 'O' not connected to the virtual node is enclosed and gets flipped. It is a neat formulation and the standard way to handle the incremental version of this problem, where cells are added over time and re-running a flood fill each step would be wasteful. For a single static board, flood fill is simpler and faster."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Dijkstra's shortest path in a weighted graph.",
-  "answer": "Min-heap (priority queue) of (distance, node); repeatedly pop the closest unfinalized node, relax its neighbors (update distances if shorter), and push updates. Works for non-negative weights. O((V+E) log V) time. For negative edges use Bellman-Ford.",
+  "answer": "**Logic**\n\nGreedily settle the nearest unvisited node. Keep a tentative distance for every node, start at zero for the source and infinity elsewhere, and use a min-heap keyed on distance. Pop the closest node, and for each neighbour check whether going through this node is shorter than the best known route; if so, record it and push the improved distance.\n\nOnce a node is popped it is final, because every remaining route to it must pass through something at least as far away. That argument is why the algorithm requires non-negative weights. O((V + E) log V) with a binary heap.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    // graph[u] = list of (neighbour, weight)\n    public static int[] Dijkstra(List<(int to, int weight)>[] graph, int source)\n    {\n        int n = graph.Length;\n        var dist = new int[n];\n        Array.Fill(dist, int.MaxValue);\n        dist[source] = 0;\n\n        var heap = new PriorityQueue<int, int>();\n        heap.Enqueue(source, 0);\n\n        var settled = new bool[n];\n\n        while (heap.Count > 0)\n        {\n            int node = heap.Dequeue();\n\n            // A node can be pushed several times with improving distances; the\n            // first pop is the final one, so ignore the stale copies.\n            if (settled[node]) continue;\n            settled[node] = true;\n\n            foreach (var (next, weight) in graph[node])\n            {\n                if (dist[node] == int.MaxValue) continue;\n\n                int candidate = dist[node] + weight;\n                if (candidate < dist[next])\n                {\n                    dist[next] = candidate;\n                    heap.Enqueue(next, candidate);\n                }\n            }\n        }\n\n        return dist;\n    }\n\n    private static string Show(int[] d) =>\n        string.Join(\",\", Array.ConvertAll(d, x => x == int.MaxValue ? \"inf\" : x.ToString()));\n\n    public static void Main()\n    {\n        //      (4)\n        //  0 -------- 1\n        //  | \\        |\n        // (1)  (8)   (2)\n        //  |      \\   |\n        //  2 ------- 3\n        //      (1)\n        var g = new List<(int, int)>[4];\n        for (int i = 0; i < 4; i++) g[i] = new List<(int, int)>();\n        void Edge(int a, int b, int w) { g[a].Add((b, w)); g[b].Add((a, w)); }\n\n        Edge(0, 1, 4);\n        Edge(0, 2, 1);\n        Edge(0, 3, 8);\n        Edge(2, 3, 1);\n        Edge(1, 3, 2);\n\n        Console.WriteLine(Show(Dijkstra(g, 0)));\n\n        // A disconnected node stays at infinity.\n        var d = new List<(int, int)>[3];\n        for (int i = 0; i < 3; i++) d[i] = new List<(int, int)>();\n        d[0].Add((1, 5)); d[1].Add((0, 5));\n        Console.WriteLine(Show(Dijkstra(d, 0)));\n\n        var single = new List<(int, int)>[1] { new() };\n        Console.WriteLine(Show(Dijkstra(single, 0)));\n    }\n}\n```\n\n**Output**\n\n```\n0,4,1,2\n0,5,inf\n0\n```\n\nNote node 3: the direct edge costs 8, but going 0-2-3 costs 2, which is what the relaxation finds.",
   "tags": [
    "graphs",
    "dijkstra",
+   "priority-queue",
    "shortest-path",
-   "heap",
-   "hard"
+   "csharp"
   ],
-  "id": 1622
+  "id": 1622,
+  "followups": [
+   {
+    "q": "Why exactly does Dijkstra fail with negative weights?",
+    "a": "Because the greedy argument collapses. Settling a node assumes no shorter route can appear later, which holds only if every additional edge adds non-negative cost. With a negative edge, a longer-looking path can become cheaper after traversing it, so a node settled early may need revising, and the algorithm never revisits it. Bellman-Ford handles negatives by relaxing every edge V-1 times, at O(VE), and a further pass detects negative cycles, for which no shortest path exists at all."
+   },
+   {
+    "q": "Why check settled[node] instead of decreasing the key in the heap?",
+    "a": "Because .NET's PriorityQueue has no decrease-key operation, and neither do most standard library heaps. The lazy approach pushes a duplicate entry at the better distance and skips stale pops, which is simpler and performs well in practice at the cost of a heap that can hold up to E entries rather than V. A Fibonacci heap gives the textbook O(E + V log V) with real decrease-key, but its constants are poor enough that the lazy binary-heap version is usually faster on real graphs."
+   },
+   {
+    "q": "Suppose you need the actual route, not just the distance.",
+    "a": "Keep a parent array, recording which node produced each improvement during relaxation, then walk backwards from the destination and reverse. It is the same parent-pointer technique that recovers the coin list in coin change or the alignment in edit distance: the algorithm computes the cost, a parallel array remembers the decision, and a backward walk reconstructs it. Cost is one extra array and O(path length) to rebuild."
+   },
+   {
+    "q": "Suppose this is a road network and you need it to be much faster.",
+    "a": "Add a heuristic and it becomes A*: prioritise by distance so far plus an estimate of the distance remaining, such as straight-line distance, which steers the search toward the goal instead of expanding uniformly in all directions. A* is optimal as long as the heuristic never overestimates. Beyond that, real routing engines precompute contraction hierarchies or landmark distances, which turn continent-scale queries into milliseconds by doing most of the work offline."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23826,42 +24118,87 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Detect a cycle in an undirected graph (Union-Find).",
-  "answer": "Union-Find (Disjoint Set Union): for each edge, if both endpoints share a root, a cycle exists; else union them. With path compression and union by rank, near O(α(n)) per operation. Alternatively DFS tracking the parent to ignore the edge you came from.",
+  "answer": "**Logic**\n\nProcess edges one at a time. For each edge, find the representative of both endpoints: if they already share one, the two nodes were already connected, so this edge closes a cycle. Otherwise union them.\n\nThe subtlety specific to undirected graphs is that an edge is not a cycle just because you can walk back along it. Union-find sidesteps that entirely, since it reasons about set membership rather than about traversal paths. Near-linear time with path compression and union by rank.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool HasCycle(int n, int[][] edges)\n    {\n        var parent = new int[n];\n        var rank = new int[n];\n        for (int i = 0; i < n; i++) parent[i] = i;\n\n        int Find(int x)\n        {\n            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n            return x;\n        }\n\n        foreach (var e in edges)\n        {\n            int a = Find(e[0]), b = Find(e[1]);\n\n            // Already in the same set: this edge closes a loop.\n            if (a == b) return true;\n\n            if (rank[a] < rank[b]) (a, b) = (b, a);\n            parent[b] = a;\n            if (rank[a] == rank[b]) rank[a]++;\n        }\n\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(HasCycle(3, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 } }));      // triangle\n\n        Console.WriteLine(HasCycle(3, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 } }));                      // a path\n\n        Console.WriteLine(HasCycle(4, new[] {\n            new[] { 0, 1 }, new[] { 2, 3 } }));                      // two separate edges\n\n        Console.WriteLine(HasCycle(2, new[] {\n            new[] { 0, 1 }, new[] { 0, 1 } }));                      // parallel edge counts\n\n        Console.WriteLine(HasCycle(1, Array.Empty<int[]>()));\n        Console.WriteLine(HasCycle(5, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 3, 4 }, new[] { 4, 3 } }));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nFalse\nTrue\nFalse\nTrue\n```",
   "tags": [
    "graphs",
    "union-find",
    "cycle-detection",
-   "dsu"
+   "undirected",
+   "csharp"
   ],
-  "id": 1624
+  "id": 1624,
+  "followups": [
+   {
+    "q": "How does the DFS version differ, and what is its trap?",
+    "a": "DFS detects a cycle by finding an edge to an already-visited node that is not the parent you arrived from. The parent check is the trap: without it, every single edge looks like a cycle, because from node b you can always see a. Passing the parent down is the fix, and note it must exclude only the specific edge used, not every occurrence of that node, which is why a parallel edge between the same pair genuinely is a cycle and must still be reported."
+   },
+   {
+    "q": "Why does union-find not need a parent check?",
+    "a": "Because it never traverses. It asks a set-membership question, whether these two nodes are already connected by some earlier edge, and the edge currently being processed has not yet been added to any set. So there is no way for the edge to see itself. That immunity to the parent problem is a good reason to prefer union-find for undirected cycle detection, quite apart from the incremental advantage."
+   },
+   {
+    "q": "Suppose the graph is directed. Does this approach still work?",
+    "a": "No. Union-find has no notion of direction, so it would report the two edges a to b and a to c joined by b to c as a cycle when directionally there is none. Directed cycle detection needs either DFS with the three-colour scheme, where a grey node on the current stack signals a back edge, or Kahn's algorithm, where leftover nodes with non-zero indegree sit on cycles. Applying an undirected technique to a directed graph is one of the more common conceptual errors in this area."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Number of connected components in an undirected graph.",
-  "answer": "Union-Find: start with n components, union each edge's endpoints (decrement count on a successful union). Final count is the number of components. O(E α(n)) time. DFS/BFS from each unvisited node counting starts also works in O(V+E).",
+  "answer": "**Logic**\n\nTwo standard answers. Traverse from every unvisited node, marking everything reachable, and count how many traversals were needed; each one consumes exactly one component. That is O(V + E).\n\nOr use union-find: start with V components, union the endpoints of every edge, and decrement the count each time a union actually merges two distinct sets. That is near-linear and has the advantage of working incrementally as edges arrive, which traversal cannot do without starting over.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    // Traversal: one DFS per component.\n    public static int CountComponents(int n, int[][] edges)\n    {\n        var adj = new List<int>[n];\n        for (int i = 0; i < n; i++) adj[i] = new List<int>();\n        foreach (var e in edges) { adj[e[0]].Add(e[1]); adj[e[1]].Add(e[0]); }\n\n        var seen = new bool[n];\n        int components = 0;\n\n        for (int start = 0; start < n; start++)\n        {\n            if (seen[start]) continue;\n            components++;\n\n            var stack = new Stack<int>();\n            stack.Push(start);\n            seen[start] = true;\n\n            while (stack.Count > 0)\n                foreach (int next in adj[stack.Pop()])\n                    if (!seen[next]) { seen[next] = true; stack.Push(next); }\n        }\n\n        return components;\n    }\n\n    // Union-find: start at n components, merge on each effective union.\n    public static int CountComponentsUnionFind(int n, int[][] edges)\n    {\n        var parent = new int[n];\n        var rank = new int[n];\n        for (int i = 0; i < n; i++) parent[i] = i;\n\n        int Find(int x)\n        {\n            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n            return x;   // path halving keeps trees flat\n        }\n\n        int components = n;\n        foreach (var e in edges)\n        {\n            int a = Find(e[0]), b = Find(e[1]);\n            if (a == b) continue;                  // already together\n\n            if (rank[a] < rank[b]) (a, b) = (b, a);\n            parent[b] = a;\n            if (rank[a] == rank[b]) rank[a]++;\n            components--;\n        }\n\n        return components;\n    }\n\n    public static void Main()\n    {\n        var e1 = new[] { new[] { 0, 1 }, new[] { 1, 2 }, new[] { 3, 4 } };\n        Console.WriteLine(CountComponents(5, e1));\n        Console.WriteLine(CountComponentsUnionFind(5, e1));\n\n        var e2 = new[] { new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 4 } };\n        Console.WriteLine(CountComponents(5, e2));\n\n        Console.WriteLine(CountComponents(4, Array.Empty<int[]>()));   // no edges at all\n        Console.WriteLine(CountComponents(1, Array.Empty<int[]>()));\n        Console.WriteLine(CountComponentsUnionFind(3, new[] {\n            new[] { 0, 1 }, new[] { 0, 1 } }));                        // duplicate edge\n    }\n}\n```\n\n**Output**\n\n```\n2\n2\n1\n4\n1\n2\n```",
   "tags": [
    "graphs",
    "union-find",
-   "connected-components",
-   "dsu"
+   "dfs",
+   "components",
+   "csharp"
   ],
-  "id": 1625
+  "id": 1625,
+  "followups": [
+   {
+    "q": "When would you choose union-find over traversal?",
+    "a": "When edges arrive over time and the count must stay current. Traversal answers a static question and would have to re-run from scratch after each new edge, whereas union-find absorbs an edge in near-constant amortised time. It is also the natural fit when there is no explicit node list to iterate, or when the graph is too large to build adjacency lists for. Traversal wins when you need more than connectivity, such as the actual members of each component or distances within it."
+   },
+   {
+    "q": "What do path compression and union by rank actually buy you?",
+    "a": "Without them, a sequence of unions can build a linked-list-shaped tree and each Find degrades to O(n). Union by rank keeps the shallower tree under the deeper one so depth grows logarithmically at worst, and path compression flattens the path on every lookup. Together they give an amortised cost of the inverse Ackermann function, which is below 5 for any input that fits in the universe, so effectively constant. Using only one of the two is still good; using neither is a real performance bug."
+   },
+   {
+    "q": "Suppose the graph is directed. Does this still count components?",
+    "a": "No, and this is a common trap. These algorithms treat edges as bidirectional, so they compute weakly connected components: groups that would be connected if you ignored direction. Strongly connected components, where every node can reach every other following the arrows, need Tarjan's or Kosaraju's algorithm. The distinction matters in practice, for instance in dependency graphs, where a strongly connected component is precisely a circular dependency."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Is a graph a valid tree?",
-  "answer": "A graph with n nodes is a tree iff it has exactly n-1 edges and is fully connected (or equivalently connected and acyclic). Check edge count, then verify connectivity/no cycle via Union-Find or DFS/BFS. O(V+E) time.",
+  "answer": "**Logic**\n\nA graph on n nodes is a tree exactly when it is connected and has no cycle. Those two conditions together force the edge count to be n-1, and conversely, given n-1 edges, connected implies acyclic and acyclic implies connected. So the cheapest correct test is: check the edge count is n-1, then check either one of the two properties.\n\nChecking the edge count first is worth doing because it rejects most invalid inputs in constant time, and it means the subsequent union-find pass only has to establish connectivity.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool ValidTree(int n, int[][] edges)\n    {\n        // A tree on n nodes has exactly n-1 edges. Too few cannot connect, too\n        // many must contain a cycle. This one line removes most bad inputs.\n        if (edges.Length != n - 1) return false;\n\n        var parent = new int[n];\n        for (int i = 0; i < n; i++) parent[i] = i;\n\n        int Find(int x)\n        {\n            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n            return x;\n        }\n\n        foreach (var e in edges)\n        {\n            int a = Find(e[0]), b = Find(e[1]);\n            if (a == b) return false;    // a cycle, so with n-1 edges it cannot be connected\n            parent[b] = a;\n        }\n\n        // n-1 edges and no cycle means exactly one component.\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ValidTree(5, new[] {\n            new[] { 0, 1 }, new[] { 0, 2 }, new[] { 0, 3 }, new[] { 1, 4 } }));\n\n        Console.WriteLine(ValidTree(5, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 }, new[] { 1, 3 }, new[] { 1, 4 } }));\n\n        Console.WriteLine(ValidTree(4, new[] {\n            new[] { 0, 1 }, new[] { 2, 3 } }));       // two components, too few edges\n\n        Console.WriteLine(ValidTree(1, Array.Empty<int[]>()));   // single node is a tree\n        Console.WriteLine(ValidTree(2, Array.Empty<int[]>()));   // disconnected\n\n        Console.WriteLine(ValidTree(3, new[] {\n            new[] { 0, 1 }, new[] { 0, 1 } }));       // right count, but a parallel edge\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nFalse\nTrue\nFalse\nFalse\n```",
   "tags": [
    "graphs",
-   "tree",
    "union-find",
-   "connectivity"
+   "tree",
+   "connectivity",
+   "csharp"
   ],
-  "id": 1626
+  "id": 1626,
+  "followups": [
+   {
+    "q": "Why is checking the edge count plus acyclicity enough? Don't you also need connectivity?",
+    "a": "They imply each other given the count. With exactly n-1 edges, suppose the graph were disconnected: each component with k nodes and no cycle has k-1 edges, so c components would have n-c edges total, which is fewer than n-1 whenever c exceeds 1. So n-1 edges plus acyclic forces a single component. The last test case shows why the count alone is not enough: three nodes with two edges both between the same pair passes the count but forms a cycle and leaves a node isolated."
+   },
+   {
+    "q": "Suppose the input might contain self-loops or duplicate edges. Does this hold up?",
+    "a": "Yes, and the sixth test case demonstrates it: a duplicated edge is caught because the second copy finds both endpoints already in the same set. A self-loop is caught the same way, since Find of a node equals itself. This is a nice property of the union-find formulation; a naive 'count edges and check connectivity' approach without cycle detection would wrongly accept both. Always ask whether the input is a simple graph, because the answer changes which checks are sufficient."
+   },
+   {
+    "q": "How would you do this with BFS or DFS instead?",
+    "a": "Traverse from node 0, counting the nodes reached and watching for an edge to a visited node that is not the one you came from. The graph is a tree if the traversal reaches all n nodes and finds no such edge. Same O(V + E), and it has the advantage of not needing the edge-count shortcut. The parent-tracking detail is the same trap as in undirected cycle detection, which is the main reason the union-find version is less error-prone to write under pressure."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23884,28 +24221,66 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Check if a graph is bipartite.",
-  "answer": "Two-color the graph with BFS/DFS: assign a color, then give neighbors the opposite color; if a neighbor already has the same color as the current node, it's not bipartite. Handle disconnected components. O(V+E) time. Bipartite = no odd-length cycle.",
+  "answer": "**Logic**\n\nA graph is bipartite when its nodes can be split into two sets with every edge crossing between them, which is the same as saying it is two-colourable. Traverse, colouring each node the opposite of the node you arrived from. If you ever meet an already-coloured neighbour with the same colour as the current node, an edge lies inside a set and the graph is not bipartite.\n\nThe graph may be disconnected, so the traversal must be started from every uncoloured node. O(V + E).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool IsBipartite(int[][] graph)\n    {\n        int n = graph.Length;\n        var colour = new int[n];     // 0 = uncoloured, 1 and -1 are the two sides\n\n        for (int start = 0; start < n; start++)\n        {\n            if (colour[start] != 0) continue;   // components must each be checked\n\n            var queue = new Queue<int>();\n            colour[start] = 1;\n            queue.Enqueue(start);\n\n            while (queue.Count > 0)\n            {\n                int node = queue.Dequeue();\n\n                foreach (int next in graph[node])\n                {\n                    if (colour[next] == colour[node]) return false;   // same side: not bipartite\n\n                    if (colour[next] == 0)\n                    {\n                        colour[next] = -colour[node];\n                        queue.Enqueue(next);\n                    }\n                }\n            }\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        // A square: 0-1-2-3-0, an even cycle, so bipartite.\n        Console.WriteLine(IsBipartite(new[] {\n            new[] { 1, 3 }, new[] { 0, 2 }, new[] { 1, 3 }, new[] { 0, 2 } }));\n\n        // A triangle: an odd cycle, so not.\n        Console.WriteLine(IsBipartite(new[] {\n            new[] { 1, 2 }, new[] { 0, 2 }, new[] { 0, 1 } }));\n\n        Console.WriteLine(IsBipartite(new[] { Array.Empty<int>() }));       // one lonely node\n\n        // Two components, one bipartite and one not.\n        Console.WriteLine(IsBipartite(new[] {\n            new[] { 1 }, new[] { 0 },\n            new[] { 3, 4 }, new[] { 2, 4 }, new[] { 2, 3 } }));\n\n        // A path of four nodes.\n        Console.WriteLine(IsBipartite(new[] {\n            new[] { 1 }, new[] { 0, 2 }, new[] { 1, 3 }, new[] { 2 } }));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nTrue\n```",
   "tags": [
    "graphs",
-   "bipartite",
    "bfs",
-   "coloring"
+   "colouring",
+   "bipartite",
+   "csharp"
   ],
-  "id": 1628
+  "id": 1628,
+  "followups": [
+   {
+    "q": "What is the precise characterisation of a bipartite graph?",
+    "a": "A graph is bipartite if and only if it contains no odd-length cycle. That is why a triangle fails and a square passes: colouring alternates along a cycle, so returning to the start with the correct colour requires an even number of steps. It also means a tree or a forest is always bipartite, having no cycles at all, and that checking bipartiteness is really odd-cycle detection wearing a different name."
+   },
+   {
+    "q": "Why must the outer loop start a traversal from every node?",
+    "a": "Because the graph may be disconnected, and a single traversal only colours one component. The fourth test case is built for exactly this: the first component is a simple edge and perfectly bipartite, and stopping there would return true while a triangle lurks in the second component. Forgetting the outer loop is the most common bug here, and it passes any test data that happens to be connected, which is most casual test data."
+   },
+   {
+    "q": "Suppose you need to know which side each node belongs to, not just whether it is possible.",
+    "a": "The colour array already holds it: the nodes coloured 1 form one side and those coloured -1 the other. That is the point of using a two-valued colour rather than a boolean visited flag, and it costs nothing extra. It matters because most real uses of bipartiteness need the partition, for instance to run a maximum bipartite matching for job assignment, or to lay out a graph with the two groups on opposite sides of a diagram."
+   },
+   {
+    "q": "Would DFS work equally well?",
+    "a": "Yes, with the same colouring rule, and it is a smaller amount of code. The practical difference is that a recursive DFS can overflow the stack on a long path, and that BFS tends to find a conflict closer to the start node, which makes for a better error message if you are reporting why the graph failed. Neither is more correct, since the property does not depend on traversal order, unlike problems such as topological sort where it does."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Implement a Trie (prefix tree) with insert, search, startsWith.",
-  "answer": "Each node has a map/array of children and an isEnd flag. Insert walks/creates nodes per character setting isEnd at the end. Search walks and checks isEnd. startsWith walks and returns true if the path exists. O(L) per operation where L is the word length.",
+  "answer": "**Logic**\n\nEach node holds links to child nodes, one per possible next character, plus a flag marking whether a complete word ends there. Walking a word means following one link per character. Insert creates missing links; search walks and checks the end-of-word flag; startsWith walks and only checks that the path exists.\n\nThe end-of-word flag is what separates the two lookups: without it, searching for \"app\" in a trie containing only \"apple\" would wrongly succeed. All three operations are O(length of the key), independent of how many words the trie holds.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Trie\n{\n    private sealed class Node\n    {\n        public readonly Dictionary<char, Node> Children = new();\n        public bool IsWord;      // distinguishes a stored word from a mere prefix\n    }\n\n    private readonly Node _root = new();\n\n    public void Insert(string word)\n    {\n        var node = _root;\n        foreach (char c in word)\n        {\n            if (!node.Children.TryGetValue(c, out var next))\n                node.Children[c] = next = new Node();\n            node = next;\n        }\n        node.IsWord = true;\n    }\n\n    public bool Search(string word)\n    {\n        var node = Walk(word);\n        return node != null && node.IsWord;      // must be a complete word\n    }\n\n    public bool StartsWith(string prefix) => Walk(prefix) != null;\n\n    private Node Walk(string s)\n    {\n        var node = _root;\n        foreach (char c in s)\n        {\n            if (!node.Children.TryGetValue(c, out node)) return null;\n        }\n        return node;\n    }\n\n    // Everything stored under a prefix - the reason a trie exists.\n    public IEnumerable<string> WithPrefix(string prefix)\n    {\n        var start = Walk(prefix);\n        if (start == null) yield break;\n\n        var stack = new Stack<(Node node, string text)>();\n        stack.Push((start, prefix));\n\n        while (stack.Count > 0)\n        {\n            var (node, text) = stack.Pop();\n            if (node.IsWord) yield return text;\n            foreach (var (c, child) in node.Children) stack.Push((child, text + c));\n        }\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var trie = new Trie();\n        trie.Insert(\"apple\");\n\n        Console.WriteLine(trie.Search(\"apple\"));\n        Console.WriteLine(trie.Search(\"app\"));        // a prefix, not a stored word\n        Console.WriteLine(trie.StartsWith(\"app\"));\n\n        trie.Insert(\"app\");\n        Console.WriteLine(trie.Search(\"app\"));        // now it is\n\n        Console.WriteLine(trie.Search(\"apples\"));     // walks off the end\n        Console.WriteLine(trie.StartsWith(\"b\"));\n\n        trie.Insert(\"application\");\n        var found = new List<string>(trie.WithPrefix(\"app\"));\n        found.Sort();\n        Console.WriteLine(string.Join(\",\", found));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nFalse\nFalse\napp,apple,application\n```",
   "tags": [
    "trees",
    "trie",
-   "prefix-tree",
-   "design"
+   "prefix",
+   "autocomplete",
+   "csharp"
   ],
-  "id": 1629
+  "id": 1629,
+  "followups": [
+   {
+    "q": "Dictionary per node or a fixed array of 26?",
+    "a": "An `int[26]`-style array of child references is faster and avoids hashing, but every node pays for 26 slots whether or not it uses them, which is wasteful for sparse tries and impossible for a large alphabet. A dictionary costs more per lookup but only stores real children, and works for any character set including Unicode. The rule of thumb is arrays for small fixed alphabets with dense branching near the root, dictionaries otherwise. Production tries often use both, arrays near the root and dictionaries deeper where branching thins out."
+   },
+   {
+    "q": "Why use a trie rather than a HashSet, which also gives O(1) lookup?",
+    "a": "For exact-match lookup a hash set is better: simpler and usually faster. The trie earns its place the moment you need prefix queries, because a hash set cannot answer 'every word starting with app' without scanning everything. Autocomplete, IP routing tables, and word-search-on-a-grid all need exactly that. If the only operations were Insert and Search, using a trie would be over-engineering, and saying so shows judgement rather than just knowledge."
+   },
+   {
+    "q": "Suppose you must also delete words. How does that work?",
+    "a": "Walk to the end of the word and clear its IsWord flag, which is the easy half. The subtle half is pruning: a node may now be useless, but only if it has no children and is not itself the end of another word. So you unwind back up the path deleting nodes while both conditions hold, and stop at the first node that fails either. Deleting 'app' from a trie also containing 'apple' must prune nothing at all, which is the test case that catches a naive implementation."
+   },
+   {
+    "q": "Suppose the trie holds ten million words and memory is the constraint. What would you change?",
+    "a": "The per-node dictionary overhead dominates at that scale, so the usual moves are a radix tree, which compresses chains of single-child nodes into one edge holding a whole substring, or a double-array trie or DAWG, which merges identical suffixes so shared word endings are stored once. A DAWG can cut memory dramatically for natural-language dictionaries. The trade-off is that these structures are far harder to update, so they suit a build-once-query-many workload such as a shipped spell checker."
+   }
+  ]
  },
  {
   "category": "Coding",
