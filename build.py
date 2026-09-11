@@ -16,20 +16,30 @@ SINGLE = os.path.join(HERE, "questions.json")
 DATA_DIR = os.path.join(HERE, "data")
 
 def load():
+    """Reads the bank. Source of truth is data/<category>.json; questions.json
+    is the pre-split layout and is still accepted if the data dir is absent."""
     rows = []
-    if os.path.exists(SINGLE):
+    data_files = sorted(glob.glob(os.path.join(DATA_DIR, "*.json")))
+
+    if data_files:
+        for fp in data_files:
+            with open(fp, encoding="utf-8") as f:
+                rows.extend(json.load(f))
+    elif os.path.exists(SINGLE):
         with open(SINGLE, encoding="utf-8") as f:
             rows = json.load(f)
     else:
-        for fp in sorted(glob.glob(os.path.join(DATA_DIR, "*.json"))):
-            with open(fp, encoding="utf-8") as f:
-                rows.extend(json.load(f))
+        raise SystemExit("no source found: expected data/*.json or questions.json")
+
     for r in rows:
         r.setdefault("category", "General")
         r.setdefault("subcategory", "")
         r.setdefault("difficulty", "Medium")
         r.setdefault("tags", [])
         r.setdefault("followups", [])
+
+    # Ids are assigned here, not stored in the source, so adding a question
+    # never renumbers the files.
     for i, r in enumerate(rows, 1):
         r["id"] = i
     return rows

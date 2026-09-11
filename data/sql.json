@@ -1,0 +1,3908 @@
+[
+ {
+  "category": "SQL",
+  "subcategory": "Joins",
+  "difficulty": "Easy",
+  "question": "What are the different types of JOINs in SQL?",
+  "answer": "INNER JOIN returns rows matching in both tables. LEFT (OUTER) JOIN returns all left rows plus matches (NULLs where none). RIGHT JOIN is the mirror. FULL OUTER JOIN returns all rows from both, matched where possible. CROSS JOIN returns the Cartesian product. SELF JOIN joins a table to itself (e.g., employee-manager hierarchies).",
+  "tags": [
+   "joins",
+   "inner",
+   "outer"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Fundamentals",
+  "difficulty": "Easy",
+  "question": "What is the difference between WHERE and HAVING?",
+  "answer": "WHERE filters individual rows before grouping and cannot use aggregate functions. HAVING filters groups after GROUP BY and can use aggregates (e.g., HAVING COUNT(*) > 5). Logical order: FROM/JOIN → WHERE → GROUP BY → HAVING → SELECT → ORDER BY. Apply row filters in WHERE for efficiency; reserve HAVING for aggregate conditions.",
+  "tags": [
+   "where",
+   "having",
+   "group-by"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Fundamentals",
+  "difficulty": "Easy",
+  "question": "What is the difference between DELETE, TRUNCATE, and DROP?",
+  "answer": "DELETE removes rows (optionally with WHERE), is logged per row, fires triggers, and can be rolled back. TRUNCATE removes all rows quickly by deallocating pages, resets identity, is minimally logged, but can't be filtered and doesn't fire row triggers. DROP removes the entire table structure. Use TRUNCATE for fast full clears where triggers/filters aren't needed.",
+  "tags": [
+   "delete",
+   "truncate",
+   "drop"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "What is the difference between UNION and UNION ALL?",
+  "answer": "UNION combines result sets and removes duplicate rows, requiring a sort/distinct pass (slower). UNION ALL concatenates all rows including duplicates and is faster because it skips deduplication. Use UNION ALL when you know results are already distinct or duplicates are acceptable.",
+  "tags": [
+   "union",
+   "union-all",
+   "set-operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "What is the difference between a clustered and a non-clustered index?",
+  "answer": "A clustered index defines the physical order of rows and IS the table (one per table)—the leaf level holds the actual data. A non-clustered index is a separate structure whose leaf holds index keys plus a row locator (clustering key or RID) pointing to the data. Clustered is ideal for range scans and the primary access path; non-clustered supports additional lookup patterns.",
+  "tags": [
+   "clustered",
+   "nonclustered",
+   "index"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Indexing",
+  "difficulty": "Hard",
+  "question": "What is a covering index and an INCLUDE column?",
+  "answer": "A covering index contains all columns a query needs (in the key or INCLUDE list) so the engine satisfies the query from the index alone—no key/RID lookup to the base table. Key columns are used for seeking/ordering; INCLUDE columns are stored only at the leaf to 'cover' SELECTed columns without bloating the key. This eliminates expensive lookups and dramatically speeds read queries.",
+  "tags": [
+   "covering-index",
+   "include",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Indexing",
+  "difficulty": "Hard",
+  "question": "What is a key lookup (bookmark lookup) and why is it a performance concern?",
+  "answer": "A key lookup occurs when a non-clustered index seek finds matching rows but must jump to the clustered index to fetch columns not in the index. For many rows this random I/O is costly and can make the optimizer choose a full scan instead. Fix by adding the needed columns as INCLUDE columns to make the index covering.",
+  "tags": [
+   "key-lookup",
+   "index",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you read and use an execution plan to optimize a query?",
+  "answer": "Inspect the estimated/actual plan for costly operators: table/clustered index Scans (missing/unused index), Key Lookups (add INCLUDE), Hash/Sort spills (memory grant or missing index), and large row-count discrepancies between estimated and actual (stale statistics). Look at the widest arrows (most rows), high-cost nodes, and warnings. Then add/adjust indexes, rewrite predicates to be SARGable, and update statistics.",
+  "tags": [
+   "execution-plan",
+   "optimization",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What does SARGable mean and why does it matter?",
+  "answer": "SARGable (Search ARGument able) predicates let the engine use an index seek. Wrapping an indexed column in a function (WHERE YEAR(OrderDate)=2024), leading wildcards (LIKE '%x'), or implicit conversions makes predicates non-SARGable, forcing scans. Rewrite to compare the raw column (WHERE OrderDate >= '2024-01-01' AND < '2025-01-01') so the index can seek.",
+  "tags": [
+   "sargable",
+   "index-seek",
+   "optimization"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you troubleshoot a slow stored procedure?",
+  "answer": "Capture the actual execution plan and runtime stats (SET STATISTICS IO, TIME ON). Look for scans, key lookups, sort/hash spills, and estimate vs actual row skew. Check for parameter sniffing, stale statistics, missing/duplicate indexes, non-SARGable predicates, excessive row-by-row logic, and unnecessary columns. Then add indexes, update stats, rewrite set-based, and consider OPTION(RECOMPILE) or OPTIMIZE FOR when sniffing hurts.",
+  "tags": [
+   "stored-procedure",
+   "tuning",
+   "optimization"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What is parameter sniffing and how do you handle it?",
+  "answer": "SQL Server caches an execution plan based on the parameter values of the first execution ('sniffed'). If later calls have very different data distributions, the cached plan can be terrible. Mitigations: OPTION(RECOMPILE) for a fresh plan each call, OPTIMIZE FOR (value/UNKNOWN), local variables to disable sniffing, plan guides, or splitting into separate procs. Balance recompilation cost against plan quality.",
+  "tags": [
+   "parameter-sniffing",
+   "plan-cache",
+   "optimization"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "Why should you avoid SELECT * in production queries?",
+  "answer": "SELECT * returns all columns, increasing I/O and network transfer, preventing covering indexes, breaking when schema changes, and loading unneeded large columns (blobs). Always list only the columns you need to reduce data volume, enable index-only access, and keep queries stable against column additions.",
+  "tags": [
+   "select-star",
+   "optimization",
+   "best-practice"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between statistics and indexes?",
+  "answer": "Indexes are physical structures that speed data access. Statistics are metadata describing data distribution (histograms) the optimizer uses to estimate row counts and choose plans. Stale statistics cause bad estimates and poor plans even with good indexes. Keep statistics current (auto-update or manual UPDATE STATISTICS), especially after large data changes.",
+  "tags": [
+   "statistics",
+   "index",
+   "optimizer"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What is index fragmentation and how do you address it?",
+  "answer": "Fragmentation is when index pages are out of logical order or sparsely filled, increasing I/O for scans. Measure with sys.dm_db_index_physical_stats. Typical guidance: 5–30% fragmentation → REORGANIZE (online, light); >30% → REBUILD (heavier, resets fill). Also tune FILLFACTOR to reduce page splits. On modern SSD/cloud DBs, fragmentation matters less than statistics freshness.",
+  "tags": [
+   "fragmentation",
+   "rebuild",
+   "reorganize"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What are ACID properties?",
+  "answer": "Atomicity: a transaction is all-or-nothing. Consistency: it moves the database from one valid state to another, respecting constraints. Isolation: concurrent transactions don't interfere (governed by isolation levels). Durability: once committed, changes survive crashes (persisted to durable log/storage). ACID guarantees reliable transaction processing.",
+  "tags": [
+   "acid",
+   "transactions"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Hard",
+  "question": "Explain SQL isolation levels and the anomalies they prevent.",
+  "answer": "READ UNCOMMITTED allows dirty reads. READ COMMITTED (default) prevents dirty reads but allows non-repeatable reads/phantoms. REPEATABLE READ prevents non-repeatable reads but allows phantoms. SERIALIZABLE prevents all anomalies via range locks (least concurrency). SNAPSHOT uses row-versioning for consistent reads without blocking writers. Higher isolation = more consistency, less concurrency.",
+  "tags": [
+   "isolation-levels",
+   "dirty-read",
+   "phantom"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Hard",
+  "question": "What is a deadlock in SQL Server and how do you prevent it?",
+  "answer": "A deadlock happens when two transactions each hold a lock the other needs, so neither proceeds; SQL Server kills one as the victim. Prevent by accessing objects in a consistent order, keeping transactions short, using appropriate indexes to reduce lock footprint, lowering isolation where safe (SNAPSHOT/RCSI), and adding retry logic for deadlock (error 1205). Analyze via deadlock graph/Extended Events.",
+  "tags": [
+   "deadlock",
+   "locking",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What is the difference between optimistic and pessimistic concurrency?",
+  "answer": "Pessimistic concurrency locks data when read so others can't modify it until released—prevents conflicts but reduces concurrency and risks deadlocks. Optimistic concurrency doesn't lock; it checks at write time (via rowversion/timestamp) whether the row changed and fails/ retries if so. Optimistic scales better for low-contention, read-heavy workloads.",
+  "tags": [
+   "concurrency",
+   "optimistic",
+   "pessimistic"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is normalization and what are the normal forms?",
+  "answer": "Normalization organizes data to reduce redundancy and anomalies. 1NF: atomic columns, no repeating groups. 2NF: 1NF + no partial dependency on part of a composite key. 3NF: 2NF + no transitive dependency (non-key depends only on the key). BCNF is a stricter 3NF. Higher forms reduce duplication but add joins; denormalize selectively for read performance.",
+  "tags": [
+   "normalization",
+   "1nf",
+   "2nf",
+   "3nf"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When would you denormalize a database?",
+  "answer": "Denormalize to improve read performance in read-heavy or reporting/analytics scenarios by avoiding expensive joins—e.g., storing computed totals, duplicating lookup values, or maintaining summary tables. Trade-offs: data redundancy and update anomalies you must manage (triggers, application logic, or ETL). Common in data warehouses (star schema) and caching layers.",
+  "tags": [
+   "denormalization",
+   "performance",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "What is the difference between a CTE and a subquery, and what is a recursive CTE?",
+  "answer": "A CTE (WITH clause) is a named, readable temporary result set referenced once or multiple times in the following statement—improving readability over nested subqueries. A recursive CTE references itself to traverse hierarchies (org charts, bill of materials) or generate sequences, with an anchor member and a recursive member terminated by a condition. CTEs don't inherently perform better than equivalent subqueries.",
+  "tags": [
+   "cte",
+   "subquery",
+   "recursive"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Hard",
+  "question": "What are window functions and how do ROW_NUMBER, RANK, and DENSE_RANK differ?",
+  "answer": "Window functions compute across a set of rows related to the current row via OVER(PARTITION BY ... ORDER BY ...) without collapsing rows. ROW_NUMBER gives a unique sequential number. RANK leaves gaps after ties (1,1,3). DENSE_RANK has no gaps (1,1,2). They're used for paging, top-N-per-group, running totals (SUM OVER), and deduplication.",
+  "tags": [
+   "window-functions",
+   "row_number",
+   "rank"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "How do you implement pagination efficiently in SQL Server?",
+  "answer": "Use OFFSET ... FETCH NEXT n ROWS ONLY with a stable ORDER BY for simple paging, but deep offsets get slow because the engine still scans skipped rows. For large datasets use keyset (seek) pagination: WHERE (SortKey) > @lastValue ORDER BY SortKey FETCH NEXT n—it seeks directly and stays fast regardless of page depth.",
+  "tags": [
+   "pagination",
+   "offset-fetch",
+   "keyset"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between a table variable and a temp table?",
+  "answer": "Temp tables (#t) live in tempdb, support indexes/statistics, and the optimizer estimates rows accurately—better for larger intermediate sets. Table variables (@t) have no statistics (estimated as 1 row historically, improved in SQL 2019), minimal logging, and are scoped to the batch—good for small sets. Choose temp tables when the row count is large or indexing/statistics help the plan.",
+  "tags": [
+   "temp-table",
+   "table-variable",
+   "tempdb"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "Why can cursors be a performance problem and what are alternatives?",
+  "answer": "Cursors process row-by-row (RBAR), incurring per-row overhead and poor scalability versus SQL's set-based engine. Replace with set-based operations: JOINs, UPDATE...FROM, window functions, or MERGE. When iteration is truly required, use a FAST_FORWARD/READ_ONLY cursor or a WHILE loop over a keyset, and keep the working set minimal.",
+  "tags": [
+   "cursor",
+   "set-based",
+   "rbar"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "What is the difference between a stored procedure and a function in SQL Server?",
+  "answer": "A stored procedure can perform DML, use transactions, return multiple result sets/output params, and have side effects—but can't be used inline in a query. A function (scalar or table-valued) returns a value/table, can be used in SELECT/WHERE/JOIN, but can't perform side-effecting DML. Prefer inline table-valued functions over scalar/multi-statement TVFs for performance.",
+  "tags": [
+   "stored-procedure",
+   "function",
+   "tvf"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "Why are scalar user-defined functions often slow, and what is the fix?",
+  "answer": "Scalar UDFs historically executed row-by-row and inhibited parallelism, causing hidden performance cliffs when used in SELECT/WHERE. Fixes: rewrite as an inline table-valued function (APPLY), inline the logic, or upgrade to SQL Server 2019+ which can inline many scalar UDFs automatically (Scalar UDF Inlining). Check the plan to confirm the UDF isn't serializing execution.",
+  "tags": [
+   "scalar-udf",
+   "inlining",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the MERGE statement and what caution applies?",
+  "answer": "MERGE performs INSERT/UPDATE/DELETE in one statement based on matching a source to a target (upsert). It's concise but has known bug/edge-case reports and can behave unexpectedly with concurrency and triggers. Many teams prefer explicit UPDATE + INSERT with proper locking hints (or use MERGE with HOLDLOCK) for reliability. Test concurrency carefully.",
+  "tags": [
+   "merge",
+   "upsert",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "When should you NOT add an index?",
+  "answer": "Avoid over-indexing: each index slows INSERT/UPDATE/DELETE and consumes storage and maintenance. Don't index low-selectivity columns (e.g., a boolean) alone, rarely-queried columns, or small tables. Remove duplicate/overlapping and unused indexes (check sys.dm_db_index_usage_stats). Balance read speedups against write costs based on the workload.",
+  "tags": [
+   "index",
+   "write-cost",
+   "over-indexing"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Indexing",
+  "difficulty": "Hard",
+  "question": "What is a filtered index and when is it useful?",
+  "answer": "A filtered index is a non-clustered index with a WHERE predicate, covering only a subset of rows (e.g., WHERE IsActive = 1 or Status = 'Open'). It's smaller, faster to maintain, and gives better statistics for that subset—ideal when queries consistently target a small, well-defined portion of a large table, such as active records or non-null values.",
+  "tags": [
+   "filtered-index",
+   "index",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between EXISTS and IN, and which is better?",
+  "answer": "IN compares against a list/subquery result; EXISTS checks for the existence of any matching row and can short-circuit. For correlated subqueries EXISTS is often more efficient and handles NULLs correctly (NOT IN with NULLs returns no rows unexpectedly). Prefer EXISTS/NOT EXISTS for existence checks, especially when the subquery may return NULLs.",
+  "tags": [
+   "exists",
+   "in",
+   "subquery"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you handle a query that suddenly got slow in production?",
+  "answer": "Compare current vs prior execution plan (plan regression), check for stale statistics, parameter sniffing, blocking/locking (sp_whoisactive, sys.dm_exec_requests), data growth changing selectivity, and recent index/schema changes. Short-term: update statistics, force a good plan (Query Store 'force plan'), or add OPTION(RECOMPILE). Long-term: fix indexes, statistics maintenance, and query design.",
+  "tags": [
+   "troubleshooting",
+   "query-store",
+   "regression"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Tooling",
+  "difficulty": "Medium",
+  "question": "What is Query Store and how does it help performance tuning?",
+  "answer": "Query Store captures query text, execution plans, and runtime statistics over time, letting you identify regressed queries, compare plan changes, and force a known-good plan without code changes. It's essential for diagnosing plan regressions after upgrades or statistics changes. Enable it and review 'Regressed Queries' and 'Top Resource Consumers' reports.",
+  "tags": [
+   "query-store",
+   "tuning",
+   "plan-regression"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between a primary key, unique key, and foreign key?",
+  "answer": "A primary key uniquely identifies each row, is not null, and there's one per table (often clustered). A unique key/constraint enforces uniqueness but allows one NULL (SQL Server) and you can have several. A foreign key enforces referential integrity by referencing a primary/unique key in another table, preventing orphaned rows and supporting cascade actions.",
+  "tags": [
+   "primary-key",
+   "foreign-key",
+   "unique"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is referential integrity and what are cascade options?",
+  "answer": "Referential integrity ensures foreign key values always reference existing parent rows. ON DELETE/UPDATE options: NO ACTION/RESTRICT (block if children exist), CASCADE (propagate delete/update to children), SET NULL, SET DEFAULT. Use CASCADE carefully—it can delete large trees unexpectedly; often explicit application-level handling is safer.",
+  "tags": [
+   "referential-integrity",
+   "cascade",
+   "foreign-key"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Easy",
+  "question": "What is the difference between COUNT(*), COUNT(column), and COUNT(DISTINCT column)?",
+  "answer": "COUNT(*) counts all rows including NULLs. COUNT(column) counts non-NULL values in that column. COUNT(DISTINCT column) counts distinct non-NULL values. Choose based on whether NULLs and duplicates should be included—this is a frequent source of subtle reporting bugs.",
+  "tags": [
+   "count",
+   "aggregate",
+   "null"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "How do NULLs behave in comparisons and aggregates?",
+  "answer": "NULL means unknown: any comparison with NULL (= , <>) yields UNKNOWN, so use IS NULL/IS NOT NULL. NULLs are ignored by aggregates like SUM/AVG/COUNT(column) but COUNT(*) includes them. NOT IN with a NULL in the list returns no rows. Use ISNULL/COALESCE to substitute defaults, and be deliberate about NULL handling in joins and filters.",
+  "tags": [
+   "null",
+   "three-valued-logic",
+   "coalesce"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What is a hash join vs a nested loop join vs a merge join?",
+  "answer": "Nested loops: good for small outer input with an index seek on the inner—fast for selective queries. Merge join: efficient when both inputs are sorted on the join key (large, pre-sorted sets). Hash join: builds a hash table on one input; good for large unsorted inputs but needs memory (can spill to tempdb). The optimizer picks based on size/statistics; wrong choices often signal stale stats or missing indexes.",
+  "tags": [
+   "hash-join",
+   "nested-loops",
+   "merge-join"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What does SET NOCOUNT ON do in a stored procedure?",
+  "answer": "SET NOCOUNT ON stops SQL Server from sending the 'n rows affected' message after each statement, reducing network chatter and slightly improving performance—especially for procs with many statements or loops. It's a best practice at the top of stored procedures (and avoids some client-side issues with DONE_IN_PROC messages).",
+  "tags": [
+   "set-nocount",
+   "stored-procedure",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you find missing indexes and unused indexes?",
+  "answer": "Missing indexes: query sys.dm_db_missing_index_details/groups/stats (or read plan XML green hints) but validate—don't blindly apply, as they ignore write cost and duplicates. Unused/duplicate indexes: sys.dm_db_index_usage_stats (low seeks/scans, high updates) reveals candidates to drop. Always weigh read benefit vs write/storage cost and test.",
+  "tags": [
+   "missing-index",
+   "unused-index",
+   "dmv"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is a columnstore index and when do you use it?",
+  "answer": "Columnstore indexes store data column-wise with heavy compression and batch-mode execution, giving huge gains for analytical/aggregation queries over large tables (data warehouse, reporting). Clustered columnstore suits fact tables; nonclustered columnstore enables real-time analytics on OLTP tables. They're poor for point lookups/single-row OLTP—use rowstore there.",
+  "tags": [
+   "columnstore",
+   "analytics",
+   "olap"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between OLTP and OLAP database design?",
+  "answer": "OLTP (transactional) is optimized for many short read/write transactions with normalized schemas, row-store, and heavy indexing for point access. OLAP (analytical) is optimized for large aggregations/reads with denormalized star/snowflake schemas, columnstore, and pre-aggregation. Mixing them hurts both—separate concerns via ETL to a warehouse or read replicas.",
+  "tags": [
+   "oltp",
+   "olap",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you prevent SQL injection?",
+  "answer": "Always use parameterized queries/prepared statements or ORMs that parameterize—never concatenate user input into SQL. Validate/whitelist inputs, apply least-privilege DB accounts, avoid dynamic SQL where possible (and use sp_executesql with parameters when needed), and don't expose detailed DB errors. Parameterization also improves plan reuse.",
+  "tags": [
+   "sql-injection",
+   "security",
+   "parameterized"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is batching and why does it help large data operations?",
+  "answer": "Processing huge INSERT/UPDATE/DELETE in one transaction bloats the log, escalates locks, and blocks others. Batching splits the operation into chunks (e.g., 5,000 rows) in separate transactions with a WHERE/TOP loop, keeping log growth and lock duration bounded and letting the system stay responsive. Add a small delay and checkpoint between batches for large jobs.",
+  "tags": [
+   "batching",
+   "bulk-operations",
+   "locking"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What is lock escalation and how do you control it?",
+  "answer": "SQL Server escalates many row/page locks into a single table lock once thresholds (~5,000 locks) are hit, reducing memory but increasing blocking. Control it by batching large DML, using appropriate indexes to touch fewer rows, partition-level escalation (ALTER TABLE SET LOCK_ESCALATION = AUTO), or disabling table escalation on hot tables when justified. Keep transactions small.",
+  "tags": [
+   "lock-escalation",
+   "locking",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "What is the difference between CHAR, VARCHAR, and NVARCHAR?",
+  "answer": "CHAR(n) is fixed length (padded), good for consistent-length codes. VARCHAR(n) is variable length, storing only actual characters (1 byte/char, non-Unicode). NVARCHAR(n) is variable length Unicode (2 bytes/char) for multilingual data. Use NVARCHAR when you need Unicode; oversizing (NVARCHAR(MAX) everywhere) wastes memory grants and can hurt performance.",
+  "tags": [
+   "char",
+   "varchar",
+   "nvarchar",
+   "datatype"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "How does implicit conversion hurt query performance?",
+  "answer": "When a predicate compares columns/parameters of different types (e.g., NVARCHAR column vs VARCHAR parameter, or int column vs string), SQL Server implicitly converts one side. If it converts the column, the index becomes unusable (non-SARGable), forcing a scan. Fix by matching parameter/column data types exactly and checking the plan for CONVERT_IMPLICIT warnings.",
+  "tags": [
+   "implicit-conversion",
+   "sargable",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What is the difference between COMMIT, ROLLBACK, and SAVEPOINT?",
+  "answer": "COMMIT makes all changes in a transaction permanent. ROLLBACK undoes all (or, with a savepoint, part) of the changes. SAVEPOINT (SAVE TRANSACTION) marks a point you can partially roll back to without aborting the whole transaction—useful for handling recoverable sub-steps. Always wrap multi-statement changes in explicit transactions with error handling (TRY/CATCH).",
+  "tags": [
+   "commit",
+   "rollback",
+   "savepoint"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What is RCSI (Read Committed Snapshot Isolation) and its trade-offs?",
+  "answer": "RCSI changes the default READ COMMITTED to use row-versioning: readers see the last committed version instead of being blocked by writers, drastically reducing reader-writer blocking. Trade-offs: extra tempdb usage for the version store and 14 bytes per row overhead. It's often a high-impact, low-code fix for blocking, but test tempdb capacity and update-conflict behavior.",
+  "tags": [
+   "rcsi",
+   "snapshot",
+   "blocking"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is table partitioning and when is it beneficial?",
+  "answer": "Partitioning splits a large table's rows across partitions by a key (usually date) while presenting one logical table. Benefits: partition elimination speeds range queries, and partition switching enables near-instant bulk load/archival/purge. It doesn't automatically speed all queries and adds management overhead—best for very large tables with clear range access and sliding-window maintenance.",
+  "tags": [
+   "partitioning",
+   "large-tables",
+   "archival"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "What is the difference between GROUP BY and DISTINCT?",
+  "answer": "DISTINCT removes duplicate rows from a result set. GROUP BY groups rows to compute aggregates per group. If you only need unique values, DISTINCT and GROUP BY (without aggregates) often produce the same plan. Use GROUP BY when you also need aggregate calculations (SUM, COUNT) per group.",
+  "tags": [
+   "group-by",
+   "distinct",
+   "aggregate"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How would you optimize a report query joining several large tables?",
+  "answer": "Filter early and selectively (SARGable predicates), select only needed columns, ensure supporting indexes (covering/composite matching join and filter keys), consider indexed views or pre-aggregated summary tables, use columnstore for analytics, keep statistics fresh, and check the plan for scans/spills. For repeated reports, offload to a read replica or warehouse to avoid impacting OLTP.",
+  "tags": [
+   "report",
+   "optimization",
+   "joins",
+   "indexing"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is an indexed (materialized) view and its constraints?",
+  "answer": "An indexed view (SQL Server) persists a view's result with a unique clustered index, so aggregations/joins are precomputed and maintained automatically on base-table changes—great for expensive, frequently-run aggregations. Constraints: schema binding, deterministic expressions, specific SET options, and no outer joins/subqueries in many cases. It speeds reads at the cost of write overhead.",
+  "tags": [
+   "indexed-view",
+   "materialized-view",
+   "aggregation"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Joins",
+  "difficulty": "Medium",
+  "question": "What is a self join and when is it used?",
+  "answer": "A self join joins a table to itself using table aliases, treating it as two logical tables. It's used for hierarchical or comparative data within one table—e.g., employees to their managers (Employee e JOIN Employee m ON e.ManagerId = m.Id), finding pairs, or comparing rows to other rows in the same table. Choose the join type (usually INNER or LEFT) based on whether unmatched rows should appear.",
+  "tags": [
+   "sql",
+   "self-join",
+   "hierarchy"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Joins",
+  "difficulty": "Hard",
+  "question": "What is the difference between APPLY (CROSS/OUTER) and JOIN?",
+  "answer": "CROSS APPLY/OUTER APPLY invoke a table-valued function or correlated subquery per outer row—useful when the right side depends on the current outer row (top-N per group, unnesting). CROSS APPLY is like INNER JOIN (drops rows with no match); OUTER APPLY like LEFT JOIN (keeps them with NULLs). Regular JOINs can't reference outer columns in a derived table the same way, so APPLY handles row-correlated logic.",
+  "tags": [
+   "sql",
+   "apply",
+   "cross-apply",
+   "join"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you find the top N rows per group efficiently?",
+  "answer": "Use ROW_NUMBER() OVER(PARTITION BY group ORDER BY sortkey) in a CTE/subquery and filter WHERE rn <= N—clean and index-friendly with a supporting index on (group, sortkey). Alternatively CROSS APPLY with a correlated TOP N query per group. For top-1, a windowed approach or a correlated subquery both work. Ensure an index matching PARTITION/ORDER columns to avoid sorts.",
+  "tags": [
+   "sql",
+   "top-n-per-group",
+   "row_number",
+   "window"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between a correlated and a non-correlated subquery?",
+  "answer": "A non-correlated subquery runs once independently and its result is used by the outer query. A correlated subquery references columns from the outer query and conceptually runs per outer row—potentially slower. The optimizer may transform correlated subqueries into joins. For existence checks prefer EXISTS (correlated but short-circuits); rewrite slow correlated subqueries as joins/window functions when possible.",
+  "tags": [
+   "sql",
+   "correlated-subquery",
+   "subquery",
+   "optimization"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Indexing",
+  "difficulty": "Hard",
+  "question": "How does column order matter in a composite index?",
+  "answer": "A composite index is ordered by its leading column, then the next, etc. It efficiently supports queries filtering on a left-prefix of the columns (col1, or col1+col2) and ordering by them. A query filtering only on the second column can't seek—it scans. Put the most selective/most-frequently-filtered equality column first, then range/sort columns, matching your query patterns (similar to the ESR rule).",
+  "tags": [
+   "sql",
+   "composite-index",
+   "column-order",
+   "left-prefix"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What is a query hint and when should you use one?",
+  "answer": "A query hint (OPTION(...), table hints like WITH(NOLOCK), FORCESEEK, join/loop hints) overrides the optimizer's choices. Use them sparingly as a last resort when the optimizer consistently picks a bad plan and you've ruled out stats/index issues—they can hurt as data changes. Prefer fixing root causes (indexes, statistics, query rewrites, parameter sniffing mitigations) or Query Store plan forcing over hardcoded hints.",
+  "tags": [
+   "sql",
+   "query-hint",
+   "optimizer",
+   "nolock"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Hard",
+  "question": "What does WITH (NOLOCK) do and what are its dangers?",
+  "answer": "NOLOCK reads without taking shared locks (equivalent to READ UNCOMMITTED), avoiding blocking—but it allows dirty reads (uncommitted data), and can miss or double-count rows due to page moves during scans. It's not a safe performance fix. For non-blocking consistent reads, use RCSI/SNAPSHOT isolation (row-versioning) instead. Reserve NOLOCK for rough estimates on non-critical reporting where inaccuracy is acceptable.",
+  "tags": [
+   "sql",
+   "nolock",
+   "dirty-read",
+   "isolation"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "What is the difference between RANK, DENSE_RANK, and NTILE?",
+  "answer": "RANK assigns ranks with gaps after ties (1,1,3). DENSE_RANK ranks without gaps (1,1,2). NTILE(n) distributes rows into n roughly equal buckets (quartiles, percentiles). All are window functions over OVER(ORDER BY ...) with optional PARTITION BY. Use RANK/DENSE_RANK for ranking with tie handling and NTILE for bucketing data into groups.",
+  "tags": [
+   "sql",
+   "rank",
+   "dense_rank",
+   "ntile",
+   "window"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "What are LAG and LEAD window functions?",
+  "answer": "LAG(col, n) accesses a value from a previous row and LEAD(col, n) from a following row within the window's ORDER BY—without a self join. They're ideal for period-over-period comparisons (this month vs last), computing differences/deltas, and detecting changes/gaps between consecutive rows. Combine with PARTITION BY to scope per group.",
+  "tags": [
+   "sql",
+   "lag",
+   "lead",
+   "window",
+   "period-over-period"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "How do you compute a running total in SQL?",
+  "answer": "Use a window aggregate: SUM(amount) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW). The frame clause defines the running window; omitting ROWS uses RANGE which can behave unexpectedly with ties. This computes cumulative totals efficiently in one pass, far better than a correlated subquery or self join per row.",
+  "tags": [
+   "sql",
+   "running-total",
+   "window",
+   "frame"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you diagnose blocking in SQL Server?",
+  "answer": "Query sys.dm_exec_requests / sys.dm_os_waiting_tasks (or sp_whoisactive) to see the blocking session, blocked session, wait type, and the resource. Identify the lead blocker (blocking_session_id chain), inspect its query/transaction, and check for long transactions, missing indexes causing scans/lock escalation, or high isolation. Fix by shortening transactions, adding indexes, using RCSI, or correcting application transaction handling.",
+  "tags": [
+   "sql",
+   "blocking",
+   "dmv",
+   "locking",
+   "troubleshooting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is a good approach to paginate a large ordered result set?",
+  "answer": "For deep pagination use keyset (seek) pagination: WHERE (SortCol, Id) > (@lastSort, @lastId) ORDER BY SortCol, Id OFFSET 0 FETCH NEXT @n—it seeks to the last position via an index and stays O(page size) regardless of depth. OFFSET/FETCH is simpler but O(offset) because it scans skipped rows. Always order by a unique, indexed key combination for stable, fast pages.",
+  "tags": [
+   "sql",
+   "pagination",
+   "keyset",
+   "offset-fetch"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is a surrogate key vs a natural key?",
+  "answer": "A natural key is a business attribute that uniquely identifies a row (email, SSN, ISBN). A surrogate key is a system-generated, meaningless identifier (IDENTITY/sequence/GUID). Surrogates are stable (business values change), compact, and simplify joins/foreign keys, so they're commonly used as primary keys. Natural keys can still be enforced via unique constraints. Prefer surrogates for PKs, natural keys as unique business constraints.",
+  "tags": [
+   "sql",
+   "surrogate-key",
+   "natural-key",
+   "primary-key"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What are the trade-offs of using GUIDs vs integers as primary keys?",
+  "answer": "GUIDs (uniqueidentifier) are globally unique (good for distributed generation, merging, client-side IDs) but are large (16 bytes) and, if random, cause index fragmentation and page splits (poor clustered-key locality). Sequential GUIDs (NEWSEQUENTIALID) or int/bigint IDENTITY are smaller and index-friendly. Use ints/bigints for clustered PKs when possible; use GUIDs when you need decentralized, non-guessable, or pre-assigned IDs, ideally sequential.",
+  "tags": [
+   "sql",
+   "guid",
+   "identity",
+   "primary-key",
+   "fragmentation"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "What is the difference between COALESCE and ISNULL?",
+  "answer": "ISNULL(a, b) is T-SQL specific, takes exactly two arguments, and returns the type of the first argument. COALESCE(a, b, c, ...) is ANSI standard, accepts multiple arguments returning the first non-null, and determines type by precedence. COALESCE is more flexible and portable; ISNULL is slightly faster and simpler for two values. Watch data-type differences that can cause truncation with ISNULL.",
+  "tags": [
+   "sql",
+   "coalesce",
+   "isnull",
+   "null"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "When would you use a JSON column in SQL Server/PostgreSQL?",
+  "answer": "Use a JSON column for semi-structured, sparse, or variable attributes that don't warrant fixed columns (flexible metadata, settings, event payloads) while keeping relational structure for the rest. SQL Server offers JSON functions (OPENJSON, JSON_VALUE) and Postgres has jsonb with GIN indexing for efficient querying. Don't overuse it—frequently-queried/filtered fields belong in real, indexed columns for performance and integrity.",
+  "tags": [
+   "sql",
+   "json",
+   "jsonb",
+   "semi-structured"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What is a plan cache and how does parameterization affect it?",
+  "answer": "SQL Server caches compiled execution plans keyed by query text so repeated queries reuse plans (avoiding recompilation). Parameterized queries (sp_executesql/parameters) share one plan across values—good for reuse—while ad-hoc concatenated SQL creates a new plan per literal, bloating the cache (plan cache pollution) and hurting performance. Parameterize to promote reuse; be aware it can also enable parameter sniffing issues.",
+  "tags": [
+   "sql",
+   "plan-cache",
+   "parameterization",
+   "recompilation"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What does SET STATISTICS IO and TIME tell you?",
+  "answer": "SET STATISTICS IO ON reports logical reads (pages read from cache), physical reads, and scan counts per table—high logical reads indicate inefficient access (scans/lookups). SET STATISTICS TIME ON reports CPU and elapsed time. Together they quantify a query's cost so you can compare before/after tuning. Focus on reducing logical reads (better indexes, fewer rows/columns) as the primary efficiency signal.",
+  "tags": [
+   "sql",
+   "statistics-io",
+   "statistics-time",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What is a distributed transaction and why avoid it?",
+  "answer": "A distributed transaction spans multiple resources (databases/servers) coordinated via two-phase commit (MSDTC), guaranteeing all-or-nothing across them. Avoid it because it's slow, locks resources across the commit, reduces availability, and scales poorly. Prefer designs with a single transactional boundary per service and eventual consistency across services (Saga/Outbox patterns) instead of 2PC.",
+  "tags": [
+   "sql",
+   "distributed-transaction",
+   "2pc",
+   "msdtc"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is an identity column and what pitfalls exist?",
+  "answer": "An IDENTITY column auto-generates increasing integer values on insert. Pitfalls: gaps occur on rollbacks/failed inserts (values aren't reused), reseeding after deletes needs DBCC CHECKIDENT, identity values aren't guaranteed contiguous, and you can't easily insert explicit values without SET IDENTITY_INSERT ON. For distributed or gap-sensitive scenarios consider sequences (more flexible) or application-generated keys.",
+  "tags": [
+   "sql",
+   "identity",
+   "sequence",
+   "auto-increment"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between UNIQUE constraint and UNIQUE index?",
+  "answer": "Functionally similar—both enforce uniqueness and create an underlying unique index. A UNIQUE constraint is a logical/metadata declaration (can be referenced by foreign keys), while a UNIQUE INDEX is created directly and can include extra features (filtered/WHERE, INCLUDE columns, specific ordering). Use a constraint to express a business rule; use a unique index when you need index-specific options like filtering or included columns.",
+  "tags": [
+   "sql",
+   "unique-constraint",
+   "unique-index"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "What is PIVOT and UNPIVOT used for?",
+  "answer": "PIVOT rotates rows into columns—turning row values into column headers with aggregation (e.g., months as columns of sales). UNPIVOT does the reverse, turning columns into rows (normalizing wide data). They're useful for reporting/cross-tab output and reshaping data. For dynamic column sets you often build dynamic SQL, as PIVOT requires known column values.",
+  "tags": [
+   "sql",
+   "pivot",
+   "unpivot",
+   "reshape"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you optimize a query with an OR condition across different columns?",
+  "answer": "OR predicates across different indexed columns often prevent a single index seek (the optimizer may scan). Rewrite as a UNION of two seekable queries (each using its own index) when selectivity is high, or ensure covering indexes exist. Sometimes an index on each column plus an index-union plan helps. Test both forms—UNION ALL of separate SARGable queries frequently outperforms a single OR scan.",
+  "tags": [
+   "sql",
+   "or-condition",
+   "union",
+   "index-seek",
+   "optimization"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is database normalization vs denormalization trade-off in practice?",
+  "answer": "Normalize (3NF) OLTP systems to reduce redundancy, ensure integrity, and make writes consistent. Denormalize selectively for read performance—precomputed aggregates, duplicated lookup values, summary tables, or reporting/warehouse schemas—accepting redundancy you must keep in sync. The practical approach: normalize by default, then denormalize specific hot read paths with measurement, managing consistency via triggers/ETL/application logic.",
+  "tags": [
+   "sql",
+   "normalization",
+   "denormalization",
+   "trade-off"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What causes a query to use a scan instead of a seek?",
+  "answer": "Common causes: no suitable index on the filter columns, non-SARGable predicates (functions on columns, leading wildcards, implicit conversions), low selectivity (returning a large fraction of rows makes a scan cheaper), stale statistics causing bad estimates, or OR/complex predicates. Fix by adding/adjusting indexes, making predicates SARGable, updating statistics, and reducing returned rows/columns. Check the actual plan to confirm.",
+  "tags": [
+   "sql",
+   "scan",
+   "seek",
+   "sargable",
+   "index"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What is the purpose of TRY...CATCH in T-SQL?",
+  "answer": "TRY...CATCH captures runtime errors in a batch/stored procedure so you can handle them gracefully—log the error (ERROR_MESSAGE/NUMBER/LINE), roll back the transaction (checking XACT_STATE), and rethrow (THROW) or return a controlled result. Wrap transactional logic in TRY...CATCH with proper ROLLBACK on failure to maintain consistency, and use THROW (not RAISERROR) to preserve error details.",
+  "tags": [
+   "sql",
+   "try-catch",
+   "error-handling",
+   "transactions"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "Why can functions in the WHERE clause hurt performance?",
+  "answer": "Applying a function to an indexed column (WHERE UPPER(name)='X' or WHERE DATEPART(year,dt)=2024) makes the predicate non-SARGable, so the index can't seek and a scan results. Rewrite to leave the column bare: compare against computed literals/ranges (WHERE dt >= '2024-01-01' AND dt < '2025-01-01'), store a computed/persisted column, or use a case-insensitive collation instead of UPPER.",
+  "tags": [
+   "sql",
+   "function-in-where",
+   "sargable",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is a computed (persisted) column and when is it useful?",
+  "answer": "A computed column derives its value from other columns via an expression. PERSISTED stores the computed value physically (updated on write) so it can be indexed and read without recomputation. Useful for indexing expressions (e.g., a normalized/derived value used in filters), enforcing SARGability, or precomputing frequently-read derivations. Non-persisted computes on read (no storage) but can't always be indexed.",
+  "tags": [
+   "sql",
+   "computed-column",
+   "persisted",
+   "index"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you tune tempdb-related performance issues?",
+  "answer": "tempdb contention (PFS/GAM/SGAM latch waits) hurts workloads heavy on temp tables, sorts, spills, and version stores (RCSI/snapshot). Mitigations: multiple equally-sized tempdb data files (often 4–8 or one per core up to 8), enable uniform extent allocation/auto-growth settings, put tempdb on fast storage, reduce spills (better memory grants/indexes to avoid sort/hash overflow), and minimize large temp objects. Monitor tempdb waits and version-store size.",
+  "tags": [
+   "sql",
+   "tempdb",
+   "contention",
+   "spills",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between a view and a stored procedure?",
+  "answer": "A view is a saved SELECT query you use like a table—good for encapsulating/reusing query logic and simplifying access, but it can't take parameters or perform actions. A stored procedure is executable code that can take parameters, run multiple statements, do DML, use transactions, and return results—used for operations and business logic. Use views for reusable read shapes, procedures for parameterized operations and logic.",
+  "tags": [
+   "sql",
+   "view",
+   "stored-procedure"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between a seek predicate and a residual predicate?",
+  "answer": "A seek predicate is used by the index to navigate directly to matching rows (efficient—uses the B-tree). A residual predicate is applied after the seek/scan to filter the rows already retrieved (extra CPU, not narrowing the index navigation). Ideally, the most selective conditions are seek predicates. If a key filter shows as residual, the index/column order may not support seeking on it—adjust the index to make it a seek.",
+  "tags": [
+   "sql",
+   "seek-predicate",
+   "residual-predicate",
+   "index"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you handle a query with wildcards efficiently (LIKE)?",
+  "answer": "LIKE 'abc%' (trailing wildcard) is SARGable and can use an index seek on the range. LIKE '%abc' or '%abc%' (leading wildcard) can't seek—it scans. For leading-wildcard/substring search, use full-text search, a trigram index (Postgres pg_trgm), a computed reversed column for suffix matches, or a dedicated search engine. Design search features around index-friendly patterns rather than forcing scans on large tables.",
+  "tags": [
+   "sql",
+   "like",
+   "wildcard",
+   "sargable",
+   "full-text"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is a bridge/junction table for many-to-many?",
+  "answer": "A many-to-many relationship is modeled with a junction (bridge) table holding foreign keys to both entities (e.g., StudentCourse with StudentId + CourseId), often with a composite primary key and possibly extra columns (enrollment date). It decomposes M:N into two 1:N relationships the relational model can enforce. Index the foreign keys for efficient joins in both directions. It's the standard pattern for M:N in relational schemas.",
+  "tags": [
+   "sql",
+   "junction-table",
+   "many-to-many",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Hard",
+  "question": "What is a phantom read and which isolation level prevents it?",
+  "answer": "A phantom read occurs when a transaction re-runs a range query and sees new rows that another transaction inserted and committed in between—the set of rows 'changes'. REPEATABLE READ prevents dirty and non-repeatable reads but not phantoms; SERIALIZABLE prevents phantoms (via range locks or serialization) at the cost of concurrency. SNAPSHOT isolation also avoids phantoms via row-versioning. Choose based on the consistency your workload needs.",
+  "tags": [
+   "sql",
+   "phantom-read",
+   "isolation",
+   "serializable"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is a deadlock priority and how do you handle deadlocks in code?",
+  "answer": "SQL Server picks a deadlock victim (lowest DEADLOCK_PRIORITY, or cheapest to roll back) and aborts it with error 1205. Handle it in application code by catching the deadlock error and retrying the transaction with a short backoff (deadlocks are often transient). Reduce their frequency by consistent object access order, short transactions, proper indexing, and lower isolation (RCSI). Set DEADLOCK_PRIORITY to influence which transaction is chosen as victim.",
+  "tags": [
+   "sql",
+   "deadlock",
+   "priority",
+   "retry",
+   "1205"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is a check constraint and a default constraint?",
+  "answer": "A CHECK constraint enforces a boolean condition on column values (CHECK (Price >= 0), CHECK (Status IN ('A','B'))), rejecting invalid data at the database level. A DEFAULT constraint supplies a value when none is provided on insert (DEFAULT GETUTCDATE()). Both enforce data integrity in the schema itself (not just application code), ensuring consistency regardless of the data source. Use them to encode invariants close to the data.",
+  "tags": [
+   "sql",
+   "check-constraint",
+   "default-constraint",
+   "integrity"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you decide between adding an index and rewriting a query?",
+  "answer": "First understand the plan: if a good index is missing and the query is well-written, add/adjust the index. If the query has non-SARGable predicates, unnecessary columns, functions on columns, or bad join logic, rewrite it (indexes won't help non-SARGable code). Often both: rewrite for SARGability, then index to support it. Weigh index write/storage cost against read benefit. Measure before and after with the execution plan and statistics.",
+  "tags": [
+   "sql",
+   "index",
+   "query-rewrite",
+   "optimization",
+   "sargable"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What is the difference between pessimistic and optimistic locking in SQL?",
+  "answer": "Pessimistic locking acquires locks when reading data (e.g., SELECT ... WITH (UPDLOCK)) so others can't modify it until you commit—prevents conflicts but reduces concurrency and risks blocking/deadlocks. Optimistic locking doesn't lock; it checks at update time whether the row changed (via a rowversion/timestamp) and fails if so, letting the app retry. Optimistic scales better for low-contention, read-heavy workloads; pessimistic suits high-contention critical updates.",
+  "tags": [
+   "sql",
+   "pessimistic-locking",
+   "optimistic-locking",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between logical and physical reads?",
+  "answer": "Logical reads are pages read from the buffer cache (memory)—the primary cost metric for query efficiency (fewer is better). Physical reads are pages read from disk into cache (occur on cache misses, e.g., cold cache). Tuning focuses on reducing logical reads (better indexes, fewer rows/columns, avoiding scans), since physical reads depend on caching and warm up over time. High logical reads indicate an inefficient access pattern.",
+  "tags": [
+   "sql",
+   "logical-reads",
+   "physical-reads",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is a covering index vs a filtered index vs a unique index?",
+  "answer": "A covering index includes all columns a query needs (key + INCLUDE) so it's served from the index alone (no lookup). A filtered index indexes only a subset of rows via a WHERE clause (smaller, for queries targeting that subset). A unique index enforces uniqueness while also speeding lookups. They address different goals: covering for read performance, filtered for selective subsets, unique for integrity + lookup. You can combine features (a filtered covering index).",
+  "tags": [
+   "sql",
+   "covering-index",
+   "filtered-index",
+   "unique-index"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What is a spool operator in an execution plan?",
+  "answer": "A spool operator temporarily stores intermediate results (in tempdb) to reuse them—table spools/index spools/eager spools. It can indicate the optimizer is caching rows to avoid recomputation, but eager spools (often with Halloween protection on updates) can signal performance issues or missing indexes. Investigate unexpected spools: they may point to a suboptimal plan you can improve with better indexing or query rewriting to avoid the tempdb round-trip.",
+  "tags": [
+   "sql",
+   "spool",
+   "execution-plan",
+   "tempdb"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What is the difference between an explicit, implicit, and autocommit transaction?",
+  "answer": "Autocommit (default): each statement is its own transaction, committed automatically. Explicit: you delimit with BEGIN TRANSACTION ... COMMIT/ROLLBACK, grouping multiple statements atomically. Implicit transactions (SET IMPLICIT_TRANSACTIONS ON): a transaction starts automatically after certain statements and stays open until you explicitly commit/rollback (error-prone, can hold locks). Use explicit transactions for multi-statement units of work; avoid leaving implicit transactions open.",
+  "tags": [
+   "sql",
+   "transaction",
+   "explicit",
+   "implicit",
+   "autocommit"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is soft delete and its trade-offs?",
+  "answer": "Soft delete marks rows as deleted (IsDeleted flag/DeletedAt timestamp) instead of physically removing them—preserving history, enabling recovery/audit, and maintaining referential integrity. Trade-offs: queries must filter out deleted rows everywhere (use global query filters in EF Core), indexes/uniqueness must account for the flag, and data grows (needs archival). Use it when you need recoverability/audit; hard delete for truly transient data or compliance-driven removal (right to be forgotten).",
+  "tags": [
+   "sql",
+   "soft-delete",
+   "audit",
+   "query-filter"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between a nonclustered index scan and seek?",
+  "answer": "An index seek uses the B-tree to navigate directly to the qualifying rows/range—efficient for selective queries. An index scan reads the entire (or a large part of the) index leaf level—used when the query is non-selective, the predicate is non-SARGable, or no suitable seek path exists. Seeks are generally preferred for selective lookups; a scan on a large index for a selective query signals a tuning opportunity (index/predicate fix).",
+  "tags": [
+   "sql",
+   "index-scan",
+   "index-seek",
+   "optimization"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you enforce data integrity in a relational database?",
+  "answer": "Use constraints: PRIMARY KEY (unique identity, not null), FOREIGN KEY (referential integrity), UNIQUE (business uniqueness), CHECK (value rules), NOT NULL (required), and DEFAULT (defaults). Add triggers for complex cross-row rules and transactions for multi-statement atomicity. Enforcing integrity in the database (not just the app) guarantees consistency regardless of the data source and catches bugs early. Prefer declarative constraints over triggers where possible.",
+  "tags": [
+   "sql",
+   "data-integrity",
+   "constraints",
+   "foreign-key"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "What is a key/RID lookup and how do you eliminate it?",
+  "answer": "After a non-clustered index seek finds matching rows, a key lookup (clustered table) or RID lookup (heap) fetches columns not in the index—random I/O that's costly for many rows and can push the optimizer to a full scan. Eliminate it by making the index covering: add the needed SELECT columns as INCLUDE columns so the query is satisfied entirely from the index. Check the plan for the lookup operator to identify the opportunity.",
+  "tags": [
+   "sql",
+   "key-lookup",
+   "rid-lookup",
+   "covering-index"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between OFFSET-FETCH and TOP?",
+  "answer": "TOP (n) limits the result to the first n rows (optionally WITH TIES), simple for 'top N' queries but not for skipping rows. OFFSET n ROWS FETCH NEXT m ROWS ONLY skips n rows and returns the next m—used for pagination, requiring an ORDER BY. TOP is for limiting; OFFSET-FETCH for paging. Deep OFFSET is slow (scans skipped rows)—use keyset pagination for large datasets instead.",
+  "tags": [
+   "sql",
+   "top",
+   "offset-fetch",
+   "pagination"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is a temporal table in SQL Server?",
+  "answer": "A system-versioned temporal table automatically keeps a full history of row changes in a linked history table, with period columns (ValidFrom/ValidTo). You query point-in-time or over-time data with FOR SYSTEM_TIME clauses (AS OF, BETWEEN)—useful for auditing, tracking changes, and recovering prior states without manual history logic. SQL Server manages the history transparently on every update/delete. Use it for compliance/audit and time-travel queries.",
+  "tags": [
+   "sql",
+   "temporal-table",
+   "system-versioned",
+   "audit",
+   "history"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Hard",
+  "question": "What is snapshot isolation and how does it differ from RCSI?",
+  "answer": "Both use row-versioning (version store in tempdb) to avoid reader-writer blocking. RCSI (Read Committed Snapshot) changes the default READ COMMITTED so each statement sees the latest committed data at statement start—statement-level consistency. SNAPSHOT isolation gives transaction-level consistency: all reads in the transaction see the data as of the transaction's start, and it detects update conflicts (throwing on conflicting writes). Use RCSI to reduce blocking transparently; SNAPSHOT when you need a consistent view across a whole transaction.",
+  "tags": [
+   "sql",
+   "snapshot-isolation",
+   "rcsi",
+   "row-versioning",
+   "blocking"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "How do you optimize a COUNT query on a large table?",
+  "answer": "COUNT(*) with no filter can use a small nonclustered index (fewest pages) or metadata—avoid scanning the clustered index. For filtered counts, ensure an index supports the WHERE (and ideally covers it). For approximate counts on huge tables, use sys.dm_db_partition_stats/sys.partitions row counts (fast, approximate). Avoid COUNT(column) unless you specifically need non-null counts. Materialized/indexed views can precompute expensive aggregate counts if queried frequently.",
+  "tags": [
+   "sql",
+   "count",
+   "optimization",
+   "index"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between a natural and composite key?",
+  "answer": "A natural key is a meaningful business attribute (email, ISBN) used as a key. A composite key is a key made of two or more columns together (OrderId + LineNumber, or in a junction table StudentId + CourseId). A composite key can be natural or surrogate-based. Use composite keys when uniqueness requires multiple columns (especially junction tables); consider a surrogate key if the composite is large/unwieldy or referenced by many foreign keys.",
+  "tags": [
+   "sql",
+   "natural-key",
+   "composite-key",
+   "primary-key"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you tune a query returning too many rows to the client?",
+  "answer": "First question whether the client needs them all—add filtering/pagination (keyset) to return only needed rows, project only needed columns (avoid SELECT *), and aggregate/summarize server-side rather than in the client. Large result sets cost network, memory, and client processing. If a report genuinely needs bulk data, stream it, page it, or precompute/materialize summaries. Often the fix is reducing what's returned, not just indexing.",
+  "tags": [
+   "sql",
+   "large-result",
+   "pagination",
+   "projection",
+   "optimization"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is a lookup/reference table and why use one?",
+  "answer": "A lookup (reference) table stores a fixed set of valid values (statuses, categories, countries) referenced by foreign keys from other tables, instead of storing free-text or magic strings. Benefits: data integrity (only valid values via FK), consistency, easy updates (change the label in one place), and efficient joins/filtering. It normalizes categorical data. Trade-off: extra join for the label (mitigated by caching/denormalizing the display value where reads dominate).",
+  "tags": [
+   "sql",
+   "lookup-table",
+   "reference-table",
+   "normalization"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "When should you use a stored procedure vs an ORM-generated query?",
+  "answer": "ORMs (EF Core) are productive for typical CRUD and dynamic queries, with maintainability and type safety. Stored procedures shine for complex set-based logic, heavy data processing kept close to the data, fine-grained performance tuning, batch operations, and when DBAs manage query plans/security. Trade-offs: procs add a separate artifact to version and can scatter logic. Use the ORM for most access; procedures for performance-critical, complex, or data-intensive operations where SQL control matters.",
+  "tags": [
+   "sql",
+   "stored-procedure",
+   "orm",
+   "ef-core"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is an ENUM alternative in SQL Server?",
+  "answer": "SQL Server has no native ENUM type. Alternatives: a CHECK constraint limiting a column to allowed string/int values (simple, but changing options edits the constraint), or a lookup/reference table with a foreign key (flexible, queryable, supports adding values and storing metadata/labels—preferred for evolving sets). Use a CHECK for tiny fixed sets; a lookup table for sets that grow or need descriptions. Map to a C# enum in the application layer.",
+  "tags": [
+   "sql",
+   "enum",
+   "check-constraint",
+   "lookup-table"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "How do you handle a query that performs well in test but poorly in production?",
+  "answer": "Differences are usually data volume/distribution, statistics, and parameter values. Compare execution plans (test vs prod), check for parameter sniffing (a plan optimized for atypical values), stale/missing statistics, data skew, different indexes, and concurrency/blocking under load. Reproduce with production-like data volumes. Fixes: update statistics, address sniffing (OPTION RECOMPILE/OPTIMIZE FOR), add/adjust indexes for real data distribution, and test with representative data sizes.",
+  "tags": [
+   "sql",
+   "performance",
+   "parameter-sniffing",
+   "statistics",
+   "production"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between a heap and a clustered table?",
+  "answer": "A heap is a table with no clustered index—rows are stored unordered, and nonclustered indexes use a RID (row identifier) to locate rows. A clustered table has a clustered index defining physical row order (the leaf is the data). Heaps can be fast for bulk inserts but suffer on lookups/range scans and can have forwarded records/fragmentation. Most OLTP tables should have a clustered index (often the primary key) for efficient seeks/range queries.",
+  "tags": [
+   "sql",
+   "heap",
+   "clustered-index",
+   "storage"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "How do statistics affect the query optimizer?",
+  "answer": "The optimizer uses statistics (histograms of data distribution and density) to estimate how many rows each operation will produce, choosing join types, index usage, and memory grants accordingly. Stale or missing statistics cause bad estimates → poor plans (wrong join type, insufficient memory causing spills, unnecessary scans). Keep statistics updated (auto-update, or manual after large data changes), and watch for large estimated-vs-actual row discrepancies in plans as a signal of stats problems.",
+  "tags": [
+   "sql",
+   "statistics",
+   "optimizer",
+   "estimates",
+   "plan"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between UNION and a full outer join for combining data?",
+  "answer": "UNION/UNION ALL stacks rows from two result sets vertically (same columns), combining rows. A FULL OUTER JOIN combines two tables horizontally by matching a key, returning matched rows plus unmatched from both sides (with NULLs). Use UNION to append similar rows from different sources; use FULL OUTER JOIN to merge related tables side-by-side keeping non-matching rows. They solve different combination needs—row concatenation vs key-based merging.",
+  "tags": [
+   "sql",
+   "union",
+   "full-outer-join",
+   "combine"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is a wide table vs a narrow table and the trade-offs?",
+  "answer": "A wide table has many columns (denormalized, many attributes per row)—fewer joins for reads but larger rows, more I/O per row, and potential sparse/null columns. A narrow table has fewer columns (normalized)—smaller rows, efficient for targeted access, but may require joins to assemble full data. Balance based on access patterns: wide for read-heavy, join-averse scenarios (with covering indexes); narrow for normalized integrity and when queries touch subsets of columns.",
+  "tags": [
+   "sql",
+   "wide-table",
+   "narrow-table",
+   "normalization",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the impact of implicit type conversion in a JOIN?",
+  "answer": "If two joined columns have different types (e.g., VARCHAR vs NVARCHAR, or int vs string), SQL Server implicitly converts one side, which can make the join non-SARGable and prevent index usage—forcing scans and hurting performance (visible as CONVERT_IMPLICIT in the plan). Ensure joined/compared columns have matching data types (fix the schema or cast the constant, not the column). Consistent types across foreign keys and comparisons keep joins index-efficient.",
+  "tags": [
+   "sql",
+   "implicit-conversion",
+   "join",
+   "sargable",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When would you use a NoSQL store alongside SQL Server?",
+  "answer": "Use NoSQL alongside SQL (polyglot persistence) when parts of the workload fit it better: a document store for flexible/nested content or catalogs, Redis for caching/sessions/leaderboards, a search engine for full-text search, or a time-series/wide-column store for high-volume telemetry. Keep transactional, relational data in SQL (system of record) and offload specific access patterns to the right NoSQL store, syncing via events/CDC. Adopt deliberately—each store adds operational complexity.",
+  "tags": [
+   "sql",
+   "nosql",
+   "polyglot-persistence",
+   "architecture"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between a hash match aggregate and a stream aggregate?",
+  "answer": "A stream aggregate computes aggregates over sorted input (groups arrive together)—efficient and low-memory, used when data is already ordered by the GROUP BY columns (e.g., via an index). A hash match aggregate builds a hash table to group unsorted input—works without ordering but uses memory (can spill to tempdb). If you see hash aggregates on large data, an index supporting the GROUP BY order can enable a cheaper stream aggregate. The optimizer picks based on input order and cardinality.",
+  "tags": [
+   "sql",
+   "stream-aggregate",
+   "hash-aggregate",
+   "group-by",
+   "optimization"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is an audit table and how do you implement one?",
+  "answer": "An audit table records changes to data (who changed what, when, old/new values) for compliance, debugging, and history. Implement via triggers (capture INSERT/UPDATE/DELETE into an audit table), application-level logging, temporal tables (system-versioned history automatically), or change data capture (CDC). Temporal tables are the cleanest built-in option in SQL Server. Include change type, timestamp, user, and before/after values. Choose based on performance, granularity, and whether you need query-able history.",
+  "tags": [
+   "sql",
+   "audit-table",
+   "temporal-table",
+   "cdc",
+   "triggers"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Medium",
+  "question": "What is the difference between an index rebuild and reorganize?",
+  "answer": "REORGANIZE defragments the index leaf level in place—online, lightweight, uses minimal resources, and doesn't update statistics (good for 5–30% fragmentation). REBUILD recreates the index entirely—more resource-intensive, can be online (Enterprise) or offline, resets fragmentation fully, and updates statistics with a full scan (good for >30% fragmentation). Choose reorganize for light fragmentation and rebuild for heavy fragmentation or when you also want fresh full statistics.",
+  "tags": [
+   "sql",
+   "rebuild",
+   "reorganize",
+   "fragmentation",
+   "index"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "What does it mean for a predicate to be sargable?",
+  "answer": "A sargable predicate can use an index seek because the indexed column appears alone on one side - WHERE created_at >= @from. Wrapping the column in a function, applying arithmetic to it, or leading a LIKE with a wildcard forces a scan. Rewriting to a range comparison on the raw column is usually the fix, sometimes with a computed persisted column.",
+  "tags": [
+   "sql",
+   "sargable",
+   "indexing",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "Why can adding an index make a system slower?",
+  "answer": "Every index must be maintained on insert, update and delete, and consumes memory in the buffer pool and space in backups. Too many overlapping indexes slow writes and give the optimiser more plans to consider. Duplicate and unused indexes are pure cost, which is why index tuning includes dropping as well as adding.",
+  "tags": [
+   "sql",
+   "indexing",
+   "write-performance",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Indexing",
+  "difficulty": "Hard",
+  "question": "What is index fragmentation and does it still matter?",
+  "answer": "Logical fragmentation means page order does not match key order, which historically hurt read-ahead on spinning disks. On SSDs and in cloud databases the effect is much smaller, and aggressive rebuilds cost IO, log and time. Modern practice is to care about page density and statistics freshness more than fragmentation percentage, and to rebuild selectively.",
+  "tags": [
+   "sql",
+   "fragmentation",
+   "maintenance",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Hard",
+  "question": "What is parameter sniffing and how do you deal with it?",
+  "answer": "The engine compiles a plan for the parameter values of the first execution and reuses it, which is optimal for typical values and terrible for outliers - a plan tuned for one row used for a million. Remedies are OPTIMIZE FOR, RECOMPILE on the problem statement, splitting the procedure by cardinality, or letting the platform force a known good plan.",
+  "tags": [
+   "sql",
+   "parameter-sniffing",
+   "plans",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What are statistics and why do stale statistics cause bad plans?",
+  "answer": "Statistics describe data distribution and drive cardinality estimates. When they are stale - after a bulk load, or on a rapidly growing table where the auto-update threshold has not been reached - the optimiser estimates too few rows and picks nested loops and lookups that collapse at real volumes. Updating statistics is often a faster fix than adding an index.",
+  "tags": [
+   "sql",
+   "statistics",
+   "optimizer",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Hard",
+  "question": "What is an implicit conversion and why does it kill index usage?",
+  "answer": "Comparing columns of different types makes the engine convert one side; if it converts the column, the predicate stops being sargable and the index cannot be sought. The classic case is an nvarchar parameter against a varchar column, or a string parameter against an integer key. Plans flag it as a warning, and the fix is matching parameter types to column types.",
+  "tags": [
+   "sql",
+   "conversion",
+   "indexing",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "Why is SELECT * a problem beyond style?",
+  "answer": "It defeats covering indexes by demanding columns the index does not have, transfers data nobody uses, breaks when a column is added or reordered, and prevents the optimiser from using narrower structures. In a view or subquery it also propagates outward. Naming columns is what allows an index to answer the query without touching the table.",
+  "tags": [
+   "sql",
+   "query-design",
+   "performance",
+   "practices"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you rewrite a correlated subquery that runs per row?",
+  "answer": "Convert it to a join or an APPLY, or to a window function when the inner query aggregates over a related set. Correlated subqueries are not always slow - the optimiser often unnests them - but when the plan shows the inner operator executing once per outer row, a set-based rewrite with a single pass is the fix.",
+  "tags": [
+   "sql",
+   "subquery",
+   "rewriting",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What are window functions and when do they replace self-joins?",
+  "answer": "Window functions compute over a partition of rows while keeping row detail - ROW_NUMBER for deduplication and paging, LAG and LEAD for comparing to neighbours, running totals with SUM OVER. They replace self-joins and correlated subqueries that reprocess the same table, usually with one pass instead of several.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "query-design",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you delete millions of rows without blocking the database?",
+  "answer": "Delete in bounded batches inside their own transactions with a short pause between, driven by an indexed predicate so each batch is a seek. That keeps the log from exploding, avoids lock escalation to a table lock, and lets other work interleave. For very large purges, partition switching or copying survivors into a new table is faster still.",
+  "tags": [
+   "sql",
+   "bulk-delete",
+   "locking",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What are the four ACID properties and what does each actually guarantee?",
+  "answer": "Atomicity means all or nothing. Consistency means constraints hold before and after. Isolation means concurrent transactions do not see each other's intermediate state, to the degree the isolation level promises. Durability means committed data survives a crash. Isolation is the one with levels and trade-offs, and where most real bugs live.",
+  "tags": [
+   "sql",
+   "acid",
+   "transactions",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Hard",
+  "question": "What is the difference between snapshot isolation and read committed snapshot?",
+  "answer": "Read committed snapshot makes each statement see a consistent snapshot as of statement start, removing reader-writer blocking with minimal application change. Snapshot isolation gives the whole transaction one snapshot from its start and detects update conflicts, throwing on conflict. Both use row versions in tempdb, which is the cost people forget to plan for.",
+  "tags": [
+   "sql",
+   "isolation",
+   "mvcc",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What is a deadlock in a database and how do you resolve one?",
+  "answer": "Two transactions each hold a lock the other needs, so the engine kills one as the deadlock victim. Diagnose with the deadlock graph in extended events, which names the resources and statements. Fixes are consistent access order across transactions, shorter transactions, appropriate indexes so fewer rows are locked, and lower isolation where correctness allows.",
+  "tags": [
+   "sql",
+   "deadlock",
+   "concurrency",
+   "troubleshooting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What is lock escalation and why does it hurt?",
+  "answer": "When a statement acquires too many row or page locks, the engine escalates to a table lock to save memory, blocking everyone else. It is why a large update that seemed row-scoped freezes the table. Avoid it by batching modifications, using an index so fewer rows qualify, or partitioning so escalation stops at the partition.",
+  "tags": [
+   "sql",
+   "locking",
+   "escalation",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "What is a blocking chain and how do you find the head of it?",
+  "answer": "One transaction holds a lock and others queue behind it, each blocking more, so the symptom appears everywhere while the cause is one session. Query the blocking session id from the requests DMV and follow it back to the session with no blocker - that is the head. Common heads are an open transaction awaiting user input or a long-running batch update.",
+  "tags": [
+   "sql",
+   "blocking",
+   "troubleshooting",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What are the normal forms and when should you denormalise?",
+  "answer": "First normal form removes repeating groups, second removes partial dependencies on a composite key, third removes transitive dependencies. Normalise by default because it prevents update anomalies. Denormalise deliberately for read performance when a join is proven expensive, and then accept that you own keeping the duplicate data consistent.",
+  "tags": [
+   "sql",
+   "normalisation",
+   "design",
+   "modelling"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Why can a random GUID primary key hurt write performance?",
+  "answer": "A clustered index on a random GUID inserts into random pages, causing page splits, fragmentation and a much larger buffer pool footprint - and the wide key is copied into every non-clustered index. Sequential GUIDs or an identity clustering key with the GUID as a unique non-clustered index avoid the splits while keeping a globally unique identifier.",
+  "tags": [
+   "sql",
+   "guid",
+   "indexing",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When should you use a composite primary key?",
+  "answer": "When the row is genuinely identified by the combination - a junction table of order and product, or a time series of device and timestamp - and no separate identity adds value. The trade-off is that every foreign key referencing it carries all columns, and ORMs handle composite keys less gracefully, which is why many teams add a surrogate anyway.",
+  "tags": [
+   "sql",
+   "keys",
+   "design",
+   "modelling"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you model soft deletes without wrecking your indexes and constraints?",
+  "answer": "Add the flag, then make unique constraints filtered so deleted rows do not block reuse of a value, index the flag alongside common filters, and apply it consistently through views or a query filter so nobody forgets. Consider whether an archive table is better: it keeps the hot table small and removes the flag from every query.",
+  "tags": [
+   "sql",
+   "soft-delete",
+   "design",
+   "indexing"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is table partitioning and what does it actually help with?",
+  "answer": "Partitioning splits a table by a key - usually date - into units that can be switched in and out instantly, which makes archiving and purging cheap and lets maintenance run per partition. It helps queries only when they filter on the partition key so the engine can eliminate partitions. It is not a general performance feature and adds real management overhead.",
+  "tags": [
+   "sql",
+   "partitioning",
+   "maintenance",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the EAV pattern and why is it usually a mistake?",
+  "answer": "Entity-attribute-value stores each field as a row, which sounds flexible but destroys typing, constraints and query performance - every logical row needs a join or pivot per attribute. It is justified only for genuinely open-ended, sparse user-defined attributes, and even then a JSON column with indexes on the queried paths is usually better in a modern engine.",
+  "tags": [
+   "sql",
+   "eav",
+   "anti-pattern",
+   "modelling"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When should you store JSON in a relational database?",
+  "answer": "For genuinely schemaless or rarely queried attachments - external payloads, audit snapshots, sparse per-tenant settings - where the alternative is dozens of nullable columns. Index the specific paths you filter on. It is the wrong choice for data you frequently join, aggregate or constrain, because you lose foreign keys, types and the optimiser's statistics.",
+  "tags": [
+   "sql",
+   "json",
+   "modelling",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Stored Procedures",
+  "difficulty": "Medium",
+  "question": "What are the arguments for and against stored procedures today?",
+  "answer": "For: a stable interface over the schema, set-based work executed next to the data, plan reuse, and permissions granted on procedures rather than tables. Against: logic split across two repositories, weaker testing and refactoring tooling, harder version control, and vendor lock-in. Many teams keep procedures for heavy set-based operations and use the ORM elsewhere.",
+  "tags": [
+   "sql",
+   "stored-procedures",
+   "architecture",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Stored Procedures",
+  "difficulty": "Hard",
+  "question": "How do you handle errors and transactions inside a stored procedure correctly?",
+  "answer": "Use TRY/CATCH with XACT_ABORT ON, check XACT_STATE in the catch block, and only roll back a transaction this procedure started - rolling back one begun by the caller aborts work it still owns. Re-raise with THROW so the error reaches the application rather than being swallowed, and avoid returning success codes nobody checks.",
+  "tags": [
+   "sql",
+   "error-handling",
+   "transactions",
+   "stored-procedures"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Stored Procedures",
+  "difficulty": "Medium",
+  "question": "What is a common table expression and when is it not the right tool?",
+  "answer": "A CTE names a subquery for readability and enables recursion for hierarchies. It is not a temp table - it is inlined and may be evaluated multiple times, so a CTE referenced repeatedly can re-execute expensive work. When that happens, materialise into a temp table instead of relying on the CTE as a cache.",
+  "tags": [
+   "sql",
+   "cte",
+   "query-design",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Stored Procedures",
+  "difficulty": "Medium",
+  "question": "How does a recursive CTE work and what is its main risk?",
+  "answer": "An anchor member seeds the result and a recursive member joins back to the CTE until it returns nothing. It is the standard way to walk hierarchies and generate sequences. The risk is cyclic data producing infinite recursion - bounded by MAXRECURSION, which raises an error rather than returning partial results - so cycle detection belongs in the query.",
+  "tags": [
+   "sql",
+   "cte",
+   "recursion",
+   "hierarchies"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Stored Procedures",
+  "difficulty": "Medium",
+  "question": "What is the MERGE statement and why do people avoid it?",
+  "answer": "MERGE performs insert, update and delete in one statement against a source. It is convenient but has a long history of bugs and concurrency hazards - it does not serialise as people expect, so concurrent merges can produce primary key violations without a HOLDLOCK hint. Many teams prefer explicit update-then-insert with clear locking.",
+  "tags": [
+   "sql",
+   "merge",
+   "upsert",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Stored Procedures",
+  "difficulty": "Medium",
+  "question": "How do you write a safe upsert under concurrency?",
+  "answer": "Either use MERGE with HOLDLOCK on the target so the existence check and the write are serialised, or attempt the update, check the affected row count, insert if zero, and handle the duplicate key error as a retryable path. Doing a plain SELECT then INSERT without either is a race that fails only under load.",
+  "tags": [
+   "sql",
+   "upsert",
+   "concurrency",
+   "reliability"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is the difference between a full, differential, and log backup?",
+  "answer": "A full backup copies everything. A differential copies changes since the last full, so restore is full plus latest differential. A log backup captures transactions since the previous log backup and enables point-in-time recovery, but only in full recovery model - and unbacked-up logs are why the log file grows until the disk fills.",
+  "tags": [
+   "sql",
+   "backup",
+   "recovery",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What does the recovery model change?",
+  "answer": "Simple truncates the log at each checkpoint - no log backups, no point-in-time recovery, smallest maintenance burden. Full keeps every transaction until a log backup, enabling point-in-time restore at the cost of managing those backups. Bulk-logged is full with minimally logged bulk operations, which speeds large loads but breaks point-in-time recovery across them.",
+  "tags": [
+   "sql",
+   "recovery-model",
+   "backup",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "Why does the transaction log grow uncontrollably and how do you fix it?",
+  "answer": "In full recovery model the log cannot truncate until backed up, so missing log backups grow it forever. Other causes are a long-running open transaction, replication or CDC not catching up, and an unresolved availability group. Fix the cause first - shrinking the file without addressing it just repeats the cycle and fragments the log.",
+  "tags": [
+   "sql",
+   "transaction-log",
+   "operations",
+   "troubleshooting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is tempdb contention and how do you reduce it?",
+  "answer": "Heavy temp table and sort usage contends on allocation pages, showing as PAGELATCH waits on tempdb. Reduce it with multiple equally sized data files, avoiding needless temp objects, reducing sort and hash spills by fixing cardinality estimates, and keeping transactions short. In cloud databases the file configuration is managed, so query-side fixes matter more.",
+  "tags": [
+   "sql",
+   "tempdb",
+   "contention",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What are wait statistics and how do you use them?",
+  "answer": "Wait stats show what the engine spent time waiting on - PAGEIOLATCH for reads from disk, LCK for blocking, CXPACKET for parallelism, WRITELOG for log flush, RESOURCE_SEMAPHORE for memory grants. They point at the bottleneck class before you look at individual queries, which stops the common mistake of tuning a query that was never the constraint.",
+  "tags": [
+   "sql",
+   "wait-stats",
+   "performance",
+   "diagnostics"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is the difference between EXISTS and IN for a subquery?",
+  "answer": "EXISTS stops at the first match and handles NULLs naturally. IN materialises the list, and NOT IN silently returns no rows when the subquery yields a NULL, because the comparison becomes unknown. Optimisers often produce the same plan for EXISTS and IN, but NOT EXISTS is safer than NOT IN and usually faster on nullable columns.",
+  "tags": [
+   "sql",
+   "exists",
+   "subquery",
+   "nulls"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you write an efficient top-N-per-group query?",
+  "answer": "Either ROW_NUMBER partitioned by the group ordered by the ranking column, filtered to the first N in an outer query, or CROSS APPLY with a TOP N subquery per group. APPLY is usually faster when an index supports the inner ordering and groups are few; the window function wins when scanning everything once is cheaper than many seeks.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "apply",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is the difference between RANK, DENSE_RANK and ROW_NUMBER?",
+  "answer": "ROW_NUMBER always yields distinct consecutive numbers, breaking ties arbitrarily unless the ORDER BY is deterministic. RANK leaves gaps after ties - two firsts then third. DENSE_RANK does not - two firsts then second. Deduplication needs ROW_NUMBER; leaderboards usually want RANK or DENSE_RANK depending on how ties should read.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "ranking",
+   "query-design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Hard",
+  "question": "What does the ROWS versus RANGE window frame change?",
+  "answer": "ROWS counts physical rows, RANGE counts logical peers with equal ORDER BY values. A running total with the default frame uses RANGE, so tied rows all receive the same cumulative value - which surprises people expecting row-by-row accumulation. Specify ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW when you mean physical rows; it is also faster.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "framing",
+   "gotchas"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you find gaps and islands in a sequence?",
+  "answer": "The standard technique subtracts ROW_NUMBER from the value or date, producing a constant per consecutive run, then groups by that difference to get island boundaries. Gaps come from comparing each row to the previous with LAG and filtering where the difference exceeds one. It is a common interview question and a genuinely useful reporting pattern.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "patterns",
+   "query-design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you pivot rows into columns in SQL?",
+  "answer": "Use the PIVOT operator where supported, or conditional aggregation - SUM with a CASE per target column - which is portable and often clearer. Both need the column list known at write time; a dynamic set of columns requires building the statement as dynamic SQL, which is usually a sign the shaping belongs in the reporting layer instead.",
+  "tags": [
+   "sql",
+   "pivot",
+   "reporting",
+   "query-design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What does the query optimiser use cardinality estimates for?",
+  "answer": "To choose join order, join algorithm, index access method and memory grant. An estimate that is wrong by orders of magnitude produces a plan optimised for the wrong shape - nested loops over a million rows, or a memory grant so small the sort spills to disk. That is why comparing estimated to actual rows is the first diagnostic step.",
+  "tags": [
+   "sql",
+   "optimizer",
+   "cardinality",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Hard",
+  "question": "What is a memory grant and what happens when it is wrong?",
+  "answer": "Sorts and hash operations request memory based on estimated rows. Too small and the operator spills to tempdb, turning an in-memory sort into disk IO. Too large and the query holds memory other queries need, reducing concurrency and causing RESOURCE_SEMAPHORE waits. Both trace back to cardinality estimation rather than to the memory setting itself.",
+  "tags": [
+   "sql",
+   "memory-grant",
+   "performance",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "When does parallelism hurt a query?",
+  "answer": "Parallel plans add coordination overhead, so small queries run slower in parallel than serially, and skewed distribution leaves one thread doing most of the work while others wait. Symptoms are CXPACKET and CXCONSUMER waits. Tune the cost threshold for parallelism upward from its ancient default and set MAXDOP appropriately rather than disabling parallelism outright.",
+  "tags": [
+   "sql",
+   "parallelism",
+   "maxdop",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is a columnstore index and when is it the right choice?",
+  "answer": "Columnstore stores data by column with heavy compression and batch-mode execution, giving order-of-magnitude gains on analytical scans and aggregations over large tables. It is wrong for singleton lookups and frequent small updates, which is why the pattern is a clustered columnstore for the warehouse table and rowstore for the transactional one.",
+  "tags": [
+   "sql",
+   "columnstore",
+   "analytics",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is batch mode execution and why does it matter?",
+  "answer": "Batch mode processes around 900 rows per operator invocation instead of one, dramatically reducing CPU per row for aggregations and joins over large sets. Originally tied to columnstore, modern versions can use it on rowstore when the optimiser judges the query analytical. It is why the same query can be several times faster after a compatibility level change.",
+  "tags": [
+   "sql",
+   "batch-mode",
+   "performance",
+   "optimizer"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you paginate large result sets efficiently in SQL?",
+  "answer": "OFFSET-FETCH is readable but the engine still produces and discards the skipped rows, so page 10,000 is slow and results shift as data changes. Keyset pagination filters on the last seen sort key, which stays constant time with a supporting index. Make the sort key unique by appending the primary key, otherwise rows can be skipped or repeated across pages.",
+  "tags": [
+   "sql",
+   "pagination",
+   "keyset",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "Why is COUNT(*) on a huge table slow, and what are the alternatives?",
+  "answer": "An exact count must read every row or an entire index, since the engine cannot know without checking. Alternatives are counting a narrow index rather than the clustered one, reading approximate row counts from catalogue views, or maintaining a counter table when the value is displayed constantly. Approximate counts are usually acceptable for UI purposes.",
+  "tags": [
+   "sql",
+   "count",
+   "performance",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you tune a report query that aggregates millions of rows?",
+  "answer": "Aggregate as early as possible, filter on indexed columns, avoid functions on those columns, consider a columnstore index or a pre-aggregated summary table refreshed on a schedule, and check whether the report needs live data at all. Most slow report queries are solved by materialising the aggregation rather than by micro-tuning the query.",
+  "tags": [
+   "sql",
+   "reporting",
+   "aggregation",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is an indexed or materialised view and what are its limits?",
+  "answer": "It stores the view's result set and keeps it current automatically, so the aggregation cost moves to write time. Limits are strict: deterministic expressions only, schema binding, restrictions on outer joins, subqueries and aggregates, and a real write penalty on the base tables. It suits stable, heavily queried aggregations, not ad hoc reporting.",
+  "tags": [
+   "sql",
+   "materialised-view",
+   "performance",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How does NULL behave in comparisons, aggregates and unique constraints?",
+  "answer": "Any comparison with NULL yields unknown, so equality never matches and NOT IN with a NULL returns nothing. Aggregates ignore NULLs, except COUNT(*) which counts rows. Most engines allow multiple NULLs in a unique constraint because they are not considered equal, which surprises people expecting only one. Use IS NULL and COALESCE deliberately.",
+  "tags": [
+   "sql",
+   "nulls",
+   "fundamentals",
+   "gotchas"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the logical order of execution of a SELECT statement?",
+  "answer": "FROM and JOIN, then WHERE, GROUP BY, HAVING, SELECT with window functions, DISTINCT, ORDER BY, then OFFSET/FETCH. This explains why a column alias defined in SELECT cannot be used in WHERE but can in ORDER BY, and why window functions cannot be filtered in WHERE - they are computed after it.",
+  "tags": [
+   "sql",
+   "fundamentals",
+   "execution-order",
+   "query-design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between an inner, left, full and cross join?",
+  "answer": "Inner keeps only matching rows. Left keeps all left rows with NULLs where no match exists. Full keeps unmatched rows from both. Cross produces the Cartesian product. The classic bug is a left join whose right-side condition is placed in WHERE rather than ON, which filters out the NULL rows and silently turns it into an inner join.",
+  "tags": [
+   "sql",
+   "joins",
+   "fundamentals",
+   "gotchas"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you find and remove duplicate rows?",
+  "answer": "Number rows with ROW_NUMBER partitioned by the columns that define duplication, ordered by whichever row you want to keep, then delete where the number is greater than one. Afterwards add the unique constraint that should have existed, otherwise the duplicates return - removal without prevention is a recurring maintenance job.",
+  "tags": [
+   "sql",
+   "duplicates",
+   "data-quality",
+   "query-design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is referential integrity and what does a foreign key actually enforce?",
+  "answer": "A foreign key guarantees every child value exists in the parent, blocking orphans on insert and controlling what happens on parent delete or update. It also gives the optimiser information it can use. Applications that enforce this in code instead invariably develop orphans, because there is always a path - a bulk load, a script - that skips the check.",
+  "tags": [
+   "sql",
+   "constraints",
+   "integrity",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a check constraint and why use one instead of application validation?",
+  "answer": "A check constraint enforces a predicate at the database, so no code path can violate it - including migrations, scripts and other applications. Application validation gives better error messages and can express rules the database cannot, so real systems use both: the database as the last line of defence, the application for user experience.",
+  "tags": [
+   "sql",
+   "constraints",
+   "validation",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a trigger and why are triggers controversial?",
+  "answer": "A trigger runs automatically on insert, update or delete. They guarantee behaviour no code path can bypass, which is why they are used for auditing. They are controversial because they execute invisibly, complicate debugging, run inside the caller's transaction so they extend locks, and cascade in ways nobody predicted when a second trigger fires.",
+  "tags": [
+   "sql",
+   "triggers",
+   "design",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a view and a table-valued function?",
+  "answer": "A view is a named query with no parameters, inlined into the calling query and optimisable with it. An inline table-valued function takes parameters and is also inlined. A multi-statement table-valued function materialises into a table variable and historically estimated one row, producing dreadful plans - which is why inline forms are strongly preferred.",
+  "tags": [
+   "sql",
+   "views",
+   "functions",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Hard",
+  "question": "Why are scalar user-defined functions in a WHERE clause a performance problem?",
+  "answer": "Historically they executed once per row, serialised the plan and were invisible in the plan's cost, so a query looked cheap and ran for minutes. Scalar UDF inlining in newer versions fixes many cases, but not all - functions with loops or data access still behave badly. Rewriting as an inline table-valued function or a computed column is the reliable fix.",
+  "tags": [
+   "sql",
+   "udf",
+   "performance",
+   "gotchas"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How should you store dates and times in a database?",
+  "answer": "Store UTC in a type that carries no ambiguity - datetime2 or timestamptz - and keep the user's time zone separately when local rendering matters. Avoid storing local times without an offset, and avoid strings entirely. For future recurring events, store local time plus the IANA zone, because the UTC offset for that date is not yet determined.",
+  "tags": [
+   "sql",
+   "dates",
+   "timezone",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is collation and where does it bite you?",
+  "answer": "Collation determines sorting and comparison rules, including case and accent sensitivity. It bites when joining columns with different collations - which errors or forces a conversion that kills index usage - and when a case-insensitive database silently treats two distinct keys as duplicates. Set it deliberately at database level and override per column only with reason.",
+  "tags": [
+   "sql",
+   "collation",
+   "globalization",
+   "gotchas"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between DECIMAL, FLOAT and MONEY?",
+  "answer": "DECIMAL is exact base-ten with defined precision and scale, correct for currency. FLOAT is binary approximate, fine for measurements but wrong for money because sums drift. MONEY is a fixed four-decimal type with rounding quirks in division. Use DECIMAL with explicit precision, and match it across every system the value crosses.",
+  "tags": [
+   "sql",
+   "data-types",
+   "money",
+   "precision"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Security",
+  "difficulty": "Hard",
+  "question": "How can dynamic SQL be written safely?",
+  "answer": "Parameterise every value with sp_executesql rather than concatenating, validate identifiers against a whitelist from catalogue views since they cannot be parameterised, quote them with QUOTENAME, and run with the least privilege necessary - considering EXECUTE AS so the caller does not inherit broad rights through ownership chaining.",
+  "tags": [
+   "sql",
+   "dynamic-sql",
+   "injection",
+   "security"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "What is dynamic data masking and what is it not?",
+  "answer": "It obscures column values in query results for unprivileged users - showing only the last four digits of a card, for instance. It is a presentation-layer convenience, not a security boundary: a user who can query the table can infer masked values with filtered queries. Real protection requires column-level permissions or encryption.",
+  "tags": [
+   "sql",
+   "masking",
+   "security",
+   "compliance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "What is the principle of least privilege applied to database accounts?",
+  "answer": "The application account should have only the rights it uses - typically execute on procedures or CRUD on specific tables - not db_owner. Separate accounts for migrations, reporting and the application limit the blast radius of a leaked credential or an injection flaw, and make audit logs meaningful about which component did what.",
+  "tags": [
+   "sql",
+   "security",
+   "permissions",
+   "practices"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "What is MVCC in PostgreSQL and what maintenance does it require?",
+  "answer": "Every update writes a new row version, so readers never block writers. Dead versions accumulate and must be reclaimed by VACUUM, which also updates the visibility map and prevents transaction id wraparound. Autovacuum handles this, but a long-running transaction blocks cleanup, causing table bloat and eventually emergency vacuum behaviour.",
+  "tags": [
+   "postgres",
+   "mvcc",
+   "vacuum",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "What is table bloat in PostgreSQL and how do you address it?",
+  "answer": "Bloat is space occupied by dead tuples that vacuum has not reclaimed or cannot reuse, growing tables and indexes and slowing scans. Address it by tuning autovacuum to run more aggressively on hot tables, eliminating long-running transactions that hold the horizon back, and using REINDEX CONCURRENTLY or pg_repack to compact without long locks.",
+  "tags": [
+   "postgres",
+   "bloat",
+   "vacuum",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "What index types does PostgreSQL offer beyond B-tree?",
+  "answer": "GIN for multi-value data such as arrays, jsonb and full-text search; GiST for geometric and range types and nearest-neighbour; BRIN for very large naturally ordered tables, storing only per-block ranges; and Hash for equality. Choosing GIN over B-tree for a jsonb containment query is often the difference between a scan and an instant lookup.",
+  "tags": [
+   "postgres",
+   "indexing",
+   "gin",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "How does full-text search work in PostgreSQL?",
+  "answer": "to_tsvector normalises text into stemmed lexemes and websearch_to_tsquery parses a user query; the match operator compares them, backed by a GIN index on the tsvector - usually a generated column. ts_rank orders results. It is enough for most application search needs without adding a separate search engine.",
+  "tags": [
+   "postgres",
+   "full-text-search",
+   "gin",
+   "indexing"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "What is pg_trgm and what does it enable?",
+  "answer": "The trigram extension indexes three-character sequences, enabling fuzzy matching, similarity scoring and fast LIKE with leading wildcards through a GIN or GiST index. It is how you get typo tolerance without a search engine, and it complements full-text search, which cannot match misspellings because they stem to different lexemes.",
+  "tags": [
+   "postgres",
+   "pg-trgm",
+   "fuzzy-search",
+   "indexing"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "What is the difference between jsonb and json in PostgreSQL?",
+  "answer": "json stores the exact text and reparses on each access, preserving key order and duplicates. jsonb stores a decomposed binary form: slightly slower to write, much faster to query, and indexable with GIN. Use jsonb for anything you query; json only when you must round-trip the original document byte for byte.",
+  "tags": [
+   "postgres",
+   "jsonb",
+   "data-types",
+   "indexing"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Hard",
+  "question": "How does connection pooling differ in PostgreSQL and why is PgBouncer common?",
+  "answer": "Postgres uses a process per connection, so each one costs real memory and high connection counts degrade the whole server. PgBouncer multiplexes many client connections onto few server ones. Transaction pooling mode is the most efficient but forbids session state - prepared statements, temp tables, advisory locks - which is the constraint applications hit first.",
+  "tags": [
+   "postgres",
+   "pgbouncer",
+   "connections",
+   "scaling"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "What is a partial index in PostgreSQL and when is it valuable?",
+  "answer": "An index with a WHERE clause covering only matching rows - active users, unprocessed jobs, non-null values. It is far smaller and cheaper to maintain than a full index, and for a queue table where only pending rows are queried it can be a fraction of the size while serving every query the workload issues.",
+  "tags": [
+   "postgres",
+   "indexing",
+   "partial-index",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "How do you implement a job queue in PostgreSQL safely?",
+  "answer": "SELECT the next rows FOR UPDATE SKIP LOCKED inside a transaction, so concurrent workers each grab different rows without blocking each other, then update the status and commit. Without SKIP LOCKED, workers serialise on the same row. Add a partial index on pending status and a visibility timeout for crashed workers.",
+  "tags": [
+   "postgres",
+   "queue",
+   "concurrency",
+   "patterns"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "What is LISTEN/NOTIFY and what are its limits?",
+  "answer": "It is a lightweight pub/sub inside Postgres: NOTIFY sends a payload on a channel to listening sessions, useful for cache invalidation or waking a worker. Limits are that it is fire-and-forget with no persistence - a disconnected listener misses messages - payload size is capped, and it does not survive failover, so it cannot replace a broker.",
+  "tags": [
+   "postgres",
+   "notify",
+   "pubsub",
+   "architecture"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "How does EXPLAIN ANALYZE differ from EXPLAIN in PostgreSQL?",
+  "answer": "EXPLAIN shows the planned tree with estimates; EXPLAIN ANALYZE actually runs the query and reports real timings and row counts per node, plus buffer statistics with the BUFFERS option. Comparing planned to actual rows is how you find bad estimates. Remember it executes the statement, so wrap data-modifying statements in a transaction you roll back.",
+  "tags": [
+   "postgres",
+   "explain",
+   "tuning",
+   "diagnostics"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "What is a CTE materialisation change in PostgreSQL 12?",
+  "answer": "Before 12, CTEs were always materialised, acting as an optimisation fence that sometimes helped and often hurt. From 12 they are inlined when referenced once and side-effect free, so plans improve automatically - but queries that relied on the fence for performance can regress. MATERIALIZED and NOT MATERIALIZED make the choice explicit.",
+  "tags": [
+   "postgres",
+   "cte",
+   "optimizer",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Postgres",
+  "difficulty": "Medium",
+  "question": "How does logical replication differ from streaming replication?",
+  "answer": "Streaming replication ships WAL for a byte-identical replica of the whole cluster, used for high availability and read replicas. Logical replication decodes WAL into row changes published per table, so subscribers can be a different major version, a subset of tables, or a different schema - which is what makes near-zero-downtime upgrades and CDC possible.",
+  "tags": [
+   "postgres",
+   "replication",
+   "cdc",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is CDC and what are the ways to implement it?",
+  "answer": "Change data capture streams row-level changes to consumers. Options are reading the transaction log - Debezium, native CDC - which is low overhead and catches every change; triggers writing to an audit table, which is simpler but adds write latency; and timestamp polling, which is easiest and misses deletes and late updates. Log-based is the standard for anything that must be complete.",
+  "tags": [
+   "cdc",
+   "data-integration",
+   "streaming",
+   "architecture"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is the difference between OLTP and OLAP workloads?",
+  "answer": "OLTP handles many small, short transactions with high concurrency and needs row storage, selective indexes and short locks. OLAP scans and aggregates large volumes with few concurrent users and benefits from columnar storage, compression and parallelism. Running both on one system means each degrades the other, which is why analytics is usually offloaded.",
+  "tags": [
+   "databases",
+   "oltp",
+   "olap",
+   "architecture"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is a star schema and why is it used in warehouses?",
+  "answer": "A central fact table of measures with foreign keys to denormalised dimension tables. It is used because it is simple for analysts to query, produces predictable join patterns the optimiser handles well, and matches how BI tools generate SQL. Snowflaking normalises dimensions further, saving space at the cost of more joins and more complex queries.",
+  "tags": [
+   "data-warehouse",
+   "star-schema",
+   "modelling",
+   "bi"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is a surrogate key in a data warehouse and why not reuse the source key?",
+  "answer": "Warehouses assign their own integer keys so dimensions can hold multiple versions of the same source entity for type 2 history, integrate several source systems whose keys collide, and survive a source system renumbering. Facts then join on the surrogate that was current at load time, which is what makes historical attribution correct.",
+  "tags": [
+   "data-warehouse",
+   "keys",
+   "modelling",
+   "etl"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is idempotency in a data pipeline and why does it matter?",
+  "answer": "Rerunning the same load must produce the same result rather than duplicating rows. Achieve it with deterministic partitions overwritten wholesale, MERGE on a business key, or deduplication on a load id. It matters because pipelines fail halfway and get rerun constantly - a non-idempotent pipeline turns every retry into a data quality incident.",
+  "tags": [
+   "etl",
+   "idempotency",
+   "data-quality",
+   "reliability"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "How do you test a data pipeline?",
+  "answer": "Unit test transformation logic on small fixtures, assert schema contracts at boundaries so an upstream change fails fast, and run data quality checks on each load - row counts within expected range, no unexpected nulls, referential integrity, uniqueness of keys. Reconciliation against the source total is what actually catches silent partial loads.",
+  "tags": [
+   "etl",
+   "testing",
+   "data-quality",
+   "practices"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "When would you choose a NoSQL database over a relational one?",
+  "answer": "When the access pattern is known and narrow and you need horizontal scale beyond one node, when the data is genuinely document-shaped or graph-shaped, or when write throughput and geographic distribution outweigh ad hoc query flexibility. Choosing it to avoid schema design usually ends with the schema enforced implicitly in application code instead.",
+  "tags": [
+   "nosql",
+   "databases",
+   "architecture",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Hard",
+  "question": "What does the CAP theorem actually say, and what is the common misreading?",
+  "answer": "During a network partition a distributed system must choose between consistency and availability - it says nothing about the partition-free case, where you can have both. The common misreading treats CP and AP as permanent system labels. PACELC extends it usefully: even without partitions, there is a latency versus consistency trade-off.",
+  "tags": [
+   "distributed-systems",
+   "cap",
+   "theory",
+   "architecture"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is eventual consistency and what does it demand of application design?",
+  "answer": "Replicas converge given no new writes, so a read after write may return stale data. Applications must tolerate that: show the user their own write from a local copy, avoid read-modify-write without version checks, make operations commutative or idempotent, and design UI that does not imply immediate global visibility.",
+  "tags": [
+   "distributed-systems",
+   "consistency",
+   "design",
+   "architecture"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is read-your-own-writes consistency and how do you provide it?",
+  "answer": "A user must see their own update immediately even if replication is asynchronous. Provide it by routing that user's reads to the primary for a short window after a write, by pinning the session to the replica that has caught up to a known log position, or by returning the written state directly so the UI does not need to re-read.",
+  "tags": [
+   "distributed-systems",
+   "consistency",
+   "replication",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is sharding and what makes it hard?",
+  "answer": "Sharding splits data across independent databases by a key so writes scale horizontally. The hard parts are choosing a key that spreads load without splitting entities that must be queried together, cross-shard queries and joins, distributed transactions, rebalancing when a shard grows, and the operational cost of many databases. Most systems should exhaust vertical scaling and read replicas first.",
+  "tags": [
+   "databases",
+   "sharding",
+   "scaling",
+   "architecture"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is consistent hashing and what problem does it solve in sharding?",
+  "answer": "Simple modulo hashing remaps almost every key when the node count changes, forcing a full reshuffle. Consistent hashing places nodes on a ring so adding or removing one only moves the keys in its arc, and virtual nodes smooth the distribution. It is what makes elastic scaling of caches and shard sets practical.",
+  "tags": [
+   "distributed-systems",
+   "sharding",
+   "hashing",
+   "scaling"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is a read replica and what should you not use it for?",
+  "answer": "A replica serves read-only traffic, offloading reporting and heavy queries from the primary. Do not use it where staleness breaks correctness - reading immediately after a write, or any check-then-act logic such as uniqueness validation. Replication lag is normal and spikes under load, exactly when the application is busiest.",
+  "tags": [
+   "databases",
+   "replication",
+   "scaling",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "How do you monitor replication lag and why does it matter?",
+  "answer": "Compare the primary's log position or a heartbeat timestamp against the replica's applied position, and alert on both seconds behind and bytes behind. It matters because lag silently changes application correctness for read-your-own-writes flows, and because a replica far behind cannot serve as a failover target within the RPO you promised.",
+  "tags": [
+   "databases",
+   "replication",
+   "monitoring",
+   "reliability"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Medium",
+  "question": "What is a two-phase commit and why is it avoided in microservices?",
+  "answer": "A coordinator asks all participants to prepare, then tells them to commit or abort, giving atomicity across resources. It is avoided because it holds locks for the whole round trip, blocks indefinitely if the coordinator fails mid-protocol, couples service availability together, and scales poorly. Sagas with compensation are the usual alternative.",
+  "tags": [
+   "distributed-systems",
+   "transactions",
+   "2pc",
+   "architecture"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Databases",
+  "difficulty": "Hard",
+  "question": "What is the dual write problem?",
+  "answer": "Writing to a database and publishing a message are separate operations with no shared transaction, so a crash between them leaves the two systems disagreeing - the order exists but nobody was told, or the message went out for work that rolled back. The outbox pattern or change data capture solves it by deriving the message from the committed database change.",
+  "tags": [
+   "distributed-systems",
+   "dual-write",
+   "outbox",
+   "reliability"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you optimise a query with an OR across two different columns?",
+  "answer": "An OR across columns usually prevents a single index seek, so the optimiser scans. Rewriting as a UNION ALL of two queries, each able to seek its own index, is often dramatically faster - with a distinct or a mutual-exclusion predicate to avoid duplicates. Check the plan, since some optimisers already perform this transformation.",
+  "tags": [
+   "sql",
+   "tuning",
+   "indexing",
+   "rewriting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "Why can a query with a NOT IN subquery be slow or wrong?",
+  "answer": "If the subquery returns any NULL, NOT IN yields no rows at all because the comparison is unknown. It also often produces a worse plan than the alternative. NOT EXISTS handles NULLs correctly and usually plans as an anti-semi join, which is why it is the recommended form.",
+  "tags": [
+   "sql",
+   "nulls",
+   "subquery",
+   "correctness"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is a semi join and an anti join?",
+  "answer": "A semi join returns rows from the left side that have at least one match on the right, without duplicating them - which is what EXISTS and IN express. An anti join returns rows with no match, expressed by NOT EXISTS. Recognising them in a plan explains why EXISTS does not multiply rows the way a plain join would.",
+  "tags": [
+   "sql",
+   "joins",
+   "optimizer",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you tune a query that filters on a computed expression?",
+  "answer": "Either rewrite the predicate so the raw column is compared - converting a function on a date column into a range comparison - or create a persisted computed column and index it, or use an expression index where the engine supports one. All three restore the ability to seek rather than scan.",
+  "tags": [
+   "sql",
+   "sargable",
+   "indexing",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "Why does adding ORDER BY sometimes change a query from fast to slow?",
+  "answer": "Without an index matching the sort order, the engine must materialise and sort the whole result, which may spill to disk and prevents streaming the first rows. An index whose key order matches the ORDER BY lets the sort be skipped entirely, which is why paginated queries need an index covering both filter and order.",
+  "tags": [
+   "sql",
+   "sorting",
+   "indexing",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is the effect of TOP or LIMIT on the query plan?",
+  "answer": "The optimiser may choose a plan that returns the first rows quickly rather than the whole set efficiently - typically favouring an index seek over a hash aggregate. That is beneficial with a matching index and harmful when it picks a nested loop over a large table, which is a common cause of a paginated query being slower than the unpaginated one.",
+  "tags": [
+   "sql",
+   "limit",
+   "optimizer",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you handle a query that is fast for most parameter values and slow for one?",
+  "answer": "That is classic parameter sniffing plus data skew. Options are recompiling per execution for that statement, optimising for a representative value, splitting into separate procedures per cardinality class, or using a filtered index for the skewed value. Diagnose by comparing the plan produced for each parameter.",
+  "tags": [
+   "sql",
+   "parameter-sniffing",
+   "skew",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What are query hints and when are they justified?",
+  "answer": "Hints force a specific plan choice - a join type, an index, a degree of parallelism. They are justified as a temporary fix for a known optimiser misjudgement, with a comment explaining why. They become liabilities as data changes, because the forced plan stops being appropriate and nobody revisits it.",
+  "tags": [
+   "sql",
+   "hints",
+   "optimizer",
+   "practices"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is a plan cache and why does it matter for performance consistency?",
+  "answer": "Compiled plans are cached and reused for matching statements, saving compilation cost. It matters because a plan compiled for one set of parameters is reused for all, and because non-parameterised ad hoc SQL floods the cache with single-use plans. Parameterised queries give both reuse and a stable cache.",
+  "tags": [
+   "sql",
+   "plan-cache",
+   "performance",
+   "parameterisation"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "Why is dynamic SQL built by string concatenation bad for the plan cache?",
+  "answer": "Every distinct string is a separate cache entry, so a query concatenating literals produces thousands of single-use plans, consuming memory and paying compilation each time. Parameterising the values keeps one plan for the shape, which improves both performance and injection safety.",
+  "tags": [
+   "sql",
+   "dynamic-sql",
+   "plan-cache",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you find the most expensive queries on a database?",
+  "answer": "Query the engine's statistics store - Query Store, pg_stat_statements, or the DMVs - ordered by total elapsed time or total logical reads rather than by single-execution duration, because a cheap query running a million times often costs more than a slow report. Then examine plans for the top few.",
+  "tags": [
+   "sql",
+   "diagnostics",
+   "tuning",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you model a hierarchy in a relational database?",
+  "answer": "An adjacency list with a parent id is simplest and needs a recursive query to traverse. A materialised path stores the ancestor chain as a string, making subtree queries a prefix match. Nested sets make reads cheap and writes expensive. Choose by read-write ratio and whether subtrees move.",
+  "tags": [
+   "sql",
+   "hierarchies",
+   "modelling",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you model a many-to-many relationship with history?",
+  "answer": "The junction table gains validity dates - effective from and to - and the primary key includes the start date so the same pair can recur over time. Queries then need a temporal predicate, and unique constraints must prevent overlapping periods, which usually needs an exclusion constraint or a trigger.",
+  "tags": [
+   "sql",
+   "temporal",
+   "modelling",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you store a state machine's transitions in a relational schema?",
+  "answer": "Store the current state on the entity for queries plus an append-only transition table recording from-state, to-state, actor, reason and timestamp. That gives both fast reads and a full audit trail, and the transition table is what lets you answer how long items spend in each state.",
+  "tags": [
+   "sql",
+   "modelling",
+   "state-machine",
+   "audit"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle currency and multi-currency amounts?",
+  "answer": "Store the amount as a decimal with explicit precision plus the currency code, never a single number in an assumed currency. For converted values, store the original, the rate used and the rate date, since a later recalculation with a different rate would silently change historical figures.",
+  "tags": [
+   "sql",
+   "money",
+   "modelling",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you model optional attributes that vary by entity subtype?",
+  "answer": "Either a single table with nullable columns per subtype - simple but sparse and unconstrained - or a base table plus one table per subtype with a shared key, which enforces the correct columns per type at the cost of joins. Choose the second when the subtypes have substantial distinct structure.",
+  "tags": [
+   "sql",
+   "inheritance",
+   "modelling",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When is a lookup table better than a check constraint or an enum?",
+  "answer": "When the set of values changes without a deployment, when values carry additional attributes such as display order or a label, or when other tables need to reference them. A check constraint or database enum is fine for a truly fixed set, but altering it requires a migration.",
+  "tags": [
+   "sql",
+   "modelling",
+   "constraints",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you design a table that will hold billions of rows?",
+  "answer": "Narrow the row - avoid wide strings and unnecessary columns - choose a clustering key matching the dominant access pattern, partition by time so old data can be archived by switching partitions, index deliberately rather than liberally, and consider whether the workload is analytical and belongs in a columnar store instead.",
+  "tags": [
+   "sql",
+   "scale",
+   "partitioning",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you archive old data without breaking queries?",
+  "answer": "Move rows to an archive table or partition, keep a view that unions both if historical queries must still work, and make the split point explicit in the data model rather than implicit in a job. The mistake is deleting from the hot table without a plan for the reports that still reference it.",
+  "tags": [
+   "sql",
+   "archiving",
+   "partitioning",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is a surrogate key generation strategy for a distributed system?",
+  "answer": "Database identity columns are simplest but require a round trip and are not unique across shards. UUIDv7 or ULIDs are time-ordered so they index well while being generated client-side. Snowflake-style ids pack timestamp, node and sequence into a 64-bit integer, giving ordering and compactness at the cost of node coordination.",
+  "tags": [
+   "sql",
+   "keys",
+   "distributed-systems",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you monitor a production database's health?",
+  "answer": "Watch active sessions and blocking, wait statistics by type, buffer cache hit and page life expectancy, transaction log growth, longest-running transaction, replication lag, and top queries by total cost. Alert on the leading indicators - blocking duration and log growth - rather than on CPU alone, which is often the last thing to move.",
+  "tags": [
+   "sql",
+   "monitoring",
+   "operations",
+   "diagnostics"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is a long-running transaction and why is it dangerous?",
+  "answer": "It holds locks and prevents version cleanup for its whole duration, so blocking and bloat grow, log space cannot be reclaimed, and a failover has more to recover. The usual cause is a transaction spanning application logic or a user interaction. Alerting on the oldest open transaction age catches it early.",
+  "tags": [
+   "sql",
+   "transactions",
+   "operations",
+   "reliability"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you safely kill a runaway query?",
+  "answer": "Identify the session and confirm what it is doing and whether it is inside a transaction, since killing it triggers a rollback that can take as long as the work already done. Prefer to let a nearly complete operation finish. Afterwards, address the cause - a missing index, an accidental cross join, a report run against production.",
+  "tags": [
+   "sql",
+   "operations",
+   "incident",
+   "troubleshooting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you test a database migration before running it in production?",
+  "answer": "Run it against a restored copy of production-sized data to measure duration and lock behaviour, review the generated SQL rather than trusting the tool, verify it is backward compatible with the currently deployed application, and confirm the rollback path. Timing on a small development database tells you nothing useful.",
+  "tags": [
+   "sql",
+   "migrations",
+   "testing",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What makes a database migration backward compatible?",
+  "answer": "The previously deployed application version continues to work against the new schema - so add columns as nullable, do not rename or drop anything still referenced, and do not tighten constraints until the old code path is gone. That property is what makes rolling deployment and rollback possible.",
+  "tags": [
+   "sql",
+   "migrations",
+   "compatibility",
+   "deployment"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you handle a migration that must transform millions of rows?",
+  "answer": "Backfill in bounded batches outside the schema change, with a resumable marker so it can be stopped and restarted, throttled to protect replication lag and IO. Keep the schema change itself instantaneous - add the column first, backfill separately, then add the constraint.",
+  "tags": [
+   "sql",
+   "migrations",
+   "batch",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What should be in a database deployment checklist?",
+  "answer": "A reviewed script with its plan, an estimated duration from a production-sized test, confirmation of backward compatibility, a rollback or forward-fix plan, a backup or restore point, awareness of replication and maintenance windows, and monitoring in place during execution. Schema changes are the least reversible part of most deployments.",
+  "tags": [
+   "sql",
+   "deployment",
+   "operations",
+   "practices"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How should application database credentials be managed?",
+  "answer": "A dedicated least-privilege account per application, credentials held in a secret store and injected at runtime, rotated on a schedule, and ideally replaced entirely by managed identity so no secret exists. Separate accounts for migrations and reporting keep the blast radius of a leak proportionate.",
+  "tags": [
+   "sql",
+   "security",
+   "credentials",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "What database-level auditing is usually required for compliance?",
+  "answer": "Who connected and from where, failed authentication attempts, privilege changes, schema changes, and access to sensitive tables - written somewhere the database administrators cannot alter. The common gap is auditing only application traffic while direct administrative access goes unrecorded.",
+  "tags": [
+   "sql",
+   "audit",
+   "compliance",
+   "security"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you give analysts access to production data safely?",
+  "answer": "Give them a read replica or a masked copy rather than the primary, restrict to views exposing only necessary columns with sensitive fields masked or omitted, apply row-level security where tenancy matters, and enforce query timeouts and resource limits so an accidental cross join does not affect production.",
+  "tags": [
+   "sql",
+   "security",
+   "access-control",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "What is a window frame and how does it differ from GROUP BY?",
+  "answer": "GROUP BY collapses rows into one per group; a window function computes over a set of related rows while preserving each row. That is why a running total, a rank, or a comparison to the group average can appear alongside the detail without a self-join.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "analytics",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you compute a month-over-month change in SQL?",
+  "answer": "Aggregate to monthly totals, then use LAG over the ordered months to fetch the previous value and compute the difference or ratio. Doing it with a self-join on a computed previous month breaks across year boundaries and on months with no data, which the window function handles more cleanly.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "analytics",
+   "reporting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you handle gaps in a time series in SQL?",
+  "answer": "Generate a complete date spine - a calendar table or a generated series - and left join the data to it, so missing periods appear as rows with nulls that can be coalesced to zero. Aggregating the raw data alone silently omits empty periods, which distorts every chart and average.",
+  "tags": [
+   "sql",
+   "time-series",
+   "reporting",
+   "analytics"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you calculate a rolling average over the last seven days?",
+  "answer": "A window function ordered by date with a frame of rows or a range interval covering the preceding six days plus the current one. Using ROWS assumes one row per day, so a date range frame is safer when days can be missing - which is where naive implementations quietly go wrong.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "analytics",
+   "reporting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Hard",
+  "question": "How do you compute a cohort retention table in SQL?",
+  "answer": "Determine each user's first activity period as their cohort, join their subsequent activity, and aggregate distinct users by cohort and period offset, dividing by the cohort size. The hard parts are defining activity precisely and handling users with no later activity, who must still appear as zero rather than vanish.",
+  "tags": [
+   "sql",
+   "analytics",
+   "cohort",
+   "reporting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you deduplicate rows keeping the most recent version?",
+  "answer": "ROW_NUMBER partitioned by the business key ordered by the version or timestamp descending, then filter to row number one. Ties need a deterministic tiebreaker such as the primary key, otherwise the chosen row varies between executions and downstream results become non-reproducible.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "deduplication",
+   "analytics"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "What is the difference between COUNT DISTINCT and an approximate distinct count?",
+  "answer": "COUNT DISTINCT is exact but requires tracking every distinct value, which is memory-heavy and often spills at scale. Approximate functions using HyperLogLog give a result within a small error using fixed memory, which is usually acceptable for dashboards and vastly cheaper on large datasets.",
+  "tags": [
+   "sql",
+   "analytics",
+   "hyperloglog",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you pivot a variable set of columns?",
+  "answer": "You cannot with static SQL, because the column list must be known at parse time. Options are dynamic SQL generating the statement from a query of the distinct values, returning long-format rows and pivoting in the reporting layer, or a JSON aggregate. The reporting layer is usually the right place.",
+  "tags": [
+   "sql",
+   "pivot",
+   "dynamic-sql",
+   "reporting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you audit whether a report's numbers are correct?",
+  "answer": "Reconcile against an independent source or a simpler query, check the grain for double counting from a fan-out join, verify filters exclude what they should including nulls, confirm the date boundaries and time zone, and test with a known small subset where the answer can be counted by hand.",
+  "tags": [
+   "sql",
+   "reporting",
+   "data-quality",
+   "verification"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you optimise a query that filters on a low-selectivity column?",
+  "answer": "An index on a column with few distinct values rarely helps because the engine still reads most of the table. Combine it with a more selective column in a composite index, use a filtered index for the specific value queried, or accept the scan if the table is small enough for it not to matter.",
+  "tags": [
+   "sql",
+   "indexing",
+   "selectivity",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is index intersection and why is a composite index usually better?",
+  "answer": "The engine can combine two single-column indexes by intersecting their results, but that costs extra work and produces poorer estimates than one composite index covering both predicates. Composite indexes also support ordering, so they usually win where the query pattern is known.",
+  "tags": [
+   "sql",
+   "indexing",
+   "optimizer",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you decide the order of columns in a composite index for a mixed workload?",
+  "answer": "By the queries you must serve: equality predicates first, then the sort column, then range predicates, and prefer an order that serves several queries through prefixes. When two queries want incompatible orders, measure which matters more rather than creating both indexes reflexively.",
+  "tags": [
+   "sql",
+   "indexing",
+   "design",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "Why can a query be fast with a literal and slow with a parameter?",
+  "answer": "With a literal the optimiser knows the exact value and its distribution; with a parameter it either sniffs the first value or estimates generically. On skewed data those produce different plans, which is why testing with a literal in a query tool can mislead about production behaviour.",
+  "tags": [
+   "sql",
+   "parameter-sniffing",
+   "optimizer",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is the impact of functions in a JOIN condition?",
+  "answer": "The same as in a WHERE clause - the column is no longer directly comparable, so an index seek becomes a scan, and estimates degrade. Joining on a computed or converted value is a common cause of a query that looks simple and performs terribly on large tables.",
+  "tags": [
+   "sql",
+   "joins",
+   "sargable",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you optimise a query with many OR conditions on the same column?",
+  "answer": "Rewrite as an IN list, which the optimiser handles better and can seek on. For a large list, join against a table-valued parameter or temporary table instead, because very long IN lists bloat the plan cache and eventually hit parser limits.",
+  "tags": [
+   "sql",
+   "query-design",
+   "indexing",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "When is a temp table faster than a subquery or CTE?",
+  "answer": "When the intermediate result is used several times, is large enough to benefit from statistics, or when the optimiser is producing a poor plan for the combined query. Materialising breaks the query into two well-estimated halves, which is often faster than one large plan built on bad estimates.",
+  "tags": [
+   "sql",
+   "tempdb",
+   "tuning",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you diagnose a query that suddenly became slow?",
+  "answer": "Compare the current plan against the historical one in the plan store to see whether the plan changed, check whether statistics or data volume changed, and look for blocking or resource pressure at the time. A changed plan points at parameter sniffing or statistics; an unchanged plan points at data or contention.",
+  "tags": [
+   "sql",
+   "diagnostics",
+   "regression",
+   "tuning"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you design tables for an append-heavy workload?",
+  "answer": "Use a clustering key that appends at the end to avoid page splits, keep indexes minimal since each one is maintained per insert, consider partitioning by time for archival, and batch inserts rather than one row per statement. Then verify the read patterns still have the indexes they need.",
+  "tags": [
+   "sql",
+   "design",
+   "write-performance",
+   "indexing"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the trade-off of a wide table versus several narrow ones?",
+  "answer": "A wide table avoids joins but reads more pages per row and locks more on update; narrow tables read less and allow independent update patterns but require joins. Vertical partitioning - splitting rarely used or large columns into a separate table - is the usual compromise for hot tables.",
+  "tags": [
+   "sql",
+   "design",
+   "normalisation",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When should you store a calculated column rather than compute on read?",
+  "answer": "When it is read far more often than written and the computation is expensive or blocks an index seek - a persisted computed column can then be indexed. When the inputs change frequently, computing on read avoids the write cost and the risk of the stored value drifting from its definition.",
+  "tags": [
+   "sql",
+   "computed-columns",
+   "performance",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you enforce that only one row in a group can be active?",
+  "answer": "A filtered unique index on the grouping key where the active flag is true. That enforces it in the database regardless of application path, which a check in code cannot. Without it, a race between two requests creates two active rows and the invariant is silently broken.",
+  "tags": [
+   "sql",
+   "constraints",
+   "indexing",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you model a value that must be unique per tenant?",
+  "answer": "A unique constraint on the composite of tenant identifier and the value, not on the value alone. Getting this wrong is a common multi-tenant defect - either the constraint is global, so one tenant blocks another's name, or it is missing entirely and duplicates appear within a tenant.",
+  "tags": [
+   "sql",
+   "multitenancy",
+   "constraints",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is the safest way to rename a column in a live system?",
+  "answer": "Add the new column, write to both, backfill, migrate readers, then drop the old one - four deployments rather than one rename. A direct rename breaks the currently deployed application version instantly and makes rollback impossible, which is why it is never safe during a rolling deployment.",
+  "tags": [
+   "sql",
+   "migrations",
+   "zero-downtime",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you add a NOT NULL constraint to an existing column safely?",
+  "answer": "Backfill the nulls in batches, deploy application code that always writes a value, then add the constraint - preferably with a validation step that does not hold a long lock where the engine supports it. Adding it directly on a large table can lock the table for the duration of a full scan.",
+  "tags": [
+   "sql",
+   "migrations",
+   "constraints",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What should you monitor after deploying a schema change?",
+  "answer": "Query duration for the affected statements, plan changes, error rates, lock waits and replication lag - the last because a large change can saturate replication and quietly break read replicas. Watching only for application errors misses a change that succeeded but made the system slower.",
+  "tags": [
+   "sql",
+   "migrations",
+   "monitoring",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you handle a migration that must be rolled back?",
+  "answer": "Prefer migrations that never need it - additive and backward compatible - and where a rollback script exists, test it against production-like data. Data-destroying changes cannot be rolled back, so they should be split into a reversible deploy followed by an irreversible cleanup once confidence exists.",
+  "tags": [
+   "sql",
+   "migrations",
+   "rollback",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is the risk of running maintenance jobs during business hours?",
+  "answer": "Index rebuilds, statistics updates, backups and integrity checks consume IO and CPU and can hold locks, so they compete with user traffic. Schedule them for low-traffic windows, use online options where available, and monitor their duration - a job that grows past its window eventually overlaps the busy period.",
+  "tags": [
+   "sql",
+   "maintenance",
+   "operations",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you calculate a percentage of total correctly in SQL?",
+  "answer": "Divide the row's value by a windowed sum over the appropriate partition, using SUM OVER rather than a subquery so it is computed in one pass. Watch the divide-by-zero case and the data type - integer division silently truncates to zero, which is a frequent source of a report showing all zeros.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "analytics",
+   "gotchas"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you produce a running total that resets per group?",
+  "answer": "SUM OVER partitioned by the group and ordered by the sequence column with an explicit ROWS frame. Omitting the partition gives a total across all groups, and omitting the frame gives RANGE semantics that group tied rows together - both produce plausible but wrong numbers.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "analytics",
+   "reporting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you compare a value to the same period last year in SQL?",
+  "answer": "Join the aggregate to itself on the date shifted by a year, or use LAG over a period-ordered aggregate with the appropriate offset. Handle missing periods with a date spine, and decide explicitly how to treat leap years and partial current periods, which is where such comparisons usually mislead.",
+  "tags": [
+   "sql",
+   "analytics",
+   "time-intelligence",
+   "reporting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "What is a funnel analysis in SQL terms?",
+  "answer": "Counting distinct users reaching each ordered step within a time window, typically by finding the first occurrence of each step per user and requiring the timestamps to be ordered. The subtleties are the attribution window, whether steps must be consecutive, and how to handle users who repeat a step.",
+  "tags": [
+   "sql",
+   "analytics",
+   "funnel",
+   "reporting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you handle time zones in analytical queries?",
+  "answer": "Store UTC and convert to the reporting time zone once, at the point of grouping, using the engine's time zone support rather than a fixed offset so daylight saving is handled. Grouping by a UTC date and labelling it as local is the error that makes daily totals shift by a few hours of activity.",
+  "tags": [
+   "sql",
+   "time-zones",
+   "analytics",
+   "correctness"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "Why can two correct-looking queries return different counts for the same question?",
+  "answer": "Different join types producing fan-out, distinct applied at different points, null handling in filters, inclusive versus exclusive date boundaries, and different definitions of the entity being counted. Reconciling them almost always reveals that the two queries are answering subtly different questions.",
+  "tags": [
+   "sql",
+   "correctness",
+   "analytics",
+   "debugging"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Analytics",
+  "difficulty": "Medium",
+  "question": "How do you safely test a change to a reporting query?",
+  "answer": "Run old and new side by side against the same data, compare totals and a row-level sample, and check the edge periods - the earliest data, the current partial period, and any period with known anomalies. A change that matches on the total can still be wrong at the row level.",
+  "tags": [
+   "sql",
+   "testing",
+   "reporting",
+   "verification"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between DDL, DML, DCL and TCL?",
+  "answer": "DDL defines structure - create, alter, drop. DML manipulates data - select, insert, update, delete. DCL controls permissions - grant, revoke. TCL controls transactions - commit, rollback, savepoint. The practical relevance is that DDL is often implicitly committed and can hold schema locks, unlike DML.",
+  "tags": [
+   "sql",
+   "fundamentals",
+   "categories",
+   "terminology"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What does it mean that SQL is declarative?",
+  "answer": "You state what result you want and the optimiser decides how to produce it, so two queries expressing the same intent differently may execute identically - or very differently if one prevents an optimisation. It also means performance tuning is largely about giving the optimiser better information rather than instructing it.",
+  "tags": [
+   "sql",
+   "fundamentals",
+   "optimizer",
+   "theory"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a correlated versus an uncorrelated subquery?",
+  "answer": "An uncorrelated subquery is independent and can be evaluated once; a correlated one references the outer query and is conceptually evaluated per outer row, though optimisers frequently rewrite it as a join. The distinction matters when the plan shows the inner operator executing once per row.",
+  "tags": [
+   "sql",
+   "subqueries",
+   "optimizer",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a scalar, a row and a table subquery?",
+  "answer": "A scalar subquery returns one value and can appear anywhere a value is expected, erroring if it returns more. A row subquery returns one row for multi-column comparison. A table subquery returns a set and appears in FROM or with IN and EXISTS. Misusing a scalar subquery is a common runtime error under real data.",
+  "tags": [
+   "sql",
+   "subqueries",
+   "fundamentals",
+   "query-design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What does GROUP BY with ROLLUP or CUBE produce?",
+  "answer": "ROLLUP adds subtotal rows along a hierarchy of the grouping columns plus a grand total; CUBE adds every combination. They produce the subtotal rows a report needs in one query instead of several unions, distinguished by nulls in the grouped columns or by the GROUPING function.",
+  "tags": [
+   "sql",
+   "grouping",
+   "reporting",
+   "analytics"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a natural join and an explicit join condition?",
+  "answer": "A natural join matches on all identically named columns implicitly, which breaks silently when a column is added or renamed. An explicit condition states the relationship, survives schema change, and is readable. Natural joins are a convenience that costs more than they save.",
+  "tags": [
+   "sql",
+   "joins",
+   "practices",
+   "maintainability"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What does a self-referencing foreign key model and what must you be careful about?",
+  "answer": "A hierarchy such as employee to manager or category to parent. Be careful about cycles, which the constraint does not prevent, cascade behaviour which can delete an entire subtree, and recursive queries needing a depth bound. Enforcing acyclicity usually requires a trigger or application-level check.",
+  "tags": [
+   "sql",
+   "hierarchies",
+   "constraints",
+   "modelling"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you find rows in one table with no match in another?",
+  "answer": "A left join filtered where the right side is null, or NOT EXISTS with a correlated subquery. NOT EXISTS is usually clearer and handles nulls safely, and optimisers typically produce the same anti-join plan for both. NOT IN is the one to avoid because of null semantics.",
+  "tags": [
+   "sql",
+   "joins",
+   "anti-join",
+   "query-design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a view and a common table expression for reuse?",
+  "answer": "A view is stored and reusable across queries with its own permissions; a CTE exists only within one statement. Use a view for logic reused by several queries or consumers, and a CTE for readability within a single complex statement. A CTE copied into ten queries should have been a view.",
+  "tags": [
+   "sql",
+   "views",
+   "cte",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you tune a query that must return a large result set?",
+  "answer": "Question whether the client needs all of it - usually pagination or aggregation is the real requirement. If it genuinely does, stream rather than buffer, project only needed columns, avoid a sort the client will ignore, and consider a bulk export path rather than a query interface.",
+  "tags": [
+   "sql",
+   "performance",
+   "large-results",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "What is the effect of a scalar subquery in the SELECT list?",
+  "answer": "It is evaluated per output row unless the optimiser rewrites it, so a query returning ten thousand rows may execute the subquery ten thousand times. Rewriting as a join or a window function makes it one pass, which is often an order-of-magnitude improvement on a report query.",
+  "tags": [
+   "sql",
+   "subqueries",
+   "performance",
+   "rewriting"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you decide whether a lookup belongs in the database or in code?",
+  "answer": "In the database when other queries must join to it, when it needs referential integrity, or when it changes without a deployment. In code when it is a fixed set tied to program logic, since a database round trip for a constant list adds latency and a deployment dependency in the other direction.",
+  "tags": [
+   "sql",
+   "design",
+   "lookup-tables",
+   "architecture"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "Why can adding a seemingly unrelated column to a SELECT slow a query dramatically?",
+  "answer": "Because it breaks index coverage - the index no longer contains every needed column, so the engine must look up each matching row in the base table. On a query matching thousands of rows that turns a single index scan into thousands of random lookups.",
+  "tags": [
+   "sql",
+   "indexing",
+   "covering-index",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you tune an UPDATE that affects many rows?",
+  "answer": "Batch it with a bounded predicate so each transaction is short, ensure the predicate is indexed so rows are found by seek rather than scan, avoid updating indexed columns unnecessarily since each index must be maintained, and monitor log growth and replication lag between batches.",
+  "tags": [
+   "sql",
+   "updates",
+   "batching",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you choose between storing a status as a code, an enum or a foreign key?",
+  "answer": "A foreign key when the status has attributes or changes without a deployment, a database enum or check constraint when the set is fixed and small, and a plain code column with application validation when flexibility matters more than enforcement. The main mistake is a free-text status column with no constraint at all.",
+  "tags": [
+   "sql",
+   "modelling",
+   "constraints",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you model data that must be queryable both by current state and full history?",
+  "answer": "A current table for fast operational queries plus a history table written on change, or a temporal table where the engine maintains both. Querying history from an event log alone makes every current-state read expensive, which is why systems keep both representations.",
+  "tags": [
+   "sql",
+   "temporal",
+   "modelling",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you find which query is causing blocking right now?",
+  "answer": "Query the active requests view for sessions with a blocking session id, follow the chain to the head, and inspect its statement and how long it has been open. The head is often idle inside an open transaction, which points at application code holding a transaction across other work.",
+  "tags": [
+   "sql",
+   "blocking",
+   "diagnostics",
+   "operations"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you decide whether to enforce a rule with a constraint or in the application?",
+  "answer": "Constraint when the rule is absolute and expressible - uniqueness, referential integrity, a value range - because no path can bypass it. Application when the rule needs context the database lacks or must produce a friendly explanation. Most systems need both, with the constraint as the backstop.",
+  "tags": [
+   "sql",
+   "constraints",
+   "validation",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "Why can a query be fast in isolation and slow under concurrency?",
+  "answer": "Because contention appears only with concurrent access - lock waits, latch contention on a hot page, connection pool queueing, or memory grants competing. Measuring a query alone characterises its cost, not its behaviour in production, which is why load testing finds problems benchmarks miss.",
+  "tags": [
+   "sql",
+   "concurrency",
+   "performance",
+   "diagnostics"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What should you check before assuming a query needs an index?",
+  "answer": "Whether the query is written sargably, whether statistics are current, whether an existing index would serve it with a small change, and whether the query is asking for more data than it needs. Adding an index is permanent write cost, so it should follow eliminating the cheaper explanations.",
+  "tags": [
+   "sql",
+   "indexing",
+   "tuning",
+   "practices"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle a column that must be unique only among active rows?",
+  "answer": "A filtered unique index restricted to the active predicate, so inactive duplicates are permitted while active ones are not. A plain unique constraint blocks reusing a value after deactivation, which is usually the behaviour the business does not want.",
+  "tags": [
+   "sql",
+   "constraints",
+   "filtered-index",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What should you check when a nightly job that used to finish in minutes now takes hours?",
+  "answer": "Data volume growth crossing a plan threshold, statistics staleness, a missing index after a schema change, contention with another job now overlapping, or a change in the source data distribution. Comparing the execution plan against a previous run usually identifies it immediately.",
+  "tags": [
+   "sql",
+   "batch",
+   "performance",
+   "diagnostics"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you decide the precision and scale for a decimal column?",
+  "answer": "From the domain's requirements including intermediate calculations, not from the display format - a percentage stored with two decimals loses precision when used in a multiplication chain. Match precision across systems that exchange the value, since a mismatch produces rounding differences nobody can reconcile.",
+  "tags": [
+   "sql",
+   "decimal",
+   "precision",
+   "modelling"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "How do you optimise a query that filters on a JSON field?",
+  "answer": "Extract the frequently queried path into a persisted computed column and index it, or use the engine's JSON path index where supported. Filtering on a JSON expression without an index scans and parses every document, which is why JSON columns should hold what you do not query.",
+  "tags": [
+   "sql",
+   "json",
+   "indexing",
+   "performance"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you safely test a query against production data?",
+  "answer": "Run it against a replica with a statement timeout and a row limit, inside a transaction that is rolled back if it modifies anything, and check the estimated plan before executing. Running an untested query against a production primary is a routine cause of self-inflicted incidents.",
+  "tags": [
+   "sql",
+   "operations",
+   "safety",
+   "practices"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle a table that needs both fast writes and complex reads?",
+  "answer": "Separate them - write to a narrow table optimised for insertion and derive a read model with the indexes and denormalisation the queries need, updated asynchronously or by a scheduled job. Trying to serve both from one heavily indexed table degrades writes to serve reads that could have been precomputed.",
+  "tags": [
+   "sql",
+   "cqrs",
+   "performance",
+   "design"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you handle a query that must run against production but could be disruptive?",
+  "answer": "Run it on a replica, bound it with a timeout and a row limit, check the estimated plan first, run during low traffic, and if it must touch the primary, use the lowest isolation the correctness allows. Any of those is cheaper than the incident an unbounded query causes.",
+  "tags": [
+   "sql",
+   "operations",
+   "safety",
+   "practices"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a query being correct and being deterministic?",
+  "answer": "A correct query returns the right set of rows; a deterministic one returns them in a defined order with a defined choice among equivalent candidates. Aggregates picking an arbitrary row, sorts without a tiebreaker and top-N without a stable order are correct and non-deterministic, which breaks pagination and comparison.",
+  "tags": [
+   "sql",
+   "determinism",
+   "correctness",
+   "practices"
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you make SQL readable for the next person?",
+  "answer": "Consistent formatting and keyword casing, meaningful aliases rather than single letters, common table expressions naming intermediate steps, comments explaining why rather than what, and avoiding deeply nested subqueries where a CTE would name the step. Complex SQL is read far more often than written.",
+  "tags": [
+   "sql",
+   "readability",
+   "practices",
+   "maintainability"
+  ]
+ }
+]

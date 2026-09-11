@@ -14,7 +14,9 @@ const csOnly = process.argv.includes('--cs');
 const term = args.join(' ');
 if (!term) { console.error('usage: node tools/show.js <id | text>'); process.exit(2); }
 
-const rows = load(SOURCE);
+// Ids are assigned at build time, not stored, so apply the same numbering
+// here (1..N over the concatenated bank) to keep id lookups working.
+const rows = load(SOURCE).map((r, i) => ({ ...r, id: i + 1 }));
 const match = /^\d+$/.test(term)
   ? rows.find(r => r.id === Number(term))
   : rows.find(r => r.question.toLowerCase().includes(term.toLowerCase()));

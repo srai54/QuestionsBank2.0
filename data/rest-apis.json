@@ -1,0 +1,1176 @@
+[
+ {
+  "category": "REST APIs",
+  "subcategory": "Fundamentals",
+  "difficulty": "Easy",
+  "question": "What is REST and what are its core constraints?",
+  "answer": "REST (Representational State Transfer) is an architectural style for networked APIs. Constraints: client-server separation, statelessness (each request self-contained), cacheability, uniform interface (resources, standard methods, representations), layered system, and optional code-on-demand. Resources are identified by URIs and manipulated via HTTP methods with representations (usually JSON).",
+  "tags": [
+   "rest",
+   "constraints",
+   "stateless"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "HTTP Methods",
+  "difficulty": "Easy",
+  "question": "What are the main HTTP methods and their semantics?",
+  "answer": "GET retrieves (safe, idempotent). POST creates or triggers processing (not idempotent). PUT replaces a resource fully (idempotent). PATCH partially updates (should be idempotent). DELETE removes (idempotent). HEAD returns headers only; OPTIONS reports allowed methods (used in CORS preflight). Following these semantics keeps APIs predictable and cache/proxy-friendly.",
+  "tags": [
+   "rest",
+   "http-methods",
+   "idempotent"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "HTTP Methods",
+  "difficulty": "Medium",
+  "question": "What is idempotency and why does it matter for APIs?",
+  "answer": "An idempotent operation produces the same result whether called once or many times (GET, PUT, DELETE). It matters because networks retry: clients/gateways may resend on timeout, and idempotent endpoints avoid duplicate side effects. For non-idempotent POST (e.g., payments), use an idempotency key so retries don't double-charge. Design writes to be safely retryable.",
+  "tags": [
+   "rest",
+   "idempotency",
+   "retry",
+   "reliability"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Status Codes",
+  "difficulty": "Easy",
+  "question": "What do the main HTTP status code classes mean?",
+  "answer": "2xx success (200 OK, 201 Created, 204 No Content). 3xx redirection (301/302, 304 Not Modified). 4xx client errors (400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422 Unprocessable, 429 Too Many Requests). 5xx server errors (500 Internal, 502 Bad Gateway, 503 Unavailable, 504 Timeout). Correct codes let clients react appropriately.",
+  "tags": [
+   "rest",
+   "status-codes",
+   "http"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Status Codes",
+  "difficulty": "Medium",
+  "question": "What is the difference between 401 and 403?",
+  "answer": "401 Unauthorized means the request lacks valid authentication—the client isn't identified (missing/invalid/expired token); the client should authenticate. 403 Forbidden means the client is authenticated but not authorized to access the resource—more credentials won't help. Use 401 for 'who are you?' and 403 for 'you can't do that.'",
+  "tags": [
+   "rest",
+   "401",
+   "403",
+   "auth"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What are best practices for designing REST resource URIs?",
+  "answer": "Use nouns, not verbs, and plural collections (/orders, /orders/123/items). Represent hierarchy with nesting, filter/sort/paginate via query params (?status=open&page=2&sort=-date), use lowercase and hyphens, keep them stable, and version at the base (/v1). Let HTTP methods convey actions rather than encoding verbs in the path (avoid /getOrders).",
+  "tags": [
+   "rest",
+   "uri-design",
+   "best-practice"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How should you handle errors in a REST API?",
+  "answer": "Return the correct status code plus a structured, consistent error body—ideally RFC 7807 ProblemDetails (type, title, status, detail, instance, and field errors). Don't leak stack traces/internal details. Include a correlation/trace id for support, use 400/422 for validation with per-field messages, and document error shapes. Consistency lets clients handle errors programmatically.",
+  "tags": [
+   "rest",
+   "error-handling",
+   "problemdetails",
+   "rfc7807"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Pagination",
+  "difficulty": "Medium",
+  "question": "What are pagination strategies for REST APIs?",
+  "answer": "Offset/limit (?page=2&size=20)—simple but slow and inconsistent for deep pages with changing data. Cursor/keyset (?after=<token>)—stable and efficient for large/real-time datasets, using an opaque cursor over a sort key. Include total counts sparingly (they're expensive). Return links (next/prev) and metadata. Prefer cursor pagination for scalability.",
+  "tags": [
+   "rest",
+   "pagination",
+   "cursor",
+   "offset"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Caching",
+  "difficulty": "Hard",
+  "question": "How does HTTP caching work with ETags and Cache-Control?",
+  "answer": "Cache-Control directives (max-age, no-cache, private/public) tell caches how long/who can cache. ETag is a version identifier of a resource; clients send If-None-Match and the server returns 304 Not Modified if unchanged, saving bandwidth. Last-Modified/If-Modified-Since is a time-based variant. Combined, they enable conditional requests and efficient client/proxy caching.",
+  "tags": [
+   "rest",
+   "caching",
+   "etag",
+   "cache-control"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "How do you handle concurrent updates (optimistic concurrency) in a REST API?",
+  "answer": "Use ETags/version numbers: the client sends the resource's ETag in If-Match on update; if it no longer matches (someone else changed it) the server returns 412 Precondition Failed, preventing lost updates. The client then re-fetches, merges, and retries. This provides optimistic concurrency over stateless HTTP without server-side locks.",
+  "tags": [
+   "rest",
+   "concurrency",
+   "etag",
+   "if-match",
+   "412"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Versioning",
+  "difficulty": "Medium",
+  "question": "What are the approaches to versioning a REST API?",
+  "answer": "URI path (/v1/orders)—explicit, cache-friendly, most common. Query string (?version=1). Custom header (Api-Version: 1). Media type/content negotiation (Accept: application/vnd.company.v1+json)—purist HATEOAS style. Trade-offs are visibility vs URL cleanliness. Whatever you pick, be consistent, document it, and avoid breaking changes by adding rather than modifying.",
+  "tags": [
+   "rest",
+   "versioning",
+   "api-design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is HATEOAS?",
+  "answer": "HATEOAS (Hypermedia as the Engine of Application State) is the REST constraint where responses include links to related actions/resources, so clients navigate the API dynamically via provided hypermedia rather than hardcoding URIs. It decouples clients from URL structure and enables discoverability. In practice it's rarely fully implemented; most APIs are 'pragmatic REST' without full HATEOAS.",
+  "tags": [
+   "rest",
+   "hateoas",
+   "hypermedia"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Comparison",
+  "difficulty": "Medium",
+  "question": "What is the difference between REST, GraphQL, and gRPC?",
+  "answer": "REST: resource-based over HTTP/JSON, simple, cacheable, but can over/under-fetch. GraphQL: a single endpoint with a query language letting clients request exactly the fields they need—great for varied clients, but caching/complexity trade-offs. gRPC: high-performance binary (Protobuf) over HTTP/2 with streaming and contracts—ideal for internal service-to-service. Choose by client needs, performance, and ecosystem.",
+  "tags": [
+   "rest",
+   "graphql",
+   "grpc",
+   "comparison"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you secure a REST API?",
+  "answer": "Use HTTPS everywhere, authenticate with OAuth2/JWT (validate signature, issuer, audience, expiry), authorize with scopes/roles, validate and sanitize all input, apply rate limiting/throttling, use CORS to restrict origins, avoid exposing internal errors, add security headers, and never put secrets in URLs. Follow least privilege and the OWASP API Security Top 10.",
+  "tags": [
+   "rest",
+   "security",
+   "oauth",
+   "owasp"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Documentation",
+  "difficulty": "Easy",
+  "question": "What is OpenAPI/Swagger?",
+  "answer": "OpenAPI is a standard, language-agnostic specification (YAML/JSON) describing an API's endpoints, parameters, schemas, responses, and auth. Swagger is the tooling ecosystem (Swagger UI for interactive docs, codegen for clients/servers). In ASP.NET Core, Swashbuckle/NSwag generate the spec from code. It enables discoverability, client generation, contract testing, and consistent documentation.",
+  "tags": [
+   "rest",
+   "openapi",
+   "swagger",
+   "documentation"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between PUT and PATCH?",
+  "answer": "PUT replaces the entire resource with the payload—omitted fields are typically cleared, and it's idempotent. PATCH applies a partial update—only the provided fields change (via merge patch or JSON Patch operations). Use PUT for full replacement, PATCH for partial modifications. Both should be idempotent; ensure PATCH semantics are clearly documented (merge vs JSON Patch).",
+  "tags": [
+   "rest",
+   "put",
+   "patch",
+   "update"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When should an API return 200 vs 201 vs 204?",
+  "answer": "200 OK for successful GET/most operations returning a body. 201 Created after successfully creating a resource, ideally with a Location header pointing to it and the created representation in the body. 204 No Content for success with nothing to return (e.g., DELETE or a PUT that returns no body). Correct codes improve client handling and semantics.",
+  "tags": [
+   "rest",
+   "200",
+   "201",
+   "204"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you handle rate limiting from the client side?",
+  "answer": "Respect 429 responses and the Retry-After header; back off with exponential delay + jitter before retrying. Read rate-limit headers (X-RateLimit-Remaining/Reset) to pace requests proactively. Batch or cache to reduce calls, use conditional requests (ETags) to avoid re-fetching, and implement a circuit breaker for repeated failures. Never hammer an API on 429.",
+  "tags": [
+   "rest",
+   "rate-limit",
+   "429",
+   "retry-after"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How do you design an API for long-running operations?",
+  "answer": "Use the async request-reply pattern: POST accepts the work and returns 202 Accepted with a status URL (Location/Operation-Location). The client polls that URL for status (pending/running/succeeded/failed) and retrieves the result when done, or use webhooks/push to notify completion. This avoids holding HTTP connections open and lets clients track progress.",
+  "tags": [
+   "rest",
+   "async",
+   "202",
+   "long-running",
+   "polling"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Content Negotiation",
+  "difficulty": "Medium",
+  "question": "What is content negotiation in REST?",
+  "answer": "Content negotiation lets a client specify desired response format/language via headers—Accept (media type like application/json), Accept-Language, Accept-Encoding—and the server returns the best match (or 406 Not Acceptable). The request's Content-Type header declares the body's format. This decouples resource identity from representation, allowing JSON/XML/etc. from the same URI.",
+  "tags": [
+   "rest",
+   "content-negotiation",
+   "accept",
+   "content-type"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the Richardson Maturity Model?",
+  "answer": "It rates REST API maturity in levels: Level 0 (single endpoint, RPC-style over HTTP), Level 1 (resources—separate URIs per resource), Level 2 (HTTP verbs and status codes used properly), and Level 3 (HATEOAS—hypermedia links driving state). Most 'RESTful' APIs are Level 2 (pragmatic REST). It's a useful lens to assess and improve API design, though full Level 3 is rarely implemented.",
+  "tags": [
+   "rest",
+   "richardson-maturity",
+   "hateoas",
+   "design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle bulk operations in a REST API?",
+  "answer": "Options: a batch endpoint accepting an array (POST /orders/batch) returning per-item results/status (207 Multi-Status style), or a dedicated bulk resource. Decide on atomicity (all-or-nothing vs partial success) and clearly report which items succeeded/failed. For very large jobs, accept the batch and process asynchronously (202 + status URL). Document idempotency and limits. Bulk endpoints reduce chattiness versus many single calls.",
+  "tags": [
+   "rest",
+   "bulk",
+   "batch",
+   "207"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How should you design filtering, sorting, and field selection?",
+  "answer": "Use query parameters: filtering (?status=open&minPrice=10), sorting (?sort=-createdAt,name with a sign for direction), pagination (?page/size or cursor), and sparse fieldsets (?fields=id,name) to return only requested fields. Keep conventions consistent, validate/allow-list parameters, and translate them to efficient DB queries (indexes). This gives clients flexibility while you control performance. Document supported filters/sorts explicitly.",
+  "tags": [
+   "rest",
+   "filtering",
+   "sorting",
+   "field-selection"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you implement API authentication for third-party developers?",
+  "answer": "Issue API keys (simple, per-client, revocable) for identification/basic access, or OAuth2 client credentials for machine-to-machine with scopes, and OAuth2 authorization code for user-delegated access. Combine with rate limiting/quotas per key, HTTPS only, and least-privilege scopes. A gateway (APIM) manages keys, subscriptions, and throttling. Prefer OAuth tokens over static keys for anything sensitive; document the auth flow clearly.",
+  "tags": [
+   "rest",
+   "authentication",
+   "api-key",
+   "oauth",
+   "gateway"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between synchronous and asynchronous REST APIs?",
+  "answer": "A synchronous API processes the request and returns the result in the same response—simple for quick operations. An asynchronous API accepts the request (202 Accepted), returns a status/operation URL, and processes in the background; the client polls or is notified (webhook) when done. Use async for long-running or resource-intensive work to avoid holding connections and timeouts, keeping the API responsive.",
+  "tags": [
+   "rest",
+   "async",
+   "202",
+   "long-running"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How do you design webhooks and make them reliable?",
+  "answer": "Let consumers register a callback URL; on events, POST the payload to it. For reliability: sign payloads (HMAC) so receivers verify authenticity, retry with backoff on failures, ensure at-least-once delivery (so receivers must be idempotent via an event id), include event type/timestamp/id, support replay, and provide a way to verify/subscribe. Handle receiver downtime with retries and a dead-letter/alerting mechanism.",
+  "tags": [
+   "rest",
+   "webhooks",
+   "hmac",
+   "idempotency",
+   "retry"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Comparison",
+  "difficulty": "Medium",
+  "question": "When would you choose GraphQL over REST?",
+  "answer": "Choose GraphQL when clients need flexible, precise data shapes (avoid over/under-fetching), aggregate data from many sources in one request, or when many diverse clients evolve independently. It has a typed schema and single endpoint. Trade-offs: caching is harder (POST/queries), complexity, and risk of expensive queries (need depth/cost limiting). REST is simpler, cache-friendly, and fine for resource-oriented CRUD. Match the tool to client needs.",
+  "tags": [
+   "rest",
+   "graphql",
+   "comparison",
+   "over-fetching"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How does caching improve REST API performance and scalability?",
+  "answer": "Caching serves repeated requests without recomputation/DB hits: client/CDN caching via Cache-Control/ETag reduces server load and latency; server-side/gateway response caching offloads backends; and data caching (Redis) speeds queries. Cache cacheable GETs with appropriate TTLs and validation (ETag/304), and vary by relevant headers/auth. It dramatically improves scalability for read-heavy APIs but requires careful invalidation to avoid staleness.",
+  "tags": [
+   "rest",
+   "caching",
+   "etag",
+   "cdn",
+   "scalability"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is idempotency key and how do you implement it?",
+  "answer": "An idempotency key is a client-generated unique value sent with a non-idempotent request (POST payment) so retries don't duplicate the effect. The server stores the key with the request result; on a repeat, it returns the stored result instead of reprocessing. Implement with a unique constraint insert to atomically detect duplicates, handle concurrent retries with locking, and expire keys. Essential for safe retries on payments/orders.",
+  "tags": [
+   "rest",
+   "idempotency-key",
+   "payments",
+   "retry"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What status code should you return for validation errors?",
+  "answer": "Use 400 Bad Request for malformed syntax/invalid requests, and 422 Unprocessable Entity for well-formed requests that fail business/semantic validation (many APIs use 400 for both). Return a structured body (ProblemDetails/RFC 7807) with per-field error messages so clients can display them. Be consistent across the API. Reserve 4xx for client errors and 5xx for server faults—don't return 200 with an error body.",
+  "tags": [
+   "rest",
+   "validation",
+   "400",
+   "422",
+   "problemdetails"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle backward compatibility when evolving an API?",
+  "answer": "Make additive, non-breaking changes: add optional fields/endpoints, don't remove or rename existing fields, don't change types or semantics, and default new behavior to old. Version the API when breaking changes are unavoidable, support old versions during a deprecation window with clear communication, and use tolerant readers (ignore unknown fields). Contract tests catch accidental breaks. This keeps existing clients working while you evolve.",
+  "tags": [
+   "rest",
+   "backward-compatibility",
+   "versioning",
+   "deprecation"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between PUT and POST for creating resources?",
+  "answer": "POST creates a resource where the server assigns the identifier (POST /orders returns the new id)—not idempotent (repeating creates duplicates). PUT creates or replaces at a client-specified URI (PUT /orders/123)—idempotent (repeating yields the same state). Use POST when the server generates the id (most creation); use PUT when the client controls the id and you want idempotent create/replace semantics.",
+  "tags": [
+   "rest",
+   "put",
+   "post",
+   "create",
+   "idempotency"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is content negotiation and the Accept header?",
+  "answer": "Content negotiation lets clients request a preferred representation via the Accept header (media type: application/json, application/xml) and Accept-Language/Encoding; the server responds with the best match or 406 Not Acceptable. The Content-Type header declares the format of the request/response body. This decouples a resource's identity from its representation, allowing multiple formats/languages from the same URI. Most modern APIs default to JSON.",
+  "tags": [
+   "rest",
+   "content-negotiation",
+   "accept",
+   "content-type"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How do you prevent and handle API abuse?",
+  "answer": "Apply rate limiting and quotas per client/IP/key (429 + Retry-After), authentication and least-privilege scopes, input validation and payload size limits, throttling of expensive operations, bot/anomaly detection, and a WAF/gateway. Monitor usage patterns and alert on spikes. Return clear errors and back-pressure. A gateway (APIM) centralizes these protections. Combine limits with authentication so abuse is attributable and controllable.",
+  "tags": [
+   "rest",
+   "abuse",
+   "rate-limiting",
+   "waf",
+   "security"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is HATEOAS with a concrete example?",
+  "answer": "HATEOAS includes hypermedia links in responses so clients discover available actions dynamically. Example: an order response includes links like { 'self': '/orders/1', 'cancel': '/orders/1/cancel', 'pay': '/orders/1/pay' } only when those actions are valid for the order's current state. Clients follow links rather than hardcoding URLs, decoupling them from URI structure. In practice it's rarely fully adopted; most APIs are pragmatic Level 2.",
+  "tags": [
+   "rest",
+   "hateoas",
+   "hypermedia",
+   "links"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between REST and RPC styles?",
+  "answer": "REST is resource-oriented—URIs identify resources and HTTP verbs express actions (GET /users/1). RPC (Remote Procedure Call) is action-oriented—endpoints are procedures/verbs (POST /getUser, /createOrder), often over HTTP or binary (gRPC). REST leverages HTTP semantics/caching and suits CRUD/resource models; RPC (especially gRPC) suits action-centric, high-performance internal service calls. Choose based on whether your model is resource- or action-centric.",
+  "tags": [
+   "rest",
+   "rpc",
+   "grpc",
+   "comparison"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle partial responses and large payloads?",
+  "answer": "Support sparse fieldsets (?fields=id,name) so clients fetch only needed fields, pagination for collections, compression (gzip/brotli), and streaming (chunked/NDJSON) for very large responses. For large binary data, return references/URLs to storage rather than embedding. Use ETags/conditional requests to avoid re-sending unchanged data. These reduce bandwidth, latency, and client parsing cost, improving performance for large or bandwidth-constrained scenarios.",
+  "tags": [
+   "rest",
+   "partial-response",
+   "large-payload",
+   "compression",
+   "streaming"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you handle authentication vs authorization in a REST API pipeline?",
+  "answer": "Authentication (identifying the caller) happens first—validate the token/key and populate the identity (JWT bearer middleware). Authorization (checking permissions) happens next—apply policies/scopes/roles or resource-based checks to decide if the authenticated caller may perform the action on the specific resource. In ASP.NET Core: UseAuthentication then UseAuthorization, with [Authorize] and policies on endpoints. Keep them separate concerns for clarity and correctness (401 vs 403).",
+  "tags": [
+   "rest",
+   "authentication",
+   "authorization",
+   "pipeline",
+   "aspnetcore"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between an API gateway and a load balancer?",
+  "answer": "A load balancer (L4/L7) distributes traffic across identical backend instances for scale/availability. An API gateway is an L7 entry point providing API-specific features: routing to different services, authentication, rate limiting, request/response transformation, aggregation, caching, and versioning. A gateway often sits in front of (or incorporates) load balancing. Use a load balancer to spread load across instances; a gateway to manage and secure APIs and route across services.",
+  "tags": [
+   "rest",
+   "api-gateway",
+   "load-balancer",
+   "routing"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What makes an API RESTful beyond using HTTP verbs?",
+  "answer": "Resource-oriented URIs, correct use of methods and status codes, statelessness so any server can handle any request, cacheability signalled through headers, and a uniform interface. Hypermedia links are the level most APIs skip. In practice most so-called REST APIs are resource-oriented HTTP, which is fine as long as the constraints they do keep are consistent.",
+  "tags": [
+   "rest",
+   "api-design",
+   "http",
+   "architecture"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Which HTTP methods are safe and which are idempotent?",
+  "answer": "GET, HEAD and OPTIONS are safe - they should not change state. GET, HEAD, PUT and DELETE are idempotent - repeating them has the same effect as doing them once. POST is neither, and PATCH is not guaranteed to be. These properties determine what proxies may cache and what clients may retry automatically.",
+  "tags": [
+   "rest",
+   "http",
+   "idempotency",
+   "api-design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How should resource URIs be structured?",
+  "answer": "Plural nouns for collections, identifiers for members, nesting only to express ownership and no more than one or two levels deep, no verbs, lowercase with hyphens, and no file extensions. Deep nesting such as four levels becomes unusable; once a sub-resource is addressable on its own, promote it to a top-level collection.",
+  "tags": [
+   "rest",
+   "api-design",
+   "uri",
+   "conventions"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you model actions that are not CRUD in a REST API?",
+  "answer": "Either model the action as a resource - a POST to a cancellations or approvals sub-collection creating a record of the event - or accept a controller-style endpoint with a verb where the domain genuinely has no noun. Forcing every action into PATCH on a status field loses auditability and intent.",
+  "tags": [
+   "rest",
+   "api-design",
+   "modelling",
+   "conventions"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How should filtering, sorting and pagination be expressed?",
+  "answer": "As query parameters on the collection - filter fields by name, a sort parameter with a direction prefix, and either page and size or a cursor. Be consistent across every collection endpoint, document the maximum page size, and always apply a default limit so an unbounded request cannot be made accidentally.",
+  "tags": [
+   "rest",
+   "api-design",
+   "pagination",
+   "conventions"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What should an API return when a request succeeds but produces no content?",
+  "answer": "204 No Content with an empty body, typically for DELETE and for PUT where the client already has the state. Returning 200 with an empty body or a wrapper containing nothing forces clients to handle two representations of the same outcome. Consistency here removes a class of client bugs.",
+  "tags": [
+   "rest",
+   "http-status",
+   "api-design",
+   "conventions"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is HATEOAS and why is it rarely implemented?",
+  "answer": "Responses include links describing available transitions, so clients discover capability rather than hardcoding URIs. It is rarely implemented because clients are usually written against documentation anyway, it increases payload size and complexity, and few client libraries take advantage of it. It earns its place in long-lived public APIs with many consumers.",
+  "tags": [
+   "rest",
+   "hateoas",
+   "api-design",
+   "architecture"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is content negotiation and where does it cause problems?",
+  "answer": "Clients state acceptable formats and languages via Accept headers and the server selects a representation. Problems arise when caching does not vary on those headers, when a client omits them and gets a surprising default, and when versioning is done through custom media types that tooling and browsers handle poorly.",
+  "tags": [
+   "rest",
+   "http",
+   "content-negotiation",
+   "caching"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you design an API that must support partial responses?",
+  "answer": "A fields parameter listing the properties to return, validated against an allow-list, or predefined views such as summary and full. Sparse fieldsets reduce payload for mobile clients, but they complicate caching and client typing - which is one of the arguments people make for GraphQL instead.",
+  "tags": [
+   "rest",
+   "api-design",
+   "performance",
+   "graphql"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When is GraphQL a better fit than REST, and what does it cost?",
+  "answer": "GraphQL suits many client shapes over a rich graph, letting each fetch exactly what it needs in one round trip. The costs are query complexity and depth limits to prevent abuse, harder HTTP caching, N+1 resolver problems needing data loaders, and authorisation that must be enforced per field rather than per endpoint.",
+  "tags": [
+   "graphql",
+   "rest",
+   "api-design",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When would you choose gRPC over REST for a public API?",
+  "answer": "Rarely - gRPC's strengths are internal service-to-service traffic with strong contracts, streaming and efficiency. For a public API, REST over JSON has universal tooling, browser support and easier debugging. gRPC public APIs need a JSON transcoding or gRPC-Web layer anyway, which erodes the advantage.",
+  "tags": [
+   "grpc",
+   "rest",
+   "api-design",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you handle backward compatibility when a field must change type?",
+  "answer": "Add a new field with the new type, populate both during a transition, migrate consumers with telemetry showing who still reads the old one, then remove it in a later version. Changing a field's type in place is a breaking change even if the old value happens to parse, because clients have typed models.",
+  "tags": [
+   "rest",
+   "versioning",
+   "compatibility",
+   "api-design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "What is the tolerant reader pattern?",
+  "answer": "A client ignores fields it does not recognise and does not fail on additive changes, so the provider can evolve the contract without coordinated releases. It is one line of policy with large consequences - strict deserialisation that throws on unknown properties makes every additive change breaking.",
+  "tags": [
+   "rest",
+   "compatibility",
+   "integration",
+   "patterns"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How should an API communicate rate limits to clients?",
+  "answer": "Return 429 with Retry-After, and expose the limit, remaining quota and reset time in headers on every response so a well-behaved client can pace itself rather than discovering the limit by hitting it. Documenting limits per plan and per endpoint prevents the support conversation that otherwise follows every launch.",
+  "tags": [
+   "rest",
+   "rate-limiting",
+   "api-design",
+   "http"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "What is the difference between throttling per user, per IP and per API key?",
+  "answer": "Per user is fairest but requires authentication and can be evaded with multiple accounts. Per IP catches anonymous abuse but punishes shared networks and NAT. Per API key aligns with commercial plans and is the usual choice for partner APIs. Production systems layer several, with the strictest applying.",
+  "tags": [
+   "rest",
+   "rate-limiting",
+   "security",
+   "api-design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you version an API's data alongside its contract?",
+  "answer": "Contract versioning handles the shape, but stored data outlives it - so persist a schema version with each record and upcast on read. Otherwise a v2 deployment cannot interpret v1 rows, and rollback becomes impossible. This is the part teams discover after the first breaking change reaches production.",
+  "tags": [
+   "rest",
+   "versioning",
+   "data",
+   "compatibility"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "What should API documentation include beyond endpoint definitions?",
+  "answer": "Authentication setup with a working example, error codes and what to do about each, rate limits, pagination semantics, idempotency behaviour, versioning and deprecation policy, and a quick-start that produces a successful call in minutes. Generated schemas without those leave every consumer asking the same questions.",
+  "tags": [
+   "rest",
+   "documentation",
+   "api-design",
+   "developer-experience"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you design an API for eventual consistency?",
+  "answer": "Return the resource state along with an indication that processing is pending, provide a status endpoint or webhook rather than implying synchronous completion, and make reads after write return the caller's own change where possible. Silently returning stale data after a successful write is what makes clients add sleep statements.",
+  "tags": [
+   "rest",
+   "consistency",
+   "api-design",
+   "distributed-systems"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "What HTTP caching headers matter for an API and how do they interact?",
+  "answer": "Cache-Control sets shareability and freshness lifetime, ETag and Last-Modified enable conditional revalidation, and Vary tells caches which request headers change the response. Getting Vary wrong with authenticated responses is how one user's data is served to another from a shared cache.",
+  "tags": [
+   "rest",
+   "caching",
+   "http",
+   "security"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you secure a public API against abuse beyond authentication?",
+  "answer": "Rate limits and quotas per key, request size limits, depth and complexity limits for nested queries, input validation with allow-lists, timeouts on downstream calls, anomaly detection on usage patterns, and a WAF for common attack traffic. Authentication answers who, not how much or how aggressively.",
+  "tags": [
+   "rest",
+   "security",
+   "rate-limiting",
+   "api-design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you design an API that is pleasant for its consumers?",
+  "answer": "Consistent naming, predictable pagination and errors, sensible defaults, no required fields that could be inferred, examples that work when pasted, and clear versioning. The test is whether a new consumer can make a successful authenticated call in five minutes without asking a question.",
+  "tags": [
+   "rest",
+   "api-design",
+   "developer-experience",
+   "practices"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Should an API return nulls or omit absent fields?",
+  "answer": "Pick one and apply it everywhere. Omitting keeps payloads small but forces clients to distinguish absent from null, which matters for partial updates. Including nulls is more predictable for typed clients. What causes bugs is mixing the two, so the same field is sometimes missing and sometimes null.",
+  "tags": [
+   "rest",
+   "api-design",
+   "serialisation",
+   "consistency"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How should an API represent dates, times and money?",
+  "answer": "Dates and times as ISO 8601 strings in UTC with an explicit offset, and money as a minor-unit integer or a decimal string plus a currency code - never a floating point number. These two choices prevent a disproportionate share of integration defects, and both are hard to change once published.",
+  "tags": [
+   "rest",
+   "api-design",
+   "serialisation",
+   "standards"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When should an API return 404 rather than 403 for a resource the caller cannot access?",
+  "answer": "When revealing existence is itself a disclosure - another tenant's record, a private repository. Returning 404 hides whether the resource exists at the cost of a less helpful error for legitimate users who lost access. It is a deliberate trade-off that should be consistent across the API.",
+  "tags": [
+   "rest",
+   "security",
+   "http-status",
+   "design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle an endpoint that must return both data and warnings?",
+  "answer": "Return the data with a warnings collection in the payload and a success status, reserving error statuses for failures. Overloading a status code to mean partial success forces clients to parse the body to know what happened, which is what a 207 multi-status response formalises for bulk operations.",
+  "tags": [
+   "rest",
+   "api-design",
+   "errors",
+   "http-status"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is an anti-corruption boundary at an API edge?",
+  "answer": "Translating an external API's model into your own at the integration point, so their naming, quirks and versioning do not propagate into your domain. It costs a mapping layer and pays for itself the first time they change a field name or you replace the provider entirely.",
+  "tags": [
+   "rest",
+   "integration",
+   "architecture",
+   "design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you handle breaking changes for a small number of known consumers?",
+  "answer": "Coordinate directly: agree a window, run both versions, monitor which consumers still use the old one, and switch off only when usage is zero. With few consumers this is cheaper than formal versioning infrastructure - the failure mode is assuming you know all the consumers when an unregistered integration exists.",
+  "tags": [
+   "rest",
+   "versioning",
+   "integration",
+   "practices"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you test an API contract without deploying the consumer?",
+  "answer": "Contract tests generated from consumer expectations and verified against the provider in its own pipeline, plus schema validation of responses against the published specification. That catches the change that breaks a consumer at build time rather than after deployment.",
+  "tags": [
+   "rest",
+   "contract-testing",
+   "cicd",
+   "integration"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "What should an API's error payload contain for debuggability?",
+  "answer": "A stable machine-readable code, a human message safe to display, field-level details for validation, and a correlation identifier matching your logs. What it must not contain is stack traces, internal paths, SQL, or anything revealing implementation - which is how error responses become reconnaissance.",
+  "tags": [
+   "rest",
+   "errors",
+   "security",
+   "debugging"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you deprecate a field without breaking clients?",
+  "answer": "Mark it deprecated in the specification and documentation with a removal date, keep populating it, log which consumers still read it if that is observable, and remove it only after usage stops. Silently removing a field is a breaking change even though the endpoint and status code are unchanged.",
+  "tags": [
+   "rest",
+   "versioning",
+   "deprecation",
+   "compatibility"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "What belongs in an API's rate limiting policy documentation?",
+  "answer": "The limits per plan and per endpoint, the window and whether it is fixed or sliding, which headers report remaining quota, what status and headers a rejection returns, and the expected client behaviour on 429. Without this, clients either over-engineer or discover the limits during their launch.",
+  "tags": [
+   "rest",
+   "rate-limiting",
+   "documentation",
+   "api-design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How should an API behave when a downstream dependency is unavailable?",
+  "answer": "Return 503 with Retry-After rather than 500, so clients know it is transient and when to retry, and fail fast rather than holding the connection until timeout. Where a degraded response is meaningful, return it with an indication that data is partial rather than failing the whole request.",
+  "tags": [
+   "rest",
+   "reliability",
+   "http-status",
+   "resilience"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you design an API for a resource with a complex lifecycle?",
+  "answer": "Expose the state explicitly as a field with a documented set of values and transitions, and model transitions as sub-resources or actions rather than allowing arbitrary state assignment. That makes invalid transitions rejectable and gives a natural place to record who changed what and when.",
+  "tags": [
+   "rest",
+   "api-design",
+   "state-machine",
+   "modelling"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Should an API expose internal identifiers?",
+  "answer": "Prefer opaque identifiers that do not reveal volume or ordering and are not tied to your storage - sequential integers leak business information and couple the contract to the database. If you already expose them, adding a public identifier later is a breaking change, so it is worth deciding early.",
+  "tags": [
+   "rest",
+   "api-design",
+   "identifiers",
+   "security"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you handle an endpoint whose response would be enormous?",
+  "answer": "Paginate by default with a maximum page size, offer field selection, provide an asynchronous export for bulk needs, and consider streaming for genuinely large sequential data. An endpoint that can return a hundred megabytes will eventually be called in a loop by someone and take the service down.",
+  "tags": [
+   "rest",
+   "api-design",
+   "pagination",
+   "reliability"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between filtering, searching and querying in an API?",
+  "answer": "Filtering restricts by exact field values, searching matches text with relevance ranking, and querying implies a general expression language. Each has different performance, caching and injection characteristics, and conflating them produces an endpoint that is simultaneously too limited and too dangerous.",
+  "tags": [
+   "rest",
+   "api-design",
+   "search",
+   "filtering"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you expose aggregated or computed data in a REST API?",
+  "answer": "As its own resource representing the report or summary, with parameters for the dimensions and period, rather than overloading a collection endpoint with aggregation flags. That keeps caching and authorisation coherent and avoids an endpoint whose response shape depends on its query string.",
+  "tags": [
+   "rest",
+   "api-design",
+   "aggregation",
+   "reporting"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How should an API handle a request that is valid but cannot be fulfilled right now?",
+  "answer": "409 for a state conflict, 422 or 400 for a rule violation, 429 for rate limiting, 503 with Retry-After for temporary unavailability - and a body explaining which condition applies and what would change it. Returning a generic 400 for all of them gives the client nothing actionable.",
+  "tags": [
+   "rest",
+   "http-status",
+   "errors",
+   "api-design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you secure a public API endpoint that must remain unauthenticated?",
+  "answer": "Rate limit aggressively by address and fingerprint, keep the response minimal so it has little value to abuse, add bot detection where warranted, cache heavily at the edge so origin load is bounded, and monitor for scraping patterns. Accept that anything unauthenticated will be scraped and design the data accordingly.",
+  "tags": [
+   "rest",
+   "security",
+   "rate-limiting",
+   "api-design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "What is the risk of verbose error messages in an API?",
+  "answer": "They reveal stack traces, framework versions, file paths, SQL and internal identifiers that assist an attacker in mapping the system. Return a generic message with a correlation id publicly, and keep the detail in logs. The same detail that helps a developer helps someone probing the service.",
+  "tags": [
+   "rest",
+   "security",
+   "errors",
+   "practices"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you protect against parameter tampering in an API?",
+  "answer": "Never trust client-supplied values that determine authority - price, role, owner, tenant - and re-derive them server-side from the authenticated context or from your own records. Signing values so tampering is detectable is a fallback when a value genuinely must round-trip through the client.",
+  "tags": [
+   "rest",
+   "security",
+   "validation",
+   "api-design"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What should you monitor for a public API?",
+  "answer": "Request rate, error rate and latency per endpoint and per consumer, rate limit rejections, authentication failures, payload sizes, and the version distribution of clients. Per-consumer breakdown is what lets you distinguish one misbehaving integration from a general problem.",
+  "tags": [
+   "rest",
+   "observability",
+   "monitoring",
+   "operations"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you roll out a change to an API used by external consumers?",
+  "answer": "Announce with lead time, deploy additively so nothing breaks, monitor adoption per consumer, provide a sandbox for testing, and only then deprecate the old behaviour with a published sunset date. External consumers cannot be redeployed on your schedule, which is the fundamental constraint.",
+  "tags": [
+   "rest",
+   "versioning",
+   "deployment",
+   "operations"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you handle a consumer that is abusing your API?",
+  "answer": "Identify them through per-key telemetry, apply a targeted rate limit rather than a global one, contact them with specifics, and provide the endpoint or pattern that would meet their need efficiently. Blocking without communication converts a technical problem into a commercial one.",
+  "tags": [
+   "rest",
+   "operations",
+   "rate-limiting",
+   "practices"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you design an API for a resource with optional expansion of related data?",
+  "answer": "An expand parameter naming related resources to include, validated against an allow-list and depth-limited. It avoids both over-fetching by default and the round trips of strict resource separation. The limits matter - unbounded expansion is how one request becomes a hundred database queries.",
+  "tags": [
+   "rest",
+   "api-design",
+   "expansion",
+   "performance"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "When should an API return a representation after a write?",
+  "answer": "When the server modified or computed fields the client needs - generated identifiers, timestamps, derived status - which saves a round trip and avoids the client guessing. Returning nothing is defensible for large resources where the client already has the state, but it should be consistent across the API.",
+  "tags": [
+   "rest",
+   "api-design",
+   "http",
+   "conventions"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you version an event or webhook payload?",
+  "answer": "Include a version field in the payload, allow consumers to register for a specific version, and publish both during a migration. Unlike a synchronous API, you cannot see whether a consumer read the new field, so telemetry on which versions are subscribed is what makes retirement safe.",
+  "tags": [
+   "rest",
+   "webhooks",
+   "versioning",
+   "events"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between a synchronous and asynchronous API from the consumer's perspective?",
+  "answer": "Synchronous returns the outcome; asynchronous returns an acknowledgement and requires polling or a callback. The consumer's error handling, timeout strategy and user experience differ entirely, which is why converting one to the other is a breaking change even if the URL is unchanged.",
+  "tags": [
+   "rest",
+   "async",
+   "api-design",
+   "compatibility"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you provide a sandbox environment for API consumers?",
+  "answer": "A separate environment with realistic but synthetic data, stable test credentials, deterministic behaviour for testable scenarios such as a declined payment, and parity with production behaviour. A sandbox that behaves differently from production is worse than none, because integrations are built against the wrong assumptions.",
+  "tags": [
+   "rest",
+   "sandbox",
+   "developer-experience",
+   "testing"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "What should you include in an API changelog?",
+  "answer": "Every change classified as additive, behavioural or breaking, with dates, affected endpoints, migration guidance and deprecation timelines. Consumers cannot diff your specification themselves reliably, and an unannounced behavioural change is functionally a breaking change to whoever depended on the old behaviour.",
+  "tags": [
+   "rest",
+   "documentation",
+   "versioning",
+   "practices"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Practice",
+  "difficulty": "Medium",
+  "question": "How do you support both a public API and internal callers on the same service?",
+  "answer": "Separate the contracts - internal callers may use a richer or different interface - or apply the public contract to everyone and accept the constraint. What causes trouble is internal callers depending on undocumented behaviour, which then blocks changes intended to be safe for public consumers.",
+  "tags": [
+   "rest",
+   "api-design",
+   "architecture",
+   "versioning"
+  ]
+ }
+]

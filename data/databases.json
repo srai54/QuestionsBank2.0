@@ -1,0 +1,1726 @@
+[
+ {
+  "category": "Databases",
+  "subcategory": "NoSQL",
+  "difficulty": "Medium",
+  "question": "What are the types of NoSQL databases?",
+  "answer": "Document (MongoDB, Cosmos DB)—JSON documents. Key-value (Redis, DynamoDB)—simple fast lookups. Column-family (Cassandra, HBase)—wide columns for big data/time-series. Graph (Neo4j, Cosmos Gremlin)—nodes/edges for relationships. Each optimizes different access patterns. Choose by data shape and query needs; NoSQL trades some relational features for scalability and flexibility.",
+  "tags": [
+   "nosql",
+   "document",
+   "key-value",
+   "graph",
+   "column"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "What are common caching strategies?",
+  "answer": "Cache-aside (lazy): app loads from DB on miss and populates cache. Read-through: cache loads from DB automatically on miss. Write-through: writes go to cache and DB synchronously (consistent, slower writes). Write-behind (write-back): write to cache, async to DB (fast, risk of loss). Refresh-ahead: proactively refresh hot keys before expiry. Choose based on read/write ratio and consistency needs.",
+  "tags": [
+   "caching",
+   "cache-aside",
+   "write-through",
+   "strategies"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Caching",
+  "difficulty": "Hard",
+  "question": "How do you keep a cache consistent with the database?",
+  "answer": "Prefer cache-aside with invalidation: on write, update the DB then delete/invalidate the cache key (don't just update it—races cause staleness). Use short TTLs as a safety net, versioned keys, and event-driven invalidation for cross-service caches. Accept that caches are eventually consistent; for strict needs, minimize caching of that data or use write-through with careful ordering. Beware dual-write inconsistencies.",
+  "tags": [
+   "caching",
+   "consistency",
+   "invalidation",
+   "ttl"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "What is the difference between a distributed cache and an in-memory cache?",
+  "answer": "An in-memory (local) cache (IMemoryCache) lives inside one app instance—fastest but not shared, so instances have inconsistent data and it's lost on restart. A distributed cache (Redis) is shared across instances over the network—consistent across a scaled-out app, survives instance restarts, but has network latency. Use local caching for per-instance hot data and distributed for shared state behind a load balancer.",
+  "tags": [
+   "caching",
+   "distributed",
+   "in-memory",
+   "redis"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is connection pooling and why is it important?",
+  "answer": "Connection pooling reuses a set of open database connections instead of opening/closing one per request—opening connections is expensive (handshake, auth). The pool hands out idle connections and returns them after use, dramatically improving throughput and latency under load. ADO.NET/EF Core pool automatically; ensure connections are disposed promptly (using/DbContext scope) and the pool size fits concurrency.",
+  "tags": [
+   "database",
+   "connection-pooling",
+   "performance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between horizontal and vertical database scaling?",
+  "answer": "Vertical scaling adds more power (CPU/RAM/storage) to a single DB server—simple but has a ceiling and single point of failure. Horizontal scaling distributes data/load across multiple servers via read replicas (scale reads), sharding/partitioning (scale writes/storage), or clustering—more scalable and resilient but complex (consistency, routing). SQL scales vertically more easily; NoSQL is designed to scale horizontally.",
+  "tags": [
+   "database",
+   "scaling",
+   "sharding",
+   "replicas"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Replication",
+  "difficulty": "Medium",
+  "question": "What is the difference between synchronous and asynchronous replication?",
+  "answer": "Synchronous replication confirms a write only after replicas acknowledge it—guaranteeing no data loss on failover but adding write latency and reduced availability if a replica is slow/down. Asynchronous replication acknowledges after the primary writes, replicating in the background—lower latency and higher availability but risk of losing recent writes on failover (replica lag). Choose per RPO/latency requirements.",
+  "tags": [
+   "database",
+   "replication",
+   "synchronous",
+   "asynchronous"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "What is read/write splitting and when do you use it?",
+  "answer": "Read/write splitting routes writes to the primary and reads to one or more read replicas, offloading read-heavy traffic to scale reads and protect the primary. It works when the app tolerates slight replica lag (eventual consistency on reads). Route consistency-critical reads (read-your-writes) to the primary. It's a common scaling technique for read-dominant workloads.",
+  "tags": [
+   "database",
+   "read-write-splitting",
+   "replicas",
+   "scaling"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "What is cache eviction and what policies exist?",
+  "answer": "Eviction removes entries when the cache is full. Policies: LRU (evict least recently used—good general default), LFU (least frequently used), FIFO (oldest first), MRU, and TTL-based (expire by age). LRU suits temporal locality (recently-used likely reused); LFU suits stable hot sets. Choose based on access patterns and whether the cache holds pure cache data (evict freely) or must-keep data (bound by TTL). Redis supports several policies.",
+  "tags": [
+   "databases",
+   "cache-eviction",
+   "lru",
+   "lfu",
+   "ttl"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Caching",
+  "difficulty": "Hard",
+  "question": "What is a cache stampede and how do you prevent it?",
+  "answer": "A cache stampede (thundering herd) happens when a popular key expires and many concurrent requests miss and hammer the database to rebuild it. Prevent with: a lock/mutex so only one request rebuilds while others wait or serve stale, probabilistic early recomputation (refresh before expiry), request coalescing (single-flight), and staggered/jittered TTLs. Serving slightly stale data during rebuild smooths the spike.",
+  "tags": [
+   "databases",
+   "cache-stampede",
+   "thundering-herd",
+   "locking"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "What are the trade-offs of write-through vs write-behind caching?",
+  "answer": "Write-through writes to cache and database synchronously—strong consistency and durability, but slower writes. Write-behind (write-back) writes to cache immediately and to the DB asynchronously—fast writes and reduced DB load, but risk of data loss if the cache fails before flushing and temporary inconsistency. Use write-through when consistency/durability matter; write-behind for write-heavy workloads tolerant of eventual persistence, with careful failure handling.",
+  "tags": [
+   "databases",
+   "write-through",
+   "write-behind",
+   "caching",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is database connection pooling and why is pool size important?",
+  "answer": "Connection pooling reuses a set of open DB connections instead of opening one per request (opening is expensive). Pool size must balance concurrency and DB limits: too small causes waits/timeouts under load; too large exhausts DB connections/memory and causes contention. Size it to expected concurrent queries and the DB's max connections, and ensure connections are released promptly (dispose contexts). Serverless apps use external poolers (PgBouncer, Supabase pooler).",
+  "tags": [
+   "databases",
+   "connection-pooling",
+   "pool-size",
+   "performance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "What is CDC (Change Data Capture) and its use cases?",
+  "answer": "CDC captures inserts/updates/deletes from a database (via transaction logs or triggers) and streams them to consumers. Use cases: syncing to a data warehouse/search index/cache, event-driven integration (outbox alternative), replication, and auditing—without polling. Tools: Debezium, SQL Server CDC, Postgres logical replication, Cosmos/Mongo change feeds/streams. It enables near-real-time propagation of data changes across systems reliably.",
+  "tags": [
+   "databases",
+   "cdc",
+   "change-data-capture",
+   "streaming",
+   "debezium"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the difference between a materialized view and a regular view?",
+  "answer": "A regular view is a stored query executed each time it's referenced—always current but recomputed (can be slow for complex aggregations). A materialized view stores the precomputed result physically, so reads are fast, but it must be refreshed (manually, on schedule, or incrementally) and can be stale between refreshes. Use materialized views for expensive, frequently-read aggregations where some staleness is acceptable; regular views for always-fresh, lightweight logic.",
+  "tags": [
+   "databases",
+   "materialized-view",
+   "view",
+   "aggregation"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do read replicas help and what is replication lag?",
+  "answer": "Read replicas are copies of the primary that serve read queries, offloading the primary and scaling reads. Writes go to the primary and replicate asynchronously, so replicas can be slightly behind—replication lag—meaning a read right after a write might return stale data. Route consistency-critical (read-your-writes) reads to the primary and tolerant reads (reports, listings) to replicas. Monitor lag and design for eventual consistency on replica reads.",
+  "tags": [
+   "databases",
+   "read-replica",
+   "replication-lag",
+   "scaling"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "What is polyglot persistence?",
+  "answer": "Polyglot persistence uses different databases for different needs within one system—e.g., a relational DB for transactions, a document store for flexible content, Redis for caching, Elasticsearch for search, and a graph DB for relationships. Each subsystem uses the store best suited to its access patterns. Trade-offs: operational complexity, consistency across stores, and more expertise required. Adopt it deliberately where a single database can't serve all workloads well.",
+  "tags": [
+   "databases",
+   "polyglot-persistence",
+   "architecture",
+   "nosql"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is eventual consistency in a caching context?",
+  "answer": "With caching, the cache and source database can temporarily disagree after a write until the cache is invalidated/updated—that window is eventual consistency. It's acceptable when brief staleness doesn't harm users (product listings, counts). Bound it with short TTLs, invalidate on writes, and use versioning. For strict needs (balances), bypass or carefully synchronize the cache. Accepting eventual consistency is the trade-off for cache performance/scalability.",
+  "tags": [
+   "databases",
+   "eventual-consistency",
+   "cache",
+   "staleness"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a covering index versus a clustered index in general database terms?",
+  "answer": "A clustered index determines the physical order of rows, so there can be only one and range scans on it are cheap. A covering index contains all the columns a query needs, so the query is answered without touching the table. Engines differ in terminology, but the two ideas exist in almost all of them.",
+  "tags": [
+   "databases",
+   "indexing",
+   "performance",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is write amplification and where does it appear?",
+  "answer": "One logical write causing several physical writes - index maintenance, journalling, replication, and compaction in log-structured engines. It matters because storage throughput and SSD lifetime are consumed by the amplified figure, not the logical one, which is why adding indexes has a cost far beyond the table itself.",
+  "tags": [
+   "databases",
+   "performance",
+   "storage",
+   "internals"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a write-ahead log and what does it guarantee?",
+  "answer": "Changes are appended to a durable log before being applied to data pages, so a crash can be recovered by replaying committed transactions and undoing incomplete ones. It is what makes durability possible without flushing every random page write, and it is also the foundation for replication and point-in-time recovery.",
+  "tags": [
+   "databases",
+   "wal",
+   "durability",
+   "internals"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is MVCC and what does it cost?",
+  "answer": "Multi-version concurrency control keeps multiple versions of a row so readers see a consistent snapshot without blocking writers. The costs are storage for old versions, a cleanup process to reclaim them, and the possibility of long transactions preventing that cleanup - which is exactly how table bloat happens.",
+  "tags": [
+   "databases",
+   "mvcc",
+   "concurrency",
+   "internals"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a lost update and how do you prevent it?",
+  "answer": "Two transactions read the same row, both compute a new value from what they read, and the second overwrites the first - so one update disappears with no error. Prevent it with an atomic update expressed in SQL, optimistic concurrency using a version column, or a pessimistic lock at read time.",
+  "tags": [
+   "databases",
+   "concurrency",
+   "transactions",
+   "bugs"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is connection pooling and why is pool sizing counterintuitive?",
+  "answer": "A pool reuses established connections because creating one is expensive. Sizing is counterintuitive because a larger pool often reduces throughput - the database has finite cores and disks, so excess concurrency causes context switching and lock contention. A small pool with queueing usually gives better latency than a large one.",
+  "tags": [
+   "databases",
+   "connection-pool",
+   "performance",
+   "tuning"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a materialised view and a regular view?",
+  "answer": "A regular view is a stored query executed on every reference, always current and costing full execution. A materialised view stores the result, giving fast reads at the cost of staleness and a refresh strategy - full or incremental, scheduled or on commit. The choice is a read-cost versus freshness trade.",
+  "tags": [
+   "databases",
+   "views",
+   "performance",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you safely add a column to a very large table?",
+  "answer": "On modern engines adding a nullable column with no default is a metadata-only change and instant; adding a non-null default may rewrite the table and lock it for a long time. The safe pattern is add nullable, backfill in batches, add the constraint or default afterwards, and check the specific engine's behaviour first.",
+  "tags": [
+   "databases",
+   "migrations",
+   "ddl",
+   "operations"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you add an index to a busy production table?",
+  "answer": "Use the engine's online or concurrent index build so it does not hold an exclusive lock, run it during lower traffic since it consumes IO and CPU, and monitor replication lag because the build must also be applied on replicas. Verify afterwards that the planner actually uses it.",
+  "tags": [
+   "databases",
+   "indexing",
+   "operations",
+   "migrations"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the buffer pool and why is its hit rate important?",
+  "answer": "An in-memory cache of data and index pages. A high hit rate means most reads are served without disk IO, which is one to two orders of magnitude faster. A falling hit rate usually indicates the working set has outgrown memory or a query is scanning far more data than it needs.",
+  "tags": [
+   "databases",
+   "buffer-pool",
+   "performance",
+   "internals"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a checkpoint in a database engine?",
+  "answer": "A point at which dirty pages are flushed and the log position recorded, bounding how much of the log must be replayed after a crash. Frequent checkpoints shorten recovery but cost IO; infrequent ones do the opposite. Recovery time objectives are therefore partly a checkpoint tuning question.",
+  "tags": [
+   "databases",
+   "checkpoint",
+   "recovery",
+   "internals"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between logical and physical backup?",
+  "answer": "A logical backup exports statements or data rows, so it is portable across versions and selective but slow to restore at scale. A physical backup copies data files or blocks, restoring far faster but tied to the engine version and platform. Large databases use physical backups with logical exports for portability.",
+  "tags": [
+   "databases",
+   "backup",
+   "recovery",
+   "operations"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is point-in-time recovery and what does it require?",
+  "answer": "Restoring to an arbitrary moment by applying a base backup plus the transaction log up to that point. It requires continuous log archiving and enough retention to cover your recovery window. Without log backups you can only restore to the last full or differential backup, which sets a floor on data loss.",
+  "tags": [
+   "databases",
+   "recovery",
+   "backup",
+   "operations"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a split-brain risk in database failover and how is it avoided?",
+  "answer": "Two nodes both believe they are primary and accept writes, diverging the data. Avoided with quorum-based election so only a majority side can promote, plus fencing - STONITH or storage-level exclusion - so the old primary cannot continue writing after losing the role.",
+  "tags": [
+   "databases",
+   "failover",
+   "split-brain",
+   "reliability"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a lock hierarchy and why do databases use intent locks?",
+  "answer": "Locks are taken at row, page and table level, and an intent lock at the higher level advertises that a lower-level lock exists, so a table-level request can detect conflict without inspecting every row. Without intent locks, checking whether a table can be locked exclusively would require scanning all row locks.",
+  "tags": [
+   "databases",
+   "locking",
+   "internals",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is optimistic concurrency and how is it implemented at the row level?",
+  "answer": "Each row carries a version or timestamp; an update includes the original value in its predicate and affects zero rows if someone else changed it, which the application detects and handles by reloading and retrying. It avoids locks entirely and scales well when conflicts are rare.",
+  "tags": [
+   "databases",
+   "concurrency",
+   "optimistic",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a serialisation anomaly and how does snapshot isolation permit one?",
+  "answer": "Two transactions each read a consistent snapshot and write based on it, producing a combined result impossible under any serial order - write skew, such as two doctors both going off-call because each saw the other still on. Snapshot isolation prevents dirty and non-repeatable reads but not this, which is why serialisable isolation exists.",
+  "tags": [
+   "databases",
+   "isolation",
+   "write-skew",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a database cursor and why are cursors discouraged?",
+  "answer": "A cursor iterates a result set row by row, allowing per-row logic. They are discouraged because set-based SQL is usually orders of magnitude faster, and cursors hold resources and locks for their duration. They are justified for genuinely sequential operations such as controlled batch processing.",
+  "tags": [
+   "databases",
+   "cursors",
+   "performance",
+   "practices"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a database and a schema across engines?",
+  "answer": "In PostgreSQL a database contains schemas, and cross-database queries need extensions; in SQL Server a database contains schemas and cross-database queries are straightforward; in MySQL the terms are effectively synonymous. This inconsistency matters when planning multi-tenant isolation, because the isolation unit differs.",
+  "tags": [
+   "databases",
+   "schemas",
+   "fundamentals",
+   "multitenancy"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "NoSQL",
+  "difficulty": "Medium",
+  "question": "What are the main NoSQL families and what is each good at?",
+  "answer": "Key-value stores for fast lookup by identity, document stores for aggregate-shaped records with flexible fields, wide-column stores for very high write volume with known access patterns, and graph databases for relationship traversal. Each trades ad hoc query flexibility for a specific access pattern's performance.",
+  "tags": [
+   "nosql",
+   "databases",
+   "architecture",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "NoSQL",
+  "difficulty": "Medium",
+  "question": "When is a graph database the right choice?",
+  "answer": "When queries traverse relationships of variable depth - shortest path, recommendations, fraud rings, permission inheritance - where the equivalent SQL needs recursive joins whose cost grows with depth. For fixed-depth relationships, a relational database with proper indexes is usually simpler and faster.",
+  "tags": [
+   "nosql",
+   "graph-databases",
+   "architecture",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "NoSQL",
+  "difficulty": "Medium",
+  "question": "What is a wide-column store and how does its data model differ?",
+  "answer": "Rows are keyed by a partition key with a clustering key ordering columns within the partition, so the model is designed around the queries rather than normalised entities. Cassandra-style stores excel at high-volume writes and time-series reads within a partition, and cannot do ad hoc joins or aggregate across partitions cheaply.",
+  "tags": [
+   "nosql",
+   "cassandra",
+   "modelling",
+   "architecture"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "NoSQL",
+  "difficulty": "Medium",
+  "question": "What is denormalisation-by-necessity in NoSQL modelling?",
+  "answer": "Because joins are unavailable or expensive, data is duplicated per query pattern - the same entity stored several times shaped for each access path. The consequence is that writes fan out to all copies and the application owns consistency between them, which is the cost paid for the read performance.",
+  "tags": [
+   "nosql",
+   "modelling",
+   "denormalisation",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "NoSQL",
+  "difficulty": "Medium",
+  "question": "What is a secondary index in a distributed NoSQL store and why is it problematic?",
+  "answer": "It indexes a non-key attribute, but the index must either live with each partition - so queries fan out to all partitions - or be globally partitioned by the indexed value, which makes writes cross-partition. Both undermine the guarantees that made the store fast, which is why access patterns are usually modelled into the key instead.",
+  "tags": [
+   "nosql",
+   "indexing",
+   "distributed-systems",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "What eviction policies do caches use and how do they differ?",
+  "answer": "LRU evicts the least recently used and suits temporal locality. LFU evicts the least frequently used and resists one-off scans polluting the cache. FIFO is simplest and rarely optimal. TTL-only expiry bounds staleness but does not bound memory. Real caches often combine LFU with an admission policy.",
+  "tags": [
+   "caching",
+   "eviction",
+   "performance",
+   "algorithms"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "What is cache pollution and how do you prevent it?",
+  "answer": "A large scan or a batch job loads data that will never be read again, evicting genuinely hot entries. Prevent it by bypassing the cache for bulk operations, using a separate cache or namespace for them, or an admission policy that only caches entries seen more than once - which is what modern designs do by default.",
+  "tags": [
+   "caching",
+   "performance",
+   "eviction",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "How do you choose what to use as a cache key?",
+  "answer": "Include every input that changes the result - identity, filters, locale, permissions or tenant - and nothing that does not, or the hit rate collapses. Omitting a dimension such as tenant or user role is how one user's data is served to another, which is the most serious cache bug class.",
+  "tags": [
+   "caching",
+   "design",
+   "security",
+   "performance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "What is negative caching and why does it matter?",
+  "answer": "Caching the fact that something does not exist, so repeated lookups for a missing key do not hit the origin. It matters because a hot missing key - a scraped URL, a deleted resource - otherwise passes every request through. Use a short TTL so a newly created item appears promptly.",
+  "tags": [
+   "caching",
+   "design",
+   "performance",
+   "patterns"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Search",
+  "difficulty": "Medium",
+  "question": "What is an inverted index and why is it fast for text search?",
+  "answer": "It maps each term to the list of documents containing it, so a query intersects a few small posting lists rather than scanning documents. That is why full-text search is fast where a LIKE with a leading wildcard is a full scan. The cost is index size and an analysis pipeline at write time.",
+  "tags": [
+   "search",
+   "inverted-index",
+   "indexing",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Search",
+  "difficulty": "Medium",
+  "question": "What does an analyser do in a search engine?",
+  "answer": "It tokenises text, lowercases, removes stop words, applies stemming or lemmatisation, and may add synonyms - and the same analyser must be applied to queries or they will not match the index. Analyser mismatch between index and query time is the most common cause of a search that finds nothing.",
+  "tags": [
+   "search",
+   "analysers",
+   "tokenisation",
+   "elasticsearch"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Search",
+  "difficulty": "Medium",
+  "question": "What is BM25 and why is it the default relevance function?",
+  "answer": "It scores documents by term frequency and inverse document frequency with saturation and length normalisation, so a term appearing fifty times does not score ten times higher than five, and long documents are not unfairly favoured. It is a robust default that needs no training data, unlike learned ranking models.",
+  "tags": [
+   "search",
+   "bm25",
+   "relevance",
+   "ranking"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Search",
+  "difficulty": "Medium",
+  "question": "When should you use a dedicated search engine rather than database full-text search?",
+  "answer": "When you need relevance tuning, faceting, aggregations over search results, typo tolerance, synonyms and multi-language analysis at scale. Database full-text search is sufficient for straightforward keyword matching over moderate volumes and avoids operating and synchronising a second system, which is a real ongoing cost.",
+  "tags": [
+   "search",
+   "architecture",
+   "trade-offs",
+   "elasticsearch"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Search",
+  "difficulty": "Medium",
+  "question": "How do you keep a search index synchronised with the database?",
+  "answer": "Drive it from change data capture or an outbox rather than dual writing, so the index is derived from committed changes. Make indexing idempotent, keep a version per document to detect out-of-order updates, and retain the ability to rebuild the index from source - which you will need after any mapping change.",
+  "tags": [
+   "search",
+   "cdc",
+   "consistency",
+   "integration"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Time Series",
+  "difficulty": "Medium",
+  "question": "What makes a time-series database different from a relational one?",
+  "answer": "It assumes append-mostly, time-ordered data, so it uses columnar or specialised storage with heavy compression on timestamps and values, automatic partitioning by time, downsampling and retention policies, and query functions for windows and gap filling. The same workload on a relational engine needs all of that built by hand.",
+  "tags": [
+   "time-series",
+   "databases",
+   "architecture",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Time Series",
+  "difficulty": "Medium",
+  "question": "What is downsampling and retention in time-series storage?",
+  "answer": "Raw high-resolution data is kept for a short period, then aggregated to coarser intervals for long-term storage, with raw points deleted. It keeps storage bounded while preserving trend history. The design decision is which aggregates to keep, because anything not retained cannot be recomputed later.",
+  "tags": [
+   "time-series",
+   "retention",
+   "storage",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Time Series",
+  "difficulty": "Medium",
+  "question": "Why is high cardinality a problem in time-series systems?",
+  "answer": "Each unique combination of tag values creates a separate series with its own index entry and storage, so adding an unbounded tag such as a request id can create millions of series and exhaust memory. Keeping tags to bounded, low-cardinality dimensions is the primary design rule.",
+  "tags": [
+   "time-series",
+   "cardinality",
+   "performance",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Medium",
+  "question": "What does autovacuum do in PostgreSQL and what breaks if you disable it?",
+  "answer": "Autovacuum reclaims dead tuples left by MVCC updates/deletes, freezes old transaction IDs to prevent wraparound, and refreshes planner statistics. Disabling it causes table bloat, ever-slower sequential scans, stale stats with bad plans, and eventually a forced anti-wraparound vacuum that locks tables. Keep it on and tune scale-factor thresholds per write-heavy table.",
+  "tags": [
+   "postgres",
+   "autovacuum",
+   "mvcc"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Hard",
+  "question": "How do you diagnose table bloat in PostgreSQL and fix it safely?",
+  "answer": "Compare pg_total_relation_size against an estimate from live tuples via pgstattuple or the bloat query on pg_stat_user_tables (dead tuples, last vacuum). Confirm with EXPLAIN (ANALYZE, BUFFERS) showing excess heap fetches. Fix with VACUUM (not full) first, then CLUSTER or pg_repack for rewrite without long locks. Schedule aggressive autovacuum and lower fillfactor to 80 on hot-update tables.",
+  "tags": [
+   "postgres",
+   "bloat",
+   "vacuum"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Medium",
+  "question": "What is a HOT update in PostgreSQL and how does fillfactor help?",
+  "answer": "A HOT (heap-only tuple) update stores the new row version on the same page when no indexed column changes, avoiding new index entries and making cleanup cheap. It needs free page space, so setting fillfactor to 70-85 on update-heavy tables reserves room. Without it every update writes full index entries and bloat grows fast.",
+  "tags": [
+   "postgres",
+   "hot-updates",
+   "fillfactor"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Medium",
+  "question": "What workload favors JSONB with GIN indexing over plain JSON storage?",
+  "answer": "Use JSONB almost always: it stores a decomposed binary form supporting GIN indexes, containment operators (@>, ?), and partial updates. Plain JSON only preserves exact input whitespace and is slower to query. Choose JSONB with a GIN index on the queried paths, and add generated columns for frequently filtered fields needing btree stats.",
+  "tags": [
+   "postgres",
+   "jsonb",
+   "gin"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Hard",
+  "question": "How do GIN and GiST indexes differ in PostgreSQL?",
+  "answer": "GIN is an inverted index ideal for composite values: arrays, JSONB, full-text vectors; fast search, slower writes, larger size. GiST is a balanced tree for overlapping ranges, geometry, nearest-neighbour (KNN) with lossy compression; faster writes, supports ordering. Rule: containment/tag search uses GIN, range/geo/KNN uses GiST.",
+  "tags": [
+   "postgres",
+   "gin",
+   "gist"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Medium",
+  "question": "What is TOAST in PostgreSQL and why should you care?",
+  "answer": "TOAST transparently compresses and out-of-lines wide column values (over ~2KB) into a side table. It keeps narrow queries fast but makes SELECT * on wide rows expensive and bloats updates touching toasted columns. Design: split hot narrow columns from cold wide text/JSONB, and avoid updating toasted columns in hot paths.",
+  "tags": [
+   "postgres",
+   "toast",
+   "storage"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Hard",
+  "question": "How do you use EXPLAIN (ANALYZE, BUFFERS) to find a slow query cause?",
+  "answer": "Run EXPLAIN (ANALYZE, BUFFERS, TIMING OFF) and read inside-out: look for high actual rows vs estimates (stale stats), Seq Scan with filter removing 99% (missing index), nested loops over large inputs, temp files (work_mem spill), and Buffers shared hit vs read (cache misses). Fix order: correct stats/index, rewrite SARGable predicates, then tune work_mem per query.",
+  "tags": [
+   "postgres",
+   "explain",
+   "query-tuning"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Medium",
+  "question": "What causes unexpected sequential scans in PostgreSQL?",
+  "answer": "Small tables (correct), stale statistics, non-SARGable predicates (functions on columns, LIKE '%x'), wrong data types forcing casts, low selectivity estimates, or disabled index knobs. Check pg_stat_user_tables seq_scan vs idx_scan, verify column types match, and use generated columns or expression indexes for function predicates instead of wrapping columns.",
+  "tags": [
+   "postgres",
+   "seq-scan",
+   "indexing"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Medium",
+  "question": "What is an index-only scan and why does the visibility map matter?",
+  "answer": "An index-only scan answers the query from the index without heap fetches, but only for pages marked all-visible in the visibility map. Without recent vacuuming it silently degrades to heap fetches. Maintain autovacuum so the map stays current, and INCLUDE extra columns to make covering indexes for hot queries.",
+  "tags": [
+   "postgres",
+   "index-only-scan",
+   "visibility-map"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Medium",
+  "question": "When is BRIN the right index in PostgreSQL?",
+  "answer": "BRIN suits huge naturally ordered tables like append-only time series: it stores min/max per block range, tiny size, cheap writes. It fails on unordered data or selective point lookups needing btree. Use BRIN on event timestamps with clustered inserts, btree/GIN where random access dominates.",
+  "tags": [
+   "postgres",
+   "brin",
+   "time-series"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Hard",
+  "question": "How does declarative partitioning help a 500M-row table?",
+  "answer": "Range/list partitioning by date or tenant prunes irrelevant partitions at plan time, makes bulk drops instant (DETACH), and localizes vacuum/index builds. Key rules: partition key in every unique constraint, matching indexes per partition, and constraint exclusion on. Hash partition only for uniform write spread, not time expiry.",
+  "tags": [
+   "postgres",
+   "partitioning",
+   "scale"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Medium",
+  "question": "What does pg_stat_statements tell you each week?",
+  "answer": "Top queries by total/mean time, calls, rows, and shared buffers plus temp usage. Sort by total_time to find the real load drivers, then by mean_time for latency outliers. Reset weekly, track the top 20, and tie each to an index or rewrite action. It needs shared_preload_libraries and modest track settings.",
+  "tags": [
+   "postgres",
+   "pg-stat-statements",
+   "monitoring"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Hard",
+  "question": "How do you find blocking locks in PostgreSQL?",
+  "answer": "Query pg_stat_activity joined to pg_locks: wait_event_type = Lock, find blocked pid and blocking pid via ungranted vs granted locks on same relation. Log lock_timeout breaches, set statement_timeout on app roles, keep transactions short, and take DDL with lock_timeout plus retry. Never kill -9 the postmaster; cancel the blocker pid.",
+  "tags": [
+   "postgres",
+   "locking",
+   "pg-locks"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Medium",
+  "question": "What are advisory locks good for?",
+  "answer": "Application-level mutexes without tables: pg_try_advisory_lock for leader election, cron singleton, or ordered migration runners. They die with the session, never bloat, and show in pg_locks. Scope keys per job, always use try-variants with timeouts, and release in finally blocks.",
+  "tags": [
+   "postgres",
+   "advisory-locks",
+   "coordination"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Pooling",
+  "difficulty": "Medium",
+  "question": "When do you put PgBouncer in front of PostgreSQL?",
+  "answer": "When thousands of short-lived app connections exhaust max_connections and memory. PgBouncer transaction-pooling multiplexes them onto few real backends. Use transaction mode for stateless REST, session mode only if you need prepared statements/listen/notify or temp tables. Size pool to CPU cores x2 plus headroom, not to app threads.",
+  "tags": [
+   "pgbouncer",
+   "pooling",
+   "postgres"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Pooling",
+  "difficulty": "Hard",
+  "question": "Why do prepared statements break under transaction pooling?",
+  "answer": "Named prepared statements bind to a backend session, but transaction pooling reassigns backends per transaction, so the next checkout misses the plan or errors. Fix with unnamed protocol-level prepares per transaction, driver settings disabling server prepares under PgBouncer, or session pooling for that workload only.",
+  "tags": [
+   "pgbouncer",
+   "prepared-statements",
+   "pooling"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Redis",
+  "difficulty": "Medium",
+  "question": "How do RDB and AOF persistence differ in Redis?",
+  "answer": "RDB takes point-in-time snapshots: compact, fast restarts, risk of minutes of loss. AOF logs every write: safer (fsync everysec default), bigger files, slower replays. Production uses both: AOF for durability plus periodic RDB for fast recovery. Never put persistence on the same disk as swap without monitoring fork latency.",
+  "tags": [
+   "redis",
+   "rdb",
+   "aof"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Redis",
+  "difficulty": "Hard",
+  "question": "How does Redis Cluster distribute keys?",
+  "answer": "16384 hash slots mapped by CRC16(key hash tag). Each primary owns slot ranges with replicas for failover. Multi-key ops must share a hash tag ({user:123}) to land on one slot or they fail with CROSSSLOT. Scale by adding primaries and resharding slots live; clients must follow MOVED/ASK redirects.",
+  "tags": [
+   "redis",
+   "clustering",
+   "hash-slots"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Redis",
+  "difficulty": "Hard",
+  "question": "Why is Redlock controversial and when is a single Redis lock enough?",
+  "answer": "Redlock across independent masters defends against a single node failing, but clock drift, GC pauses, and failover can still grant two holders; fencing tokens are required for correctness. A single-instance SET NX PX lock with owner token plus Lua release is fine for best-effort cron dedupe, not for money movements which need consensus like Raft.",
+  "tags": [
+   "redis",
+   "redlock",
+   "distributed-lock"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Redis",
+  "difficulty": "Medium",
+  "question": "What are Redis Streams used for?",
+  "answer": "Durable consumer-group queues with at-least-once delivery: XADD producers, XREADGROUP consumers, XACK commits, XPENDING for stuck-message recovery. Unlike pub/sub they persist and replay. Use for event pipelines and outbox relays, with trimming (MAXLEN ~) to bound memory.",
+  "tags": [
+   "redis",
+   "streams",
+   "messaging"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Redis",
+  "difficulty": "Easy",
+  "question": "What is HyperLogLog in Redis good for?",
+  "answer": "Approximate distinct counting (unique visitors, daily actives) in 12KB with ~0.8% error via PFADD/PFCOUNT. Use when exact sets would cost megabytes. Merge days with PFMERGE. Not for billing where exact counts matter.",
+  "tags": [
+   "redis",
+   "hyperloglog",
+   "analytics"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Redis",
+  "difficulty": "Medium",
+  "question": "How do Lua scripts make Redis operations atomic?",
+  "answer": "Scripts run atomically on the server: check-and-set, token-validated release, rate-limit buckets happen without race windows. Keep them short (under ~5ms), pass keys via KEYS and args via ARGV for cluster tags, and avoid cross-slot keys. Prefer functions (FUNCTION LOAD) over EVALSHA for versioning.",
+  "tags": [
+   "redis",
+   "lua",
+   "atomicity"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Redis",
+  "difficulty": "Medium",
+  "question": "What is client-side caching in Redis 6+?",
+  "answer": "Server-assisted invalidation: client caches GETs locally and subscribes to invalidate messages on key change (RESP3). Cuts hot-key latency to microseconds while staying consistent. Use for read-heavy reference data with versioned keys, and always set a TTL fallback in case of missed invalidations.",
+  "tags": [
+   "redis",
+   "client-caching",
+   "performance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Redis",
+  "difficulty": "Medium",
+  "question": "How do you model geospatial queries in Redis?",
+  "answer": "GEOADD lon/lat members, then GEORADIUS/GEOSEARCH by radius or box with COUNT and SORT. Backed by sorted sets with geohash scores. Good for nearby-drivers or stores under millions of points. For polygons or heavy GIS use PostGIS instead.",
+  "tags": [
+   "redis",
+   "geo",
+   "indexing"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Cassandra",
+  "difficulty": "Medium",
+  "question": "How do you pick a partition key in Cassandra?",
+  "answer": "Choose a key spreading writes evenly with bounded partition size (under ~100MB, ideally few MB): tenant+day bucket rather than raw user_id for hot users. All queries must include it; cross-partition scans fail at scale. Model one table per query pattern (denormalize) instead of joins.",
+  "tags": [
+   "cassandra",
+   "partitioning",
+   "data-model"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Cassandra",
+  "difficulty": "Hard",
+  "question": "What do read/write quorums trade off in Cassandra?",
+  "answer": "QUORUM = (RF/2)+1 balances consistency and availability. ALL is consistent but fails on one replica down; ONE is fast but stale. LOCAL_QUORUM keeps latency low per DC. Use quorum reads+writes for money-adjacent data, ONE for telemetry. Add lightweight transactions only for rare uniqueness, they cost 4 round trips.",
+  "tags": [
+   "cassandra",
+   "quorum",
+   "consistency"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Cassandra",
+  "difficulty": "Medium",
+  "question": "What is compaction and why does strategy matter?",
+  "answer": "Compaction merges SSTables and evicts tombstones. STCS suits write-heavy, LCS suits read-heavy with bounded sstables, TWCS suits TTL time series. Wrong choice means read amplification or disk blowup. Monitor pending compactions and tombstone warnings, and never run major manual compactions in peak.",
+  "tags": [
+   "cassandra",
+   "compaction",
+   "storage"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Cassandra",
+  "difficulty": "Medium",
+  "question": "What is hinted handoff?",
+  "answer": "When a replica is briefly down, coordinators store hints and replay them on recovery, preserving availability without immediate repair. It covers minutes to hours, not days; longer outages need nodetool repair to sync digests. Size hint windows small to avoid coordinator memory pressure.",
+  "tags": [
+   "cassandra",
+   "availability",
+   "repair"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Search",
+  "difficulty": "Medium",
+  "question": "How do shards and replicas work in Elasticsearch?",
+  "answer": "An index splits into primary shards for parallelism; each has replica copies for HA and read scale. Search fans out to one copy per shard then merges. Too many small shards waste heap; too few limit throughput. Size shards 10-50GB, keep replicas >=1 in prod, and use ILM to roll hot to warm to delete.",
+  "tags": [
+   "elasticsearch",
+   "sharding",
+   "replicas"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Search",
+  "difficulty": "Medium",
+  "question": "Why does Elasticsearch refresh_interval matter?",
+  "answer": "It controls how often the in-memory buffer becomes searchable (default 1s). Lower gives fresher search but more segments and CPU; bulk loads set it to 30s or -1 then restore. Durability still comes from translog, not refresh. Tune per index: 1s for user-facing search, 30s+ for logs ingest.",
+  "tags": [
+   "elasticsearch",
+   "refresh",
+   "tuning"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Graph",
+  "difficulty": "Medium",
+  "question": "When is Neo4j better than Postgres for relationships?",
+  "answer": "When queries traverse 3+ hops (fraud rings, recommendations, access paths) with variable depth. Cypher pattern matching avoids explosive joins and stays readable. Use Postgres for tabular aggregates and strict schemas; sync the graph from the system of record via outbox/CDC rather than dual-writing.",
+  "tags": [
+   "neo4j",
+   "graph",
+   "cypher"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Graph",
+  "difficulty": "Medium",
+  "question": "What makes a good Cypher query fast?",
+  "answer": "Anchor on indexed labels/properties first, then expand with bounded hop limits and direction. Profile for Eager operators signalling cartesian products, split big writes into batches with periodic commit, and parameterize everything. Add composite indexes matching the MATCH predicates.",
+  "tags": [
+   "neo4j",
+   "cypher",
+   "indexing"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Cloud",
+  "difficulty": "Medium",
+  "question": "How do DynamoDB hot partitions happen and how do you fix them?",
+  "answer": "One partition key value exceeds ~1000 WCU/3000 RCU or 10GB, throttling despite low average use. Fix with write sharding (suffix buckets like order#1..N), higher-cardinality keys, SQS buffering for bursts, and on-demand only for spiky unknowns. Monitor throttled requests by key via contributor insights.",
+  "tags": [
+   "dynamodb",
+   "hot-partitions",
+   "throughput"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Cloud",
+  "difficulty": "Medium",
+  "question": "What is a Cosmos DB Request Unit?",
+  "answer": "A normalized cost of throughput combining CPU, memory, and IO per operation. Point reads cost ~1 RU, writes ~5 RU, queries scale with scanned documents. Provision autoscale with a cap, partition by high-cardinality key, and rewrite cross-partition queries to single-partition filters to cut RU burn.",
+  "tags": [
+   "cosmosdb",
+   "ru",
+   "throughput"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you plan RPO and RTO for a database?",
+  "answer": "RPO defines max tolerable data loss (backup frequency + WAL/stream lag), RTO defines restore speed (snapshot size, parallel restore, pre-warmed replicas). Test both with game days: measure PITR replay time and replica promotion. Cheap blob snapshots give hours RTO; synchronous replicas plus tested runbooks give minutes.",
+  "tags": [
+   "backup",
+   "rpo-rto",
+   "dr"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "Snapshot vs PITR restore: when is each right?",
+  "answer": "Snapshots restore whole volumes fast for AZ loss or bad deployments. PITR replays WAL/binlog to a second before human error or bad migration, but is slower and needs continuous archiving. Keep daily snapshots plus WAL archiving, and practice table-level restore so you never restore 2TB for one dropped table.",
+  "tags": [
+   "backup",
+   "pitr",
+   "restore"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "How do you replace OFFSET pagination at scale?",
+  "answer": "OFFSET scans and discards rows every page, degrading linearly. Switch to keyset (WHERE (created_at,id) > (?,?) ORDER BY created_at,id LIMIT n) using a covering index. It is stable under inserts and constant-time. Keep OFFSET only for small admin lists; expose opaque cursors encoding the last key.",
+  "tags": [
+   "pagination",
+   "keyset",
+   "performance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the N+1 problem at the database layer?",
+  "answer": "ORMs fire one query for the parent plus one per child (100 orders becomes 101 queries), spiking latency and pool use. Fix by eager-loading with JOIN or IN batches, DataLoader batching in GraphQL, and covering the foreign-key index. Prove with query logs counting statements per request before and after.",
+  "tags": [
+   "orm",
+   "n-plus-one",
+   "performance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Medium",
+  "question": "How does pg_trgm power fuzzy search in PostgreSQL?",
+  "answer": "pg_trgm splits text into trigrams and indexes them with GIN/GiST for LIKE '%term%', similarity (%), and word_similarity ranking. It tolerates typos without an external engine up to millions of rows. Set similarity_threshold ~0.3, combine with FTS ranking, and move to dedicated search past 10M docs or complex facets.",
+  "tags": [
+   "postgres",
+   "pg-trgm",
+   "fuzzy-search"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "PostgreSQL",
+  "difficulty": "Easy",
+  "question": "What is the fillfactor trade-off for read-mostly tables?",
+  "answer": "Keep fillfactor at 100 for read-mostly tables to pack pages densely and cut IO. Lower it only for update-heavy tables needing HOT room. Changing it requires rewrite (VACUUM FULL or CLUSTER) to take effect, so set it at creation based on write pattern.",
+  "tags": [
+   "postgres",
+   "fillfactor",
+   "storage"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Redis",
+  "difficulty": "Easy",
+  "question": "When do Redis keyspace notifications help?",
+  "answer": "For cache invalidation hooks, session-expiry jobs, or local-cache purges via SUBSCRIBE to __keyevent__ expirations. They are fire-and-forget with at-most-once delivery, so pair with periodic reconciliation scans. Never build money-critical workflows solely on them.",
+  "tags": [
+   "redis",
+   "keyspace",
+   "events"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you safely run a backfill on a live table?",
+  "answer": "Batch by primary key in small transactions (1000-5000 rows) with sleeps and idempotent WHERE clauses, throttled by replica lag. Make it resumable via last-processed key checkpoint, run during low traffic, and monitor locks plus bloat. Avoid one giant UPDATE that holds locks and explodes WAL.",
+  "tags": [
+   "backfill",
+   "migrations",
+   "safety"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What belongs in a database runbook for on-call?",
+  "answer": "Symptoms to dashboards (lag, pool waits, bloat), safe read-only checks, thresholds for failover vs wait, exact promotion and fencing steps, PITR commands with tested timings, and rollback contacts. Include copy-paste queries for locks, long transactions, and top queries. Review quarterly with a game-day restore.",
+  "tags": [
+   "runbook",
+   "oncall",
+   "operations"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you size a connection pool correctly?",
+  "answer": "Pool to backend limits, not app threads: start near (2 x CPU cores) + disks for OLTP, measure wait events and queue depth, then grow slowly. Too large causes context switching and lock contention; too small queues requests. Separate pools for OLTP, reporting, and migrations with statement timeouts per role.",
+  "tags": [
+   "pooling",
+   "sizing",
+   "performance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you handle database secrets rotation without downtime?",
+  "answer": "Issue dual credentials with overlapping validity, roll app instances gradually via secret manager (Vault/AWS SM with sidecar reload), and keep audit of old credential use before revoking. Use short-lived IAM DB auth where supported. Never bake passwords into images or logs; rotate on a schedule plus on engineer exit.",
+  "tags": [
+   "secrets",
+   "rotation",
+   "security"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you model multi-tenant data?",
+  "answer": "Choose silo (per-DB, strongest isolation, costly), pool with tenant_id + RLS (cheap, needs disciplined indexes and row security), or bridge (schema per tenant). Enforce tenant filters in RLS policies, include tenant first in indexes, and test cross-tenant leakage with dedicated security tests. Migrate noisy tenants to silos.",
+  "tags": [
+   "multitenancy",
+   "rls",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How do you keep reporting queries off the OLTP primary?",
+  "answer": "Route analytics to read replicas or a warehouse via CDC, with separate pools and statement timeouts. Materialize daily aggregates, precompute rollups with incremental refresh, and cache dashboards. If replicas lag, serve stale-with-timestamp rather than hitting the primary and risking lock queues.",
+  "tags": [
+   "oltp",
+   "olap",
+   "replicas"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a covering index in a document database?",
+  "answer": "An index containing every field the query filters, sorts and projects, so the engine answers from the index without fetching documents. It is the same idea as in relational engines and gives the same order-of-magnitude improvement, which is why projection and index design are considered together.",
+  "tags": [
+   "databases",
+   "indexing",
+   "performance",
+   "nosql"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the working set and why is it the key capacity metric?",
+  "answer": "The portion of data and indexes actively accessed, which must fit in memory for good performance. Total data size matters far less - a terabyte database with a two-gigabyte working set performs well, while a fifty-gigabyte database read uniformly does not. Capacity planning should size memory against the working set.",
+  "tags": [
+   "databases",
+   "memory",
+   "capacity",
+   "performance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a hot row or hot key and how do you address it?",
+  "answer": "A single row or key receiving disproportionate traffic, serialising on locks or saturating one partition. Address it by caching, sharding the counter into multiple sub-keys aggregated on read, batching updates, or moving the contended value out of the transactional path entirely.",
+  "tags": [
+   "databases",
+   "contention",
+   "scalability",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between logical and physical deletion, and what should you consider?",
+  "answer": "Physical removes the row; logical marks it deleted. Logical preserves history and referential integrity but complicates every query, unique constraint and index, and it conflicts with data deletion obligations. Consider an archive table instead, which gives history without polluting the operational schema.",
+  "tags": [
+   "databases",
+   "soft-delete",
+   "design",
+   "compliance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you choose between storing derived values and computing them?",
+  "answer": "Store when computation is expensive, the value is read far more than written, and one writer owns it. Compute when the inputs change often, correctness matters more than speed, or several writers could update the sources. Stored derived values need a rebuild path for when they inevitably drift.",
+  "tags": [
+   "databases",
+   "denormalisation",
+   "design",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is an idempotency table and how is it used?",
+  "answer": "A table keyed by a client-supplied idempotency key recording the request and its outcome, written in the same transaction as the effect. A repeat request finds the key and returns the stored result rather than acting again. It is the standard mechanism for making a non-idempotent operation safely retryable.",
+  "tags": [
+   "databases",
+   "idempotency",
+   "reliability",
+   "patterns"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you implement a queue in a relational database and when is it acceptable?",
+  "answer": "A table with a status and claim mechanism using SELECT FOR UPDATE SKIP LOCKED, an index on the pending predicate, and a visibility timeout for crashed workers. It is acceptable at modest throughput and gives transactional consistency with your data - which is exactly what a separate broker cannot offer.",
+  "tags": [
+   "databases",
+   "queues",
+   "patterns",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What are the risks of using the database as a message queue at scale?",
+  "answer": "Table bloat from high churn, index contention on the status column, polling overhead, vacuum or cleanup pressure, and competition with the application's own workload for the same resources. Those are the points at which a purpose-built broker becomes worth the extra system.",
+  "tags": [
+   "databases",
+   "queues",
+   "scalability",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is an advisory lock and when would you use one?",
+  "answer": "A named lock the application takes explicitly, unrelated to any row, used to serialise a job across instances or protect a critical section that has no natural row to lock. It is simpler than a distributed lock service when you already have a database, but it inherits that database's availability as a dependency.",
+  "tags": [
+   "databases",
+   "locking",
+   "concurrency",
+   "patterns"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you decide the transaction boundary in an application?",
+  "answer": "It should span exactly one unit of business consistency - the smallest set of changes that must succeed or fail together. Extending it across external calls, user interaction or unrelated work holds locks unnecessarily; splitting a genuinely atomic change across two transactions creates states the domain says cannot exist.",
+  "tags": [
+   "databases",
+   "transactions",
+   "design",
+   "architecture"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why should you not call an external service inside a database transaction?",
+  "answer": "The transaction holds locks and a connection for the duration of a call whose latency you do not control, and the external effect cannot be rolled back if the transaction fails. Commit first and then act, using an outbox if the two must be reliably linked.",
+  "tags": [
+   "databases",
+   "transactions",
+   "integration",
+   "reliability"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is connection churn and why does it hurt?",
+  "answer": "Opening and closing connections repeatedly rather than pooling. Each connection costs a handshake, authentication and, in some engines, a process - so churn shows as high CPU on the database and latency that grows with load. It is usually caused by creating a client per request instead of sharing a pooled one.",
+  "tags": [
+   "databases",
+   "connections",
+   "performance",
+   "troubleshooting"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you safely run a report against a production database?",
+  "answer": "Against a replica rather than the primary, with a read-only least-privilege account, a statement timeout, and a resource governor or query limit where available. Reports are unbounded by nature, and a single accidental cross join on the primary is a routine cause of production incidents.",
+  "tags": [
+   "databases",
+   "operations",
+   "reporting",
+   "reliability"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the risk of business logic living in database triggers?",
+  "answer": "It executes invisibly to application developers, runs inside the caller's transaction extending lock duration, is hard to test and version, and can cascade unpredictably when triggers fire other triggers. The legitimate cases are integrity enforcement and auditing that must not be bypassable.",
+  "tags": [
+   "databases",
+   "triggers",
+   "design",
+   "maintainability"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a clustered index scan and a table scan?",
+  "answer": "In an engine where the clustered index is the table, they are the same operation named differently depending on whether the table has a clustered index. Either way it means reading everything, so the distinction matters less than the fact that no seek was possible.",
+  "tags": [
+   "databases",
+   "indexing",
+   "execution-plans",
+   "terminology"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why does a query sometimes get slower after adding rows even with an index?",
+  "answer": "The optimiser may switch plans once the estimated row count crosses a threshold - a seek with lookups becomes more expensive than a scan - or the index no longer fits in memory. Both are expected behaviour, and both are diagnosed by comparing the plan before and after.",
+  "tags": [
+   "databases",
+   "optimizer",
+   "performance",
+   "diagnostics"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a tipping point in query optimisation?",
+  "answer": "The selectivity at which the optimiser stops using a non-covering index because the cost of looking up each matching row exceeds a full scan - often only a few percent of the table. It explains why an index helps for a narrow filter and is ignored for a broader one.",
+  "tags": [
+   "databases",
+   "optimizer",
+   "indexing",
+   "performance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "How do you decide between an index and a materialised aggregate?",
+  "answer": "An index speeds access to rows; a materialised aggregate removes the work of computing over many rows. When a query aggregates millions of rows to produce a few numbers repeatedly, no index makes it fast - precomputing does, at the cost of maintenance and staleness.",
+  "tags": [
+   "databases",
+   "aggregation",
+   "performance",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you validate that a database restore actually worked?",
+  "answer": "Restore to an isolated environment, check row counts and checksums against expectations, run application smoke tests against it, and record the elapsed time against your recovery objective. A restore that completes without error can still produce a database missing recent data or with broken permissions.",
+  "tags": [
+   "databases",
+   "backup",
+   "recovery",
+   "verification"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is the operational risk of a database with no maintenance plan?",
+  "answer": "Statistics drift so plans degrade, indexes fragment, the transaction log grows unbounded, backups may not be running, and integrity corruption goes undetected until a restore fails. Managed services handle much of this, which is precisely why self-managed instances are where it is forgotten.",
+  "tags": [
+   "databases",
+   "maintenance",
+   "operations",
+   "risk"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a covering query and how does it differ from a covering index?",
+  "answer": "A covering index contains all columns a query needs; a covering query is one that can be answered from an index alone. The distinction is that the same index covers some queries and not others, so index design must target specific query shapes rather than columns in isolation.",
+  "tags": [
+   "databases",
+   "indexing",
+   "performance",
+   "terminology"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why can a database appear healthy while queries are slow?",
+  "answer": "Because CPU, memory and disk metrics look normal while the bottleneck is locking, a plan regression, or client-side connection waiting. Resource dashboards measure the server; wait statistics and query-level timing measure the workload, and only the latter explains slowness with idle resources.",
+  "tags": [
+   "databases",
+   "diagnostics",
+   "performance",
+   "monitoring"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you plan a database version upgrade?",
+  "answer": "Review breaking changes and deprecated features, test the application and its queries against the new version with production-like data, check for plan regressions from optimiser changes, plan the rollback, and upgrade a replica first where the topology allows. Optimiser changes are the usual source of surprise.",
+  "tags": [
+   "databases",
+   "upgrades",
+   "planning",
+   "operations"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a logical and a physical data model?",
+  "answer": "The logical model describes entities, attributes and relationships independent of technology; the physical model adds tables, types, indexes and storage decisions for a specific engine. Skipping the logical model is why physical schemas often encode the first implementation's assumptions rather than the domain.",
+  "tags": [
+   "databases",
+   "modelling",
+   "design",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you decide the isolation level for an application?",
+  "answer": "From what the business can tolerate - read committed with snapshot semantics suits most workloads, serialisable is needed where a check-then-act invariant must hold, and lower levels are rarely justified. Choose per transaction where the engine allows, since a single global choice over-constrains most operations.",
+  "tags": [
+   "databases",
+   "isolation",
+   "transactions",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why is an index on a boolean column usually useless?",
+  "answer": "Because it has two distinct values, so any lookup matches roughly half the table and the optimiser prefers a scan. It becomes useful as a filtered index on the rare value, or as the trailing column of a composite index where the leading columns provide selectivity.",
+  "tags": [
+   "databases",
+   "indexing",
+   "selectivity",
+   "performance"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the effect of a nullable foreign key on query plans and integrity?",
+  "answer": "Nullable foreign keys permit orphan-like states the model may not intend, require outer joins in queries, and complicate aggregation because nulls are excluded. Where the relationship is genuinely optional they are correct; where they exist because the column was added later, they encode a migration rather than a rule.",
+  "tags": [
+   "databases",
+   "constraints",
+   "nullability",
+   "modelling"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the practical difference between a primary and a secondary replica for reads?",
+  "answer": "The primary is authoritative and immediately consistent; a secondary is behind by the replication lag and may be seconds stale under load. Routing reads to a secondary is a correctness decision per query, not a global setting, because read-after-write and validation queries break on stale data.",
+  "tags": [
+   "databases",
+   "replication",
+   "consistency",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is the risk of running schema changes and data changes in the same migration?",
+  "answer": "They have different durations, locking behaviour and rollback characteristics, so a failure partway leaves an inconsistent state that is hard to reason about. Separating them - schema change deployed, then data backfilled in batches - makes each independently verifiable and reversible.",
+  "tags": [
+   "databases",
+   "migrations",
+   "risk",
+   "operations"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why is it important that a transaction does not span user interaction?",
+  "answer": "Because the locks are held for as long as the user takes to respond, which may be minutes or forever if they close the browser. Read the data, let the user act, then apply the change in a short transaction with optimistic concurrency to detect intervening edits.",
+  "tags": [
+   "databases",
+   "transactions",
+   "locking",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you evaluate whether a managed database service is a good fit?",
+  "answer": "Check the version support and upgrade cadence, the backup and recovery guarantees against your objectives, the scaling limits, what administrative control you lose, the network isolation options, and the cost at your expected size. The main trade is operational burden against configuration flexibility.",
+  "tags": [
+   "databases",
+   "managed-services",
+   "evaluation",
+   "cloud"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why does deleting rows not always reclaim disk space?",
+  "answer": "Most engines mark space as reusable within the file rather than returning it to the operating system, so the file stays the same size and is reused by subsequent inserts. Reclaiming it requires a shrink or rebuild, which is IO-intensive and often unnecessary since the space will be reused anyway.",
+  "tags": [
+   "databases",
+   "storage",
+   "maintenance",
+   "operations"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why should an application not depend on the order of rows without an ORDER BY?",
+  "answer": "Because no order is guaranteed - it depends on the plan, the storage layout and concurrency, so it can change with an index addition or a version upgrade. Code that relies on incidental ordering works until an unrelated change reorders the result, which is then extremely hard to diagnose.",
+  "tags": [
+   "databases",
+   "ordering",
+   "correctness",
+   "practices"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the practical difference between a constraint and a trigger for enforcing a rule?",
+  "answer": "A constraint is declarative, checked by the engine efficiently and impossible to bypass. A trigger is procedural, runs inside the transaction, can express rules constraints cannot, and is invisible to developers reading the application. Prefer a constraint whenever the rule can be expressed as one.",
+  "tags": [
+   "databases",
+   "constraints",
+   "triggers",
+   "design"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why is it risky to rely on the database's default isolation level without knowing it?",
+  "answer": "Because it differs by engine and by configuration, so the same application code has different concurrency semantics on different systems. Behaviour that appears correct in development can permit lost updates or phantom reads elsewhere, which is why the level should be an explicit decision.",
+  "tags": [
+   "databases",
+   "isolation",
+   "portability",
+   "correctness"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you decide who should have direct database access in production?",
+  "answer": "As few people as possible, with read-only by default, time-bound elevation for writes, all access logged and reviewed, and application changes going through deployment rather than manual statements. Direct write access is the path by which changes bypass every control the pipeline provides.",
+  "tags": [
+   "databases",
+   "access-control",
+   "governance",
+   "operations"
+  ]
+ }
+]

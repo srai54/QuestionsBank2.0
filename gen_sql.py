@@ -1,7 +1,17 @@
 import json
 import os
-_src = "questions.json" if os.path.exists("questions.json") else "interview_qbank.json"
-rows = json.load(open(_src, encoding="utf-8"))
+# Read the built aggregate, which build.py produces from data/*.json with ids
+# assigned. Run build.py first.
+import glob
+_data = sorted(glob.glob(os.path.join("data", "*.json")))
+if _data:
+    rows = []
+    for _f in _data:
+        rows.extend(json.load(open(_f, encoding="utf-8")))
+elif os.path.exists("questions.json"):
+    rows = json.load(open("questions.json", encoding="utf-8"))
+else:
+    rows = json.load(open("interview_qbank.json", encoding="utf-8"))
 
 def esc(s):
     if s is None: return ''

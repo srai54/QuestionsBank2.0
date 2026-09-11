@@ -1,0 +1,2437 @@
+[
+ {
+  "category": "System Design",
+  "subcategory": "Approach",
+  "difficulty": "Medium",
+  "question": "How do you approach a system design interview question?",
+  "answer": "Clarify requirements (functional and non-functional: scale, latency, consistency, availability), estimate load (QPS, data size, read/write ratio), define the API, design a high-level architecture (clients, gateway, services, data stores, cache, queues), then deep-dive into data model, scaling, and bottlenecks. Discuss trade-offs (CAP, consistency vs availability), failure handling, and monitoring. Drive with requirements—there's no single 'right' answer, only justified trade-offs.",
+  "tags": [
+   "system-design",
+   "approach",
+   "requirements",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Medium",
+  "question": "How would you design a URL shortener?",
+  "answer": "API to create a short code for a URL and redirect. Generate a short unique key (base62 of an incrementing id, or hash + collision handling). Store mappings in a fast key-value store/DB (short_code → long_url) with heavy caching (Redis) since reads dominate. Use a load-balanced stateless service, 301/302 redirects, analytics via async events, and handle custom aliases, expiry, and rate limiting. Scale reads with cache + replicas; keys are read-heavy.",
+  "tags": [
+   "system-design",
+   "url-shortener",
+   "caching",
+   "scaling"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Hard",
+  "question": "How would you design a rate limiter?",
+  "answer": "Choose an algorithm: fixed window (simple, boundary bursts), sliding window log/counter (accurate), token bucket (allows bursts up to capacity, refills steadily), or leaky bucket (smooths output). For distributed enforcement, store counters/tokens in Redis (atomic Lua scripts) keyed by user/IP/API key with TTLs. Return 429 + Retry-After. Consider per-endpoint limits, graceful degradation, and enforcing at the gateway (APIM) for consistency across instances.",
+  "tags": [
+   "system-design",
+   "rate-limiter",
+   "token-bucket",
+   "redis"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Messaging",
+  "difficulty": "Hard",
+  "question": "How would you design a notification system?",
+  "answer": "Accept notification requests via an API that publishes to a queue for async processing. A dispatcher fans out to channel workers (email, SMS, push) using provider integrations, with templates, user preferences, and rate limiting. Ensure reliability with retries, dead-letter queues, and idempotency (dedupe by notification id). Add scheduling, priority queues, delivery tracking, and observability. Decouple producers from delivery to absorb spikes and isolate channel failures.",
+  "tags": [
+   "system-design",
+   "notifications",
+   "queue",
+   "fan-out",
+   "idempotency"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Hard",
+  "question": "How would you design a scalable file upload/storage service?",
+  "answer": "Use object storage (Blob/S3) with direct-to-storage uploads via pre-signed URLs/SAS (offload bytes from your servers). Store metadata in a database. Support chunked/multipart uploads for large files with resume, virus scanning and validation on upload events, CDN for downloads, lifecycle tiering for cost, and access control via short-lived signed URLs. Keep the app stateless; the heavy data path goes client↔storage directly.",
+  "tags": [
+   "system-design",
+   "file-upload",
+   "blob",
+   "presigned-url",
+   "cdn"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "Where would you add caching in a web application?",
+  "answer": "Layer caches by distance from the user: browser cache/CDN for static assets and cacheable responses, an API/gateway response cache, an application distributed cache (Redis) for hot query results/sessions, a local in-memory cache for per-instance hot data, and the database's own buffer/query cache. Cache at the level with the best hit ratio and acceptable staleness, with clear invalidation and TTLs. Measure hit rates and guard against stampedes.",
+  "tags": [
+   "system-design",
+   "caching",
+   "cdn",
+   "redis",
+   "layers"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Data",
+  "difficulty": "Hard",
+  "question": "How do you choose between SQL and NoSQL for a system?",
+  "answer": "Choose SQL for structured data with complex relationships/joins, strong transactional integrity (ACID), and mature reporting—when the schema is well-defined and consistency matters. Choose NoSQL for flexible/evolving schemas, massive scale/high write throughput, simple access patterns, or specific shapes (documents, key-value, graph, time-series). Decide by data model, query patterns, consistency needs, and scale—often use both (polyglot persistence) for different subsystems.",
+  "tags": [
+   "system-design",
+   "sql",
+   "nosql",
+   "data-store",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Medium",
+  "question": "What is a load balancer and what algorithms does it use?",
+  "answer": "A load balancer distributes traffic across multiple servers for scalability and availability, and removes unhealthy instances (health checks). Algorithms: round-robin, weighted round-robin, least connections, least response time, IP/hash-based (sticky). Layer 4 (transport) balances by IP/port; Layer 7 (application) can route by URL/host/headers. It enables horizontal scaling of stateless services and zero-downtime deployments.",
+  "tags": [
+   "system-design",
+   "load-balancer",
+   "round-robin",
+   "health-check"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Hard",
+  "question": "How would you handle a sudden 10x traffic spike?",
+  "answer": "Autoscale stateless tiers horizontally (with pre-provisioned headroom/warm pools for fast scale-out), offload reads to caches/CDN, use queues to buffer writes and absorb bursts (load leveling), apply rate limiting and graceful degradation (shed non-critical features), and ensure the database scales via read replicas/connection pooling. Circuit breakers protect dependencies. Plan capacity and run load tests beforehand; monitor to react quickly.",
+  "tags": [
+   "system-design",
+   "traffic-spike",
+   "autoscaling",
+   "load-leveling",
+   "degradation"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Hard",
+  "question": "How do you design for high availability and disaster recovery?",
+  "answer": "HA: eliminate single points of failure—redundant stateless instances across availability zones behind a load balancer, replicated databases with automatic failover, and health checks. DR: define RTO/RPO, replicate to a paired region, back up regularly (test restores), and choose a strategy (active-active, active-passive, or backup-restore) balancing cost vs recovery speed. Automate failover and rehearse it. Design assuming components will fail.",
+  "tags": [
+   "system-design",
+   "high-availability",
+   "disaster-recovery",
+   "rto-rpo",
+   "failover"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "What is database sharding and what are the challenges?",
+  "answer": "Sharding horizontally partitions data across multiple databases by a shard key (e.g., user id hash or range) to scale beyond one server's capacity. Challenges: choosing a key that distributes evenly (avoid hotspots), cross-shard queries/joins and transactions become hard, rebalancing/resharding is complex, and referential integrity spans shards. Use it only when a single DB (with replicas/vertical scaling) truly can't cope, and align the shard key with access patterns.",
+  "tags": [
+   "system-design",
+   "sharding",
+   "partitioning",
+   "shard-key",
+   "scaling"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Consistency",
+  "difficulty": "Hard",
+  "question": "How would you ensure idempotency for a payment API?",
+  "answer": "Require clients to send an idempotency key (unique per logical request). Store the key with the request/result; on a repeat with the same key, return the original result instead of processing again—preventing double charges on retries. Use a transactional insert of the key (unique constraint) to atomically detect duplicates, set an expiry, and handle concurrent retries with locking. Combine with at-least-once messaging and reconciliation for robustness.",
+  "tags": [
+   "system-design",
+   "idempotency",
+   "payments",
+   "idempotency-key",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Real-time",
+  "difficulty": "Hard",
+  "question": "How would you design a real-time chat or presence feature?",
+  "answer": "Use persistent connections (WebSockets/SignalR) for bidirectional real-time messaging. A connection layer (with a backplane like Redis to broadcast across instances) routes messages; persist messages in a fast store, use queues for delivery/fan-out, and track presence via heartbeats with TTL in Redis. Handle reconnection, ordering, delivery receipts, and offline push. Scale the connection tier horizontally with sticky routing or a shared backplane.",
+  "tags": [
+   "system-design",
+   "chat",
+   "websockets",
+   "signalr",
+   "real-time",
+   "presence"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between latency and throughput?",
+  "answer": "Latency is the time to complete a single operation (response time), often measured in ms and by percentiles (p95/p99). Throughput is the number of operations handled per unit time (QPS/TPS). They're related but distinct—you can improve throughput (batching, parallelism) while latency per item stays or rises. Optimize for the metric that matters to users (latency for interactive, throughput for batch/ingest).",
+  "tags": [
+   "system-design",
+   "latency",
+   "throughput",
+   "performance"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is back-of-the-envelope estimation and why does it matter?",
+  "answer": "It's rough capacity math to validate a design: estimate QPS (daily requests / 86400, times peak factor), storage (records × size × retention), bandwidth, and memory for caches. It reveals whether one server suffices or you need sharding/caching, and grounds design choices in numbers. Interviewers want to see you reason about scale quantitatively rather than over- or under-engineer blindly.",
+  "tags": [
+   "system-design",
+   "estimation",
+   "capacity-planning",
+   "qps"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Caching",
+  "difficulty": "Hard",
+  "question": "How would you design a distributed cache invalidation strategy?",
+  "answer": "Options: TTL-based expiry (simple, eventual freshness), write-through/write-behind to keep cache and DB in sync, and event-driven invalidation (publish a change event that invalidates/updates relevant keys across nodes). Use versioned/namespaced keys to invalidate groups, and delete-on-write (invalidate rather than update to avoid races). Accept eventual consistency, guard against stampedes, and choose per data's staleness tolerance. Invalidation is the hard part of caching.",
+  "tags": [
+   "system-design",
+   "cache-invalidation",
+   "distributed",
+   "ttl",
+   "events"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Data",
+  "difficulty": "Hard",
+  "question": "How would you design a news feed / timeline?",
+  "answer": "Two models: fan-out on write (push each post to followers' precomputed feeds—fast reads, expensive for celebrities with millions of followers) and fan-out on read (assemble the feed at query time from followed users—cheap writes, costly reads). A hybrid pushes for normal users and pulls for high-follower accounts. Use caching, pagination (cursor), ranking, and async fan-out via queues. Balance read/write cost and freshness for the access pattern.",
+  "tags": [
+   "system-design",
+   "news-feed",
+   "fan-out",
+   "timeline",
+   "caching"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Hard",
+  "question": "How would you design a distributed job scheduler?",
+  "answer": "Store jobs and schedules in a durable store; use a leader/partitioned workers with distributed locks (or a queue) so each due job runs once; poll for due jobs by next-run time (indexed), enqueue them, and have idempotent workers execute with retries and dead-lettering. Handle missed runs, time zones, overlapping executions (skip/queue), and horizontal scaling. Tools/patterns: Hangfire, Quartz, cloud schedulers, or a custom queue-based design.",
+  "tags": [
+   "system-design",
+   "scheduler",
+   "distributed-lock",
+   "idempotency",
+   "queue"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Medium",
+  "question": "How do you design for graceful degradation under partial failure?",
+  "answer": "Isolate dependencies (bulkheads), apply timeouts and circuit breakers so a failing dependency fails fast, provide fallbacks (cached/default data, disabled non-critical features), and queue work for later when possible. Prioritize core functionality and shed load on non-essential paths. Communicate degraded state clearly. Design each feature to answer 'what do we do if this dependency is down?'—degrade rather than cascade to total failure.",
+  "tags": [
+   "system-design",
+   "graceful-degradation",
+   "bulkhead",
+   "circuit-breaker",
+   "fallback"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is consistent hashing and where is it used?",
+  "answer": "Consistent hashing maps keys and nodes onto a hash ring so that adding/removing a node only remaps a small fraction of keys (not all), minimizing reshuffling. Virtual nodes improve balance. It's used in distributed caches (Redis cluster-ish), sharded databases, and load balancers to distribute data/requests while keeping rebalancing cheap as the cluster scales. It solves the 'rehash everything' problem of naive modulo hashing.",
+  "tags": [
+   "system-design",
+   "consistent-hashing",
+   "sharding",
+   "distributed"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "How do you choose between eventual and strong consistency for a feature?",
+  "answer": "Use strong consistency where correctness is critical and stale reads cause harm (account balances, inventory decrements, uniqueness)—usually within a single service/aggregate. Use eventual consistency where availability and scale matter more and brief staleness is acceptable (feeds, counts, search indexes, cross-service replicas). Decide per feature by the cost of stale/incorrect data versus the need for availability and performance.",
+  "tags": [
+   "system-design",
+   "consistency",
+   "strong",
+   "eventual",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Medium",
+  "question": "What is the difference between a message queue and an event stream?",
+  "answer": "A message queue (Service Bus, RabbitMQ) delivers messages to consumers, typically removing them once processed (work distribution, commands). An event stream (Kafka, Event Hubs) is an append-only log where events are retained and multiple consumers read at their own offsets, enabling replay and multiple independent processors. Use queues for task processing/commands; streams for high-throughput event distribution, replay, and analytics.",
+  "tags": [
+   "system-design",
+   "message-queue",
+   "event-stream",
+   "kafka"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Approach",
+  "difficulty": "Hard",
+  "question": "How would you design a rate-limited public API with quotas?",
+  "answer": "Front it with a gateway (APIM) enforcing per-key rate limits (token bucket in a shared store like Redis for cross-instance coordination) and monthly quotas per subscription tier, returning 429 + Retry-After. Authenticate via API keys/OAuth, log usage per key for billing/analytics, and provide clear limit headers. Design tiers (free/paid) with different limits, and protect backends with additional concurrency limits and circuit breakers. Document limits clearly.",
+  "tags": [
+   "system-design",
+   "rate-limit",
+   "quota",
+   "api-gateway",
+   "redis"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Hard",
+  "question": "How would you design an image/video processing pipeline?",
+  "answer": "Accept uploads directly to blob storage (pre-signed URLs), emit an event (blob created) to a queue, and have worker services (autoscaled, competing consumers) process (resize, transcode, thumbnail, scan) idempotently, writing outputs back to storage and metadata to a DB. Use a CDN for delivery. Handle retries/DLQ for failures, prioritize with multiple queues, and decouple upload from processing so spikes are buffered. Scale workers on queue depth.",
+  "tags": [
+   "system-design",
+   "pipeline",
+   "blob",
+   "queue",
+   "workers",
+   "cdn"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "When would you use a search engine like Elasticsearch vs a database?",
+  "answer": "Use a search engine (Elasticsearch/OpenSearch, Azure AI Search) for full-text search, relevance ranking, fuzzy/typo tolerance, faceting, and analytics over large text/document sets—things relational/NoSQL DBs do poorly. Keep the database as the system of record and index a denormalized copy into the search engine (kept in sync via CDC/events). Don't use the search engine as your primary store (eventual consistency, not transactional). It complements, not replaces, the DB.",
+  "tags": [
+   "system-design",
+   "elasticsearch",
+   "search",
+   "database"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Medium",
+  "question": "What is a health check and how do load balancers use it?",
+  "answer": "A health check is an endpoint (liveness/readiness) the infrastructure probes to determine if an instance is healthy and ready for traffic. Load balancers and orchestrators periodically call it; unhealthy instances are removed from rotation (and restarted in Kubernetes) so requests only go to healthy nodes. Readiness checks should verify dependencies (DB, cache) are reachable; liveness checks detect hangs. Proper health checks enable self-healing and zero-downtime deploys.",
+  "tags": [
+   "system-design",
+   "health-check",
+   "load-balancer",
+   "readiness",
+   "liveness"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between vertical and functional decomposition of a system?",
+  "answer": "Vertical (feature/service) decomposition splits by business capability—each slice owns its UI-to-data stack (microservices per capability). Functional (layered) decomposition splits by technical layer—presentation, business, data. Microservices favor vertical decomposition (aligned to bounded contexts) for independent deployability; layered decomposition organizes a single app. Combine them: services (vertical) each internally layered. Vertical boundaries reduce cross-cutting coupling better for scaling teams.",
+  "tags": [
+   "system-design",
+   "decomposition",
+   "vertical",
+   "layered"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Hard",
+  "question": "How would you design a distributed unique ID generator?",
+  "answer": "Options: UUID/GUID (decentralized, no coordination, but large and unordered), database sequences (ordered but centralized bottleneck), Snowflake-style IDs (timestamp + machine id + sequence—ordered, distributed, compact 64-bit), or ranges/blocks handed out to nodes (Hi/Lo). Snowflake is popular for scalable, roughly time-ordered ids without central coordination per id. Choose based on ordering needs, size, and coordination tolerance.",
+  "tags": [
+   "system-design",
+   "id-generator",
+   "snowflake",
+   "uuid",
+   "distributed"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "What is write amplification and read amplification?",
+  "answer": "Write amplification: a single logical write causes multiple physical writes (index updates, replication, LSM-tree compaction, journaling)—increasing I/O and wear. Read amplification: a single logical read requires multiple physical reads (checking several SSTables/levels, following pointers). Storage engines trade these off (LSM trees favor writes with higher read amplification; B-trees favor reads). Understanding them guides database/storage choice and tuning for read- vs write-heavy workloads.",
+  "tags": [
+   "system-design",
+   "write-amplification",
+   "read-amplification",
+   "storage"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Medium",
+  "question": "What is the difference between RTO and RPO?",
+  "answer": "RTO (Recovery Time Objective) is the maximum acceptable time to restore service after an outage—how fast you must recover. RPO (Recovery Point Objective) is the maximum acceptable data loss measured in time—how much recent data you can afford to lose (drives backup/replication frequency). Lower RTO/RPO cost more (hot standby, synchronous replication). Define them per system's criticality to choose the right DR strategy (backup-restore vs active-active).",
+  "tags": [
+   "system-design",
+   "rto",
+   "rpo",
+   "disaster-recovery"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "What are the levels of caching in a typical web architecture?",
+  "answer": "Client/browser cache (static assets, HTTP caching), CDN edge cache (global static/cacheable content), reverse-proxy/gateway cache (API responses), application in-memory cache (per-instance hot data), distributed cache (Redis—shared across instances), and database cache (buffer pool, query cache). Each reduces load on the layer behind it. Cache at the level with the best hit ratio and acceptable staleness, with clear invalidation. More layers = better performance but more consistency complexity.",
+  "tags": [
+   "system-design",
+   "caching",
+   "layers",
+   "cdn",
+   "redis"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Data",
+  "difficulty": "Hard",
+  "question": "How would you design a system to prevent double-spending / double-processing?",
+  "answer": "Use a single source of truth with atomic operations: a unique constraint or conditional update (optimistic concurrency with a version/status check) so only one transaction can transition the state (e.g., WHERE status='pending'). Combine with idempotency keys for retries and, across services, sagas with compensations. For high contention, serialize per entity (partition/session). The key is an atomic check-and-set on the resource so concurrent attempts can't both succeed.",
+  "tags": [
+   "system-design",
+   "double-spending",
+   "concurrency",
+   "idempotency",
+   "atomic"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Medium",
+  "question": "What is database read/write splitting and its consistency caveat?",
+  "answer": "Route writes to the primary and reads to replicas to scale reads and reduce primary load. Caveat: replicas lag (async replication), so a read immediately after a write may not see it (violates read-your-writes). Mitigate by routing a user's post-write reads to the primary for a short window, using sticky/session consistency, or reading from the primary for consistency-critical paths. Accept eventual consistency for tolerant reads (reports, listings).",
+  "tags": [
+   "system-design",
+   "read-write-splitting",
+   "replication-lag",
+   "consistency"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "What is the difference between normalization for OLTP and denormalization for OLAP?",
+  "answer": "OLTP systems normalize (3NF) to eliminate redundancy, ensure write consistency, and handle many small transactions efficiently. OLAP/analytics systems denormalize into star/snowflake schemas (fact + dimension tables) to optimize large read/aggregation queries by minimizing joins. Data flows from normalized OLTP to denormalized analytics stores via ETL/ELT. Each design serves its workload: normalized for transactional integrity, denormalized for fast analytical reads.",
+  "tags": [
+   "system-design",
+   "normalization",
+   "denormalization",
+   "oltp",
+   "olap"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scalability",
+  "difficulty": "Hard",
+  "question": "How would you design a leaderboard system?",
+  "answer": "Use a Redis Sorted Set (ZADD with score, ZREVRANGE for top-N, ZRANK for a user's rank)—O(log n) updates and fast range/rank queries, ideal for real-time leaderboards. Persist authoritative scores in a database; the sorted set is the fast read/rank layer, rebuildable from the DB. For huge scale, shard by leaderboard/segment and cache top-N. Handle ties with score composition. Sorted sets make ranking and top-K queries efficient without scanning.",
+  "tags": [
+   "system-design",
+   "leaderboard",
+   "redis",
+   "sorted-set",
+   "ranking"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Medium",
+  "question": "What is idempotency at the infrastructure level vs application level?",
+  "answer": "Application-level idempotency ensures business operations (create order, charge) are safe to repeat via idempotency keys/dedup. Infrastructure-level idempotency covers deployments and IaC—applying the same config repeatedly converges to the same state (Terraform/Bicep, Kubernetes declarative apply). Both prevent duplicate/unintended effects from retries. App idempotency protects data correctness; infra idempotency makes deployments safe to re-run. Design both into distributed, automated systems.",
+  "tags": [
+   "system-design",
+   "idempotency",
+   "infrastructure",
+   "application"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "How should you approach an open-ended system design question?",
+  "answer": "Clarify functional and non-functional requirements first, then estimate scale - users, requests per second, data size and growth - because that determines whether the design needs sharding or a single database. Sketch the high-level components, go deep on the one or two hard parts, and state trade-offs explicitly. Jumping to a diagram before requirements is the classic failure.",
+  "tags": [
+   "system-design",
+   "interview",
+   "approach",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "What back-of-the-envelope numbers should you know?",
+  "answer": "A memory read is nanoseconds, an SSD read tens of microseconds, a datacentre round trip under a millisecond, a cross-continent round trip over a hundred. A commodity database handles thousands of simple queries per second, a cache hundreds of thousands. These orders of magnitude are enough to tell whether a design is plausible.",
+  "tags": [
+   "system-design",
+   "estimation",
+   "performance",
+   "interview"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "How do you estimate storage and throughput for a design?",
+  "answer": "Multiply daily active users by actions per user for write rate, apply a read-to-write ratio for reads, and multiply record size by retention for storage - then add indexes and replicas, which often double or triple it. Round generously and state your assumptions; the point is choosing between a single database and a sharded one, not precision.",
+  "tags": [
+   "system-design",
+   "estimation",
+   "capacity",
+   "interview"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Hard",
+  "question": "How would you design a chat system?",
+  "answer": "Persistent connections through WebSocket servers with a session registry mapping users to servers, messages persisted before acknowledgement, and a pub/sub backplane to route between servers. The hard parts are delivery guarantees and ordering, offline delivery and read receipts, presence at scale, and connection storms when a server restarts.",
+  "tags": [
+   "system-design",
+   "chat",
+   "websockets",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Hard",
+  "question": "How would you design a system for idempotent payments?",
+  "answer": "The client supplies an idempotency key per attempt; the server stores it with the request hash and the eventual outcome inside the same transaction as the charge. A repeat with the same key returns the stored result, and a repeat with a different body is rejected as a conflict. State transitions must be explicit so a crash mid-flight leaves a resumable record.",
+  "tags": [
+   "system-design",
+   "payments",
+   "idempotency",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "How would you design a search feature over millions of records?",
+  "answer": "Index into a search engine rather than querying the database with LIKE - inverted indexes, analysers, and relevance ranking. Keep the index updated via change data capture or an outbox, accept it is eventually consistent, and decide whether the search results are authoritative or are ids to hydrate from the source of truth.",
+  "tags": [
+   "system-design",
+   "search",
+   "indexing",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "How would you design multi-region active-passive failover?",
+  "answer": "Replicate data asynchronously to the secondary, keep infrastructure deployed and warm, use health-checked global routing to move traffic, and script the promotion of the database. The parts that fail in practice are unexercised failover procedures, DNS TTLs longer than the RTO, and secondary capacity that was never load-tested.",
+  "tags": [
+   "system-design",
+   "disaster-recovery",
+   "multi-region",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Hard",
+  "question": "What is a quorum and how does it relate to consistency?",
+  "answer": "With N replicas, requiring W writes and R reads such that W plus R exceeds N guarantees a read overlaps the latest write, giving strong consistency. Lowering either improves latency and availability at the cost of possibly reading stale data. That tunable trade-off is how Dynamo-style systems let each operation choose its consistency.",
+  "tags": [
+   "distributed-systems",
+   "quorum",
+   "consistency",
+   "theory"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Hard",
+  "question": "What is a leader election and why do systems need one?",
+  "answer": "A protocol choosing a single coordinator among instances, so exactly one performs work that must not be duplicated - scheduling, sequencing, or accepting writes. Implementations use consensus such as Raft, or a lease in a strongly consistent store. The subtlety is split brain: a leader that lost the lease but does not know must be fenced by a token.",
+  "tags": [
+   "distributed-systems",
+   "leader-election",
+   "consensus",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Hard",
+  "question": "What is split brain and how is it prevented?",
+  "answer": "A network partition leaves two nodes each believing they are the leader, and both accept writes, diverging the data. Prevention relies on quorum - a leader must hold a majority, so only one side can - plus fencing tokens so storage rejects writes from a stale leader that reconnects.",
+  "tags": [
+   "distributed-systems",
+   "split-brain",
+   "consensus",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "What is a heartbeat and what is the trade-off in its interval?",
+  "answer": "Periodic liveness signals let peers detect failure. A short interval detects failure quickly but risks declaring a healthy node dead during a brief pause - a GC pause or a network blip - triggering unnecessary failover. A long interval avoids false positives but extends downtime. Failure detection is always a tuning compromise, never exact.",
+  "tags": [
+   "distributed-systems",
+   "failure-detection",
+   "reliability",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "Why is exactly-once delivery impossible, and what is achievable instead?",
+  "answer": "Between delivery and acknowledgement the network can fail, so the sender cannot know whether the receiver processed the message - it must choose to retry or not. What is achievable is at-least-once delivery with idempotent processing, which produces exactly-once effects. Systems advertising exactly-once are doing that internally.",
+  "tags": [
+   "distributed-systems",
+   "messaging",
+   "idempotency",
+   "theory"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Hard",
+  "question": "What are the fallacies of distributed computing that still bite teams?",
+  "answer": "That the network is reliable, latency is zero, bandwidth is infinite, the network is secure, topology never changes, there is one administrator, transport cost is zero, and the network is homogeneous. Most production incidents in distributed systems trace back to code written as though one of these were true - usually the first two.",
+  "tags": [
+   "distributed-systems",
+   "fallacies",
+   "theory",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "How do you design for observability from the start?",
+  "answer": "Emit structured logs with a correlation id, trace across service boundaries with propagated context, expose RED metrics per endpoint and per dependency, and define what healthy looks like as an SLO. Retrofitting is far harder because the useful identifiers were never propagated, so traces stop at the first boundary.",
+  "tags": [
+   "observability",
+   "design",
+   "sre",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "What are the four golden signals?",
+  "answer": "Latency, traffic, errors and saturation. Latency should be split between successful and failed requests, since fast failures flatter the average. Saturation - how full the most constrained resource is - is the leading indicator that predicts the other three degrading, and is the one teams most often omit.",
+  "tags": [
+   "observability",
+   "sre",
+   "monitoring",
+   "metrics"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "How would you design a system to handle a 10x traffic increase?",
+  "answer": "Find the actual bottleneck by load testing rather than guessing - usually the database or a single-threaded dependency. Then apply the cheap levers first: caching, read replicas, connection pooling, asynchronous processing of non-critical work, and autoscaling stateless tiers. Sharding and rearchitecting come last because they cost the most.",
+  "tags": [
+   "scalability",
+   "capacity",
+   "architecture",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a distributed rate limiter shared across many API instances?",
+  "answer": "Start by pinning down the requirement: what is the limit keyed on (API key, user, IP, or tenant), is it a protection limit or a billing quota, and is a small overshoot acceptable. That answer determines the whole design, because exactness is what costs money here.\n\nThe centralised design keeps counters in Redis, one key per subject and window, updated atomically so concurrent instances cannot interleave a read-modify-write:\n\n```csharp\n// Atomic in Redis: no interleaving between the increment and the expiry.\nprivate const string Script = @\"\n  local n = redis.call('INCR', KEYS[1])\n  if n == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end\n  return n\";\n\npublic async Task<bool> IsAllowedAsync(string subject, int limit, TimeSpan window)\n{\n    var key = $\"rl:{subject}:{DateTimeOffset.UtcNow.Ticks / window.Ticks}\";\n    var count = (long)await _redis.ScriptEvaluateAsync(\n        Script, new RedisKey[] { key }, new RedisValue[] { (long)window.TotalMilliseconds });\n    return count <= limit;\n}\n```\n\nThe trade-off is that every request now depends on Redis. At high request rates the usual production shape is two tiers: a local token bucket per instance for the common case, with periodic reconciliation against the shared counter, so Redis sees a fraction of the traffic and a Redis outage degrades to local limiting rather than to an outage of your own.\n\nDecide explicitly what happens when the store is unreachable. Fail-open keeps the service available but removes the protection exactly when load is likely abnormal; fail-closed protects the backend but converts a cache failure into a full outage. Protection limiters usually fail open, billing quotas usually fail closed.",
+  "tags": [
+   "system-design",
+   "rate-limiting",
+   "redis",
+   "distributed-systems",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "The fixed window above has a boundary problem. How do you fix it?",
+    "a": "With a limit of 100 per minute, a client can send 100 at 00:59 and 100 more at 01:00 and pass, having sent 200 in two seconds. The cheap fix is a sliding window counter: keep the current and previous window counts and weight the previous one by how far into the current window you are. That approximates a true sliding window with two counters instead of a sorted set of timestamps, and is what most production limiters actually use."
+   },
+   {
+    "q": "How do you keep this from becoming a latency tax on every request?",
+    "a": "Keep Redis in the same region and use pipelining so the limiter costs one round trip rather than several. Then avoid the round trip where you can: a local bucket that only consults the shared store when it is near its allocated share, or checks asynchronously and lets a small overshoot through, removes it from the hot path. Set an aggressive timeout on the call, single-digit milliseconds, with a defined fallback, because a slow limiter is worse than no limiter when it is holding request threads."
+   },
+   {
+    "q": "How would you test this?",
+    "a": "Unit-test the bucket arithmetic with an injectable clock so time can be advanced deterministically rather than slept through. Integration-test the atomicity by firing concurrent requests against a real Redis, using a container, and asserting the total admitted equals the limit exactly, since that is the property a naive non-atomic implementation breaks. Then load-test at and above the limit to confirm rejection latency stays low, and run a fault test with Redis removed to verify the documented fail-open or fail-closed behaviour actually happens."
+   },
+   {
+    "q": "Where should the limiter live: gateway, service, or both?",
+    "a": "At the gateway or API Management layer for coarse protection, because it sheds load before it reaches your services and is one place to configure. In the service for limits that need application context the gateway does not have, such as per-tenant plan tiers or per-operation cost weighting. Both is common and legitimate, as long as the two layers have clearly different jobs; duplicating the same limit in both just doubles the places to misconfigure it."
+   }
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a globally distributed session store?",
+  "answer": "Sessions are small, hot and read on every request, so keep them in a low-latency store replicated per region with the user pinned to their home region, or make them stateless signed tokens with short expiry and a revocation list. Cross-region replication lag means a user moving regions may briefly appear logged out, which must be handled deliberately.",
+  "tags": [
+   "system-design",
+   "sessions",
+   "multi-region",
+   "caching"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system for real-time analytics dashboards?",
+  "answer": "Stream events into a log such as Kafka or Event Hubs, compute windowed aggregates in a stream processor, write them to a store optimised for time-series reads, and push updates to clients over websockets. Keep the raw stream for reprocessing, since aggregation bugs are otherwise unrecoverable.",
+  "tags": [
+   "system-design",
+   "streaming",
+   "analytics",
+   "real-time"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system to deduplicate events at scale?",
+  "answer": "Hash a natural idempotency key and check it against a store with a TTL matching your dedupe window - Redis for speed or a bloom filter fronting it to save memory. Accept that a bloom filter can produce false positives, dropping a legitimate event, so use it as a filter before an exact check rather than as the decision.",
+  "tags": [
+   "system-design",
+   "deduplication",
+   "bloom-filter",
+   "streaming"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a multi-tenant SaaS platform's data layer?",
+  "answer": "Choose isolation per tier: shared tables with a tenant column and enforced row filtering for small tenants, separate schemas or databases for larger or regulated ones, with the routing decision held in a tenant catalogue. Design migrations to run across many databases and make the tenant identifier impossible to omit in queries.",
+  "tags": [
+   "system-design",
+   "multitenancy",
+   "saas",
+   "data"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design an audit log that is trustworthy?",
+  "answer": "Append-only storage with no update or delete permission for the application identity, immutability enforced at the storage layer, a hash chain or signature so tampering is detectable, and separate access controls from the operational database. Write the entry in the same transaction as the change, or derive it from the change log.",
+  "tags": [
+   "system-design",
+   "audit",
+   "compliance",
+   "security"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a feature flag service?",
+  "answer": "Flags evaluated locally in each service from a cached ruleset so a flag lookup never adds a network hop, with the ruleset pushed or polled from a control plane and a safe default if it is unavailable. Include targeting rules, percentage rollout with stable bucketing per user, and an audit trail of who changed what.",
+  "tags": [
+   "system-design",
+   "feature-flags",
+   "caching",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design an export feature for very large datasets?",
+  "answer": "Accept the request, return a job id, generate the file asynchronously in streamed chunks into object storage, and notify the user with a time-limited signed link. Never generate a large export in the request path - it times out, holds a connection, and cannot be resumed if it fails halfway.",
+  "tags": [
+   "system-design",
+   "async",
+   "exports",
+   "storage"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design an inventory system that must not oversell?",
+  "answer": "Make the decrement atomic and conditional in the database so the check and the update cannot interleave, or reserve stock with a short-lived hold that expires. Under extreme contention, partition inventory into buckets or serialise through a single writer per item. Eventual consistency is not acceptable for the final commitment.",
+  "tags": [
+   "system-design",
+   "concurrency",
+   "consistency",
+   "e-commerce"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a booking system for seats or rooms?",
+  "answer": "Hold a temporary reservation with an expiry while the user completes checkout, enforced by a conditional write so two users cannot hold the same seat, then confirm or release. The interesting design decisions are hold duration, what happens when payment is slow, and how the released inventory becomes visible again promptly.",
+  "tags": [
+   "system-design",
+   "booking",
+   "concurrency",
+   "consistency"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a payment flow that survives partial failure?",
+  "answer": "Idempotency keys per attempt, a persisted state machine for the payment so any step can be resumed, an outbox for events, reconciliation against the provider's records as the source of truth, and no assumption that a timeout means failure. The reconciliation job is what catches the cases the happy path missed.",
+  "tags": [
+   "system-design",
+   "payments",
+   "idempotency",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system that must integrate with an unreliable third party?",
+  "answer": "Wrap it behind an adapter with timeouts, retries with backoff, a circuit breaker and a bulkhead so its slowness cannot consume your capacity. Queue outbound work so a provider outage becomes a backlog rather than user-facing failure, and reconcile state periodically because their API and your records will diverge.",
+  "tags": [
+   "system-design",
+   "integration",
+   "resilience",
+   "third-party"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a search-as-you-type feature?",
+  "answer": "Debounce input on the client, cancel superseded requests, serve from a prefix-optimised index such as a trie or a search engine's completion suggester, cap result count, and cache popular prefixes at the edge. Latency budget is the constraint - anything above about 100 milliseconds feels laggy while typing.",
+  "tags": [
+   "system-design",
+   "search",
+   "latency",
+   "caching"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system to send millions of emails without being rate limited?",
+  "answer": "Queue the sends, respect per-provider throughput with a token bucket per domain, spread across warmed sending IPs, handle bounces and complaints by suppressing addresses, and make each send idempotent so a retry cannot double-send. Deliverability, not throughput, is the actual engineering problem.",
+  "tags": [
+   "system-design",
+   "email",
+   "rate-limiting",
+   "queues"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a webhook delivery system?",
+  "answer": "Persist each delivery attempt, sign payloads, retry with exponential backoff over hours, disable endpoints that fail persistently, and expose delivery history so consumers can debug. Deliver from a queue with per-endpoint concurrency limits so one slow consumer cannot starve the rest.",
+  "tags": [
+   "system-design",
+   "webhooks",
+   "reliability",
+   "queues"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system for scheduled user-defined jobs at scale?",
+  "answer": "Store schedules with a computed next-run time indexed for range scans, have workers claim due jobs with a lease so exactly one runs each, and shard by tenant or hash to spread load. Add jitter to avoid the on-the-hour thundering herd, and record run history for observability and idempotency.",
+  "tags": [
+   "system-design",
+   "scheduling",
+   "distributed-systems",
+   "leases"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a URL preview or link unfurling service?",
+  "answer": "Fetch with a strict timeout, size limit and SSRF protections resolving the address before connecting, parse metadata, cache aggressively by URL, and never render fetched HTML directly. It is a classic SSRF target because the URL is fully user-controlled, so the security design matters more than the parsing.",
+  "tags": [
+   "system-design",
+   "ssrf",
+   "caching",
+   "security"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design an activity feed with fan-out to millions of followers?",
+  "answer": "Hybrid fan-out: precompute feeds for ordinary accounts on write, and compute at read time for accounts with very large follower counts, merging the two at query time. Cache assembled feeds, cap history depth, and process fan-out asynchronously so posting is never blocked by follower count.",
+  "tags": [
+   "system-design",
+   "feed",
+   "fan-out",
+   "scalability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design presence - showing which users are online?",
+  "answer": "Clients heartbeat to a service that records a TTL-keyed entry per user in a fast store, so absence of a heartbeat expires presence naturally. Fan out changes only to users who are actually watching that person, and accept approximate accuracy - exact presence at scale costs far more than it is worth.",
+  "tags": [
+   "system-design",
+   "presence",
+   "real-time",
+   "caching"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a collaborative document editor?",
+  "answer": "Use operational transformation or CRDTs so concurrent edits converge without a central lock, persist an operation log for history and recovery, and route clients through a session server per document. CRDTs avoid a central transformer at the cost of metadata growth; OT needs a server but keeps documents compact.",
+  "tags": [
+   "system-design",
+   "collaboration",
+   "crdt",
+   "real-time"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system with strict data residency requirements?",
+  "answer": "Partition by region at the top of the architecture - separate deployments, databases and backups per jurisdiction - with a global routing layer holding only the mapping from user to region. Ensure logs, telemetry and support tooling also stay in region, since those are the paths that usually leak data across boundaries.",
+  "tags": [
+   "system-design",
+   "compliance",
+   "data-residency",
+   "multi-region"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system to handle a predictable traffic spike such as a product launch?",
+  "answer": "Pre-scale rather than relying on autoscaling reaction time, pre-warm caches and connection pools, load test at the expected multiple, add a queue or waiting room to shed excess gracefully, and identify the component that cannot scale - usually the database - and plan its protection specifically.",
+  "tags": [
+   "system-design",
+   "capacity",
+   "scalability",
+   "operations"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a health check strategy for a system of many services?",
+  "answer": "Each service exposes cheap liveness and dependency-aware readiness endpoints, an aggregate view rolls those up for humans, and synthetic probes exercise real user journeys from outside. Avoid readiness checks that cascade - if every service reports unhealthy when one shared dependency blips, the whole platform removes itself from rotation.",
+  "tags": [
+   "system-design",
+   "health-checks",
+   "reliability",
+   "operations"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design an idempotent bulk import that can be safely retried?",
+  "answer": "Give each import a run id, process in idempotent batches keyed on a natural record identity with an upsert, record per-record outcomes so a retry skips completed work, and make the whole run resumable from the last committed checkpoint. Report per-record failures rather than aborting the entire import.",
+  "tags": [
+   "system-design",
+   "idempotency",
+   "batch",
+   "data"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system where reads must be strongly consistent but writes are rare?",
+  "answer": "Route all reads to the primary or to replicas verified to have caught up to a known log position, or serve from a cache invalidated synchronously on write. With rare writes, the cost of strong consistency is low - the mistake would be reflexively adding eventually consistent replicas for a workload that does not need them.",
+  "tags": [
+   "system-design",
+   "consistency",
+   "replication",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Estimation",
+  "difficulty": "Medium",
+  "question": "How do you estimate the storage needed for a chat application?",
+  "answer": "Multiply daily messages by average size including metadata, add indexes and replication factor, then multiply by the retention period. Attachments dominate if present and belong in object storage priced separately. State the assumptions explicitly - the exercise is about whether the design needs sharding, not about precision.",
+  "tags": [
+   "system-design",
+   "estimation",
+   "capacity",
+   "storage"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Estimation",
+  "difficulty": "Medium",
+  "question": "How do you convert daily active users into a peak requests-per-second figure?",
+  "answer": "Estimate actions per user per day, multiply out for the daily total, divide by 86,400 for the average, then multiply by a peak factor of roughly two to five depending on how concentrated usage is by time zone and time of day. Design for peak, not average, and state the factor you assumed.",
+  "tags": [
+   "system-design",
+   "estimation",
+   "capacity",
+   "interview"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Estimation",
+  "difficulty": "Medium",
+  "question": "How do you decide whether a workload fits on a single database?",
+  "answer": "Compare the estimated write rate, read rate, working set size and connection count against what a large managed instance handles - thousands of writes per second and hundreds of gigabytes are routinely fine. Most systems that reach for sharding early could have run on one instance with better indexes and caching.",
+  "tags": [
+   "system-design",
+   "estimation",
+   "databases",
+   "scalability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Trade-offs",
+  "difficulty": "Medium",
+  "question": "When should a system prefer availability over consistency?",
+  "answer": "When a stale or partially available answer is more useful to the user than an error - a product catalogue, a feed, a search result, a dashboard. Prefer consistency where a wrong answer causes real harm: balances, inventory commitment, permissions, and anything a user acts on irreversibly.",
+  "tags": [
+   "system-design",
+   "cap",
+   "consistency",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Trade-offs",
+  "difficulty": "Medium",
+  "question": "What are the trade-offs of a queue in front of a database?",
+  "answer": "It smooths spikes, decouples the producer from database availability, and enables batching - at the cost of eventual consistency, a backlog that hides failure, ordering complications, and a second system to operate. It also means the user's write is acknowledged before it is durable in the database, which must be reflected in the product.",
+  "tags": [
+   "system-design",
+   "queues",
+   "trade-offs",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Trade-offs",
+  "difficulty": "Medium",
+  "question": "When is denormalisation the right call?",
+  "answer": "When a read pattern is hot enough that the join cost dominates and the duplicated data has a single clear owner who updates it. It is wrong when several writers can update the copies independently, since you then own a consistency problem forever. Deriving the copy from an event stream is safer than writing it in two places.",
+  "tags": [
+   "system-design",
+   "denormalisation",
+   "data",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Trade-offs",
+  "difficulty": "Medium",
+  "question": "What are the trade-offs between polling, long polling, server-sent events and websockets?",
+  "answer": "Polling is simplest and works everywhere but wastes requests and adds latency. Long polling reduces waste at the cost of held connections. SSE gives efficient one-way push with automatic reconnection. Websockets give full duplex at the cost of connection state, proxy compatibility and scaling complexity.",
+  "tags": [
+   "system-design",
+   "real-time",
+   "websockets",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Trade-offs",
+  "difficulty": "Medium",
+  "question": "What are the trade-offs of caching at the edge versus in the application?",
+  "answer": "Edge caching removes the round trip entirely and absorbs the most load, but only for cacheable, non-personalised responses and with coarse invalidation. Application caching handles personalised and computed data with fine-grained invalidation but still pays the network and compute cost per request.",
+  "tags": [
+   "system-design",
+   "caching",
+   "cdn",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Medium",
+  "question": "How do you design a system so a bad deployment affects few users?",
+  "answer": "Canary a small percentage first with automated metric comparison, keep the change behind a flag so it can be disabled without redeploying, ensure database changes are backward compatible so rollback works, and monitor the error and latency signals that would show harm within minutes rather than hours.",
+  "tags": [
+   "system-design",
+   "deployment",
+   "canary",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Medium",
+  "question": "What is a poison message and how should a system handle one?",
+  "answer": "A message that fails every time it is processed, blocking the queue or being redelivered endlessly. Handle it with a delivery count limit and a dead-letter queue, alerting on dead-letter depth, keeping the failure reason with the message, and providing a replay path once the defect is fixed.",
+  "tags": [
+   "system-design",
+   "messaging",
+   "reliability",
+   "dlq"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Medium",
+  "question": "How do you prevent a backlog from becoming an outage?",
+  "answer": "Bound queues so producers feel backpressure, alert on depth and age rather than only on errors, scale consumers on queue depth, and decide in advance whether old messages should be dropped or processed - a two-hour-old notification may be worse than none. Unbounded queues convert a slowdown into a silent failure.",
+  "tags": [
+   "system-design",
+   "backpressure",
+   "queues",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Hard",
+  "question": "How do you design a system that can recover from data corruption?",
+  "answer": "Keep an immutable source of truth - an event log or raw ingest layer - from which derived state can be rebuilt, version the derivation logic, test restores regularly, and ensure backups are immutable so a compromised or buggy process cannot overwrite them. Recovery is a design property, not a backup product.",
+  "tags": [
+   "system-design",
+   "recovery",
+   "data",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Medium",
+  "question": "How do you decide what to alert on for a user-facing service?",
+  "answer": "Alert on symptoms that map to the SLO - error rate and latency at the boundary - using burn-rate windows so severity reflects impact. Add a small number of cause-based alerts for conditions with no symptom until it is too late, such as disk filling or certificates expiring, and route everything else to a review queue.",
+  "tags": [
+   "system-design",
+   "alerting",
+   "sre",
+   "observability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How would you design authentication for a system with web, mobile and partner API clients?",
+  "answer": "One identity provider issuing tokens, with per-client-type flows: authorisation code with PKCE for web and mobile, client credentials for partner services, and short-lived access tokens with rotating refresh tokens. Enforce authorisation at each resource server rather than trusting the gateway alone.",
+  "tags": [
+   "system-design",
+   "authentication",
+   "oauth",
+   "security"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Security",
+  "difficulty": "Hard",
+  "question": "How would you design a system to store and serve sensitive documents?",
+  "answer": "Encrypt at rest with customer-managed keys, authorise every access against the requester's entitlements, serve through short-lived signed URLs rather than proxying, log every access immutably, and separate metadata from content so a search index cannot leak the document body. Consider immutability and legal hold if retention is regulated.",
+  "tags": [
+   "system-design",
+   "security",
+   "storage",
+   "compliance"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "Where should input validation happen in a layered system?",
+  "answer": "At every trust boundary: the client for feedback, the API for syntax and shape, the domain for business invariants, and the database through constraints as a final backstop. Validating only at the edge fails as soon as a second entry point exists - a batch job, an internal caller, a migration script.",
+  "tags": [
+   "system-design",
+   "validation",
+   "security",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you design for the possibility that any single component is compromised?",
+  "answer": "Least-privilege credentials per component so a breach is contained, network segmentation, short-lived credentials, no shared secrets between environments, audit logs written where the compromised component cannot alter them, and the ability to rotate everything quickly. Assume breach and design for containment and detection.",
+  "tags": [
+   "system-design",
+   "security",
+   "zero-trust",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What makes a system operable?",
+  "answer": "Clear signals showing whether it is healthy, the ability to change behaviour without a deploy through configuration and flags, safe and tested rollback, runbooks for known failure modes, and enough isolation that one component's failure is diagnosable. Operability is designed in, and its absence is what makes on-call miserable.",
+  "tags": [
+   "system-design",
+   "operability",
+   "sre",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you design a system that can be debugged in production?",
+  "answer": "Propagate a correlation id through every hop and into logs, sample traces including all errors, expose the ability to raise log verbosity for a subset of traffic, keep enough request context in errors to reproduce, and provide read-only introspection endpoints. Debuggability competes with privacy, so redaction is part of the design.",
+  "tags": [
+   "system-design",
+   "observability",
+   "debugging",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How would you introduce a schema change to a message format consumed by many services?",
+  "answer": "Make it additive with optional fields, require consumers to ignore unknown fields, version the schema in a registry with compatibility checks in CI, and if a breaking change is unavoidable publish both formats during a migration window with telemetry showing who still consumes the old one.",
+  "tags": [
+   "system-design",
+   "schema",
+   "messaging",
+   "compatibility"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is a schema registry and what does it enforce?",
+  "answer": "A central store of message schemas with versioning and compatibility rules - backward, forward or full - checked when a producer registers a new version. It turns an implicit contract between producers and consumers into something validated at build time rather than discovered when a consumer fails to deserialise.",
+  "tags": [
+   "system-design",
+   "schema-registry",
+   "kafka",
+   "compatibility"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you handle replaying a stream of events safely?",
+  "answer": "Consumers must be idempotent, side effects must be suppressible or clearly marked as replay, downstream systems must tolerate the volume, and the replay must be scoped by offset or time range. Replay into a parallel projection and swap when verified, rather than replaying into the live one.",
+  "tags": [
+   "system-design",
+   "event-sourcing",
+   "replay",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Interview",
+  "difficulty": "Medium",
+  "question": "What are the classic mistakes in a system design interview?",
+  "answer": "Designing before clarifying requirements and scale, drawing boxes without explaining data flow or storage choices, ignoring failure modes, giving no numbers, over-engineering with technologies that are not justified, and going silent. Stating trade-offs out loud is most of what is being assessed.",
+  "tags": [
+   "system-design",
+   "interview",
+   "approach",
+   "communication"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Interview",
+  "difficulty": "Medium",
+  "question": "How do you handle a system design question about a domain you do not know?",
+  "answer": "Ask clarifying questions to establish the entities and actions, restate the problem in your own words, and reason from the access patterns rather than domain knowledge. Interviewers care about method - requirements, scale, data model, bottlenecks, failure - not about whether you have built that specific product.",
+  "tags": [
+   "system-design",
+   "interview",
+   "approach",
+   "communication"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Interview",
+  "difficulty": "Medium",
+  "question": "How deep should you go on any one component in a design interview?",
+  "answer": "Cover the whole system at a shallow level first so the shape is agreed, then go deep on the one or two genuinely hard parts - usually the data model, the consistency boundary, or the highest-scale path. Ask which area they want explored; spending the whole session on authentication is a common misallocation.",
+  "tags": [
+   "system-design",
+   "interview",
+   "approach",
+   "prioritisation"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a control plane versus a data plane?",
+  "answer": "The data plane handles user traffic and must be fast and highly available; the control plane manages configuration, scheduling and orchestration and can tolerate more latency. Separating them means a control plane outage degrades management but not serving - a property that gets lost when configuration is fetched per request.",
+  "tags": [
+   "system-design",
+   "control-plane",
+   "architecture",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a leaky bucket versus a token bucket?",
+  "answer": "Token bucket accumulates tokens up to a capacity so bursts are allowed until the bucket empties, then enforces the refill rate. Leaky bucket drains at a fixed rate, smoothing output and rejecting anything that overflows. Token bucket suits APIs where short bursts are acceptable; leaky bucket suits protecting a fixed-throughput downstream.",
+  "tags": [
+   "system-design",
+   "rate-limiting",
+   "algorithms",
+   "concepts"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a sidecar versus an agent versus a library for cross-cutting concerns?",
+  "answer": "A library is fastest and simplest but must be adopted and upgraded per language. A sidecar is language-agnostic and upgradable independently at the cost of resources and a network hop. A node agent shares one instance across workloads, which is cheaper but couples all of them to its availability and version.",
+  "tags": [
+   "system-design",
+   "architecture",
+   "sidecar",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a queue and a log in messaging?",
+  "answer": "A queue delivers each message to one consumer and removes it, giving competing consumers and per-message acknowledgement. A log retains messages with offsets so multiple independent consumers read at their own pace and can replay. Choosing a queue when you later need replay is a common and expensive mistake.",
+  "tags": [
+   "system-design",
+   "messaging",
+   "kafka",
+   "concepts"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a write-through versus write-around cache?",
+  "answer": "Write-through updates the cache and the store together, keeping them consistent and warming the cache for reads. Write-around writes only to the store, avoiding cache churn from data that is written but rarely read - which is the right choice for bulk imports that would otherwise evict genuinely hot entries.",
+  "tags": [
+   "system-design",
+   "caching",
+   "patterns",
+   "performance"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a lease and why is it preferable to a lock in distributed systems?",
+  "answer": "A lease is a lock with an expiry, so a crashed holder does not block others forever. It needs a fencing token so a holder that pauses - a long garbage collection - cannot act after its lease has been reassigned. Without fencing, lease-based mutual exclusion is not actually safe.",
+  "tags": [
+   "system-design",
+   "leases",
+   "distributed-systems",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Hard",
+  "question": "What is a fencing token and what problem does it solve?",
+  "answer": "A monotonically increasing number issued with a lock or lease, which the storage layer checks and rejects if lower than the highest seen. It prevents a delayed writer that lost its lease from corrupting state - the failure mode where a paused process resumes and writes as though it still holds exclusivity.",
+  "tags": [
+   "system-design",
+   "fencing",
+   "distributed-systems",
+   "consistency"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a vector clock and what is it used for?",
+  "answer": "A per-node counter set that allows two events to be compared as causally ordered or concurrent, which a single timestamp cannot express. It is used in eventually consistent stores to detect conflicting writes so they can be resolved rather than silently overwritten. The cost is metadata that grows with the number of writers.",
+  "tags": [
+   "distributed-systems",
+   "vector-clocks",
+   "consistency",
+   "theory"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Hard",
+  "question": "What is a CRDT and when is one worth using?",
+  "answer": "A conflict-free replicated data type whose merge operation is commutative, associative and idempotent, so replicas converge without coordination. It is worth using for collaborative editing, offline-capable apps and counters at the edge. The costs are metadata growth, limited data types, and semantics that may not match business rules.",
+  "tags": [
+   "distributed-systems",
+   "crdt",
+   "consistency",
+   "offline"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between last-write-wins and application-level conflict resolution?",
+  "answer": "Last-write-wins is simple and needs only a timestamp, but silently discards a concurrent update - and clock skew makes which one survives arbitrary. Application-level resolution merges by domain rules, preserving both intentions, at the cost of storing conflicting versions and writing merge logic per data type.",
+  "tags": [
+   "distributed-systems",
+   "conflicts",
+   "consistency",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why is relying on wall-clock time dangerous in distributed systems?",
+  "answer": "Clocks drift, can jump backwards on correction, and differ between machines by more than the duration of the operations you are ordering. Any logic that orders events, computes durations across hosts, or expires leases by comparing timestamps from different machines is unsound - use monotonic clocks locally and logical ordering globally.",
+  "tags": [
+   "distributed-systems",
+   "clocks",
+   "consistency",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a partition and a replica?",
+  "answer": "A partition holds a subset of the data, so partitioning scales capacity and throughput. A replica holds a copy of the same data, so replication provides availability and read scaling. Systems use both together, and confusing them leads to designs that add replicas expecting write throughput they cannot deliver.",
+  "tags": [
+   "distributed-systems",
+   "partitioning",
+   "replication",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is rebalancing and why is it operationally risky?",
+  "answer": "Redistributing partitions when nodes are added or removed, which moves large volumes of data while the system continues serving. Risks are IO saturation degrading latency, incomplete rebalances leaving skew, and consumer groups pausing during reassignment. Rate-limiting the movement and doing it during low traffic are the usual mitigations.",
+  "tags": [
+   "distributed-systems",
+   "rebalancing",
+   "operations",
+   "scalability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is data skew and how do you detect and fix it?",
+  "answer": "An uneven distribution across partitions, so one node holds or serves disproportionately more - a single large tenant, a popular key, a timestamp-based key. Detect it with per-partition size and request metrics rather than totals. Fix it with a better key, a salted composite key, or isolating the outlier onto its own partition.",
+  "tags": [
+   "distributed-systems",
+   "skew",
+   "partitioning",
+   "performance"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between a coordinator-based and a gossip-based cluster?",
+  "answer": "A coordinator, backed by consensus, gives one authoritative view of membership and assignment, which is simpler to reason about but adds a component that must stay available. Gossip spreads state peer to peer with no central authority, tolerating failures well but converging eventually, so membership views can briefly disagree.",
+  "tags": [
+   "distributed-systems",
+   "gossip",
+   "consensus",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Hard",
+  "question": "What does a consensus algorithm such as Raft actually provide?",
+  "answer": "Agreement among a majority on an ordered log of entries, despite crashes and message loss, giving a single consistent view for leader election and replicated state. It requires a majority to make progress, so it trades availability under partition for consistency - and it cannot help if a majority is unreachable.",
+  "tags": [
+   "distributed-systems",
+   "raft",
+   "consensus",
+   "theory"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "Why do consensus-based systems use odd numbers of nodes?",
+  "answer": "A majority of three is two and of four is also three, so a four-node cluster tolerates the same single failure as three while costing more and increasing latency. Odd sizes give the best fault tolerance per node, which is why quorum systems are deployed as three, five or seven.",
+  "tags": [
+   "distributed-systems",
+   "quorum",
+   "consensus",
+   "operations"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is a partial failure and why is it harder than a total failure?",
+  "answer": "Part of the system is unavailable or slow while the rest works, so requests succeed inconsistently and state diverges - far harder than a clean crash, where behaviour is at least uniform. It is why timeouts, health checks and idempotency exist, and why grey failure is the hardest category to detect and alert on.",
+  "tags": [
+   "distributed-systems",
+   "failure-modes",
+   "reliability",
+   "theory"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Hard",
+  "question": "What is grey failure and how do you detect it?",
+  "answer": "A component is degraded rather than down - high latency, intermittent errors, a slow disk - so health checks pass while users suffer. Detect it by measuring from the client's perspective, watching latency percentiles and error rates per instance rather than aggregates, and comparing instances against each other to find the outlier.",
+  "tags": [
+   "distributed-systems",
+   "grey-failure",
+   "observability",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system to enforce per-tenant quotas across a distributed service?",
+  "answer": "Maintain counters in a shared low-latency store updated atomically, with local pre-aggregation and periodic flushing to reduce round trips, accepting slight over-permission at the edges. Decide the behaviour when the store is unavailable, and expose remaining quota so tenants can self-regulate.",
+  "tags": [
+   "system-design",
+   "quotas",
+   "distributed-systems",
+   "rate-limiting"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design an audit trail that scales to billions of events?",
+  "answer": "Append-only writes to a partitioned immutable store partitioned by time and tenant, with an index for the query patterns you must support, tiered storage moving old data to cheaper tiers, and a retention policy. Querying is the hard part - decide up front which questions must be answerable in seconds.",
+  "tags": [
+   "system-design",
+   "audit",
+   "scale",
+   "storage"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design a system to process files dropped by external partners?",
+  "answer": "A landing area per partner with access scoped to them, validation on arrival producing a clear rejection with reasons, idempotent processing keyed on file identity, quarantine for failures, and notification of outcome. Partner integrations fail constantly, so the design work is entirely in the error paths.",
+  "tags": [
+   "system-design",
+   "integration",
+   "files",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a configuration service used by many applications?",
+  "answer": "Versioned configuration with typed schemas, environment scoping, an audit trail, client caching with a fallback to last known good, and change notification. It must degrade gracefully - applications should start and run with cached values when the service is unavailable, or it becomes the highest-blast-radius component you own.",
+  "tags": [
+   "system-design",
+   "configuration",
+   "reliability",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system that must support both real-time and batch consumers of the same data?",
+  "answer": "Publish events to a log that both can read - stream processors consume in real time while batch jobs read partitions on a schedule - with the log as the single source and both derivations rebuildable. That avoids two ingestion paths that inevitably disagree, which is the problem the lambda architecture tried and largely failed to manage.",
+  "tags": [
+   "system-design",
+   "streaming",
+   "batch",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you design deduplication for an at-least-once event stream?",
+  "answer": "An idempotency key per event checked against a store with a TTL covering the maximum expected redelivery window, sized for the event rate. For very high volume, a bloom filter fronting an exact store bounds memory. The window is the key design decision - too short and duplicates slip through, too long and the store grows unbounded.",
+  "tags": [
+   "system-design",
+   "deduplication",
+   "streaming",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design an API gateway's responsibilities in a microservice system?",
+  "answer": "Authentication, TLS termination, routing, rate limiting, request size limits and observability at the edge - with authorisation decisions delegated to services that own the resources. Keeping business logic and per-consumer transformations out is what stops it becoming a shared component every team must change.",
+  "tags": [
+   "system-design",
+   "api-gateway",
+   "microservices",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where a single request must call ten downstream services?",
+  "answer": "First question whether it must - aggregation at that fan-out is a design smell. Then parallelise independent calls, set aggressive per-call timeouts within a total budget, return partial results where acceptable, cache what is cacheable, and consider a read model that precomputes the composition asynchronously.",
+  "tags": [
+   "system-design",
+   "fan-out",
+   "latency",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where users can schedule actions in the future?",
+  "answer": "Persist the scheduled action with its due time indexed for range scans, have workers poll for due items with a lease, and handle time zones by storing the local time and zone for recurring items. The subtleties are clock skew, daylight saving transitions and what to do with actions whose time passed while the system was down.",
+  "tags": [
+   "system-design",
+   "scheduling",
+   "time",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design soft delete and restore across a system?",
+  "answer": "Mark rather than remove, filter consistently at the data access boundary, cascade the mark to dependent records, exclude deleted items from unique constraints with filtered indexes, and define a permanent purge after a retention period. Restore must reverse all of it, which is why the cascade rules must be explicit.",
+  "tags": [
+   "system-design",
+   "soft-delete",
+   "data",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system that must support undo?",
+  "answer": "Either store the inverse operation per action, or store snapshots and restore, or model state as an event log where undo appends a compensating event. The event log preserves history and supports redo naturally; snapshots are simpler but expensive for large state.",
+  "tags": [
+   "system-design",
+   "undo",
+   "event-sourcing",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a bulk import that gives good user feedback?",
+  "answer": "Validate a sample synchronously for immediate feedback, then process asynchronously with progress reporting, per-row outcomes, and a downloadable error report keyed to the original row numbers. Returning only success or failure for a ten thousand row file makes correction impossible.",
+  "tags": [
+   "system-design",
+   "bulk-import",
+   "ux",
+   "async"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design an approval workflow?",
+  "answer": "Model states and permitted transitions explicitly, record who acted and when for each step, support delegation and timeouts with escalation, and make the current state queryable for reminders. The parts usually missed are what happens when an approver leaves and how a request is withdrawn mid-flow.",
+  "tags": [
+   "system-design",
+   "workflow",
+   "state-machine",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to enforce data retention policies?",
+  "answer": "Tag data with a classification and retention period at write time, run a deletion process per store on a schedule with audit logging, handle backups through retention windows rather than surgical deletion, and prove compliance with a report. Retention that depends on someone remembering to run a script is not a policy.",
+  "tags": [
+   "system-design",
+   "retention",
+   "compliance",
+   "operations"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where different customers need different business rules?",
+  "answer": "Externalise the rules as configuration or a rules engine with a versioned per-tenant definition, rather than branching in code per customer. Code branches per customer become unmaintainable at the fifth customer; configuration with a test suite per tenant scales, at the cost of a more abstract implementation.",
+  "tags": [
+   "system-design",
+   "multitenancy",
+   "configuration",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a search and filter experience over a large dataset?",
+  "answer": "A search engine for text relevance with faceted counts, filters pushed into the index rather than applied afterwards, cursor pagination for stable scrolling, and debounced queries from the client. The facet counts are the part that forces the index design, since computing them from the database per query does not scale.",
+  "tags": [
+   "system-design",
+   "search",
+   "faceting",
+   "performance"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system that must never lose a submitted form?",
+  "answer": "Persist the submission durably before acknowledging, with an idempotency key so a client retry does not duplicate, then process asynchronously. Store client-side drafts as a further safeguard against connection loss before submission. Acknowledging before durable persistence is where submissions actually disappear.",
+  "tags": [
+   "system-design",
+   "durability",
+   "idempotency",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a rate-limited outbound integration?",
+  "answer": "A queue with a worker pool sized to the provider's limit, a token bucket governing dispatch, backoff on 429 with respect for Retry-After, and priority so urgent items are not stuck behind bulk work. Calling directly from request handlers means the limit is hit unpredictably and errors reach users.",
+  "tags": [
+   "system-design",
+   "rate-limiting",
+   "integration",
+   "queues"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system that must produce identical results when replayed?",
+  "answer": "Make every input explicit and recorded - including time, random values and external responses - so a replay uses the captured values rather than fresh ones. Determinism requires treating the clock and randomness as injected dependencies, which is the same discipline that makes such systems testable.",
+  "tags": [
+   "system-design",
+   "determinism",
+   "replay",
+   "testing"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a read-heavy system with occasional writes?",
+  "answer": "Cache aggressively with invalidation on write, use read replicas, denormalise for the read pattern, and put the expensive computation on the write path. The design freedom is that a slower write is acceptable, which is exactly what precomputation and cache warming exploit.",
+  "tags": [
+   "system-design",
+   "caching",
+   "read-heavy",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a write-heavy system?",
+  "answer": "Append rather than update, batch writes, use a store optimised for sequential writes such as an LSM engine, partition to spread load, and move derived views off the write path to asynchronous projections. The constraint is usually the durability requirement, which determines how much batching is acceptable.",
+  "tags": [
+   "system-design",
+   "write-heavy",
+   "storage",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system for GDPR-compliant data deletion?",
+  "answer": "Maintain a registry mapping a subject to every location their data appears, implement deletion per store, handle backups through documented retention windows, propagate deletion to processors, and produce an audit record. The registry is the part that must exist from the start, because reconstructing it later is impractical.",
+  "tags": [
+   "system-design",
+   "gdpr",
+   "privacy",
+   "compliance"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design an integration that must never lose a message even if the consumer is down for a day?",
+  "answer": "Durable queueing with retention exceeding the expected outage, dead-lettering with alerting, consumer offsets or acknowledgement so nothing is dropped on restart, and monitoring on backlog age. The design question is whether the producer should apply backpressure or continue accumulating.",
+  "tags": [
+   "system-design",
+   "messaging",
+   "durability",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a multi-region write system with conflict avoidance rather than resolution?",
+  "answer": "Partition ownership by region so each record has one writing region - customers routed to their home region - which avoids conflicts entirely rather than resolving them. It requires routing logic and a plan for moving ownership, but it is far simpler than merging concurrent writes correctly.",
+  "tags": [
+   "system-design",
+   "multi-region",
+   "conflicts",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design an API that must remain available when its database is down?",
+  "answer": "Serve reads from a cache with a stale-if-error policy, accept writes into a durable queue and acknowledge as pending, and return a clear degraded status. It changes the contract - writes are no longer immediately consistent - so the product must accept that before the architecture can.",
+  "tags": [
+   "system-design",
+   "availability",
+   "degradation",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to detect and prevent duplicate customer accounts?",
+  "answer": "Normalise and index the identifying attributes, apply deterministic matching on strong identifiers and probabilistic matching on weak ones with a review queue for uncertain matches, and record merge history so a wrong merge can be undone. Automatic merging on fuzzy matches without review is what creates unrecoverable data problems.",
+  "tags": [
+   "system-design",
+   "data-quality",
+   "matching",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system that must prove what a user saw at a point in time?",
+  "answer": "Version the content and record the version identifier with the interaction, rather than reconstructing from current data. Regulatory and dispute scenarios need the exact rendered terms, which a live query cannot reproduce after any change - storing a rendered snapshot is often the pragmatic answer.",
+  "tags": [
+   "system-design",
+   "audit",
+   "versioning",
+   "compliance"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design throttling that is fair between customers?",
+  "answer": "Per-tenant limits rather than a global one so a heavy user cannot starve others, weighted by plan, with a shared overflow capacity if spare. Global-only limiting means the noisiest tenant consumes the allowance and everyone else sees rejections caused by someone they cannot see.",
+  "tags": [
+   "system-design",
+   "rate-limiting",
+   "multitenancy",
+   "fairness"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to handle clock differences between clients and servers?",
+  "answer": "Treat the server clock as authoritative for anything ordered or expiring, send server time to clients that need it, use relative durations rather than absolute deadlines where possible, and allow tolerance when validating client timestamps. Client clocks are routinely wrong by minutes and occasionally by years.",
+  "tags": [
+   "system-design",
+   "clocks",
+   "time",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a feature that must work identically across web and mobile?",
+  "answer": "Put the logic behind a shared API rather than duplicating it per client, define the contract once, and keep client-specific behaviour to presentation. Duplicated business rules across three clients diverge within months, and the divergence is discovered as inconsistent behaviour reported by users.",
+  "tags": [
+   "system-design",
+   "api-design",
+   "clients",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where the same logical operation can arrive from several channels?",
+  "answer": "One internal command handler with channel-specific adapters translating into it, so the rule exists once regardless of whether the request came from the web, an API, a batch import or a support tool. Channel-specific implementations of the same operation are how the same bug gets fixed three times.",
+  "tags": [
+   "system-design",
+   "architecture",
+   "channels",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between scalability and elasticity?",
+  "answer": "Scalability is the ability to handle more load by adding resources; elasticity is doing so automatically and reversibly as load changes. A system can be scalable but not elastic - capacity added by hand - which is fine for predictable load and expensive for spiky traffic.",
+  "tags": [
+   "system-design",
+   "scalability",
+   "elasticity",
+   "terminology"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between resilience and robustness?",
+  "answer": "Robustness is resisting failure - handling expected conditions correctly. Resilience is recovering from failure, including unexpected ones. A robust system handles what you anticipated; a resilient one degrades and recovers from what you did not, which is why both retries and graceful degradation exist.",
+  "tags": [
+   "system-design",
+   "resilience",
+   "reliability",
+   "terminology"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is the difference between an SLA breach and an incident?",
+  "answer": "An incident is unplanned disruption requiring response; an SLA breach is a contractual threshold crossed, which may follow from one incident or accumulate from many small ones. Tracking both matters because a service can breach its objective without any single event large enough to be called an incident.",
+  "tags": [
+   "system-design",
+   "sla",
+   "incident",
+   "operations"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What does it mean for a system to be self-healing?",
+  "answer": "It detects and remediates known failure conditions automatically - restarting a failed process, replacing an unhealthy instance, retrying a transient failure. It reduces mean time to recovery for anticipated problems and does nothing for novel ones, so it complements rather than replaces observability and response.",
+  "tags": [
+   "system-design",
+   "self-healing",
+   "reliability",
+   "operations"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Concepts",
+  "difficulty": "Medium",
+  "question": "What is graceful degradation versus fail-fast, and when does each apply?",
+  "answer": "Graceful degradation continues with reduced functionality, appropriate when partial service has value. Fail-fast stops immediately, appropriate when continuing risks incorrect results or data corruption. A reporting page should degrade; a payment authorisation should fail fast.",
+  "tags": [
+   "system-design",
+   "reliability",
+   "degradation",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where a user action triggers work across several services?",
+  "answer": "Persist the intent, publish an event or start a saga, and track the overall state so progress is queryable and a partial failure is resumable. Calling three services synchronously from the request means the user sees a failure when any one is unavailable, and the first two have already acted.",
+  "tags": [
+   "system-design",
+   "saga",
+   "messaging",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a feature where results must be consistent between a list and a detail view?",
+  "answer": "Serve both from the same source with the same filters, or include a version or timestamp so the detail view can detect it is older than the list. Different queries against a changing dataset will disagree, and users notice when a row disappears between clicking and loading.",
+  "tags": [
+   "system-design",
+   "consistency",
+   "ux",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design retention for high-volume operational data?",
+  "answer": "Tier it - full detail for a short recent period, aggregated summaries for the medium term, and archive or deletion beyond that - with the boundaries driven by what questions must be answerable at each age. Keeping everything at full resolution is the default that becomes the largest line on the bill.",
+  "tags": [
+   "system-design",
+   "retention",
+   "cost",
+   "storage"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system that must be recoverable to any point in the last 30 days?",
+  "answer": "Continuous transaction log archiving with periodic full backups, immutable storage so the archive cannot be tampered with, tested restore procedures, and retention covering the window plus margin. The design constraint is restore time, which grows with how far back you go and must be tested at the extreme.",
+  "tags": [
+   "system-design",
+   "recovery",
+   "backup",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where correctness matters more than availability?",
+  "answer": "Fail closed on any uncertainty, use strong consistency and synchronous replication, verify before acting rather than compensating afterwards, and prefer rejecting work to processing it ambiguously. Financial ledgers and safety systems accept downtime that a social feed would not, and the architecture reflects that ordering.",
+  "tags": [
+   "system-design",
+   "consistency",
+   "correctness",
+   "trade-offs"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where different parts have very different availability requirements?",
+  "answer": "Separate them so the critical path does not depend on the optional one - independent deployment, separate resources, asynchronous boundaries where possible. Sharing infrastructure means the reporting feature's load can take down checkout, which is a design choice rather than an accident.",
+  "tags": [
+   "system-design",
+   "availability",
+   "isolation",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to support a customer-specific extension without forking?",
+  "answer": "Defined extension points - configuration, rules, webhooks, or a plugin interface with a stable contract - rather than conditional logic per customer. The design constraint is that extension points must be narrow enough to keep supporting, because every one becomes a compatibility obligation.",
+  "tags": [
+   "system-design",
+   "extensibility",
+   "multitenancy",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system for gradual data migration between two stores?",
+  "answer": "Dual read with a comparison to detect divergence, dual write derived from a single source of truth, migrate in batches with a per-record marker, and cut over per cohort with a rollback path. The comparison phase is what catches the transformation bugs before they matter.",
+  "tags": [
+   "system-design",
+   "migration",
+   "data",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system whose main constraint is a third party's rate limit?",
+  "answer": "Queue all outbound work, dispatch through a limiter matched to the allowance, prioritise so urgent items are not stuck behind bulk, cache responses aggressively, and batch where the provider supports it. The architecture is essentially a scheduler around a scarce resource.",
+  "tags": [
+   "system-design",
+   "rate-limiting",
+   "integration",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where an operation must complete within a strict deadline?",
+  "answer": "Budget the deadline across stages, set per-call timeouts summing to less than the total, fail fast rather than exceeding it, and degrade to a partial or cached result rather than returning late. Deadline propagation - passing the remaining budget downstream - is what prevents a late dependency consuming the whole allowance.",
+  "tags": [
+   "system-design",
+   "latency",
+   "deadlines",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to be operable by a small team?",
+  "answer": "Prefer managed services over self-hosted, minimise the number of distinct technologies, automate routine operations, invest in observability that answers questions without expertise, and choose boring components with good documentation. Operational load, not development effort, is what limits what a small team can sustain.",
+  "tags": [
+   "system-design",
+   "operability",
+   "team-size",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where a single tenant can generate extreme load?",
+  "answer": "Per-tenant quotas and rate limits, isolation of the largest tenants onto dedicated capacity, work queued rather than executed synchronously, and fair scheduling so one tenant cannot starve others. Designing for the average tenant and discovering the outlier in production is the common failure.",
+  "tags": [
+   "system-design",
+   "multitenancy",
+   "fairness",
+   "scalability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to handle very large individual requests?",
+  "answer": "Reject beyond a bound rather than attempting them, stream rather than buffer, process asynchronously with progress reporting, and provide a chunked or resumable path for the legitimate large cases. An endpoint that accepts an unbounded payload is a denial of service vector regardless of intent.",
+  "tags": [
+   "system-design",
+   "limits",
+   "streaming",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system that must support both API and file-based integration?",
+  "answer": "One internal processing path with adapters for each entry point, so validation and business rules are shared and only the transport and format differ. Implementing the file path separately is how the two diverge and produce different outcomes for the same data.",
+  "tags": [
+   "system-design",
+   "integration",
+   "architecture",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to support a phased rollout to specific customers?",
+  "answer": "Feature flags with per-tenant targeting evaluated server-side, telemetry segmented by cohort, and the ability to disable per tenant instantly. Deploying different code per customer is the alternative and it multiplies every subsequent change by the number of variants.",
+  "tags": [
+   "system-design",
+   "feature-flags",
+   "rollout",
+   "multitenancy"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where the cost of being wrong is asymmetric?",
+  "answer": "Bias the design toward the cheaper error - a fraud check should prefer false positives with a review path, an availability-critical read should prefer stale data over failure. Making the asymmetry explicit in the design is what stops it being resolved implicitly by whoever writes the threshold.",
+  "tags": [
+   "system-design",
+   "risk",
+   "trade-offs",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to prevent a runaway job from consuming the budget?",
+  "answer": "Bound each job's resource usage and duration, cap the total concurrent jobs, meter consumption against a budget with automatic suspension, and alert on anomalous rates. Cloud resources scale automatically, so the protection has to be an explicit limit rather than a natural ceiling.",
+  "tags": [
+   "system-design",
+   "cost",
+   "limits",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where users can define their own queries safely?",
+  "answer": "Expose a constrained query language rather than raw SQL, validate against an allow-list of fields and operations, enforce complexity and result limits, run with a read-only least-privilege connection and a timeout, and execute against a replica. Passing user input to a query engine directly is a denial of service and injection risk.",
+  "tags": [
+   "system-design",
+   "security",
+   "queries",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to support undoing a bulk operation?",
+  "answer": "Record the operation as a unit with the previous state of each affected record or the inverse operation, apply it atomically, and provide a bounded window in which it can be reversed. Undoing by reapplying an inverse computed later is unreliable if the records changed in the meantime.",
+  "tags": [
+   "system-design",
+   "undo",
+   "bulk",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where correctness depends on processing events in order?",
+  "answer": "Partition by the entity whose ordering matters so each partition is processed serially while different entities proceed in parallel, and use a sequence number so a consumer can detect a gap or a reordering. Global ordering across all events is achievable only by giving up parallelism entirely.",
+  "tags": [
+   "system-design",
+   "ordering",
+   "partitioning",
+   "messaging"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system to support querying historical state?",
+  "answer": "Either temporal tables maintained by the database, an event log the state can be rebuilt from, or periodic snapshots with change records between them. The choice depends on how far back and how precisely - reconstructing from an event log is exact and slow, while snapshots are fast and coarse.",
+  "tags": [
+   "system-design",
+   "temporal",
+   "history",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where a single request may be extremely expensive?",
+  "answer": "Estimate the cost before executing and reject or queue beyond a threshold, apply a timeout and a resource cap, run it asynchronously with progress rather than synchronously, and account it against the requester's quota. Allowing an unbounded request to run synchronously is how one user takes down a service.",
+  "tags": [
+   "system-design",
+   "limits",
+   "fairness",
+   "reliability"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system where the number of tenants grows into the thousands?",
+  "answer": "Pooled infrastructure with per-tenant isolation in data and quotas, automated onboarding with no manual step, per-tenant observability, and a migration path for a tenant that outgrows the pool onto dedicated capacity. Manual per-tenant configuration is what makes a thousand tenants unmanageable.",
+  "tags": [
+   "system-design",
+   "multitenancy",
+   "scale",
+   "operations"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design a system whose primary constraint is a fixed hardware budget?",
+  "answer": "Measure the actual bottleneck resource, optimise for it specifically, use efficient data representations and batching, cache what can be cached, and shed or queue load beyond capacity rather than degrading everything. Fixed capacity makes load shedding a design requirement rather than a failure mode.",
+  "tags": [
+   "system-design",
+   "capacity",
+   "constraints",
+   "design"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you design for the case where a downstream system is permanently removed?",
+  "answer": "Keep the integration behind an interface you own, avoid its concepts leaking into your model, ensure the data you need is either yours or replicated, and know what the fallback behaviour would be. Integrations are assumed permanent until an acquisition or a contract change proves otherwise.",
+  "tags": [
+   "system-design",
+   "integration",
+   "risk",
+   "architecture"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you approach designing a system with requirements you know will change?",
+  "answer": "Identify which decisions are expensive to reverse and defer or protect those, keep interfaces narrow so implementations can change, and build the smallest thing that delivers value so the feedback arrives before more is committed. Designing for flexibility everywhere costs more than changing a few specific things later.",
+  "tags": [
+   "system-design",
+   "uncertainty",
+   "design",
+   "judgement"
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What questions reveal whether a design has been thought through?",
+  "answer": "What happens when each dependency fails, what the behaviour is at ten times the load, how it is rolled back, how a problem would be detected, and what the data lifecycle is. A design with confident answers to those has been considered; one with answers only to the functional requirements has not.",
+  "tags": [
+   "system-design",
+   "review",
+   "practices",
+   "judgement"
+  ]
+ }
+]

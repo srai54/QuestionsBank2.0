@@ -1,0 +1,1388 @@
+[
+ {
+  "category": "MongoDB",
+  "subcategory": "Fundamentals",
+  "difficulty": "Easy",
+  "question": "What is MongoDB and how does it differ from a relational database?",
+  "answer": "MongoDB is a document-oriented NoSQL database storing flexible, schema-less JSON-like documents (BSON) in collections, versus relational tables with fixed schemas and rows. It favors denormalization/embedding over joins, scales horizontally via sharding, and suits evolving schemas and hierarchical data. Trade-offs: weaker multi-document transaction guarantees historically and no rigid schema enforcement (though schema validation exists).",
+  "tags": [
+   "mongodb",
+   "nosql",
+   "document-db"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Fundamentals",
+  "difficulty": "Easy",
+  "question": "What are collections and documents in MongoDB?",
+  "answer": "A document is a set of key-value pairs stored as BSON (binary JSON), the basic record—analogous to a row but flexible and nested. A collection is a group of documents, analogous to a table but without an enforced schema. Documents in a collection can have different fields. Each document has a unique _id (ObjectId by default) acting as the primary key.",
+  "tags": [
+   "mongodb",
+   "collection",
+   "document",
+   "bson"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Data Modeling",
+  "difficulty": "Hard",
+  "question": "When should you embed vs reference documents in MongoDB?",
+  "answer": "Embed when data is accessed together, has a contains/one-to-few relationship, and doesn't grow unbounded—it gives single-read performance and atomicity within one document. Reference (store an id) for one-to-many/many-to-many, large or independently-updated data, or unbounded growth to avoid huge documents and duplication. The rule: model around query patterns—optimize for how you read the data, not normalization.",
+  "tags": [
+   "mongodb",
+   "embedding",
+   "referencing",
+   "data-modeling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "How does indexing work in MongoDB?",
+  "answer": "MongoDB uses B-tree indexes; the default is on _id. You create single-field, compound (multi-field, order matters—ESR rule: Equality, Sort, Range), multikey (on array fields), text, geospatial, hashed, and partial/TTL indexes. Indexes speed queries/sorts but cost write performance and storage. Use explain() to verify index usage (IXSCAN vs COLLSCAN) and cover queries where possible.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "compound-index",
+   "explain"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Indexing",
+  "difficulty": "Hard",
+  "question": "What is the ESR rule for compound indexes?",
+  "answer": "ESR = Equality, Sort, Range: order compound index fields so equality-match fields come first, then fields used for sorting, then range-query fields. This lets MongoDB seek efficiently, return results already sorted (avoiding an in-memory sort), and scan a bounded range. Wrong field order forces collection scans or blocking sorts. Design indexes around your query's filter/sort shape.",
+  "tags": [
+   "mongodb",
+   "esr",
+   "compound-index",
+   "optimization"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Aggregation",
+  "difficulty": "Medium",
+  "question": "What is the aggregation pipeline in MongoDB?",
+  "answer": "The aggregation pipeline processes documents through a sequence of stages, each transforming the stream: $match (filter), $group (aggregate), $project (reshape), $sort, $limit, $lookup (left join to another collection), $unwind (expand arrays), $facet, etc. It's MongoDB's powerful analytics/reporting engine. Place $match/$sort early (before $group) so indexes apply and less data flows downstream.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "pipeline",
+   "lookup"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Sharding",
+  "difficulty": "Hard",
+  "question": "What is sharding in MongoDB and how do you choose a shard key?",
+  "answer": "Sharding horizontally partitions data across shards using a shard key, enabling scale-out for large datasets/throughput. A good shard key has high cardinality, even write/read distribution, and aligns with common query filters (so queries are targeted, not scatter-gather). Poor keys (monotonic like timestamp) create hotspots. Hashed sharding spreads writes; ranged sharding aids range queries. The key is hard to change later—choose carefully.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "shard-key",
+   "scaling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Replication",
+  "difficulty": "Medium",
+  "question": "What is a replica set in MongoDB?",
+  "answer": "A replica set is a group of mongod nodes maintaining the same data: one primary (accepts writes) and secondaries (replicate the oplog). If the primary fails, an automatic election promotes a secondary, providing high availability and failover. Secondaries can serve reads (with read preference) for scaling reads. Replication also enables backups and data redundancy across nodes/zones.",
+  "tags": [
+   "mongodb",
+   "replica-set",
+   "replication",
+   "ha"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Consistency",
+  "difficulty": "Hard",
+  "question": "What are read and write concerns in MongoDB?",
+  "answer": "Write concern controls acknowledgment durability: w:1 (primary only), w:majority (majority of nodes—durable, survives failover), with optional journaling (j:true). Read concern controls consistency of reads: local, majority (only majority-committed data), linearizable. Higher levels trade latency for stronger consistency/durability. Use w:majority + readConcern majority for strong guarantees on critical data.",
+  "tags": [
+   "mongodb",
+   "write-concern",
+   "read-concern",
+   "consistency"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "Does MongoDB support transactions?",
+  "answer": "Yes—single-document operations are always atomic. Since 4.0 MongoDB supports multi-document ACID transactions across a replica set (and sharded clusters since 4.2). However transactions add overhead and locking, so the preferred design is to embed related data in a single document to get atomicity naturally. Use multi-document transactions sparingly for cases that genuinely span documents/collections.",
+  "tags": [
+   "mongodb",
+   "transactions",
+   "acid",
+   "atomicity"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you diagnose a slow MongoDB query?",
+  "answer": "Use explain('executionStats') to see whether it uses an index (IXSCAN) or a collection scan (COLLSCAN), documents examined vs returned (should be close), and sort stages (in-memory SORT is bad). Check the profiler (db.setProfilingLevel) for slow ops. Fix by adding/adjusting indexes (ESR), projecting only needed fields, avoiding unbounded $lookup, and ensuring queries are covered/targeted.",
+  "tags": [
+   "mongodb",
+   "performance",
+   "explain",
+   "profiler"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "What is the difference between find, findOne, and aggregate?",
+  "answer": "find returns a cursor over all matching documents; findOne returns a single matching document. aggregate runs a multi-stage pipeline for grouping, joining ($lookup), reshaping, and computing—more powerful than find for analytics. Use find/findOne for simple retrievals and aggregate when you need transformations, grouping, or joins across collections.",
+  "tags": [
+   "mongodb",
+   "find",
+   "aggregate",
+   "query"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Fundamentals",
+  "difficulty": "Medium",
+  "question": "What is a TTL index and what is it used for?",
+  "answer": "A TTL (Time To Live) index automatically deletes documents after a specified number of seconds from a date field. It's ideal for expiring transient data—sessions, logs, cache entries, OTPs, or event data with retention limits—without a separate cleanup job. MongoDB's background thread removes expired documents periodically (not exactly at expiry).",
+  "tags": [
+   "mongodb",
+   "ttl-index",
+   "expiry",
+   "cleanup"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What are common data modeling patterns in MongoDB?",
+  "answer": "Patterns include: bucket (group time-series/events into documents), computed (precompute aggregates), subset (embed a hot subset, reference the rest), extended reference (denormalize frequently-read fields), polymorphic (varied shapes in one collection), and outlier (handle rare large cases separately). They optimize for read patterns and document-size limits—model to serve queries efficiently rather than normalize.",
+  "tags": [
+   "mongodb",
+   "patterns",
+   "modeling",
+   "bucket"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Comparison",
+  "difficulty": "Medium",
+  "question": "When would you choose MongoDB over SQL Server?",
+  "answer": "Choose MongoDB for flexible/evolving schemas, hierarchical or document-shaped data, rapid iteration, horizontal scale, and high write throughput with denormalized reads (catalogs, content, IoT, real-time). Choose SQL for complex relational queries/joins, strong multi-row transactional integrity, mature reporting/BI, and well-defined schemas. Often systems use both (polyglot persistence) for different workloads.",
+  "tags": [
+   "mongodb",
+   "sql",
+   "comparison",
+   "polyglot"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "CRUD",
+  "difficulty": "Easy",
+  "question": "What are the basic CRUD operations in MongoDB?",
+  "answer": "insertOne/insertMany add documents; find/findOne read with query filters and projections; updateOne/updateMany/replaceOne modify (with operators like $set, $inc, $push); deleteOne/deleteMany remove. Queries use a document-based filter syntax ({age: {$gt: 18}}). Update operators change specific fields without replacing the whole document. These map to the driver methods across languages.",
+  "tags": [
+   "mongodb",
+   "crud",
+   "insert",
+   "update",
+   "delete"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Query",
+  "difficulty": "Medium",
+  "question": "What are common query operators in MongoDB?",
+  "answer": "Comparison ($eq, $ne, $gt, $gte, $lt, $lte, $in, $nin), logical ($and, $or, $not, $nor), element ($exists, $type), evaluation ($regex, $expr), and array ($all, $elemMatch, $size). $expr allows aggregation expressions in queries. Combine them in the filter document to express complex conditions. Indexes should support the fields used in these operators for efficiency.",
+  "tags": [
+   "mongodb",
+   "query-operators",
+   "filter"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Update",
+  "difficulty": "Medium",
+  "question": "What are the main update operators in MongoDB?",
+  "answer": "$set (set field values), $unset (remove fields), $inc (increment numbers), $mul, $rename, $min/$max, $push/$addToSet (add to arrays), $pull/$pop (remove from arrays), $each with $push, and $ (positional) to update matched array elements. Upsert (upsert:true) inserts if no match. These enable partial, atomic, in-place document updates without rewriting the whole document.",
+  "tags": [
+   "mongodb",
+   "update-operators",
+   "set",
+   "inc",
+   "push"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Aggregation",
+  "difficulty": "Hard",
+  "question": "What is $lookup and its performance considerations?",
+  "answer": "$lookup performs a left outer join to another collection within an aggregation pipeline. It's powerful but can be expensive—it runs per input document and benefits greatly from an index on the foreign field. For high-volume joins, MongoDB's document model often prefers embedding related data to avoid $lookup entirely. Filter ($match) before $lookup to reduce inputs, and consider whether the data should be modeled together instead.",
+  "tags": [
+   "mongodb",
+   "lookup",
+   "join",
+   "aggregation",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Aggregation",
+  "difficulty": "Medium",
+  "question": "What is the order of stages in an aggregation pipeline and why does it matter?",
+  "answer": "Stages run in sequence, each transforming the stream. Order matters for performance and correctness: place $match and $sort early (before $group/$project) so indexes apply and less data flows downstream; $limit after $sort enables top-N optimization. $project early can reduce document size. Putting $match after $group forces processing all data first. Optimize by filtering and limiting as early as possible.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "pipeline",
+   "match",
+   "optimization"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "What is a multikey index in MongoDB?",
+  "answer": "A multikey index is automatically created when you index a field that holds an array—MongoDB indexes each array element, so queries matching any element use the index. You don't declare it specially; it's inferred. Limitations: a compound index can include at most one array field (can't have two multikey fields), and covered queries on arrays are limited. It's essential for efficiently querying array contents.",
+  "tags": [
+   "mongodb",
+   "multikey-index",
+   "array",
+   "indexing"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "What is a text index and how does text search work in MongoDB?",
+  "answer": "A text index enables full-text search on string fields, supporting stemming, stop-words, and relevance scoring via $text queries with $meta:'textScore' for ranking. You can index multiple fields with weights. It's convenient for basic search within MongoDB, but for advanced search (typo tolerance, faceting, complex relevance) Atlas Search (Lucene-based) or a dedicated engine is stronger. Only one text index per collection.",
+  "tags": [
+   "mongodb",
+   "text-index",
+   "full-text-search",
+   "atlas-search"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How do you model a one-to-many relationship in MongoDB?",
+  "answer": "Choose based on cardinality and access: embed the 'many' as an array in the parent for one-to-few, bounded, and read-together data (single-read, atomic). Reference (store parent id in children, or child ids in parent) for one-to-many/one-to-squillions or independently-accessed/large data to avoid huge documents and the 16MB limit. The extended reference pattern denormalizes a few frequently-read fields. Model around query patterns.",
+  "tags": [
+   "mongodb",
+   "one-to-many",
+   "embedding",
+   "referencing",
+   "modeling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Limits",
+  "difficulty": "Medium",
+  "question": "What is the 16MB document size limit and how do you handle large data?",
+  "answer": "A single BSON document can't exceed 16MB. For larger data: reference/split into multiple documents (bucketing), or use GridFS to store large files/blobs in chunks. Unbounded arrays are a common cause of hitting the limit—model them as separate documents (the subset/bucket pattern) with references. Design to keep documents well under the limit and avoid ever-growing embedded arrays.",
+  "tags": [
+   "mongodb",
+   "document-size",
+   "16mb",
+   "gridfs",
+   "bucket"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What does covered query mean in MongoDB?",
+  "answer": "A covered query is satisfied entirely by an index—all queried and returned fields are in the index, so MongoDB never reads the actual documents. It requires the projection to include only indexed fields (and exclude _id if not indexed). Covered queries are very fast (index-only). Design indexes with the fields your hot queries filter, sort, and return to enable covering where it matters.",
+  "tags": [
+   "mongodb",
+   "covered-query",
+   "index",
+   "projection",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Sharding",
+  "difficulty": "Hard",
+  "question": "What is the difference between ranged and hashed sharding?",
+  "answer": "Ranged sharding partitions by contiguous key ranges—good for range queries (targeted to few shards) but risks hotspots if the key is monotonically increasing (all writes hit one shard). Hashed sharding hashes the key to distribute writes evenly across shards—great write distribution but range queries become scatter-gather. Choose ranged for range-heavy access with a well-distributed key; hashed for even write load without range-query needs.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "ranged",
+   "hashed",
+   "shard-key"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Replication",
+  "difficulty": "Medium",
+  "question": "What is read preference in MongoDB?",
+  "answer": "Read preference controls which replica-set members serve reads: primary (default, strong consistency), primaryPreferred, secondary (offload reads, may be stale), secondaryPreferred, and nearest (lowest latency). Reading from secondaries scales reads but risks stale data (replication lag). Use primary for read-your-writes/consistency-critical reads; secondaries for analytics/reporting tolerant of lag. Combine with read concern for consistency guarantees.",
+  "tags": [
+   "mongodb",
+   "read-preference",
+   "replica-set",
+   "consistency"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Transactions",
+  "difficulty": "Medium",
+  "question": "When should you use multi-document transactions vs embedding?",
+  "answer": "Prefer embedding related data so a single-document update is naturally atomic—the idiomatic MongoDB approach. Use multi-document ACID transactions only when a business operation genuinely spans multiple documents/collections that can't be embedded (e.g., transfers across accounts). Transactions add locking/overhead and reduce scalability, so keep them short and rare. Good schema design minimizes the need for them.",
+  "tags": [
+   "mongodb",
+   "transactions",
+   "embedding",
+   "atomicity"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "How do you optimize aggregation pipeline performance?",
+  "answer": "Filter early with $match (use indexes), $sort before $group where an index supports it, $project to drop unneeded fields early, avoid $lookup on large collections (index the foreign key or embed instead), use $limit after sort for top-N, and check explain() for COLLSCAN/in-memory sort. Enable allowDiskUse for large sorts/groups but treat spilling as a signal to add indexes. Reduce the working set as early as possible.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "optimization",
+   "explain",
+   "index"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is the bucket pattern and when is it used?",
+  "answer": "The bucket pattern groups many small, related documents (e.g., time-series readings) into 'bucket' documents holding an array of entries for a time window or count—reducing document count, index size, and overhead. It's ideal for IoT/time-series and event data where you'd otherwise have millions of tiny documents. Trade-off: bucket size management and slightly more complex updates. MongoDB Time Series collections automate this pattern.",
+  "tags": [
+   "mongodb",
+   "bucket-pattern",
+   "time-series",
+   "modeling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Query",
+  "difficulty": "Medium",
+  "question": "What is the difference between $elemMatch and dot notation for arrays?",
+  "answer": "Dot notation (arr.field: value) matches if ANY array element satisfies each condition independently—so multiple conditions can match across different elements. $elemMatch requires a SINGLE array element to satisfy ALL specified conditions together. Use $elemMatch when multiple criteria must hold for the same element (e.g., an item with qty>0 AND status='active'); dot notation when conditions can be met by different elements.",
+  "tags": [
+   "mongodb",
+   "elemmatch",
+   "array",
+   "query"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Consistency",
+  "difficulty": "Hard",
+  "question": "What is causal consistency in MongoDB?",
+  "answer": "Causal consistency guarantees that operations respecting cause-and-effect are seen in order within a client session—you read your own writes and see monotonically consistent data even across primary/secondary reads. Enable it with causally consistent sessions plus appropriate read/write concerns (majority). It's weaker than full linearizability but stronger than eventual, providing intuitive per-session guarantees for reads following writes.",
+  "tags": [
+   "mongodb",
+   "causal-consistency",
+   "session",
+   "read-your-writes"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you back up and restore MongoDB?",
+  "answer": "Options: mongodump/mongorestore (BSON dumps, good for smaller datasets/logical backups), filesystem/volume snapshots (fast for large data, point-in-time with journaling), and managed backups in Atlas (continuous/point-in-time recovery). For sharded clusters, ensure consistent cross-shard backups. Test restores regularly, and choose based on RPO/RTO and data size. Atlas provides automated, point-in-time cloud backups.",
+  "tags": [
+   "mongodb",
+   "backup",
+   "mongodump",
+   "atlas",
+   "restore"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What is schema validation in MongoDB?",
+  "answer": "Although MongoDB is schema-flexible, you can enforce a JSON Schema validator on a collection ($jsonSchema) to require fields, types, ranges, and patterns—rejecting or warning on invalid documents. It brings optional structure/integrity to document data without sacrificing flexibility for evolving fields. Use validation to catch bad data at write time while keeping the freedom to add fields. Set validationLevel/Action (strict/moderate, error/warn).",
+  "tags": [
+   "mongodb",
+   "schema-validation",
+   "jsonschema",
+   "integrity"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Query",
+  "difficulty": "Medium",
+  "question": "What is projection and why use it?",
+  "answer": "Projection specifies which fields to return (find(filter, projection)), including (field:1) or excluding (field:0) fields. Returning only needed fields reduces network transfer, memory, and can enable covered queries (index-only). Always project to the fields you actually use rather than fetching whole documents, especially with large documents or arrays. _id is returned by default unless excluded ({_id:0}).",
+  "tags": [
+   "mongodb",
+   "projection",
+   "performance",
+   "covered-query"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "What is the document size limit and why does it shape schema design?",
+  "answer": "A BSON document cannot exceed 16 MB, which makes unbounded embedded arrays a design failure waiting to happen - comments on a popular post, events on a long-lived entity. The pattern is to cap embedded arrays and overflow into a separate collection, or reference from the start when growth is unbounded.",
+  "tags": [
+   "mongodb",
+   "limits",
+   "modelling",
+   "design"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "What is the outlier pattern?",
+  "answer": "Most documents fit the embedded design, but a few - a celebrity account, a huge order - would exceed limits. The outlier pattern flags those documents and stores the overflow separately, so the common case stays simple and fast while the exceptions still work. It avoids designing the whole schema around the rare case.",
+  "tags": [
+   "mongodb",
+   "patterns",
+   "modelling",
+   "design"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "What is the computed pattern and why use it?",
+  "answer": "Store precomputed aggregates - totals, counts, averages - alongside the source data and update them on write, rather than recomputing on every read. It trades write cost and a consistency obligation for fast reads, which is the right trade when a value is read far more often than it changes.",
+  "tags": [
+   "mongodb",
+   "patterns",
+   "performance",
+   "denormalisation"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you handle relationships that need consistency across documents?",
+  "answer": "Either embed so the update is atomic within one document, or use a multi-document transaction, or design for eventual consistency with a reconciliation process. Transactions exist but carry real cost and were added late, so the idiomatic answer remains to model so that a single document is the transaction boundary.",
+  "tags": [
+   "mongodb",
+   "transactions",
+   "consistency",
+   "modelling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "What is a compound index in MongoDB and what is the prefix rule?",
+  "answer": "An index over several fields, usable for queries that filter on a prefix of those fields in order. An index on a, b, c serves queries on a, on a and b, and on all three, but not on b alone. Sort order in the index also determines which sorts can be satisfied without an in-memory sort.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "compound-index",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "What is the ESR rule for index design?",
+  "answer": "Order compound index fields as Equality, then Sort, then Range. Equality fields narrow the scan, the sort field then comes out ordered for free, and range fields are scanned last. Putting a range before a sort field forces an in-memory sort, which fails outright above the memory limit.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "esr",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "What is a multikey index and what are its limitations?",
+  "answer": "An index on an array field, creating an entry per element so queries can match any element. Limitations are that a compound index can include at most one array field, index size grows with array length, and covered queries are not possible on multikey fields.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "arrays",
+   "limitations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "What does explain tell you in MongoDB and what do you look for?",
+  "answer": "It reports the winning plan, whether an index was used, documents examined versus returned, and whether an in-memory sort occurred. The key ratio is examined to returned - close to one is healthy, thousands to one means the index is wrong. A COLLSCAN stage on a large collection is the clearest red flag.",
+  "tags": [
+   "mongodb",
+   "explain",
+   "tuning",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "What is a partial index and how does it differ from a sparse index?",
+  "answer": "A partial index includes only documents matching a filter expression, which is more flexible and generally preferred. A sparse index includes only documents where the field exists. Both reduce index size; the query planner will only use them when it can prove the query is a subset of the index's condition.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "partial-index",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Aggregation",
+  "difficulty": "Medium",
+  "question": "How does the aggregation pipeline work and what optimisations does it apply?",
+  "answer": "Documents flow through stages, each transforming the stream. The planner reorders where safe - pushing match and project stages earlier to reduce the working set, and merging some stages. Putting match first yourself is still the most reliable optimisation, since only then can an index be used.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "pipeline",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Aggregation",
+  "difficulty": "Medium",
+  "question": "What is the memory limit on aggregation stages and how do you work around it?",
+  "answer": "Blocking stages such as sort and group are limited to 100 MB in memory by default and fail beyond it. allowDiskUse spills to disk at a large performance cost. The better fix is filtering earlier, indexing the sort, or restructuring so the aggregation works on a smaller set.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "limits",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Aggregation",
+  "difficulty": "Medium",
+  "question": "What does lookup do and why is it not a real join?",
+  "answer": "lookup performs a left outer join to another collection per input document. It is not a relational join: there is no join optimiser, it can be slow without an index on the foreign field, results are embedded as arrays, and it works poorly across shards. Frequent lookups usually indicate the schema should embed instead.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "lookup",
+   "modelling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Aggregation",
+  "difficulty": "Medium",
+  "question": "What is the difference between unwind and working with arrays directly?",
+  "answer": "unwind produces one document per array element, which enables grouping and filtering per element but multiplies the document count and memory use. Where an array operator such as filter, map or reduce can do the job inside the document, it avoids the fan-out entirely and is far cheaper.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "arrays",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Aggregation",
+  "difficulty": "Medium",
+  "question": "What is a materialised view in MongoDB and how do you maintain one?",
+  "answer": "merge or out writes aggregation results into a collection, which can be refreshed incrementally by matching on a watermark. It suits expensive aggregations read frequently, giving fast reads at the cost of staleness and a scheduled job. Change streams can drive incremental updates instead of a full recompute.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "materialised-view",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is a replica set and how does election work?",
+  "answer": "A primary takes writes and secondaries replicate the oplog. If the primary becomes unreachable, remaining members with a majority elect a new primary. A majority is required, which is why an even number of members plus an arbiter, or a two-member set, cannot survive the loss of one node cleanly.",
+  "tags": [
+   "mongodb",
+   "replication",
+   "high-availability",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What do write concern and read concern control?",
+  "answer": "Write concern sets how many members must acknowledge a write - majority guarantees durability across a failover, one is faster but can be rolled back. Read concern sets what a reader may see - local, majority, or linearizable. Together they place the application on the consistency and latency spectrum.",
+  "tags": [
+   "mongodb",
+   "consistency",
+   "durability",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What are read preferences and what is the risk of reading from secondaries?",
+  "answer": "Read preference routes queries to the primary, secondaries or the nearest member. Reading from secondaries scales reads but returns data that lags replication, so read-after-write and check-then-act logic break. It also shifts load onto members that must still apply the oplog.",
+  "tags": [
+   "mongodb",
+   "replication",
+   "consistency",
+   "scaling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is a change stream and what is it used for?",
+  "answer": "A change stream exposes the oplog as a resumable, ordered feed of document changes, filterable with an aggregation pipeline. It is used for cache invalidation, search index updates, event publication and audit, and it resumes from a token after disconnection - which is what makes it usable in production rather than tailing the oplog directly.",
+  "tags": [
+   "mongodb",
+   "change-streams",
+   "cdc",
+   "integration"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do multi-document transactions work in MongoDB and what do they cost?",
+  "answer": "They provide ACID semantics across documents and collections within a replica set or across shards. The costs are real: a transaction holds resources, has a default 60-second limit, adds latency, and can abort on write conflict requiring retry. Schema design that avoids needing them remains the idiomatic approach.",
+  "tags": [
+   "mongodb",
+   "transactions",
+   "acid",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "Why does MongoDB performance collapse when the working set exceeds RAM?",
+  "answer": "The storage engine caches frequently used data and indexes in memory; once the working set no longer fits, reads start hitting disk and latency jumps by orders of magnitude. The fix is more memory, a smaller working set through better indexes and projections, archiving cold data, or sharding to spread it.",
+  "tags": [
+   "mongodb",
+   "performance",
+   "memory",
+   "scaling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What are the main security defaults to check on a MongoDB deployment?",
+  "answer": "Authentication enabled and not bound to all interfaces, TLS for client and intra-cluster traffic, role-based users scoped per database rather than root, network restricted to known sources, encryption at rest, and auditing where required. Unauthenticated internet-exposed instances remain a recurring source of public data breaches.",
+  "tags": [
+   "mongodb",
+   "security",
+   "configuration",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "How do projections affect query performance in MongoDB?",
+  "answer": "Projecting fewer fields reduces network transfer and deserialisation cost, and can enable a covered query where the index alone answers the request. On documents with large embedded arrays or blobs, projection is often the single biggest improvement available without changing the schema.",
+  "tags": [
+   "mongodb",
+   "projection",
+   "performance",
+   "query"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "What is the difference between updateOne with upsert and findOneAndUpdate?",
+  "answer": "updateOne reports what changed without returning the document; findOneAndUpdate returns the document before or after modification, which costs an extra round trip's worth of data but avoids a separate read. Both support upsert; choose based on whether the caller needs the resulting document.",
+  "tags": [
+   "mongodb",
+   "updates",
+   "api",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "What does the elemMatch operator do and why is it needed?",
+  "answer": "It requires all conditions to match a single array element. Without it, separate conditions on the same array field can be satisfied by different elements, so a query for items with quantity above ten and status pending matches a document where one element is pending and a different one has quantity twenty.",
+  "tags": [
+   "mongodb",
+   "arrays",
+   "query",
+   "gotchas"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "How do you paginate efficiently in MongoDB?",
+  "answer": "Range on an indexed sort key rather than skip, because skip must walk the skipped documents and degrades with depth. Sort by a unique field or append the object id to break ties, and pass the last seen value as the cursor - which also keeps pages stable while data changes.",
+  "tags": [
+   "mongodb",
+   "pagination",
+   "performance",
+   "query"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "Why can a MongoDB query be slow despite using an index?",
+  "answer": "The index may be selective on the wrong field so many documents are examined, the sort may not match the index order and require an in-memory sort, the projection may force a document fetch, or the working set may exceed memory. Compare documents examined against returned in the explain output.",
+  "tags": [
+   "mongodb",
+   "performance",
+   "indexing",
+   "diagnostics"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is the oplog and how does its size affect operations?",
+  "answer": "A capped collection of write operations that secondaries replay. Its size determines how long a secondary can be offline before it can no longer catch up and needs a full resync, and how far back a change stream can resume. Sizing it for the longest expected maintenance window is a standard operational decision.",
+  "tags": [
+   "mongodb",
+   "oplog",
+   "replication",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you perform a schema migration in MongoDB?",
+  "answer": "Usually lazily: write the new shape, tolerate both on read, and migrate documents in the background or on access, tracking a schema version field per document. A bulk update of millions of documents is possible but locks resources and cannot be rolled back easily, so incremental migration is the norm.",
+  "tags": [
+   "mongodb",
+   "migrations",
+   "schema",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What causes a MongoDB connection pool to be exhausted?",
+  "answer": "Slow queries holding connections, a pool sized below the application's concurrency, connections leaked by not disposing cursors or clients, or a client created per request rather than shared. The symptom is timeouts waiting for a connection while the server itself looks idle.",
+  "tags": [
+   "mongodb",
+   "connection-pool",
+   "performance",
+   "troubleshooting"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you model a one-to-many relationship where the many side is large?",
+  "answer": "Reference from the child to the parent and index that field, so the child collection grows without bloating the parent document. Embedding is only appropriate when the collection is bounded and read as a unit - an unbounded embedded array eventually hits the document size limit and degrades every read before it does.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "relationships",
+   "design"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "What is the extended reference pattern?",
+  "answer": "Storing a few frequently needed fields from a referenced document alongside the reference - a customer name on an order - so common reads avoid a lookup. The trade-off is duplication that must be updated when the source changes, which is acceptable for fields that rarely change and unacceptable for volatile ones.",
+  "tags": [
+   "mongodb",
+   "patterns",
+   "denormalisation",
+   "modelling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "What is the subset pattern?",
+  "answer": "Keeping the most-used subset of a large embedded array in the main document - the ten most recent reviews - with the full set in a separate collection. It bounds document size and keeps the common read fast, at the cost of maintaining both copies when the subset changes.",
+  "tags": [
+   "mongodb",
+   "patterns",
+   "modelling",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "When should you use MongoDB's time-series collections?",
+  "answer": "When storing measurements keyed by time and metadata, where they give automatic bucketing, better compression and query optimisation compared with a document per reading. They come with restrictions on updates and deletes, so they suit append-mostly telemetry rather than data that is corrected after the fact.",
+  "tags": [
+   "mongodb",
+   "time-series",
+   "modelling",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you decide whether to add an index in MongoDB?",
+  "answer": "From the queries that actually run - the profiler or slow query log - checking the examined-to-returned ratio and whether a sort is done in memory. Then weigh the write cost and memory footprint. Indexes added speculatively for queries nobody runs cost writes and RAM permanently.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "performance",
+   "tuning"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is index intersection in MongoDB and why is it rarely optimal?",
+  "answer": "The planner can combine two indexes for a query, but it is usually slower than a single compound index because it must fetch and intersect result sets. Its existence is a reason not to assume single-field indexes are sufficient - the compound index matching the query shape is what actually performs.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "query-planner",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How does the MongoDB query planner choose an index?",
+  "answer": "It trials candidate plans on a sample of work, caches the winner for that query shape, and re-evaluates periodically or after significant changes. That means a plan can be cached from an unrepresentative execution, which is the MongoDB equivalent of parameter sniffing and is cleared by flushing the plan cache.",
+  "tags": [
+   "mongodb",
+   "query-planner",
+   "performance",
+   "internals"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the impact of large documents on performance?",
+  "answer": "Every read transfers and deserialises the whole document unless projected, updates rewrite it if it grows beyond its allocation, and fewer documents fit in cache. Splitting rarely accessed large fields into a separate collection is the standard remedy when documents grow into hundreds of kilobytes.",
+  "tags": [
+   "mongodb",
+   "performance",
+   "documents",
+   "modelling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you speed up a bulk write in MongoDB?",
+  "answer": "Use bulkWrite with unordered operations so failures do not stop the batch and the driver can parallelise, size batches to stay within the message limit, and drop non-essential indexes during a very large load. Writing documents individually costs a round trip each and dominates the time.",
+  "tags": [
+   "mongodb",
+   "bulk",
+   "performance",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you add an index to a large production MongoDB collection?",
+  "answer": "Build it in the background on a rolling basis across replica set members, or use the default non-blocking build in recent versions, monitoring the impact on IO and replication lag. Building on a busy primary without care can degrade the whole cluster for the duration.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "operations",
+   "reliability"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What causes replication lag in MongoDB and why does it matter?",
+  "answer": "Heavy write volume, long-running index builds, slow disks on secondaries, or a secondary busy serving reads. It matters because lagged secondaries serve stale reads, cannot be promoted without data loss beyond your RPO, and if lag exceeds the oplog window the member requires a full resync.",
+  "tags": [
+   "mongodb",
+   "replication",
+   "operations",
+   "monitoring"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you plan capacity for a MongoDB deployment?",
+  "answer": "Size memory against the working set including indexes, disk against data plus oplog plus growth and index builds, and IOPS against the write and read rate. The index size is frequently underestimated and is what pushes the working set out of memory as the collection grows.",
+  "tags": [
+   "mongodb",
+   "capacity",
+   "operations",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What should you check before enabling sharding?",
+  "answer": "Whether vertical scaling and index tuning are genuinely exhausted, whether a shard key exists that distributes both writes and queries, whether your queries can include it, and whether the operational complexity is affordable. Sharding a workload with no good key produces a distributed system that is slower than the single node it replaced.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "scalability",
+   "decision-making"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you model hierarchical data in MongoDB?",
+  "answer": "Parent reference for simple traversal, an array of ancestors for subtree queries in one lookup, materialised path for prefix matching, or nested documents for shallow fixed hierarchies. Choose by which query dominates - finding children, finding all descendants, or finding the path to root.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "hierarchies",
+   "patterns"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you handle schema evolution across millions of existing documents?",
+  "answer": "Version each document, write the new shape going forward, read tolerantly for both, and migrate lazily on access or in a background batch job with a resumable cursor. A single updateMany over millions of documents locks resources and cannot be paused, which is why incremental migration is standard.",
+  "tags": [
+   "mongodb",
+   "migrations",
+   "schema",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "When should you denormalise in MongoDB and how do you keep copies consistent?",
+  "answer": "When the read pattern requires the data together and the copied fields change rarely. Keep them consistent by making one service own the write, updating copies through change streams or an event, and running a periodic reconciliation - because a missed update leaves a stale copy that nothing detects.",
+  "tags": [
+   "mongodb",
+   "denormalisation",
+   "consistency",
+   "modelling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "What is the polymorphic pattern in MongoDB?",
+  "answer": "Storing documents of different shapes in one collection with a type discriminator, which suits variations of a common concept queried together - different product categories, different event types. It works because the database does not require a fixed schema, and it needs schema validation to stay disciplined.",
+  "tags": [
+   "mongodb",
+   "patterns",
+   "modelling",
+   "polymorphism"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you migrate a MongoDB collection to a new shard key?",
+  "answer": "Recent versions support resharding online, which rewrites the collection with the new key while serving traffic - expensive but supported. Otherwise it means creating a new collection and migrating with dual writes and a cutover. Either way it is a project, which is why the initial key choice matters so much.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "migration",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What is a jumbo chunk and why is it a problem?",
+  "answer": "A chunk that cannot be split because all its documents share one shard key value, so it cannot be balanced across shards and grows unbounded on one node. It is the direct consequence of a low-cardinality shard key, and the remedy is a more granular or compound key.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "balancing",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you monitor a MongoDB deployment?",
+  "answer": "Watch operation latency by type, queue depth, cache hit ratio and eviction rate, replication lag, connection counts, index miss indicators such as scanned-to-returned ratio, and oplog window. The cache and scan ratios are the leading indicators - both degrade before latency becomes visible to users.",
+  "tags": [
+   "mongodb",
+   "monitoring",
+   "performance",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "What is the difference between countDocuments and estimatedDocumentCount?",
+  "answer": "countDocuments runs an actual aggregation honouring a filter and is accurate but scans. estimatedDocumentCount reads collection metadata and is fast but approximate and cannot take a filter. Using the estimate for a filtered count is not possible, and using the accurate count on a huge collection for a UI badge is a performance mistake.",
+  "tags": [
+   "mongodb",
+   "counting",
+   "performance",
+   "api"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "How do you perform a case-insensitive search efficiently?",
+  "answer": "Use a collation with the appropriate strength on the index and the query, so the index is usable - a regular expression with the case-insensitive flag cannot use an index unless it is anchored and case-sensitive. Alternatively store a normalised lowercase field and index that.",
+  "tags": [
+   "mongodb",
+   "collation",
+   "indexing",
+   "search"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "When is a regular expression query able to use an index in MongoDB?",
+  "answer": "Only when it is anchored at the start and case-sensitive, so it becomes a prefix range scan. Anything with a leading wildcard or case insensitivity scans the collection. That is why prefix search works well and contains-style search needs a text index or a dedicated search engine.",
+  "tags": [
+   "mongodb",
+   "regex",
+   "indexing",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you model a counter that is updated very frequently?",
+  "answer": "Use an atomic increment operator rather than read-modify-write, and if one document becomes a contention point, shard the counter across several documents summed on read. A single hot document serialises every update regardless of how the rest of the cluster is scaled.",
+  "tags": [
+   "mongodb",
+   "counters",
+   "contention",
+   "modelling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "When should you store an array of references rather than a reverse reference?",
+  "answer": "When the array is small and bounded and is always read with the parent - tags on an article. When the relationship is large or unbounded, store the reference on the many side and index it, so the parent document does not grow with the relationship.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "relationships",
+   "design"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you handle a MongoDB query that must scan a large collection for a report?",
+  "answer": "Run it against a secondary with a read preference so the primary is unaffected, use an aggregation with allowDiskUse if it must sort large results, and consider a materialised summary refreshed on a schedule. Reporting queries against the primary are a common cause of production latency spikes.",
+  "tags": [
+   "mongodb",
+   "reporting",
+   "performance",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you safely drop an index in production?",
+  "answer": "Confirm it is unused through index usage statistics over a full business cycle including monthly reports, hide it first so it stops being used while remaining buildable, observe, then drop. Dropping an index used by a rare but critical query is discovered when that query next runs.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "operations",
+   "risk"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you decide the document boundary in a new MongoDB model?",
+  "answer": "By what is read and written together as a unit, and by what must change atomically - since a document is the transaction boundary by default. Starting from an entity-relationship diagram and mapping tables to collections produces a relational schema in a document store, which performs worse than either.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "design",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you reduce the impact of a large aggregation on production?",
+  "answer": "Run it against a secondary, filter as early as possible in the pipeline so later stages see fewer documents, project away unused fields before grouping, ensure the initial match uses an index, and consider materialising the result on a schedule rather than computing per request.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "performance",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "What is the trade-off of storing computed values in a document?",
+  "answer": "Reads become cheaper and simpler, writes must maintain the value, and the copy can drift if any write path forgets. It is worth it for values read far more than written where one code path owns the update - and it needs a periodic recomputation job to detect drift.",
+  "tags": [
+   "mongodb",
+   "denormalisation",
+   "consistency",
+   "modelling"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "What should you check before increasing a MongoDB cluster's size?",
+  "answer": "Whether the bottleneck is actually capacity - check the working set against memory, index efficiency, and whether specific queries dominate. Scaling a cluster to fix a missing index is expensive and often ineffective, because the additional nodes each perform the same inefficient scan.",
+  "tags": [
+   "mongodb",
+   "scaling",
+   "diagnostics",
+   "cost"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "How do you avoid an unbounded query returning an entire collection?",
+  "answer": "Always apply a limit and a filter at the application layer, enforce a maximum through a wrapper or repository, and set a maxTimeMS so a runaway query is terminated. A find with no criteria is a full collection scan that also transfers everything over the network.",
+  "tags": [
+   "mongodb",
+   "query",
+   "limits",
+   "reliability"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you model data that is queried by very different access patterns?",
+  "answer": "Either one shape with indexes for each pattern, accepting the write cost, or separate collections maintained from a single source of truth through change streams. The second suits genuinely divergent patterns - an operational store and a reporting projection - and the first suits everything else.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "access-patterns",
+   "design"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you handle a collection that has grown far beyond expectations?",
+  "answer": "Check whether old data can be archived or expired with a TTL index, whether the working set can be reduced with better projections and indexes, and whether the access pattern justifies splitting hot and cold data. Sharding is the last resort because it is the hardest to reverse.",
+  "tags": [
+   "mongodb",
+   "scaling",
+   "archiving",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "Why can an update that matches nothing still be a bug rather than a no-op?",
+  "answer": "Because the application assumed it matched - a stale filter, a changed identifier, or a race where the document was already modified. Checking the matched and modified counts rather than only the absence of an error is what turns a silent no-op into a detectable condition.",
+  "tags": [
+   "mongodb",
+   "updates",
+   "correctness",
+   "practices"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you handle a MongoDB deployment that must support both transactional and analytical queries?",
+  "answer": "Route analytical queries to a secondary or an analytics node, or replicate to a separate analytical store through change streams. Running heavy aggregations against the primary competes for the same cache and IO as the transactional workload, which is why the two are usually separated.",
+  "tags": [
+   "mongodb",
+   "analytics",
+   "architecture",
+   "operations"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you decide whether to use a separate collection or a discriminated single one?",
+  "answer": "One collection when the types share most fields and are queried together, separate when they differ substantially or have different access patterns and index needs. A single collection with mostly-empty fields per type wastes index space and makes schema validation nearly meaningless.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "collections",
+   "design"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the effect of a compound index's field order on sort performance?",
+  "answer": "A sort can use the index only if it matches the index order from a prefix, including direction consistency. An index on ascending fields cannot serve a mixed-direction sort, and a sort on a field not in the prefix requires an in-memory sort that fails above the memory limit.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "sorting",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you validate that a MongoDB index change had the intended effect?",
+  "answer": "Compare the explain output before and after for the target queries, checking documents examined against returned and whether the sort is now index-supported, then confirm in production metrics that the query's latency and the collection's scan rate improved. Adding the index and assuming is how unused indexes accumulate.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "verification",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How do you decide whether a field should be indexed, projected away, or moved?",
+  "answer": "Index it if it is filtered or sorted on frequently, project it away if it is large and rarely needed, and move it to a separate document if it is large and independent of the main access pattern. The three questions are how often it is queried, how large it is, and whether it changes independently.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "indexing",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Operations",
+  "difficulty": "Medium",
+  "question": "How do you approach capacity planning for a growing MongoDB collection?",
+  "answer": "Project the working set including index size rather than raw data size, model growth from actual rates rather than estimates, and identify the point at which the working set exceeds memory - which is where performance changes character rather than degrading gradually.",
+  "tags": [
+   "mongodb",
+   "capacity",
+   "planning",
+   "performance"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What is the most common MongoDB modelling mistake?",
+  "answer": "Translating a relational schema directly into collections, producing many small documents joined with lookups - which gives neither relational integrity nor document performance. The correct starting point is the access patterns, deciding what is read together and therefore what should be stored together.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "practices",
+   "design"
+  ]
+ }
+]

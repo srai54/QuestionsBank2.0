@@ -1,0 +1,665 @@
+[
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "Why is a mutable default argument dangerous?",
+  "answer": "Default arguments are evaluated once at function definition, so a default list or dict is shared across every call and accumulates state between them. The fix is a None default with the real value created inside the function. It is the single most common Python interview trap because the behaviour looks like a bug in the interpreter.",
+  "tags": [
+   "python",
+   "defaults",
+   "gotchas",
+   "functions"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What does the GIL prevent and what does it not?",
+  "answer": "The global interpreter lock allows only one thread to execute Python bytecode at a time, so threads do not give CPU parallelism. It does not block IO - threads release the lock while waiting - so threading still helps IO-bound work. CPU parallelism requires multiprocessing, or an extension releasing the lock.",
+  "tags": [
+   "python",
+   "gil",
+   "concurrency",
+   "performance"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "When should you use multiprocessing rather than threading in Python?",
+  "answer": "For CPU-bound work, since separate processes each have their own interpreter and lock. The costs are process startup, memory duplication and the need to pickle anything sent between processes - which excludes lambdas, open handles and many class instances, and is where multiprocessing code usually fails first.",
+  "tags": [
+   "python",
+   "multiprocessing",
+   "concurrency",
+   "performance"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What is a decorator and how does one work?",
+  "answer": "A callable taking a function and returning a replacement, applied with the at syntax. It is used for cross-cutting behaviour - caching, timing, retry, authentication. Use functools.wraps in the wrapper so the original name, docstring and signature metadata survive, which debugging and introspection depend on.",
+  "tags": [
+   "python",
+   "decorators",
+   "functions",
+   "patterns"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What is a context manager and when would you write one?",
+  "answer": "An object implementing __enter__ and __exit__, used with the with statement so cleanup runs even on exception. Write one for anything acquiring and releasing a resource - a connection, a lock, a temporary directory, a timing block. contextlib.contextmanager turns a generator into one with far less code.",
+  "tags": [
+   "python",
+   "context-managers",
+   "resources",
+   "patterns"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What is the difference between a generator and an iterator?",
+  "answer": "An iterator implements __iter__ and __next__. A generator is a convenient way to create one using yield, with the state machine written for you. Every generator is an iterator; not every iterator is a generator. Generators also support send and throw, which makes them usable as coroutines.",
+  "tags": [
+   "python",
+   "generators",
+   "iterators",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What are args and kwargs and when should you avoid them?",
+  "answer": "They collect positional and keyword arguments into a tuple and dict, enabling wrappers and variadic APIs. Avoid them in ordinary functions because they remove the signature from documentation, type checking and editor completion - a function taking kwargs tells the caller nothing about what it accepts.",
+  "tags": [
+   "python",
+   "functions",
+   "api-design",
+   "typing"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "How does Python's method resolution order work?",
+  "answer": "C3 linearisation produces a deterministic order for multiple inheritance, visible through the class's mro attribute. super delegates to the next class in that order rather than to a literal parent, which is why cooperative multiple inheritance requires every class in the chain to call super consistently.",
+  "tags": [
+   "python",
+   "inheritance",
+   "mro",
+   "oop"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What is a dataclass and when would you use one instead of a plain class?",
+  "answer": "A decorator generating init, repr and comparison methods from annotated fields, with options for immutability and ordering. Use it for data-carrying types where the boilerplate is noise. Use a plain class when construction has real logic, and pydantic when runtime validation of external input is needed.",
+  "tags": [
+   "python",
+   "dataclasses",
+   "modelling",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What are dunder methods and which ones matter most?",
+  "answer": "Special methods the interpreter calls for operators and protocols. The ones that matter in practice are __init__, __repr__ for debugging, __eq__ and __hash__ together, __enter__ and __exit__ for context managers, __iter__ for iteration, and __getitem__ for indexing. Implementing __repr__ well pays for itself in every debugging session.",
+  "tags": [
+   "python",
+   "dunder",
+   "protocols",
+   "oop"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "How do you make an object hashable correctly?",
+  "answer": "Implement __hash__ and __eq__ consistently over the same immutable fields, so equal objects hash equally and the hash cannot change while the object is in a set or dict. Defining __eq__ without __hash__ makes the class unhashable by default, which is the interpreter protecting you from the inconsistency.",
+  "tags": [
+   "python",
+   "hashing",
+   "equality",
+   "collections"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What is the walrus operator and when does it help?",
+  "answer": "An assignment expression binding a value inside an expression, useful in while loops reading until a sentinel, in comprehensions to avoid computing a value twice, and in conditions where the tested value is also needed. It hurts readability when it hides a significant assignment inside a complex expression.",
+  "tags": [
+   "python",
+   "syntax",
+   "walrus",
+   "readability"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What causes a circular import in Python and how do you resolve one?",
+  "answer": "Two modules importing each other at module level, so one sees a partially initialised module. Resolve by moving the shared thing into a third module, importing inside the function where it is used, or restructuring the dependency. Deferred imports work but hide the coupling rather than removing it.",
+  "tags": [
+   "python",
+   "imports",
+   "architecture",
+   "bugs"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Typing",
+  "difficulty": "Medium",
+  "question": "What do type hints actually do at runtime?",
+  "answer": "Nothing by default - they are annotations stored on the object and ignored by the interpreter. Their value is static checking with mypy or pyright, editor support and documentation. Libraries such as pydantic and FastAPI read them at runtime deliberately, which is the exception rather than the rule.",
+  "tags": [
+   "python",
+   "typing",
+   "static-analysis",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Typing",
+  "difficulty": "Medium",
+  "question": "What is the difference between Optional and a default value of None?",
+  "answer": "Optional describes the type as possibly None; a default makes the argument omittable. They frequently appear together but are independent - a required argument can be Optional, and an argument with a default need not be. Conflating them produces signatures that permit None where the code cannot handle it.",
+  "tags": [
+   "python",
+   "typing",
+   "optional",
+   "api-design"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Typing",
+  "difficulty": "Medium",
+  "question": "What is a Protocol in Python typing?",
+  "answer": "Structural typing - any class with the right methods satisfies it, without inheriting from it. It is how you type duck-typed interfaces such as anything with a read method, and it avoids forcing third-party classes to inherit from your abstract base. It is checked statically, not at runtime unless marked runtime-checkable.",
+  "tags": [
+   "python",
+   "typing",
+   "protocols",
+   "design"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Typing",
+  "difficulty": "Medium",
+  "question": "When should you use an abstract base class rather than a Protocol?",
+  "answer": "An ABC when you want to provide shared implementation and enforce the contract at instantiation time; a Protocol when you only want to describe a shape that existing classes may already satisfy. ABCs create a nominal dependency, which is exactly what Protocols exist to avoid.",
+  "tags": [
+   "python",
+   "abc",
+   "protocols",
+   "design"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Async",
+  "difficulty": "Medium",
+  "question": "What is the difference between asyncio, threading and multiprocessing?",
+  "answer": "asyncio gives cooperative concurrency in one thread for IO-bound work with thousands of tasks. Threading gives preemptive concurrency limited by the GIL, useful for IO with blocking libraries. Multiprocessing gives real parallelism for CPU-bound work at the cost of process overhead and serialisation.",
+  "tags": [
+   "python",
+   "asyncio",
+   "concurrency",
+   "architecture"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Async",
+  "difficulty": "Medium",
+  "question": "What happens if you call a blocking function inside an async coroutine?",
+  "answer": "It blocks the entire event loop, so every other task stops - the async equivalent of a frozen application. Wrap blocking calls in run_in_executor to move them to a thread pool, or use an async-native library. This is the most common asyncio mistake and it produces symptoms that look like the loop is broken.",
+  "tags": [
+   "python",
+   "asyncio",
+   "blocking",
+   "performance"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Async",
+  "difficulty": "Medium",
+  "question": "What is the difference between asyncio.gather and asyncio.as_completed?",
+  "answer": "gather runs awaitables concurrently and returns results in the original order once all finish, optionally collecting exceptions. as_completed yields them as each finishes, which suits processing results incrementally. gather with return_exceptions false cancels nothing on failure, which surprises people expecting sibling cancellation.",
+  "tags": [
+   "python",
+   "asyncio",
+   "concurrency",
+   "api"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Async",
+  "difficulty": "Medium",
+  "question": "What is a TaskGroup and why was it added?",
+  "answer": "It runs child tasks with structured concurrency - the group does not exit until all complete, and a failure cancels the siblings and propagates. It fixes the common bugs with bare create_task: tasks silently outliving their scope, exceptions never observed, and no cancellation on sibling failure.",
+  "tags": [
+   "python",
+   "asyncio",
+   "structured-concurrency",
+   "reliability"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Async",
+  "difficulty": "Medium",
+  "question": "What happens to an asyncio task whose exception is never retrieved?",
+  "answer": "It is reported when the task is garbage collected, often long after the failure and sometimes not at all if the process exits first. Always await tasks or attach a done callback that logs. Fire-and-forget create_task without a reference can also be collected mid-flight, cancelling the work silently.",
+  "tags": [
+   "python",
+   "asyncio",
+   "error-handling",
+   "reliability"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you profile a slow Python program?",
+  "answer": "cProfile for function-level cost, then a line profiler on the hot function, and a memory profiler if allocation is suspected. Interpret cumulative rather than total time to find the responsible caller. Optimising before profiling is especially wasteful in Python because the cost is rarely where intuition suggests.",
+  "tags": [
+   "python",
+   "profiling",
+   "performance",
+   "tooling"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "Why is a Python loop over a large array slow, and what replaces it?",
+  "answer": "Every iteration involves interpreter overhead and object boxing. Vectorising with NumPy pushes the loop into compiled code operating on contiguous typed memory, typically one to two orders of magnitude faster. Where vectorising is impossible, numba or a C extension are the alternatives.",
+  "tags": [
+   "python",
+   "performance",
+   "numpy",
+   "vectorisation"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the practical cost of attribute access and how do slots help?",
+  "answer": "Each instance normally carries a dict for its attributes, costing memory and a lookup. Declaring __slots__ replaces it with fixed descriptors, cutting memory substantially for many small objects and slightly speeding access. The trade-off is losing dynamic attributes and complicating multiple inheritance.",
+  "tags": [
+   "python",
+   "performance",
+   "memory",
+   "slots"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "What are pytest fixtures and what do their scopes control?",
+  "answer": "Fixtures provide setup and teardown as injectable dependencies, with scope determining reuse - function, class, module or session. Session scope is right for expensive resources such as a database container; function scope keeps tests isolated. Mixing them incorrectly produces tests that pass alone and fail together.",
+  "tags": [
+   "python",
+   "pytest",
+   "testing",
+   "fixtures"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "What is parametrize in pytest and why prefer it to a loop?",
+  "answer": "It runs the test once per data set, reporting each case separately with its own name, so a failure identifies which input broke rather than stopping at the first. A loop inside a test hides the remaining cases after the first assertion failure and produces one uninformative result.",
+  "tags": [
+   "python",
+   "pytest",
+   "testing",
+   "practices"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "How do you mock in Python without coupling tests to implementation?",
+  "answer": "Patch at the point of use rather than definition, prefer injecting a dependency over patching a module attribute, and use autospec so the mock's signature matches the real object. Patching without autospec lets a test pass while calling a method that no longer exists.",
+  "tags": [
+   "python",
+   "testing",
+   "mocking",
+   "practices"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "What is the difference between monkeypatch and unittest.mock.patch?",
+  "answer": "monkeypatch is a pytest fixture that reverses changes automatically at test end and handles environment variables and paths conveniently. mock.patch is more general with call assertions and spec support. Use monkeypatch for simple substitution and mock.patch when you need the mock's inspection features.",
+  "tags": [
+   "python",
+   "pytest",
+   "mocking",
+   "testing"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Packaging",
+  "difficulty": "Medium",
+  "question": "What is a virtual environment and why is one always needed?",
+  "answer": "An isolated interpreter and package set per project, so dependencies do not conflict between projects or with the system Python. Installing into the system interpreter breaks other tools and is blocked by default on many distributions now. Every project should have one, created automatically by the tooling.",
+  "tags": [
+   "python",
+   "virtualenv",
+   "packaging",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Packaging",
+  "difficulty": "Medium",
+  "question": "What is the difference between requirements.txt and pyproject.toml?",
+  "answer": "requirements.txt is a flat install list, historically both the declared dependencies and the pinned set. pyproject.toml is the standard project metadata file declaring dependencies with constraints, build configuration and tool settings. Modern tooling uses pyproject plus a separate lock file for exact versions.",
+  "tags": [
+   "python",
+   "packaging",
+   "dependencies",
+   "tooling"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Packaging",
+  "difficulty": "Medium",
+  "question": "Why does a lock file matter in Python?",
+  "answer": "Because version ranges resolve differently over time, so an install today can differ from one last month - including transitive dependencies nobody declared. A lock file records the exact resolved set with hashes, which is what makes a build reproducible and a supply-chain compromise detectable.",
+  "tags": [
+   "python",
+   "packaging",
+   "reproducibility",
+   "security"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "What is the SettingWithCopyWarning in pandas and what does it mean?",
+  "answer": "An assignment may have been applied to a temporary copy rather than the original, so it silently does nothing. It arises from chained indexing. The fix is a single .loc assignment covering both the row and column selection, or an explicit .copy() when a separate frame is genuinely wanted.",
+  "tags": [
+   "python",
+   "pandas",
+   "gotchas",
+   "data"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "How do you handle a pandas operation on a dataset larger than memory?",
+  "answer": "Read in chunks and aggregate incrementally, select only needed columns and downcast dtypes, or move to a library designed for it such as Polars, Dask or DuckDB. Loading a large CSV with default dtypes frequently uses several times the file size in memory, which is often the actual problem.",
+  "tags": [
+   "python",
+   "pandas",
+   "memory",
+   "scale"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "Why are pandas dtypes worth setting explicitly?",
+  "answer": "Inference produces object dtype for mixed or string columns, which is slow and memory-heavy, and can silently read an identifier as a float and lose leading zeros or precision. Declaring dtypes on read makes memory usage predictable and prevents that class of silent data corruption.",
+  "tags": [
+   "python",
+   "pandas",
+   "dtypes",
+   "data-quality"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Web",
+  "difficulty": "Medium",
+  "question": "What makes FastAPI different from Flask?",
+  "answer": "FastAPI is async-first with automatic validation and OpenAPI generation derived from type hints, built on Starlette and pydantic. Flask is synchronous by default, minimal, and leaves validation and documentation to extensions. FastAPI suits typed APIs; Flask suits small services and cases where the ecosystem matters more.",
+  "tags": [
+   "python",
+   "fastapi",
+   "flask",
+   "web"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Web",
+  "difficulty": "Medium",
+  "question": "What is WSGI and how does ASGI differ?",
+  "answer": "WSGI is the synchronous interface between Python web applications and servers, one request per worker thread. ASGI extends it to asynchronous handling, websockets and long-lived connections. A synchronous framework cannot serve websockets regardless of the server, which is the practical reason ASGI exists.",
+  "tags": [
+   "python",
+   "wsgi",
+   "asgi",
+   "web"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Web",
+  "difficulty": "Medium",
+  "question": "How do you deploy a Python web application for production?",
+  "answer": "An ASGI or WSGI server such as uvicorn or gunicorn with multiple workers behind a reverse proxy, since the development server is single-process and not hardened. Size workers to cores for CPU-bound work and higher for IO-bound async, and put timeouts and request limits at the proxy.",
+  "tags": [
+   "python",
+   "deployment",
+   "web",
+   "operations"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What does the Zen of Python actually guide in practice?",
+  "answer": "Preferring explicit over implicit, flat over nested, and readable over clever - which shows up as avoiding deep comprehensions, magic metaclasses and clever one-liners in favour of code the next reader can follow. It is a style philosophy rather than rules, and its practical effect is on review conversations.",
+  "tags": [
+   "python",
+   "philosophy",
+   "readability",
+   "practices"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you structure a Python project of moderate size?",
+  "answer": "A src layout with the package inside src so tests import the installed package rather than the working directory, pyproject.toml for metadata and tooling, tests alongside mirroring the package structure, and no business logic in __init__.py. The src layout specifically prevents tests passing against uninstalled code.",
+  "tags": [
+   "python",
+   "project-structure",
+   "packaging",
+   "practices"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "What tooling would you set up on a new Python project?",
+  "answer": "A formatter and linter such as ruff, a type checker, pytest with coverage, pre-commit hooks running them, and a lock file. Ruff has largely replaced the separate flake8, isort and black chain, which reduces the configuration surface considerably.",
+  "tags": [
+   "python",
+   "tooling",
+   "quality",
+   "practices"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What is the difference between a shallow and a deep copy of a nested dictionary?",
+  "answer": "dict.copy and the dict constructor duplicate the top level while sharing nested values, so mutating a nested list affects both. copy.deepcopy recurses. The common bug is copying a configuration dict and then mutating a nested section, which changes the original.",
+  "tags": [
+   "python",
+   "copying",
+   "dictionaries",
+   "gotchas"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "How does Python's scoping work and what does the nonlocal keyword do?",
+  "answer": "Names resolve local, enclosing, global then builtin. Assigning to a name makes it local unless declared global or nonlocal - nonlocal binds to the nearest enclosing function scope, which is what lets a closure mutate a variable from its defining function rather than shadowing it.",
+  "tags": [
+   "python",
+   "scoping",
+   "closures",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "Why does a late-binding closure in a loop capture the wrong value?",
+  "answer": "The closure captures the variable, not its value, so all closures see the final value after the loop ends. Bind it with a default argument evaluated at definition, or use functools.partial. It is the same class of bug as capturing a loop variable in other languages.",
+  "tags": [
+   "python",
+   "closures",
+   "loops",
+   "gotchas"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What is the difference between an exception raised in a finally block and one in the try?",
+  "answer": "An exception in finally replaces the original, discarding it unless explicitly chained - so an error during cleanup hides the real failure. Keep finally blocks minimal and defensive, and use context managers which handle the propagation correctly.",
+  "tags": [
+   "python",
+   "exceptions",
+   "finally",
+   "gotchas"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Language",
+  "difficulty": "Medium",
+  "question": "What does the else clause on a for loop or try block do?",
+  "answer": "On a loop it runs when the loop completes without a break, which expresses search-and-not-found cleanly. On a try it runs when no exception occurred, keeping the protected block minimal. Both are rarely used and frequently misread, which is an argument for a comment where they appear.",
+  "tags": [
+   "python",
+   "syntax",
+   "control-flow",
+   "readability"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "Why is a dictionary lookup faster than a list scan in Python, and when is it not?",
+  "answer": "Hashing gives constant-time access against a linear scan. For very small collections the constant factors and hashing cost make a list competitive, and for ordered iteration a list is better. The crossover is small enough that a dict is the right default for membership.",
+  "tags": [
+   "python",
+   "performance",
+   "collections",
+   "fundamentals"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the cost of an exception in Python compared with a return value?",
+  "answer": "Raising and catching is more expensive than a return but cheap enough that the try-except idiom is idiomatic for the expected-success case - which is why Python favours asking forgiveness over checking permission. It only matters in hot loops where the exception is the common path.",
+  "tags": [
+   "python",
+   "exceptions",
+   "performance",
+   "idioms"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Async",
+  "difficulty": "Medium",
+  "question": "What is the difference between an async generator and a regular generator?",
+  "answer": "An async generator uses async def with yield and is consumed with async for, so each item can await. It suits streaming from a network source or a database cursor. A regular generator cannot await, so any IO inside it must be synchronous and will block the loop.",
+  "tags": [
+   "python",
+   "asyncio",
+   "generators",
+   "streaming"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "How do you test asynchronous code with pytest?",
+  "answer": "An async test plugin such as pytest-asyncio provides the event loop and lets tests be coroutines. Beware sharing a loop across tests with session-scoped fixtures holding loop-bound resources, which produces errors about a different loop that are confusing to diagnose.",
+  "tags": [
+   "python",
+   "testing",
+   "asyncio",
+   "pytest"
+  ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Practices",
+  "difficulty": "Medium",
+  "question": "How do you make a Python script safe to import as a module?",
+  "answer": "Guard the entry point with the name equals main check so importing it does not execute the script body, and keep top-level code to definitions only. Without it, importing for testing or reuse runs the whole program, which is also why multiprocessing on Windows requires the guard.",
+  "tags": [
+   "python",
+   "modules",
+   "entry-point",
+   "practices"
+  ]
+ }
+]
