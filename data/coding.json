@@ -434,12 +434,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Set matrix zeroes: if an element is 0, set its entire row and column to 0, in-place.",
-  "answer": "Use the first row and first column as markers for which rows/columns to zero (track separately whether the first row/col themselves need zeroing). Pass 1: mark. Pass 2: zero cells based on markers. Pass 3: handle first row/col. O(m*n) time, O(1) extra space.",
+  "answer": "**Logic**\n\nThe trap is doing it naively: zeroing a row immediately then reading those new zeros as if they were original, which cascades until the whole matrix is zero. So the positions must be recorded before any writing.\n\nUsing two sets of flags costs O(rows + cols) space. The O(1)-space version stores those flags in the matrix itself, using the first row and first column as the markers, with one extra variable for the first column because the cell at the origin serves both and would otherwise be ambiguous.\n\nO(rows × cols) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void SetZeroes(int[][] matrix)\n    {\n        if (matrix == null || matrix.Length == 0) return;\n\n        int rows = matrix.Length, cols = matrix[0].Length;\n\n        // matrix[0][0] would mean both \"row 0 has a zero\" and \"col 0 has a zero\",\n        // so the first column gets its own flag.\n        bool firstColumnHasZero = false;\n\n        for (int r = 0; r < rows; r++)\n        {\n            if (matrix[r][0] == 0) firstColumnHasZero = true;\n\n            for (int c = 1; c < cols; c++)\n                if (matrix[r][c] == 0)\n                {\n                    matrix[r][0] = 0;    // mark the row\n                    matrix[0][c] = 0;    // mark the column\n                }\n        }\n\n        // Apply, working backwards so the markers are read before being overwritten.\n        for (int r = rows - 1; r >= 0; r--)\n        {\n            for (int c = cols - 1; c >= 1; c--)\n                if (matrix[r][0] == 0 || matrix[0][c] == 0) matrix[r][c] = 0;\n\n            if (firstColumnHasZero) matrix[r][0] = 0;\n        }\n    }\n\n    private static string Render(int[][] m) =>\n        string.Join(\" / \", Array.ConvertAll(m, r => string.Join(\",\", r)));\n\n    private static string Zeroed(params int[][] m)\n    {\n        SetZeroes(m);\n        return Render(m);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Zeroed(\n            new[] { 1, 1, 1 }, new[] { 1, 0, 1 }, new[] { 1, 1, 1 }));\n\n        Console.WriteLine(Zeroed(\n            new[] { 0, 1, 2, 0 }, new[] { 3, 4, 5, 2 }, new[] { 1, 3, 1, 5 }));\n\n        Console.WriteLine(Zeroed(new[] { 1, 2 }, new[] { 3, 4 }));   // no zeros\n        Console.WriteLine(Zeroed(new[] { 0 }));\n        Console.WriteLine(Zeroed(new[] { 1, 0 }, new[] { 1, 1 }));\n    }\n}\n```\n\n**Output**\n\n```\n1,0,1 / 0,0,0 / 1,0,1\n0,0,0,0 / 0,4,5,0 / 0,3,1,0\n1,2 / 3,4\n0\n0,0 / 1,0\n```",
   "tags": [
-   "arrays",
    "matrix",
    "in-place",
-   "markers"
+   "markers",
+   "ordering",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the application pass run backwards?",
+    "a": "Because the first row and first column hold the markers, and writing them early would destroy information still needed for later cells. Working from the bottom-right inward means every cell is written only after its row and column markers have been consumed. Going forwards, zeroing cell [0][1] as part of applying row 0 would erase the marker saying 'column 1 has a zero' before the rest of that column is processed. The direction is load-bearing, not stylistic."
+   },
+   {
+    "q": "Why does the first column need a separate flag?",
+    "a": "Because matrix[0][0] is shared: it is the row marker for row 0 and the column marker for column 0 at the same time, so a single cell cannot distinguish which of the two conditions set it. Splitting one of them out into an ordinary boolean resolves the ambiguity. You could equally give the first row its own flag instead; what you cannot do is use the origin for both. Missing this produces a matrix that is correct except for one row or column, which is easy to overlook."
+   },
+   {
+    "q": "Would you actually use the O(1)-space version?",
+    "a": "Usually not. The two-set version is a few lines, obviously correct, and costs O(rows + cols), which next to the O(rows x cols) matrix you already hold is a rounding error. The in-place version trades clear code for a saving that is proportional to the square root of the data size. I would reach for it only if the matrix were so large that even the linear overhead mattered, and I would comment the backwards pass heavily, since the next reader will assume it is arbitrary."
+   }
   ]
  },
  {
@@ -447,12 +462,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Spiral order traversal of a matrix.",
-  "answer": "Maintain four boundaries (top, bottom, left, right). Traverse top row left→right, right column top→bottom, bottom row right→left, left column bottom→top, shrinking boundaries after each. Stop when boundaries cross. O(m*n) time.",
+  "answer": "**Logic**\n\nMaintain four boundaries: top, bottom, left and right. Walk the top row left to right and lower the top boundary; walk the right column downward and pull the right boundary in; then the bottom row right to left, and the left column upward, adjusting each boundary as it is consumed.\n\nThe subtlety is the two return legs. After the first two walks the layer may be exhausted, so the bottom and left walks must re-check that the boundaries have not crossed, otherwise a single row or column is visited twice.\n\nO(rows × cols) time, O(1) extra space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static IList<int> SpiralOrder(int[][] matrix)\n    {\n        var result = new List<int>();\n        if (matrix == null || matrix.Length == 0) return result;\n\n        int top = 0, bottom = matrix.Length - 1;\n        int left = 0, right = matrix[0].Length - 1;\n\n        while (top <= bottom && left <= right)\n        {\n            for (int c = left; c <= right; c++) result.Add(matrix[top][c]);\n            top++;\n\n            for (int r = top; r <= bottom; r++) result.Add(matrix[r][right]);\n            right--;\n\n            // Re-check: the layer may already be finished after the two walks above.\n            if (top <= bottom)\n            {\n                for (int c = right; c >= left; c--) result.Add(matrix[bottom][c]);\n                bottom--;\n            }\n\n            if (left <= right)\n            {\n                for (int r = bottom; r >= top; r--) result.Add(matrix[r][left]);\n                left++;\n            }\n        }\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", SpiralOrder(new[] {\n            new[] { 1, 2, 3 }, new[] { 4, 5, 6 }, new[] { 7, 8, 9 } })));\n\n        Console.WriteLine(string.Join(\",\", SpiralOrder(new[] {\n            new[] { 1, 2, 3, 4 }, new[] { 5, 6, 7, 8 }, new[] { 9, 10, 11, 12 } })));\n\n        Console.WriteLine(string.Join(\",\", SpiralOrder(new[] { new[] { 1, 2, 3 } })));  // one row\n        Console.WriteLine(string.Join(\",\", SpiralOrder(new[] {\n            new[] { 1 }, new[] { 2 }, new[] { 3 } })));                                  // one column\n        Console.WriteLine(string.Join(\",\", SpiralOrder(new[] { new[] { 7 } })));\n    }\n}\n```\n\n**Output**\n\n```\n1,2,3,6,9,8,7,4,5\n1,2,3,4,8,12,11,10,9,5,6,7\n1,2,3\n1,2,3\n7\n```",
   "tags": [
-   "arrays",
    "matrix",
-   "spiral",
-   "simulation"
+   "boundaries",
+   "traversal",
+   "edge-cases",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why do the bottom and left walks need an extra boundary check when the first two do not?",
+    "a": "Because the loop condition was verified before the top walk, but the top and right walks each shrink a boundary, so by the time the bottom walk starts the layer may have been fully consumed. A single-row matrix is the clearest case: the top walk takes the whole row and increments top past bottom, and without the re-check the bottom walk would traverse that same row backwards and emit every element twice. The single-row and single-column tests exist for exactly this."
+   },
+   {
+    "q": "Is there a way to avoid the four boundaries?",
+    "a": "Yes, a direction-vector approach: move in the current direction until the next cell is out of bounds or already visited, then turn right. It needs a visited grid or a sentinel value, which costs O(rows x cols) space unless you may mutate the input. The boundary version is O(1) space and avoids the visited check entirely, so it is generally preferred, though the direction version generalises more easily to spirals in other shapes or to generating a spiral rather than reading one."
+   },
+   {
+    "q": "Suppose you had to generate a spiral matrix rather than read one.",
+    "a": "It is the same boundary walk with the assignment reversed: instead of appending matrix[r][c] to a list, you write an incrementing counter into it. The loop structure and the two re-checks are identical. That symmetry is worth pointing out, because interviewers sometimes ask the generation version expecting a fresh approach, and recognising it as the same traversal makes it a two-minute answer instead of a restart."
+   }
   ]
  },
  {
@@ -460,12 +490,31 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Rotate an n×n matrix 90 degrees clockwise in-place.",
-  "answer": "Transpose the matrix (swap [i][j] with [j][i]), then reverse each row. This yields a 90° clockwise rotation in O(n^2) time, O(1) extra space. For counter-clockwise, transpose then reverse columns (or reverse rows first then transpose).",
+  "answer": "**Logic**\n\nTranspose, then reverse each row. Transposing reflects across the main diagonal, and reversing each row reflects horizontally; the two reflections compose into a 90-degree clockwise rotation.\n\nTranspose only the upper triangle, swapping `[r][c]` with `[c][r]` for `c > r`. Covering the whole matrix would swap every pair twice and leave it unchanged, which is the classic bug here.\n\nFor anticlockwise, reverse each column instead, or equivalently reverse the row order before transposing.\n\nO(n²) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void Rotate(int[][] matrix)\n    {\n        int n = matrix.Length;\n\n        // 1. Transpose: only the upper triangle, or every swap happens twice.\n        for (int r = 0; r < n; r++)\n            for (int c = r + 1; c < n; c++)\n                (matrix[r][c], matrix[c][r]) = (matrix[c][r], matrix[r][c]);\n\n        // 2. Reverse each row.\n        for (int r = 0; r < n; r++)\n            Array.Reverse(matrix[r]);\n    }\n\n    // Anticlockwise: transpose, then reverse the row ORDER instead.\n    public static void RotateCounterClockwise(int[][] matrix)\n    {\n        int n = matrix.Length;\n\n        for (int r = 0; r < n; r++)\n            for (int c = r + 1; c < n; c++)\n                (matrix[r][c], matrix[c][r]) = (matrix[c][r], matrix[r][c]);\n\n        Array.Reverse(matrix);\n    }\n\n    private static string Render(int[][] m) =>\n        string.Join(\" / \", Array.ConvertAll(m, r => string.Join(\",\", r)));\n\n    public static void Main()\n    {\n        var a = new[] { new[] { 1, 2, 3 }, new[] { 4, 5, 6 }, new[] { 7, 8, 9 } };\n        Rotate(a);\n        Console.WriteLine(Render(a));\n\n        var b = new[] { new[] { 1, 2 }, new[] { 3, 4 } };\n        Rotate(b);\n        Console.WriteLine(Render(b));\n\n        var c = new[] { new[] { 5 } };\n        Rotate(c);\n        Console.WriteLine(Render(c));\n\n        var d = new[] { new[] { 1, 2, 3 }, new[] { 4, 5, 6 }, new[] { 7, 8, 9 } };\n        RotateCounterClockwise(d);\n        Console.WriteLine(Render(d));\n\n        // Four rotations return to the original.\n        var e = new[] { new[] { 1, 2 }, new[] { 3, 4 } };\n        for (int i = 0; i < 4; i++) Rotate(e);\n        Console.WriteLine(Render(e));\n    }\n}\n```\n\n**Output**\n\n```\n7,4,1 / 8,5,2 / 9,6,3\n3,1 / 4,2\n5\n3,6,9 / 2,5,8 / 1,4,7\n1,2 / 3,4\n```",
   "tags": [
-   "arrays",
    "matrix",
-   "rotation",
-   "transpose"
+   "transpose",
+   "in-place",
+   "geometry",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why transpose only the upper triangle?",
+    "a": "Because each swap exchanges a pair, so visiting both [r][c] and [c][r] performs the same swap twice and restores the original. Starting the inner loop at `r + 1` visits each pair exactly once and also skips the diagonal, which needs no swap. Running the inner loop from 0 is the standard bug and produces a matrix identical to the input, which looks like the function did nothing rather than like a logic error."
+   },
+   {
+    "q": "Why does transpose-then-reverse equal a rotation?",
+    "a": "A transpose is a reflection across the main diagonal, and reversing each row is a reflection across the vertical axis. Composing two reflections whose axes meet at 45 degrees gives a rotation of twice that angle, which is 90 degrees. That also explains the anticlockwise variant: reflecting across the diagonal and then across the horizontal axis rotates the other way. Knowing the composition rule means you can derive the right pair of steps rather than memorising four cases."
+   },
+   {
+    "q": "What changes for a non-square matrix?",
+    "a": "Rotation is no longer possible in place, because an m by n matrix becomes n by m, so the storage shape itself changes. You must allocate a new matrix with the dimensions swapped and copy, which is O(mn) time and space. That is worth stating explicitly, since the in-place requirement in the problem quietly depends on squareness and candidates sometimes claim their solution generalises when it cannot."
+   },
+   {
+    "q": "How would you rotate by 180 or 270 degrees?",
+    "a": "180 is two 90-degree rotations, but more cheaply it is a reverse of the row order combined with a reverse of each row, with no transpose at all. 270 clockwise is the same as 90 anticlockwise. Applying the 90 rotation repeatedly is simplest and the four-rotations test above confirms it returns to the original, but for a large matrix the direct formulations avoid redundant passes over the data."
+   }
   ]
  },
  {
@@ -473,11 +522,31 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Maximum product subarray.",
-  "answer": "Track both the max and min product ending at each position (because a negative times a min can become the max). At each element, compute candidates from num, max*num, min*num, updating max and min; track the global max. O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nUnlike the maximum sum, a product can flip sign, so the smallest value so far matters: multiplying a large negative by another negative produces a large positive. Track both the running maximum and the running minimum ending at each position.\n\nWhen the current element is negative, the roles swap, so compute the candidates from both before assigning. Failing to do that, and using the already-updated maximum when computing the minimum, is the standard bug.\n\nA zero resets both, since any product through it is zero. O(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxProduct(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        int best = nums[0];\n        int currentMax = nums[0], currentMin = nums[0];\n\n        for (int i = 1; i < nums.Length; i++)\n        {\n            int n = nums[i];\n\n            // Compute both candidates BEFORE assigning, or currentMin uses a\n            // currentMax that has already been overwritten.\n            int candidateMax = Math.Max(n, Math.Max(currentMax * n, currentMin * n));\n            int candidateMin = Math.Min(n, Math.Min(currentMax * n, currentMin * n));\n\n            currentMax = candidateMax;\n            currentMin = candidateMin;\n\n            best = Math.Max(best, currentMax);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxProduct(new[] { 2, 3, -2, 4 }));\n        Console.WriteLine(MaxProduct(new[] { -2, 0, -1 }));\n        Console.WriteLine(MaxProduct(new[] { -2, 3, -4 }));    // two negatives combine\n        Console.WriteLine(MaxProduct(new[] { -3 }));\n        Console.WriteLine(MaxProduct(new[] { 0, 2 }));\n        Console.WriteLine(MaxProduct(new[] { -1, -2, -9, -6 }));\n    }\n}\n```\n\n**Output**\n\n```\n6\n0\n24\n-3\n2\n108\n```\n\nThe `-2, 3, -4` case is the point: the answer uses the whole array, because two negatives multiply to a positive, which no maximum-only algorithm would find.",
   "tags": [
    "arrays",
-   "dp",
-   "product-subarray"
+   "kadane",
+   "products",
+   "sign-flip",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must the minimum be tracked as well as the maximum?",
+    "a": "Because multiplication by a negative turns the smallest value into the largest. In [-2, 3, -4] the running minimum before the last element is -6, and multiplying by -4 gives 24, which is the answer; a maximum-only algorithm never sees it. Kadane's sum version needs no minimum because addition preserves order: adding a number cannot turn the worst running total into the best. The sign-flip is precisely what makes products harder than sums."
+   },
+   {
+    "q": "What exactly goes wrong if you assign currentMax before computing currentMin?",
+    "a": "The minimum calculation would use the new maximum rather than the previous one, so it is comparing against a value from the wrong step. The result is subtly wrong only on inputs where the swap matters, meaning arrays containing negatives, so it passes all-positive tests cleanly. Using temporaries and assigning both afterwards is the fix, and it is the same class of error as updating a rolling DP variable before the value it depends on has been read."
+   },
+   {
+    "q": "Suppose the array could contain zeros and you wanted the maximum product of a non-empty subarray excluding zeros.",
+    "a": "Zeros already act as natural separators, since both running values reset through them, so the algorithm effectively restarts on each segment and takes the best across all of them. If zeros had to be excluded from the answer entirely, you would split the array on zeros and run the algorithm per segment, which is the same work. The more interesting variant is when the answer may be empty, in which case you would clamp at zero, and it is worth asking which convention applies."
+   },
+   {
+    "q": "What about overflow?",
+    "a": "Products grow far faster than sums, so an array of a dozen values near a thousand overflows int, and the code above would silently wrap. LeetCode constrains the inputs so it does not arise, which is a bad habit to absorb. In real code you would accumulate in long and still document a bound, or use checked arithmetic so it throws rather than producing a plausible wrong answer. Naming the risk is worth more than the algorithm here, because unlike the sum version it bites at realistic sizes."
+   }
   ]
  },
  {
@@ -1000,12 +1069,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Non-overlapping intervals: minimum removals to make intervals non-overlapping.",
-  "answer": "Greedy: sort by end time; keep the interval that ends earliest, and remove any subsequent interval that starts before the last kept end. Count removals. Choosing the earliest-ending interval leaves the most room. O(n log n) time.",
+  "answer": "**Logic**\n\nRemoving the fewest intervals is the same as keeping the most, which is the classic activity-selection problem. Sort by *end* time and greedily keep each interval whose start is at or after the last kept end.\n\nSorting by end is the crucial choice: the interval that finishes earliest leaves the most room for everything after it. Sorting by start fails, because one very long interval starting early would be kept and block many short ones.\n\nO(n log n) for the sort, then one linear pass.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int EraseOverlapIntervals(int[][] intervals)\n    {\n        if (intervals == null || intervals.Length == 0) return 0;\n\n        // Sort by END: the earliest finisher leaves the most room afterwards.\n        var sorted = intervals.OrderBy(i => i[1]).ToArray();\n\n        int kept = 1;\n        int lastEnd = sorted[0][1];\n\n        for (int i = 1; i < sorted.Length; i++)\n        {\n            if (sorted[i][0] >= lastEnd)   // touching is not overlapping\n            {\n                kept++;\n                lastEnd = sorted[i][1];\n            }\n        }\n\n        return intervals.Length - kept;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(EraseOverlapIntervals(new[] {\n            new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 4 }, new[] { 1, 3 } }));\n\n        Console.WriteLine(EraseOverlapIntervals(new[] {\n            new[] { 1, 2 }, new[] { 1, 2 }, new[] { 1, 2 } }));\n\n        Console.WriteLine(EraseOverlapIntervals(new[] {\n            new[] { 1, 2 }, new[] { 2, 3 } }));        // touching: keep both\n\n        Console.WriteLine(EraseOverlapIntervals(new[] { new[] { 1, 100 } }));\n\n        // One long interval versus three short ones: sorting by start would fail.\n        Console.WriteLine(EraseOverlapIntervals(new[] {\n            new[] { 0, 10 }, new[] { 1, 2 }, new[] { 3, 4 }, new[] { 5, 6 } }));\n\n        Console.WriteLine(EraseOverlapIntervals(Array.Empty<int[]>()));\n    }\n}\n```\n\n**Output**\n\n```\n1\n2\n0\n0\n1\n0\n```",
   "tags": [
-   "arrays",
    "intervals",
    "greedy",
-   "sorting"
+   "sorting",
+   "activity-selection",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why sort by end rather than by start?",
+    "a": "Because the greedy choice must leave as much room as possible for the remaining intervals, and the one that finishes earliest does exactly that. The last test case shows the failure of sorting by start: [0,10] comes first and, once kept, blocks all three short intervals, giving an answer of 3 removals when the optimum is 1. The exchange argument is that any optimal solution can be modified to include the earliest-finishing interval without getting worse, which is what makes the greedy provably correct."
+   },
+   {
+    "q": "Why is touching not counted as overlapping here?",
+    "a": "Because [1,2] and [2,3] share only the instant 2, which under the half-open reading of intervals means they are adjacent rather than overlapping. That is why the comparison is `>=` rather than `>`. If the intervals were closed and sharing an endpoint counted as a conflict, the comparison would flip and the third test case would return 1 instead of 0. It is the same closed-versus-half-open question as in merge intervals and meeting rooms, and it must be settled from the problem statement rather than assumed."
+   },
+   {
+    "q": "How does this relate to the minimum number of arrows to burst balloons?",
+    "a": "It is the same greedy with the comparison inverted. There you count how many groups of overlapping intervals exist, shooting one arrow per group, so you keep extending while intervals overlap rather than skipping them. Both sort by end and sweep once. Recognising that a family of interval problems reduces to sort-by-end-then-sweep, differing only in what is counted, is worth more than any individual solution."
+   }
   ]
  },
  {
@@ -1153,11 +1237,27 @@
   "subcategory": "Arrays",
   "difficulty": "Easy",
   "question": "Plus one: increment a number represented as a digit array.",
-  "answer": "Iterate from the last digit: add one, if it becomes 10 set to 0 and carry to the next; if no carry, return. If carry remains after the first digit (all 9s), prepend 1. O(n) time.",
+  "answer": "**Logic**\n\nWalk from the least significant digit. A digit below 9 can simply be incremented and the work is done. A 9 becomes 0 and the carry continues left.\n\nIf the loop finishes with a carry still outstanding, every digit was 9, so the result is one digit longer: a leading 1 followed by zeros. Allocating a new array of length n+1 gives zeros for free, so only the first element needs setting.\n\nO(n) worst case, but O(1) whenever the last digit is not 9, which is nine times out of ten on random input.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int[] PlusOne(int[] digits)\n    {\n        if (digits == null || digits.Length == 0) return new[] { 1 };\n\n        for (int i = digits.Length - 1; i >= 0; i--)\n        {\n            if (digits[i] < 9)\n            {\n                digits[i]++;\n                return digits;      // no carry: done immediately\n            }\n\n            digits[i] = 0;          // 9 becomes 0 and the carry moves left\n        }\n\n        // Every digit was 9: the answer is one digit longer, e.g. 999 -> 1000.\n        var result = new int[digits.Length + 1];\n        result[0] = 1;              // the rest default to 0\n        return result;\n    }\n\n    private static string Inc(params int[] d) => string.Join(\"\", PlusOne(d));\n\n    public static void Main()\n    {\n        Console.WriteLine(Inc(1, 2, 3));\n        Console.WriteLine(Inc(4, 3, 2, 1));\n        Console.WriteLine(Inc(9));            // grows\n        Console.WriteLine(Inc(9, 9, 9));      // grows\n        Console.WriteLine(Inc(1, 9, 9));      // carry stops partway\n        Console.WriteLine(Inc(0));\n    }\n}\n```\n\n**Output**\n\n```\n124\n4322\n10\n1000\n200\n1\n```",
   "tags": [
    "arrays",
-   "math",
-   "carry"
+   "carry",
+   "bignum",
+   "in-place",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the all-nines case worth special handling rather than a general carry loop?",
+    "a": "Because it is the only case where the result has more digits than the input, so it is the only one that needs a new allocation. Every other case mutates in place and returns early. Handling it after the loop keeps the hot path allocation-free, and relying on a freshly allocated int array defaulting to zero means only the leading 1 has to be written. Candidates who forget it return 000 for 999, which is a very visible failure."
+   },
+   {
+    "q": "The method mutates its input. Is that acceptable?",
+    "a": "It is what the standard problem expects, but it is a genuine side effect: the caller's array is modified even in the cases where a new array is returned, since the nines were already zeroed. That inconsistency is the worst part, because the behaviour differs depending on the data. In production I would either always copy, or name the method to make the mutation obvious, or return void and document that the array is updated in place when it can be."
+   },
+   {
+    "q": "Why represent a number as a digit array at all?",
+    "a": "Because it is not bounded by any built-in type, which is the whole point: a thousand-digit number has no int or long representation. This is the same reason the add-two-numbers linked list problem exists. Real big-number libraries such as BigInteger use the same idea but pack several digits into each element, typically working in base 2^32, so the carry logic is identical while the storage is far more compact."
+   }
   ]
  },
  {
@@ -1165,11 +1265,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Next permutation: rearrange to the next lexicographically greater permutation.",
-  "answer": "Find the first index i from the right where nums[i] < nums[i+1] (the pivot). Find the rightmost j > i with nums[j] > nums[i], swap them, then reverse the suffix after i. If no pivot exists, reverse the whole array (it was the last permutation). O(n) time.",
+  "answer": "**Logic**\n\nScan from the right for the first position whose value is smaller than its successor; call it the pivot. Everything to its right is non-increasing, so it is already the largest arrangement of those elements and cannot be advanced.\n\nThen find, again from the right, the smallest element greater than the pivot, swap them, and reverse the suffix. Reversing turns the suffix from its largest arrangement into its smallest, giving the immediate next permutation rather than some later one.\n\nIf no pivot exists the whole array is descending, so the next permutation wraps to the fully ascending one, achieved by reversing everything. O(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void NextPermutation(int[] nums)\n    {\n        int n = nums.Length;\n        if (n < 2) return;\n\n        // 1. Rightmost position with a smaller value than its successor.\n        int pivot = n - 2;\n        while (pivot >= 0 && nums[pivot] >= nums[pivot + 1]) pivot--;\n\n        if (pivot >= 0)\n        {\n            // 2. Rightmost element greater than the pivot. The suffix is\n            //    non-increasing, so the first one found from the right is the\n            //    smallest such element.\n            int swap = n - 1;\n            while (nums[swap] <= nums[pivot]) swap--;\n\n            (nums[pivot], nums[swap]) = (nums[swap], nums[pivot]);\n        }\n\n        // 3. The suffix is still non-increasing; reverse it to its smallest form.\n        Array.Reverse(nums, pivot + 1, n - pivot - 1);\n    }\n\n    private static string Next(params int[] nums)\n    {\n        NextPermutation(nums);\n        return string.Join(\",\", nums);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Next(1, 2, 3));\n        Console.WriteLine(Next(3, 2, 1));      // last permutation wraps to the first\n        Console.WriteLine(Next(1, 1, 5));\n        Console.WriteLine(Next(1, 3, 2));\n        Console.WriteLine(Next(2, 3, 1));\n        Console.WriteLine(Next(1));\n    }\n}\n```\n\n**Output**\n\n```\n1,3,2\n1,2,3\n1,5,1\n2,1,3\n3,1,2\n1\n```",
   "tags": [
    "arrays",
-   "permutation",
-   "in-place"
+   "permutations",
+   "lexicographic",
+   "in-place",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why reverse the suffix rather than sort it?",
+    "a": "Because the suffix is guaranteed non-increasing by the way the pivot was found, and after the swap it remains non-increasing, so reversing it produces exactly the ascending order that sorting would, in O(n) instead of O(n log n). Sorting would give the same answer and is not wrong, just unnecessarily slow, and reaching for it suggests you have not noticed the invariant that makes the algorithm linear. Stating why the suffix is already ordered is the substance of the answer."
+   },
+   {
+    "q": "Why does scanning from the right find the SMALLEST element greater than the pivot?",
+    "a": "Because the suffix is non-increasing, so values get smaller as you move right. The first element from the right that exceeds the pivot is therefore the smallest such element in the suffix. Swapping with anything larger would skip permutations and give a later one rather than the immediate next. It is a one-line detail that decides between 'a greater permutation' and 'the next greater permutation'."
+   },
+   {
+    "q": "Where is this used outside interviews?",
+    "a": "It is the standard way to enumerate permutations lazily, one at a time, in constant extra space, which matters when the full set is too large to materialise. C++ exposes it directly as std::next_permutation and .NET has no equivalent, so it is worth knowing. Repeatedly applying it from the sorted array visits every permutation exactly once in lexicographic order and returns to the start, which the [3,2,1] wrap case demonstrates."
+   }
   ]
  },
  {
@@ -1233,11 +1349,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Gas station: find the starting index to complete a circular route.",
-  "answer": "If total gas >= total cost, a solution exists. Track a running tank; whenever it goes negative, the start can't be any station up to here, so set start to the next station and reset the tank. Single pass O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nTwo observations make this linear. If the total gas is at least the total cost, a solution exists and is unique; otherwise none does. And if the running tank goes negative somewhere between a candidate start and station i, then no station in that span can be a valid start either, because each would begin with at most as much fuel.\n\nSo one pass suffices: track the total surplus to decide feasibility, and a running tank that resets the candidate start to the next station whenever it dips below zero.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int CanCompleteCircuit(int[] gas, int[] cost)\n    {\n        if (gas == null || cost == null || gas.Length != cost.Length) return -1;\n\n        int totalSurplus = 0;   // decides whether ANY start works\n        int tank = 0;           // fuel since the current candidate start\n        int start = 0;\n\n        for (int i = 0; i < gas.Length; i++)\n        {\n            int surplus = gas[i] - cost[i];\n            totalSurplus += surplus;\n            tank += surplus;\n\n            if (tank < 0)\n            {\n                // Nothing from start..i can work, so try the next station.\n                start = i + 1;\n                tank = 0;\n            }\n        }\n\n        return totalSurplus >= 0 ? start : -1;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CanCompleteCircuit(\n            new[] { 1, 2, 3, 4, 5 }, new[] { 3, 4, 5, 1, 2 }));\n\n        Console.WriteLine(CanCompleteCircuit(\n            new[] { 2, 3, 4 }, new[] { 3, 4, 3 }));        // impossible\n\n        Console.WriteLine(CanCompleteCircuit(new[] { 5 }, new[] { 4 }));\n        Console.WriteLine(CanCompleteCircuit(new[] { 3 }, new[] { 4 }));\n        Console.WriteLine(CanCompleteCircuit(new[] { 1, 2 }, new[] { 2, 1 }));\n        Console.WriteLine(CanCompleteCircuit(new[] { 4, 5, 2, 6, 5, 3 },\n                                            new[] { 3, 2, 7, 3, 2, 9 }));\n    }\n}\n```\n\n**Output**\n\n```\n3\n-1\n0\n-1\n1\n-1\n```",
   "tags": [
    "arrays",
    "greedy",
-   "gas-station"
+   "one-pass",
+   "circular",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why can every station between a failed start and the failure point be skipped?",
+    "a": "Because the tank was non-negative at every step from the candidate start up to just before the failure, so any later station in that range would begin its own journey with no more fuel than the original start had at that point, and would run out no later. Formally, if the partial sum from start to i is negative while all intermediate partial sums were non-negative, then every suffix of that range also sums negative. That is what turns an O(n^2) check of every start into a single pass."
+   },
+   {
+    "q": "Why does a non-negative total guarantee a solution exists?",
+    "a": "Because the circuit is closed, so the sum of all surpluses is the fuel available for the whole loop. If it is non-negative, there must be some rotation of the sequence whose every prefix sum is non-negative, which is a standard result about cyclic sequences. The algorithm's final candidate is exactly that rotation. Without the total check you would return a start index even when the route is impossible, which is why the two pieces of bookkeeping are both necessary."
+   },
+   {
+    "q": "Is the answer unique?",
+    "a": "Yes, when the total surplus is positive there is exactly one valid starting station. If the total is exactly zero the route is completable with the tank reaching zero at the end, and the start is still unique. That uniqueness is worth knowing because it means a test can assert an exact index without being fragile, unlike find-peak or reorganize-string where multiple answers are valid."
+   }
   ]
  },
  {
@@ -1245,12 +1377,31 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "First missing positive integer in O(n) time and O(1) space.",
-  "answer": "Use the array itself as a hash: place each number x (1..n) at index x-1 via swapping (cyclic sort). Then scan for the first index i where nums[i] != i+1; the answer is i+1. If all match, return n+1. O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nThe answer must lie between 1 and n+1, because n numbers cannot cover more than n distinct positive values. So the array itself can serve as the lookup table: place each value v in the range 1..n at index v-1, then scan for the first position whose value does not match.\n\nThe placement uses a while loop with swapping, not a single pass, because a swap brings in a new value that may also be misplaced. Each successful swap puts one number permanently in its home, so the total work is O(n) despite the nested loop.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int FirstMissingPositive(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 1;\n\n        int n = nums.Length;\n\n        // Cyclic sort: put value v at index v-1, for every v in 1..n.\n        for (int i = 0; i < n; i++)\n        {\n            // while, not if: the incoming value may also belong elsewhere.\n            while (nums[i] >= 1 && nums[i] <= n && nums[nums[i] - 1] != nums[i])\n                (nums[nums[i] - 1], nums[i]) = (nums[i], nums[nums[i] - 1]);\n        }\n\n        for (int i = 0; i < n; i++)\n            if (nums[i] != i + 1) return i + 1;\n\n        return n + 1;       // 1..n all present\n    }\n\n    private static int Missing(params int[] nums) => FirstMissingPositive(nums);\n\n    public static void Main()\n    {\n        Console.WriteLine(Missing(1, 2, 0));\n        Console.WriteLine(Missing(3, 4, -1, 1));\n        Console.WriteLine(Missing(7, 8, 9, 11, 12));   // nothing in range\n        Console.WriteLine(Missing(1, 2, 3));           // all present\n        Console.WriteLine(Missing(1, 1));              // duplicates\n        Console.WriteLine(Missing(-5));\n    }\n}\n```\n\n**Output**\n\n```\n3\n2\n1\n4\n2\n1\n```",
   "tags": [
    "arrays",
    "cyclic-sort",
    "in-place",
-   "hard"
+   "pigeonhole",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why compare nums[nums[i] - 1] != nums[i] rather than checking the index directly?",
+    "a": "Because comparing values rather than positions terminates correctly on duplicates. With [1,1], the second 1 wants index 0, which already holds a 1, so the values match and the loop stops. A condition written as `nums[i] != i + 1` would keep swapping the two 1s forever, since neither is ever satisfied. That infinite loop on duplicate input is the most common failure of this algorithm and the reason the [1,1] test is there."
+   },
+   {
+    "q": "Why is this O(n) when there is a while loop inside a for loop?",
+    "a": "Because every successful swap places at least one value at its permanent home, and a value at home is never moved again. So there can be at most n successful swaps in total across the entire run, regardless of how they cluster within the outer loop. The failed comparisons are bounded by n as well. It is the same amortised argument as for monotonic stacks: count the total work over the whole algorithm rather than per iteration."
+   },
+   {
+    "q": "Why must the answer be between 1 and n+1?",
+    "a": "By the pigeonhole principle: with n slots you can hold at most n distinct values, so if 1 through n are all present the first missing is n+1, and if any of them is absent the answer is at most n. That bound is what makes the array usable as its own hash table, since every value worth tracking has a home index within it. Values outside the range are simply ignored, which is why negatives and large numbers need no special handling."
+   },
+   {
+    "q": "Suppose the array must not be modified.",
+    "a": "Then the O(1) space bound is unreachable by this method and you need O(n) auxiliary space, either a hash set of the positives present or a boolean array of size n+1, scanned afterwards. That is simpler to write and usually what I would ship, since mutating the caller's array to answer a read-only question is a real side effect. The in-place version earns its place only when memory is genuinely constrained and the caller has agreed the input is disposable."
+   }
   ]
  },
  {
@@ -1314,12 +1465,27 @@
   "subcategory": "Arrays",
   "difficulty": "Easy",
   "question": "Two Sum II (sorted input): return the two indices.",
-  "answer": "Two pointers from both ends of the sorted array. If the sum is too large, move the right pointer left; if too small, move the left pointer right; if equal, return the indices. O(n) time, O(1) space (better than the hash-map version when input is sorted).",
+  "answer": "**Logic**\n\nSorted input makes the hash map unnecessary. Two pointers start at both ends: if the sum is too large the right pointer moves left, reducing it; if too small the left pointer moves right, increasing it. The sorted order guarantees each move is in the right direction, and the pointers never need to back up.\n\nO(n) time and O(1) space, against O(n) space for the hash-map version. Note this problem conventionally returns 1-based indices, which is a detail worth confirming rather than assuming.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Returns 1-based indices, as this problem conventionally specifies.\n    public static int[] TwoSum(int[] numbers, int target)\n    {\n        if (numbers == null || numbers.Length < 2) return Array.Empty<int>();\n\n        int left = 0, right = numbers.Length - 1;\n\n        while (left < right)\n        {\n            int sum = numbers[left] + numbers[right];\n\n            if (sum == target) return new[] { left + 1, right + 1 };\n\n            if (sum < target) left++;    // need a larger sum\n            else right--;                // need a smaller one\n        }\n\n        return Array.Empty<int>();       // no pair found\n    }\n\n    private static string Show(int[] r) => r.Length == 0 ? \"(none)\" : string.Join(\",\", r);\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(TwoSum(new[] { 2, 7, 11, 15 }, 9)));\n        Console.WriteLine(Show(TwoSum(new[] { 2, 3, 4 }, 6)));\n        Console.WriteLine(Show(TwoSum(new[] { -1, 0 }, -1)));\n        Console.WriteLine(Show(TwoSum(new[] { 1, 2, 3 }, 100)));    // no pair\n        Console.WriteLine(Show(TwoSum(new[] { 1, 1 }, 2)));         // duplicates\n        Console.WriteLine(Show(TwoSum(new[] { 5 }, 5)));            // too short\n    }\n}\n```\n\n**Output**\n\n```\n1,2\n1,3\n1,2\n(none)\n1,2\n(none)\n```",
   "tags": [
    "arrays",
-   "two-pointer",
-   "two-sum",
-   "sorted"
+   "two-pointers",
+   "sorted",
+   "indices",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is moving only one pointer at a time guaranteed not to miss the answer?",
+    "a": "Because of the sorted order. If the sum is too small, the current left element paired with anything to the left of right is even smaller, so left can never be part of a solution with any remaining partner and is safely discarded. The mirror argument applies when the sum is too large. Each step therefore eliminates exactly one element that provably cannot participate, which is why a single sweep suffices. That is the same exchange argument as in container-with-most-water."
+   },
+   {
+    "q": "How does this differ from the unsorted Two Sum?",
+    "a": "The unsorted version needs a hash map, giving O(n) time and O(n) space, because there is no ordering to exploit. Here the sort has already been paid for, so two pointers give O(1) space. If the input were unsorted and you sorted it yourself, you would pay O(n log n) and lose the original indices, which is why the hash map remains the right answer there. The lesson is that a precondition in the problem statement often points directly at the intended algorithm."
+   },
+   {
+    "q": "Why 1-based indices, and how would you handle that in real code?",
+    "a": "It is a convention this particular problem specifies, and it is the sort of detail that causes silent off-by-one bugs when carried between problems. In production I would return 0-based indices to match every other .NET API, or return the values rather than the indices if that is what the caller needs. Where a 1-based contract is imposed by an external system, I would convert at the boundary and keep the internal code 0-based, rather than letting the foreign convention leak inward."
+   }
   ]
  },
  {
@@ -1652,12 +1818,27 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Copy a linked list with random pointers.",
-  "answer": "Interleave copies: insert each copy node right after its original, set copy.random = original.random.next, then separate the two lists. O(n) time, O(1) extra space. Alternatively use a hash map from original→copy (O(n) space).",
+  "answer": "**Logic**\n\nA random pointer may target any node, including one not yet copied, so a single forward pass cannot resolve it. The straightforward fix is a dictionary from original node to its clone, filled in one pass and used to wire both `next` and `random` in a second pass.\n\nThe O(1)-space trick weaves the clones into the original list: place each clone directly after its source, so a node's clone is always at `node.Next`. That makes `clone.Random = node.Random.Next` a direct lookup with no map at all. A third pass unweaves the two lists.\n\nO(n) time either way.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Node\n{\n    public int Val;\n    public Node Next;\n    public Node Random;\n    public Node(int val) { Val = val; }\n}\n\npublic class Solution\n{\n    // Dictionary version: two passes, O(n) extra space, obviously correct.\n    public static Node CopyWithMap(Node head)\n    {\n        if (head == null) return null;\n\n        var map = new Dictionary<Node, Node>();\n        for (var n = head; n != null; n = n.Next) map[n] = new Node(n.Val);\n\n        for (var n = head; n != null; n = n.Next)\n        {\n            map[n].Next = n.Next == null ? null : map[n.Next];\n            map[n].Random = n.Random == null ? null : map[n.Random];\n        }\n\n        return map[head];\n    }\n\n    // Weaving version: O(1) extra space. Clone sits directly after its source.\n    public static Node CopyInterleaved(Node head)\n    {\n        if (head == null) return null;\n\n        // 1. A -> A' -> B -> B' -> ...\n        for (var n = head; n != null; n = n.Next.Next)\n        {\n            var clone = new Node(n.Val) { Next = n.Next };\n            n.Next = clone;\n        }\n\n        // 2. A clone's random is the clone of the original's random, which is\n        //    always the node right after it.\n        for (var n = head; n != null; n = n.Next.Next)\n            n.Next.Random = n.Random?.Next;\n\n        // 3. Unweave, restoring the original list exactly as it was.\n        var copyHead = head.Next;\n        for (var n = head; n != null; n = n.Next)\n        {\n            var clone = n.Next;\n            n.Next = clone.Next;\n            clone.Next = n.Next?.Next;\n        }\n\n        return copyHead;\n    }\n\n    private static string Describe(Node head)\n    {\n        var index = new Dictionary<Node, int>();\n        int i = 0;\n        for (var n = head; n != null; n = n.Next) index[n] = i++;\n\n        var parts = new List<string>();\n        for (var n = head; n != null; n = n.Next)\n            parts.Add($\"{n.Val}(r:{(n.Random == null ? \"null\" : index[n.Random].ToString())})\");\n\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\" \", parts);\n    }\n\n    private static Node Build()\n    {\n        var a = new Node(7); var b = new Node(13); var c = new Node(11);\n        a.Next = b; b.Next = c;\n        a.Random = null; b.Random = a; c.Random = c;   // c points at itself\n        return a;\n    }\n\n    public static void Main()\n    {\n        var original = Build();\n        Console.WriteLine(Describe(original));\n\n        Console.WriteLine(Describe(CopyWithMap(original)));\n\n        var copy = CopyInterleaved(original);\n        Console.WriteLine(Describe(copy));\n        Console.WriteLine(Describe(original));           // restored, not corrupted\n        Console.WriteLine(ReferenceEquals(copy, original));\n        Console.WriteLine(Describe(CopyWithMap(null)));\n    }\n}\n```\n\n**Output**\n\n```\n7(r:null) 13(r:0) 11(r:2)\n7(r:null) 13(r:0) 11(r:2)\n7(r:null) 13(r:0) 11(r:2)\n7(r:null) 13(r:0) 11(r:2)\nFalse\n(empty)\n```",
   "tags": [
    "linkedlist",
-   "random-pointer",
-   "clone",
-   "hashmap"
+   "hashmap",
+   "deep-copy",
+   "interleaving",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why can't a single forward pass resolve the random pointers?",
+    "a": "Because a random pointer can target a node later in the list that has not been cloned yet, so there is nothing to point at. The dictionary solves it by creating every clone first and wiring afterwards; the weaving trick solves it by making the clone's location derivable from the original's, so the clone exists implicitly as soon as the original is reachable. Both are answers to the same ordering problem, and it is the same forward-reference issue that clone-graph solves by registering the clone before recursing."
+   },
+   {
+    "q": "Why unweave at the end rather than leaving the lists interleaved?",
+    "a": "Because the caller still holds a reference to the original head and expects an unmodified list. Leaving it interleaved would double its apparent length and interleave foreign nodes into it, which is a severe side effect for a method named Copy. The unweaving pass is also where a partly-written implementation usually goes wrong, since both lists must be rebuilt simultaneously and the null handling at the tail is easy to get wrong."
+   },
+   {
+    "q": "Which would you ship?",
+    "a": "The dictionary version, in almost every case. It is a third of the length, obviously correct on inspection, and does not mutate the input even temporarily, so it is safe if another thread is reading the list. The weaving version is a genuine O(1)-space improvement and worth knowing, but the space saved is proportional to the list you are already duplicating, so the ceiling on the benefit is a factor of two. That is rarely worth the readability and the transient corruption."
+   }
   ]
  },
  {
@@ -1693,12 +1874,27 @@
   "subcategory": "LinkedList",
   "difficulty": "Hard",
   "question": "Reverse nodes in k-group.",
-  "answer": "Process the list in chunks of k: check that k nodes remain, reverse them, and connect to the previous group's tail and the next group's head. Recursive or iterative with careful pointer bookkeeping. O(n) time, O(1) space (iterative). Leftover nodes (< k) stay as-is.",
+  "answer": "**Logic**\n\nProcess the list in blocks of k. For each block, first check that k nodes actually remain, because a trailing partial group must be left untouched. Then reverse exactly k nodes and reconnect the block to what precedes and follows it.\n\nA dummy head removes the special case for the first group, whose reversal changes the list head. Each node is visited a constant number of times, so O(n) time and O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static ListNode ReverseKGroup(ListNode head, int k)\n    {\n        if (head == null || k <= 1) return head;\n\n        var dummy = new ListNode(0, head);\n        var groupPrev = dummy;\n\n        while (true)\n        {\n            // Is a full group of k available? A partial tail is left alone.\n            var check = groupPrev;\n            for (int i = 0; i < k && check != null; i++) check = check.Next;\n            if (check == null) break;\n\n            var groupStart = groupPrev.Next;   // becomes the group's tail\n            var next = groupStart;\n            ListNode prev = null;\n\n            for (int i = 0; i < k; i++)        // reverse exactly k nodes\n            {\n                var temp = next.Next;\n                next.Next = prev;\n                prev = next;\n                next = temp;\n            }\n\n            groupPrev.Next = prev;             // predecessor now points at the new head\n            groupStart.Next = next;            // old head, now tail, points at the remainder\n            groupPrev = groupStart;            // advance to the end of this group\n        }\n\n        return dummy.Next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        for (; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(ReverseKGroup(Build(1, 2, 3, 4, 5), 2)));\n        Console.WriteLine(Render(ReverseKGroup(Build(1, 2, 3, 4, 5), 3)));\n        Console.WriteLine(Render(ReverseKGroup(Build(1, 2, 3, 4, 5), 1)));\n        Console.WriteLine(Render(ReverseKGroup(Build(1, 2, 3), 5)));   // k exceeds the length\n        Console.WriteLine(Render(ReverseKGroup(Build(1, 2, 3, 4), 4)));\n        Console.WriteLine(Render(ReverseKGroup(null, 2)));\n    }\n}\n```\n\n**Output**\n\n```\n2->1->4->3->5\n3->2->1->4->5\n1->2->3->4->5\n1->2->3\n4->3->2->1\n(empty)\n```",
   "tags": [
    "linkedlist",
    "reverse",
-   "k-group",
-   "hard"
+   "dummy-node",
+   "groups",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why check for a full group before reversing rather than reversing and fixing up?",
+    "a": "Because the problem requires a trailing partial group to keep its original order, and once you have reversed a partial group, restoring it costs another reversal. Checking first is a cheap k-step walk and makes the main loop unconditional. The alternative some people write, counting the whole list up front and dividing, also works but needs an extra full traversal and an index to track, which is more state to get wrong."
+   },
+   {
+    "q": "Why does groupStart become the group's tail?",
+    "a": "Because reversal turns the first node into the last. Capturing it before the reversal gives you the node that will need to point at whatever follows the group, which is the `next` pointer left over from the reversal loop. Missing that reconnection is the classic failure: the reversed group becomes an isolated fragment and the rest of the list is lost, which shows up as truncated output rather than an exception."
+   },
+   {
+    "q": "How would you do this recursively, and would you?",
+    "a": "Reverse the first k nodes, then recurse on the remainder and attach the result to the group's tail. It is noticeably shorter and reads well. I would not ship it, because the recursion depth is the list length divided by k, so a long list with a small k overflows the stack, and .NET cannot catch that. It is the same reasoning as for reversing a whole list: recursion is fine on balanced trees, risky on lists whose length you do not control."
+   }
   ]
  },
  {
@@ -1706,11 +1902,27 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Remove duplicates from a sorted linked list.",
-  "answer": "Single pass: for each node, if the next node has the same value, skip it (curr.next = curr.next.next), else advance. For 'remove all duplicates' (leave only distinct), use a dummy head and compare/skip runs. O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nBecause the list is sorted, duplicates are adjacent, so a single pass comparing each node with its successor suffices. To keep one copy, skip over the successor when the values match without advancing the current pointer, so a run of three or more collapses correctly.\n\nThe harder variant removes *all* copies of any duplicated value, leaving only values that appeared exactly once. That needs a dummy head, because the original head may itself be deleted, and a predecessor pointer to splice out whole runs.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    // Keep one of each value.\n    public static ListNode RemoveDuplicates(ListNode head)\n    {\n        var current = head;\n\n        while (current?.Next != null)\n        {\n            if (current.Val == current.Next.Val)\n                current.Next = current.Next.Next;   // skip, do NOT advance current\n            else\n                current = current.Next;\n        }\n\n        return head;\n    }\n\n    // Remove every value that appears more than once.\n    public static ListNode RemoveAllDuplicates(ListNode head)\n    {\n        var dummy = new ListNode(0, head);          // the head itself may go\n        var prev = dummy;\n        var current = head;\n\n        while (current != null)\n        {\n            if (current.Next != null && current.Val == current.Next.Val)\n            {\n                int duplicated = current.Val;\n                while (current != null && current.Val == duplicated) current = current.Next;\n                prev.Next = current;                 // splice out the whole run\n            }\n            else\n            {\n                prev = current;\n                current = current.Next;\n            }\n        }\n\n        return dummy.Next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        for (; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(RemoveDuplicates(Build(1, 1, 2))));\n        Console.WriteLine(Render(RemoveDuplicates(Build(1, 1, 2, 3, 3))));\n        Console.WriteLine(Render(RemoveDuplicates(Build(1, 1, 1))));      // run of three\n        Console.WriteLine(Render(RemoveAllDuplicates(Build(1, 2, 3, 3, 4, 4, 5))));\n        Console.WriteLine(Render(RemoveAllDuplicates(Build(1, 1, 1, 2, 3))));  // head removed\n        Console.WriteLine(Render(RemoveAllDuplicates(Build(1, 1))));      // everything goes\n    }\n}\n```\n\n**Output**\n\n```\n1->2\n1->2->3\n1\n1->2->5\n2->3\n(empty)\n```",
   "tags": [
    "linkedlist",
+   "sorted",
    "duplicates",
-   "sorted"
+   "dummy-node",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why not advance current after skipping a duplicate?",
+    "a": "Because the new successor might also be a duplicate. With three 1s, skipping once leaves the current node pointing at the second 1; advancing immediately would move past it and leave the duplicate in place. Staying put re-examines the new successor and collapses the whole run. The test with [1,1,1] exists precisely to catch that, since a version that advances unconditionally passes on pairs and fails on triples."
+   },
+   {
+    "q": "Why does the remove-all variant need a dummy head when the first does not?",
+    "a": "Because it can delete the head itself, as when the list starts with a run of duplicates, so the returned head differs from the one passed in. The dummy gives the head a predecessor like every other node, so the splice logic has one code path and the answer is simply `dummy.Next`. The keep-one variant never deletes the head, since the first occurrence of any value survives, so it can return the original head unchanged."
+   },
+   {
+    "q": "Suppose the list were not sorted.",
+    "a": "Adjacency no longer implies equality, so you need a hash set of seen values and a single pass splicing out anything already present, giving O(n) time and O(n) space. Without extra space it degrades to O(n^2) with a nested scan per node. That contrast is the point worth making: sorting is what buys the O(1) space here, so if the caller can guarantee sorted input it is worth relying on, and if not the space cost is unavoidable."
+   }
   ]
  },
  {
@@ -1718,11 +1930,27 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Rotate a linked list to the right by k places.",
-  "answer": "Find the length and connect the tail to the head (make it circular). Compute the new tail at position length - (k % length) - 1, set its next as the new head, and break the circle. O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nClose the list into a ring, then break it at the right place. Walk to the tail counting the length, connect the tail to the head, then advance `length - k % length` steps from the head to find the new tail, and cut there.\n\nTaking `k % length` first is essential: rotating a 5-node list by 12 is the same as by 2, and without the reduction the walk would run off the end. Forming the ring avoids tracking two pointers separately.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static ListNode RotateRight(ListNode head, int k)\n    {\n        if (head?.Next == null || k <= 0) return head;\n\n        // 1. Find the tail and the length in one walk.\n        int length = 1;\n        var tail = head;\n        while (tail.Next != null) { tail = tail.Next; length++; }\n\n        k %= length;                  // a full turn is a no-op\n        if (k == 0) return head;\n\n        // 2. Close the ring.\n        tail.Next = head;\n\n        // 3. Walk to the new tail and cut.\n        var newTail = head;\n        for (int i = 1; i < length - k; i++) newTail = newTail.Next;\n\n        var newHead = newTail.Next;\n        newTail.Next = null;\n\n        return newHead;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        for (; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(RotateRight(Build(1, 2, 3, 4, 5), 2)));\n        Console.WriteLine(Render(RotateRight(Build(0, 1, 2), 4)));      // 4 % 3 = 1\n        Console.WriteLine(Render(RotateRight(Build(1, 2, 3), 3)));      // full turn\n        Console.WriteLine(Render(RotateRight(Build(1, 2), 1)));\n        Console.WriteLine(Render(RotateRight(Build(1), 99)));\n        Console.WriteLine(Render(RotateRight(null, 1)));\n    }\n}\n```\n\n**Output**\n\n```\n4->5->1->2->3\n2->0->1\n1->2->3\n2->1\n1\n(empty)\n```",
   "tags": [
    "linkedlist",
    "rotation",
-   "circular"
+   "modulo",
+   "ring",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why form a ring rather than just finding the split point directly?",
+    "a": "Because the new head and the old tail need connecting anyway, and closing the ring does that before you know where the cut goes. Without it you would hold three pointers, the old tail, the new tail and the new head, and wire them in the right order afterwards. The ring makes the operation a single cut, which is both fewer steps and harder to get wrong. The one hazard is that the list is temporarily cyclic, so an exception thrown between closing and cutting would leave it corrupted."
+   },
+   {
+    "q": "Why is k % length necessary rather than just an optimisation?",
+    "a": "Because without it the walk `length - k` goes negative for k greater than the length, so the loop either does nothing or runs past the end depending on how it is written, producing a wrong answer or a null dereference. The [1] rotated by 99 test would fail immediately. It is the same reduction as in array rotation, and as there, if k could be negative you would need the double-modulo idiom to bring it into range."
+   },
+   {
+    "q": "How does this compare with rotating an array?",
+    "a": "The array version cannot relink, so it uses three reversals or cyclic replacement, both O(n) time and O(1) space but performing O(n) writes. The list version performs exactly two pointer writes after the traversal, because relinking is O(1) once you have found the position. That is one of the few places a linked list genuinely beats an array, and it is worth naming since most comparisons go the other way."
+   }
   ]
  },
  {
@@ -1730,12 +1958,27 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Swap nodes in pairs.",
-  "answer": "Use a dummy head; for each pair, rewire pointers so the second node precedes the first, and connect to the previous pair. Advance by two. O(n) time, O(1) space. Recursion also works (swap first two, recurse on the rest).",
+  "answer": "**Logic**\n\nWalk the list rewiring two nodes at a time. For each pair, the predecessor points at the second node, the second points at the first, and the first points at whatever followed the pair. Then advance the predecessor to the first node, which is now the pair's tail.\n\nA dummy head removes the special case for the opening pair, whose swap changes the list head. An odd trailing node is left alone, which falls out naturally from requiring both `current` and `current.Next` to exist.\n\nThe question specifies swapping nodes rather than values, so exchanging the payloads would be considered cheating.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static ListNode SwapPairs(ListNode head)\n    {\n        var dummy = new ListNode(0, head);\n        var prev = dummy;\n\n        // Both nodes of the pair must exist; a lone trailing node stays put.\n        while (prev.Next != null && prev.Next.Next != null)\n        {\n            var first = prev.Next;\n            var second = first.Next;\n\n            first.Next = second.Next;   // first now points past the pair\n            second.Next = first;        // second takes the lead\n            prev.Next = second;         // predecessor points at the new leader\n\n            prev = first;               // first is now the pair's tail\n        }\n\n        return dummy.Next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        for (; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(SwapPairs(Build(1, 2, 3, 4))));\n        Console.WriteLine(Render(SwapPairs(Build(1, 2, 3))));     // odd tail untouched\n        Console.WriteLine(Render(SwapPairs(Build(1))));\n        Console.WriteLine(Render(SwapPairs(null)));\n        Console.WriteLine(Render(SwapPairs(Build(1, 2))));\n        Console.WriteLine(Render(SwapPairs(Build(1, 2, 3, 4, 5, 6))));\n    }\n}\n```\n\n**Output**\n\n```\n2->1->4->3\n2->1->3\n1\n(empty)\n2->1\n2->1->4->3->6->5\n```",
   "tags": [
    "linkedlist",
-   "swap",
+   "pointers",
+   "dummy-node",
    "pairs",
-   "dummy-node"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why not just swap the values, which is far simpler?",
+    "a": "Because the problem asks for the nodes to be swapped, and in real structures the distinction matters: other code may hold references to specific nodes and expect them to stay put relative to their data, or the payload may be large enough that copying is expensive. In an interview, swapping values is usually treated as sidestepping the exercise, since the whole point is to test careful pointer manipulation. It is worth stating that you know the shortcut exists and why you are not taking it."
+   },
+   {
+    "q": "This is reverse-k-group with k = 2. Would you just call that?",
+    "a": "You could, and it would be correct. In production, one general method beats two special ones, so reusing it is the right call. The specialised version here is shorter and has no reversal loop, so it is marginally faster and much easier to verify by eye. The general guidance is to prefer the general method unless the specialisation is on a hot path, and the fact that the two are related is worth saying out loud since interviewers often ask them in sequence."
+   },
+   {
+    "q": "Why advance prev to first rather than to second?",
+    "a": "Because after the swap, first is the pair's tail: the order is second then first, so first is what must point at the next pair. Advancing to second would leave prev pointing at the pair's head and the following pair would be wired into the wrong place, producing a list that loses nodes or loops. Tracing a four-node list by hand is the quickest way to convince yourself, and it is the step most often gotten backwards."
+   }
   ]
  },
  {
@@ -2109,12 +2352,27 @@
   "subcategory": "LinkedList",
   "difficulty": "Hard",
   "question": "Sort a linked list in O(n log n).",
-  "answer": "Merge sort on the list: split into halves using slow/fast pointers, recursively sort each half, then merge the sorted halves. O(n log n) time, O(log n) stack space (or O(1) with bottom-up iterative merge sort). Quicksort is possible but has poor worst case.",
+  "answer": "**Logic**\n\nMerge sort is the right choice for a list. Quicksort needs random access for good pivot selection and its partitioning is awkward without indices, while merge sort only ever walks forward and splices, which is exactly what a list supports.\n\nSplit at the first middle so both halves are non-empty, sort each recursively, then merge. Splitting at the second middle would leave a two-node list producing an empty half and a two-node half, which recurses forever.\n\nO(n log n) time. Space is O(log n) for the recursion; a bottom-up version reaches O(1).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static ListNode SortList(ListNode head)\n    {\n        if (head?.Next == null) return head;     // 0 or 1 nodes: already sorted\n\n        // Split at the FIRST middle, so neither half is empty.\n        ListNode slow = head, fast = head.Next;\n        while (fast?.Next != null) { slow = slow.Next; fast = fast.Next.Next; }\n\n        ListNode second = slow.Next;\n        slow.Next = null;                        // detach, or the recursion never ends\n\n        return Merge(SortList(head), SortList(second));\n    }\n\n    private static ListNode Merge(ListNode a, ListNode b)\n    {\n        var dummy = new ListNode();\n        var tail = dummy;\n\n        while (a != null && b != null)\n        {\n            if (a.Val <= b.Val) { tail.Next = a; a = a.Next; }   // <= keeps it stable\n            else                { tail.Next = b; b = b.Next; }\n            tail = tail.Next;\n        }\n\n        tail.Next = a ?? b;\n        return dummy.Next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        for (; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(SortList(Build(4, 2, 1, 3))));\n        Console.WriteLine(Render(SortList(Build(-1, 5, 3, 4, 0))));\n        Console.WriteLine(Render(SortList(Build(1, 2, 3))));      // already sorted\n        Console.WriteLine(Render(SortList(Build(3, 2, 1))));      // reversed\n        Console.WriteLine(Render(SortList(Build(2, 2, 1, 1))));   // duplicates\n        Console.WriteLine(Render(SortList(null)));\n    }\n}\n```\n\n**Output**\n\n```\n1->2->3->4\n-1->0->3->4->5\n1->2->3\n1->2->3\n1->1->2->2\n(empty)\n```",
   "tags": [
    "linkedlist",
    "merge-sort",
-   "sorting",
-   "hard"
+   "recursion",
+   "stability",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why merge sort rather than quicksort for a linked list?",
+    "a": "Because quicksort's advantages evaporate without random access. Choosing a good pivot needs indexing, partitioning in place needs bidirectional movement, and the cache locality that makes quicksort fast on arrays does not apply to scattered nodes anyway. Merge sort only walks forward and relinks, which is exactly what a singly linked list supports, and it needs no auxiliary array because merging lists is done by pointer, not by copying. That is why merging lists is O(1) extra space while merging arrays is O(n)."
+   },
+   {
+    "q": "Why does splitting at the second middle cause infinite recursion?",
+    "a": "With a two-node list, the second middle is the second node, so the split produces an empty first half and a two-node second half. The recursive call receives the same two-node list and splits it the same way forever. Starting the fast pointer at `head.Next` biases toward the first middle, guaranteeing both halves are strictly smaller. It is a one-token difference that turns a working sort into a stack overflow, and only on even-length inputs."
+   },
+   {
+    "q": "How would you reach O(1) space?",
+    "a": "Bottom-up merge sort. Instead of recursing, merge adjacent runs of size 1, then 2, then 4, doubling each pass until the run length exceeds the list length. It needs careful bookkeeping to split and reconnect runs, but there is no call stack at all. That is what most standard library list sorts use, and it is also the structure of an external merge sort over files, where the recursion would be impossible anyway."
+   }
   ]
  },
  {
@@ -4930,11 +5188,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find all duplicates in an array where every element is between 1 and n.",
-  "answer": "Use the array itself as a hash table: for each value, negate the entry at index abs(value)-1; if it is already negative the value is a duplicate. Time O(n), space O(1) excluding output. Restore signs afterwards if the input must be preserved.",
+  "answer": "**Logic**\n\nThe value range matches the index range, so the array can encode its own bookkeeping. For each value v, negate the element at index v-1 as a visited mark. If that element is already negative, v has been seen before, so it is a duplicate.\n\nUse the absolute value when computing the index, since earlier marks may have flipped the sign of the element you are reading. O(n) time, O(1) extra space, and the signs can be restored afterwards if the caller needs the array intact.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static IList<int> FindDuplicates(int[] nums)\n    {\n        var duplicates = new List<int>();\n        if (nums == null) return duplicates;\n\n        foreach (int raw in nums)\n        {\n            int value = Math.Abs(raw);       // the element may already be negated\n            int index = value - 1;\n\n            if (nums[index] < 0) duplicates.Add(value);   // seen before\n            else nums[index] = -nums[index];              // mark as seen\n        }\n\n        // Restore, so the method does not leave the caller's array negated.\n        for (int i = 0; i < nums.Length; i++) nums[i] = Math.Abs(nums[i]);\n\n        return duplicates;\n    }\n\n    private static string Show(int[] nums)\n    {\n        var r = FindDuplicates(nums);\n        var list = new List<int>(r);\n        list.Sort();\n        return list.Count == 0 ? \"(none)\" : string.Join(\",\", list);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(new[] { 4, 3, 2, 7, 8, 2, 3, 1 }));\n        Console.WriteLine(Show(new[] { 1, 1, 2 }));\n        Console.WriteLine(Show(new[] { 1 }));\n        Console.WriteLine(Show(new[] { 1, 2, 3, 4 }));       // no duplicates\n\n        var original = new[] { 2, 2, 1 };\n        FindDuplicates(original);\n        Console.WriteLine(string.Join(\",\", original));       // restored\n    }\n}\n```\n\n**Output**\n\n```\n2,3\n1\n(none)\n(none)\n2,2,1\n```",
   "tags": [
    "arrays",
    "in-place",
-   "hashing"
+   "negation-marking",
+   "duplicates",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why take the absolute value when reading each element?",
+    "a": "Because a previous iteration may already have negated it as a mark, and using the negative value directly would compute a negative index and throw. The sign carries the visited flag while the magnitude carries the data, so the two must be separated on every read. It is an in-band encoding, which works here only because the problem guarantees all values are positive and within 1..n; a zero or a negative in the input would break it entirely."
+   },
+   {
+    "q": "Why restore the signs at the end?",
+    "a": "Because a method named FindDuplicates that silently negates half the caller's array is a nasty surprise, and the restoration costs one extra linear pass. It also makes the method idempotent, so calling it twice gives the same answer, which the last test demonstrates. Without it the second call would report every element as a duplicate. If the caller genuinely does not care, the pass can be dropped and documented, but the default should be to leave the input as you found it."
+   },
+   {
+    "q": "How does this relate to finding the single duplicate in n+1 integers?",
+    "a": "That variant forbids modifying the array, so the negation trick is unavailable, and it uses Floyd's cycle detection instead: treat values as next pointers, which must form a cycle by the pigeonhole principle, and find its entry. Same O(n) time and O(1) space but no mutation. The pair makes a good illustration that the constraints, not the shape of the data, determine which technique applies."
+   }
   ]
  },
  {
@@ -4942,11 +5216,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find the duplicate number in an array of n+1 integers in the range 1..n without modifying it.",
-  "answer": "Treat values as next-index pointers, giving a linked list with a cycle whose entrance is the duplicate, and apply Floyd's cycle detection. Time O(n), space O(1). Binary search on the value range counting elements below the midpoint is an alternative at O(n log n).",
+  "answer": "**Logic**\n\nThe constraints rule out the obvious approaches: no sorting or marking, because the array must not be modified, and no hash set, because space must be constant.\n\nTreat each value as a pointer to the index it names. Since there are n+1 elements holding values in 1..n, the pigeonhole principle guarantees two elements share a value, which makes the traversal enter a cycle. The cycle's entry point is the duplicate, found with Floyd's tortoise and hare.\n\nO(n) time, O(1) space, input untouched.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int FindDuplicate(int[] nums)\n    {\n        if (nums == null || nums.Length < 2) throw new ArgumentException(\"need at least two values\");\n\n        // Phase 1: find a meeting point inside the cycle.\n        int slow = nums[0], fast = nums[0];\n        do\n        {\n            slow = nums[slow];              // one step\n            fast = nums[nums[fast]];        // two steps\n        } while (slow != fast);\n\n        // Phase 2: reset one pointer to the start; they meet at the cycle entry,\n        // which is the duplicated value.\n        slow = nums[0];\n        while (slow != fast)\n        {\n            slow = nums[slow];\n            fast = nums[fast];\n        }\n\n        return slow;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindDuplicate(new[] { 1, 3, 4, 2, 2 }));\n        Console.WriteLine(FindDuplicate(new[] { 3, 1, 3, 4, 2 }));\n        Console.WriteLine(FindDuplicate(new[] { 1, 1 }));\n        Console.WriteLine(FindDuplicate(new[] { 2, 2, 2, 2, 2 }));   // many copies\n        Console.WriteLine(FindDuplicate(new[] { 1, 4, 4, 2, 4 }));\n\n        var original = new[] { 1, 3, 4, 2, 2 };\n        FindDuplicate(original);\n        Console.WriteLine(string.Join(\",\", original));               // untouched\n    }\n}\n```\n\n**Output**\n\n```\n2\n3\n1\n2\n4\n1,3,4,2,2\n```",
   "tags": [
    "arrays",
+   "floyd",
    "cycle-detection",
-   "two-pointers"
+   "pigeonhole",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does treating values as pointers guarantee a cycle?",
+    "a": "Because the sequence starting at index 0 and following x = nums[x] is infinite while the index space is finite, so some index must repeat and the path closes into a cycle. The pigeonhole principle guarantees a duplicated value exists, and that duplicate is what gives two different indices pointing at the same place, making the cycle's entry point rather than the whole path a loop. The values being confined to 1..n is what keeps the traversal in bounds and never reaches index 0 again, which is why index 0 is a safe starting point outside the cycle."
+   },
+   {
+    "q": "Why is this preferred over the marking approach used for finding all duplicates?",
+    "a": "Purely because of the no-modification constraint. If the array could be altered, negation marking or cyclic sort would be simpler to write and to explain. Floyd's is the answer precisely when the input is read-only and the space must be constant, which is a combination that rules out every simpler technique. It is a good example of constraints selecting the algorithm rather than the data shape doing so."
+   },
+   {
+    "q": "Are there other approaches worth mentioning?",
+    "a": "Binary search on the value range: for a candidate m, count how many elements are at most m, and if that count exceeds m the duplicate lies in the lower half. That is O(n log n) time and O(1) space, also without modification, and it is easier to explain under pressure than Floyd's. There is also a bit-counting method comparing the input's bit distribution against that of 1..n, which is O(n log n) and rarely worth it. Offering the binary search as the fallback shows range rather than reliance on one trick."
+   }
   ]
  },
  {
