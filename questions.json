@@ -22099,27 +22099,62 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Subarray sum equals k (count subarrays).",
-  "answer": "Prefix sums with a hash map of prefix-sum frequencies. For each running sum, the number of subarrays ending here with sum k equals the count of (runningSum - k) seen before. Initialize map with {0:1}. O(n) time, O(n) space.",
+  "answer": "**Logic**\n\nPrefix sums with a hash map. If the running sum up to index j is `S`, then a subarray ending at j sums to k exactly when some earlier prefix equalled `S - k`. So keep a map from prefix sum to how many times it has occurred, and at each step add the count of `S - k`.\n\nSeed the map with `{0: 1}` to represent the empty prefix, which is what lets a subarray starting at index 0 be counted. O(n) time, O(n) space.\n\nThe sliding window does not work here, because negative numbers mean the running sum is not monotonic and shrinking the window can increase the sum.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int SubarraySum(int[] nums, int k)\n    {\n        // {0:1} is the empty prefix: it makes a subarray starting at index 0 countable.\n        var seen = new Dictionary<long, int> { [0] = 1 };\n        long sum = 0;\n        int count = 0;\n\n        foreach (int n in nums)\n        {\n            sum += n;\n\n            // Any earlier prefix equal to sum-k closes a subarray summing to k here.\n            if (seen.TryGetValue(sum - k, out int times)) count += times;\n\n            seen[sum] = seen.TryGetValue(sum, out int c) ? c + 1 : 1;\n        }\n\n        return count;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(SubarraySum(new[] { 1, 1, 1 }, 2));\n        Console.WriteLine(SubarraySum(new[] { 1, 2, 3 }, 3));         // [1,2] and [3]\n        Console.WriteLine(SubarraySum(new[] { 1 }, 0));\n        Console.WriteLine(SubarraySum(new[] { -1, -1, 1 }, 0));       // negatives\n        Console.WriteLine(SubarraySum(new[] { 3, 4, 7, 2, -3, 1, 4, 2 }, 7));\n        Console.WriteLine(SubarraySum(new[] { 0, 0, 0 }, 0));         // every subarray counts\n    }\n}\n```\n\n**Output**\n\n```\n2\n2\n0\n1\n4\n6\n```",
   "tags": [
    "arrays",
    "prefix-sum",
    "hashmap",
-   "subarray"
+   "negatives",
+   "csharp"
   ],
-  "id": 1538
+  "id": 1538,
+  "followups": [
+   {
+    "q": "Why must the map be seeded with {0: 1}?",
+    "a": "Because a subarray that starts at index 0 has no earlier prefix to subtract. If the running sum reaches exactly k at index j, the matching earlier prefix is 0, which corresponds to the empty prefix before the array began. Without the seed that lookup fails and every such subarray is missed. It is the single most common bug in this problem, and it only shows up when the answer includes a prefix of the array, so weak test data hides it."
+   },
+   {
+    "q": "Why can't you use a sliding window, as you would for 'minimum length subarray with sum at least k'?",
+    "a": "Sliding windows rely on monotonicity: extending the window must move the sum in one direction so that shrinking can correct an overshoot. That holds when all values are positive, and fails the moment negatives are allowed, because extending can decrease the sum. So the window has no valid shrink rule. Whenever a subarray-sum problem permits negative values, prefix sums with a map is the pattern, and recognising which of the two applies is what the interviewer is testing."
+   },
+   {
+    "q": "How does 'subarray sums divisible by k' change this?",
+    "a": "Key the map on `sum % k` rather than the sum itself, because two prefixes with the same remainder bound a subarray whose sum is a multiple of k. The catch is negative remainders: in C# `-3 % 5` is -2, not 3, so you must normalise with `((sum % k) + k) % k` or the two representations of the same residue class never match. That is the same signed-modulo trap as in array rotation."
+   },
+   {
+    "q": "Why accumulate into a long?",
+    "a": "Because the running prefix sum can exceed int range even when no individual element does: a million elements near int.MaxValue/2 overflow long before the end. An overflowed prefix wraps and can coincidentally match a lookup, producing a wrong count with no error. Widening the accumulator costs nothing here and removes a failure mode that only appears on large inputs, which is exactly the kind that reaches production untested."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Longest consecutive sequence in an unsorted array.",
-  "answer": "Put all numbers in a hash set. For each number that is the start of a sequence (num-1 not in set), count upward (num+1, num+2, ...) while present, tracking the longest run. Each number is visited at most twice, giving O(n) time.",
+  "answer": "**Logic**\n\nPut everything in a hash set, then for each value check whether it is the *start* of a run by asking if `value - 1` is absent. Only from a genuine start do you walk upward counting. That test is what keeps it linear: without it, a long run would be walked from every one of its members, making it quadratic.\n\nEach value is visited at most twice overall, once in the outer loop and once during the single walk of its run, so O(n) time and O(n) space. Sorting would be O(n log n), which the problem is asking you to beat.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int LongestConsecutive(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        var set = new HashSet<int>(nums);   // also removes duplicates\n        int best = 0;\n\n        foreach (int n in set)\n        {\n            // Only start counting from the beginning of a run.\n            if (set.Contains(n - 1)) continue;\n\n            int current = n, length = 1;\n            while (set.Contains(current + 1)) { current++; length++; }\n\n            if (length > best) best = length;\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestConsecutive(new[] { 100, 4, 200, 1, 3, 2 }));   // 1,2,3,4\n        Console.WriteLine(LongestConsecutive(new[] { 0, 3, 7, 2, 5, 8, 4, 6, 0, 1 }));\n        Console.WriteLine(LongestConsecutive(new int[0]));\n        Console.WriteLine(LongestConsecutive(new[] { 5 }));\n        Console.WriteLine(LongestConsecutive(new[] { 1, 1, 1 }));      // duplicates collapse\n        Console.WriteLine(LongestConsecutive(new[] { -3, -2, -1, 0 })); // negatives\n    }\n}\n```\n\n**Output**\n\n```\n4\n9\n0\n1\n1\n4\n```",
   "tags": [
    "arrays",
    "hashset",
-   "consecutive"
+   "linear-time",
+   "sequences",
+   "csharp"
   ],
-  "id": 1539
+  "id": 1539,
+  "followups": [
+   {
+    "q": "Prove this is O(n) despite the nested while loop.",
+    "a": "The inner walk only ever runs from a value whose predecessor is absent, so each run is walked exactly once in total, no matter how many members it has. Every element is therefore touched at most twice: once by the outer loop and once as part of its own run's single walk. That bounds the total work at 2n set lookups, which is linear. Without the `set.Contains(n - 1)` guard the same run would be re-walked from each member and the worst case would be quadratic, which is the whole reason that one line exists."
+   },
+   {
+    "q": "Does iterating the set rather than the array matter?",
+    "a": "Yes, for duplicates. Iterating the original array would repeat the work for every copy of a value, so an array of a million identical numbers would do a million outer iterations instead of one. It does not break correctness because the guard still prevents the inner walk, but it wastes time proportional to the duplication. Iterating the set makes the bound hold on the distinct count rather than the raw length."
+   },
+   {
+    "q": "How would you return the sequence itself, or handle a stream?",
+    "a": "For the sequence, record the starting value whenever the best length improves; the run is then start to start+length-1. For a stream where values arrive one at a time, a disjoint-set structure is the better fit: each new value creates a singleton and unions with its neighbours if present, keeping a running maximum of component sizes. That gives near-constant amortised updates and answers at any point, which the batch algorithm cannot do."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22342,14 +22377,29 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Sort colors (Dutch national flag): sort an array of 0s, 1s, 2s in one pass.",
-  "answer": "Three pointers: low, mid, high. If nums[mid]==0 swap with low and advance both; if ==2 swap with high and decrement high (don't advance mid); if ==1 advance mid. Single pass O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nThree pointers partitioning the array into four regions: settled 0s at the front, settled 1s next, an unexamined middle, and settled 2s at the back. `low` marks the end of the 0s, `high` marks the start of the 2s, and `mid` scans.\n\nOn a 0, swap it to `low` and advance both `low` and `mid`. On a 1, just advance `mid`. On a 2, swap it to `high` and decrement `high` but **do not** advance `mid`, because the value swapped in from the back has not been examined yet. That asymmetry is the crux. O(n) time, O(1) space, one pass.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void SortColors(int[] nums)\n    {\n        int low = 0, mid = 0, high = nums.Length - 1;\n\n        while (mid <= high)\n        {\n            switch (nums[mid])\n            {\n                case 0:\n                    (nums[low], nums[mid]) = (nums[mid], nums[low]);\n                    low++;\n                    mid++;      // the value swapped in came from below mid: already seen\n                    break;\n\n                case 1:\n                    mid++;      // already in the right region\n                    break;\n\n                default:        // 2\n                    (nums[mid], nums[high]) = (nums[high], nums[mid]);\n                    high--;\n                    // mid is NOT advanced: the incoming value is unexamined\n                    break;\n            }\n        }\n    }\n\n    private static string Sorted(int[] a)\n    {\n        var copy = (int[])a.Clone();\n        SortColors(copy);\n        return string.Join(\",\", copy);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Sorted(new[] { 2, 0, 2, 1, 1, 0 }));\n        Console.WriteLine(Sorted(new[] { 2, 0, 1 }));\n        Console.WriteLine(Sorted(new[] { 0 }));\n        Console.WriteLine(Sorted(new[] { 2, 2, 2 }));\n        Console.WriteLine(Sorted(new[] { 1, 0 }));\n        Console.WriteLine(Sorted(new[] { 2, 1, 0, 2, 1, 0 }));\n    }\n}\n```\n\n**Output**\n\n```\n0,0,1,1,2,2\n0,1,2\n0\n2,2,2\n0,1\n0,0,1,1,2,2\n```",
   "tags": [
    "arrays",
+   "three-pointers",
+   "partitioning",
    "dutch-flag",
-   "three-pointer",
-   "sorting"
+   "csharp"
   ],
-  "id": 1550
+  "id": 1550,
+  "followups": [
+   {
+    "q": "Why is mid advanced after swapping a 0 but not after swapping a 2?",
+    "a": "Because of where the incoming value came from. When a 0 is swapped to `low`, the value that arrives at `mid` came from the region below `mid`, which has already been scanned and can only be a 1, so it is safe to move on. When a 2 is swapped to `high`, the arriving value came from beyond `high`, which has never been examined and could be anything, so `mid` must stay and re-inspect it. Advancing in both cases is the classic bug and produces an array that is almost sorted, which is exactly the sort of error that slips through casual testing."
+   },
+   {
+    "q": "Why mid <= high rather than mid < high?",
+    "a": "Because when `mid` and `high` coincide there is still one unexamined element at that position. Stopping early leaves it unsorted, which shows up on short inputs such as [1,0]. It is the standard inclusive-bound question, and the way to settle it is to ask what the pointers mean: `high` is the first settled 2, so everything strictly below it including `mid` still needs classifying."
+   },
+   {
+    "q": "Why not just count the three values and rewrite the array?",
+    "a": "Counting sort in two passes is simpler, equally O(n), and often faster in practice. The one-pass constraint exists because the real problem is partitioning around a pivot with three-way handling of equal elements, which is exactly what quicksort needs to avoid quadratic behaviour on arrays with many duplicates. So the value of this exercise is the partitioning technique, not the sorting of three specific values. That is also why it is called the Dutch national flag problem, after Dijkstra."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22464,14 +22514,29 @@
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "First unique character in a string.",
-  "answer": "Count character frequencies in one pass (array or map), then scan again returning the index of the first character with count 1. O(n) time, O(1) space (fixed alphabet).",
+  "answer": "**Logic**\n\nTwo passes. Count every character, then scan the string again in order and return the index of the first character whose count is 1. The second pass must walk the original string rather than the counts, because a dictionary has no meaningful order. O(n) time, O(k) space for the alphabet.\n\nDoing it in one pass is not possible in general: you cannot know a character is unique until the whole string has been read.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int FirstUniqChar(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return -1;\n\n        var counts = new Dictionary<char, int>();\n        foreach (char c in s)\n            counts[c] = counts.TryGetValue(c, out int n) ? n + 1 : 1;\n\n        // Second pass over the STRING, not the dictionary: order matters.\n        for (int i = 0; i < s.Length; i++)\n            if (counts[s[i]] == 1) return i;\n\n        return -1;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FirstUniqChar(\"leetcode\"));\n        Console.WriteLine(FirstUniqChar(\"loveleetcode\"));\n        Console.WriteLine(FirstUniqChar(\"aabb\"));        // none unique\n        Console.WriteLine(FirstUniqChar(\"z\"));\n        Console.WriteLine(FirstUniqChar(\"\"));\n        Console.WriteLine(FirstUniqChar(\"aadadaad\"));\n    }\n}\n```\n\n**Output**\n\n```\n0\n2\n-1\n0\n-1\n-1\n```",
   "tags": [
    "strings",
    "hashmap",
    "counting",
-   "unique"
+   "two-pass",
+   "csharp"
   ],
-  "id": 1559
+  "id": 1559,
+  "followups": [
+   {
+    "q": "Why not iterate the dictionary looking for the first count of 1?",
+    "a": "Because dictionary order is not the string's order. .NET makes no guarantee about `Dictionary<K,V>` enumeration order, and although it often looks like insertion order in practice, that is an implementation detail that has changed between versions and breaks as soon as a removal occurs. The character that enumerates first may not be the one that appears first in the string, so the answer would be wrong for reasons that are invisible in testing. Scanning the string is both correct and obviously correct."
+   },
+   {
+    "q": "What if characters arrive as a stream and you must answer at any moment?",
+    "a": "Keep a queue of candidate characters alongside the counts. On each arrival, increment its count and push it onto the queue, then pop from the front while the front element's count exceeds one. The queue head is then always the current first-unique, answered in O(1) amortised. That is the standard 'first non-repeating character in a stream' problem, and the queue is what turns a two-pass algorithm into an online one."
+   },
+   {
+    "q": "Would an int[26] be better here?",
+    "a": "If the input is guaranteed lowercase ASCII, yes: no hashing, no allocation beyond a tiny array, and far better cache behaviour. The cost is that it silently breaks on any other input, since `c - 'a'` goes negative for an uppercase letter and either throws or corrupts memory in unchecked contexts. Use it when the constraint is stated, and say that you are relying on it, rather than quietly assuming the alphabet."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23126,27 +23191,58 @@
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Check if two binary trees are identical.",
-  "answer": "Recursion: both null → true; one null or values differ → false; else recurse on left-left and right-right subtrees. O(n) time, O(h) space. Compares structure and values simultaneously.",
+  "answer": "**Logic**\n\nCompare structurally and by value at the same time. Two trees are identical when both are null, or both are non-null with equal values and identical left and right subtrees. The null handling comes first: both null is true, exactly one null is false.\n\nO(n) time where n is the smaller tree, since a mismatch short-circuits. O(h) stack space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static bool IsSameTree(TreeNode p, TreeNode q)\n    {\n        if (p == null && q == null) return true;    // both absent: equal\n        if (p == null || q == null) return false;   // exactly one absent: differ\n        if (p.Val != q.Val) return false;\n\n        return IsSameTree(p.Left, q.Left)\n            && IsSameTree(p.Right, q.Right);\n    }\n\n    // Iterative: pairs on a stack, so no recursion depth limit.\n    public static bool IsSameTreeIterative(TreeNode p, TreeNode q)\n    {\n        var stack = new Stack<(TreeNode a, TreeNode b)>();\n        stack.Push((p, q));\n\n        while (stack.Count > 0)\n        {\n            var (a, b) = stack.Pop();\n            if (a == null && b == null) continue;\n            if (a == null || b == null || a.Val != b.Val) return false;\n\n            stack.Push((a.Left, b.Left));\n            stack.Push((a.Right, b.Right));\n        }\n        return true;\n    }\n\n    public static void Main()\n    {\n        var a = new TreeNode(1, new TreeNode(2), new TreeNode(3));\n        var b = new TreeNode(1, new TreeNode(2), new TreeNode(3));\n        Console.WriteLine(IsSameTree(a, b));\n\n        var c = new TreeNode(1, new TreeNode(2), null);\n        var d = new TreeNode(1, null, new TreeNode(2));   // same values, different shape\n        Console.WriteLine(IsSameTree(c, d));\n\n        Console.WriteLine(IsSameTree(null, null));\n        Console.WriteLine(IsSameTree(new TreeNode(1), null));\n        Console.WriteLine(IsSameTree(new TreeNode(1), new TreeNode(2)));\n        Console.WriteLine(IsSameTreeIterative(a, b));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nFalse\nTrue\n```",
   "tags": [
    "trees",
    "recursion",
-   "same-tree"
+   "structural-equality",
+   "traversal",
+   "csharp"
   ],
-  "id": 1595
+  "id": 1595,
+  "followups": [
+   {
+    "q": "Why does the shape matter, when both trees hold the same values?",
+    "a": "Because a tree is defined by its structure, not just its contents. The third test case has values 1 and 2 in both trees, but one has the 2 as a left child and the other as a right child; they represent different data and behave differently under traversal. This is also why comparing two trees by their in-order traversals alone is unsound: different trees can share a traversal, which is precisely why reconstructing a tree needs two traversals rather than one."
+   },
+   {
+    "q": "How would you check whether one tree is a subtree of another?",
+    "a": "For each node of the larger tree whose value matches the candidate root, run this identical-trees check from there. That is O(n·m) in the worst case. The faster answer is to serialise both trees to strings with explicit null markers and ask whether one is a substring of the other, which with KMP is O(n + m). The null markers are essential: without them, serialisations of different trees can collide and produce a false positive."
+   },
+   {
+    "q": "Would you use this to implement Equals on a tree type?",
+    "a": "Only with care. Structural equality for a mutable reference type is a well-known hazard: if a tree is used as a dictionary key and then mutated, its hash changes and the entry becomes unreachable. You would also need `GetHashCode` to agree, computed over the same structure, which is O(n) on every hash. The usual guidance is to keep structural comparison as an explicit method, as here, and leave `Equals` as reference identity unless the type is immutable."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Check if a binary tree is symmetric.",
-  "answer": "Compare the left and right subtrees as mirrors: two nodes match if values are equal and left.left mirrors right.right and left.right mirrors right.left. Recurse or use a queue processing pairs. O(n) time, O(h) space.",
+  "answer": "**Logic**\n\nSymmetry is a mirror property between two subtrees, not a property of one. So compare the left subtree against the right with a helper that pairs them crosswise: `left.Left` against `right.Right`, and `left.Right` against `right.Left`.\n\nThat crossover is the whole question. Comparing the two subtrees straight across tests whether they are identical, not mirrored, which wrongly rejects a genuinely symmetric tree. O(n) time, O(h) stack.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static bool IsSymmetric(TreeNode root) =>\n        root == null || IsMirror(root.Left, root.Right);\n\n    private static bool IsMirror(TreeNode a, TreeNode b)\n    {\n        if (a == null && b == null) return true;\n        if (a == null || b == null) return false;\n        if (a.Val != b.Val) return false;\n\n        // Crosswise: outer pair against outer pair, inner against inner.\n        return IsMirror(a.Left, b.Right)\n            && IsMirror(a.Right, b.Left);\n    }\n\n    // Iterative with a queue: push the pairs that must mirror each other.\n    public static bool IsSymmetricIterative(TreeNode root)\n    {\n        if (root == null) return true;\n        var queue = new Queue<(TreeNode a, TreeNode b)>();\n        queue.Enqueue((root.Left, root.Right));\n\n        while (queue.Count > 0)\n        {\n            var (a, b) = queue.Dequeue();\n            if (a == null && b == null) continue;\n            if (a == null || b == null || a.Val != b.Val) return false;\n\n            queue.Enqueue((a.Left, b.Right));\n            queue.Enqueue((a.Right, b.Left));\n        }\n        return true;\n    }\n\n    public static void Main()\n    {\n        //     1\n        //    / \\\n        //   2   2\n        //  / \\ / \\\n        // 3  4 4  3\n        var sym = new TreeNode(1,\n            new TreeNode(2, new TreeNode(3), new TreeNode(4)),\n            new TreeNode(2, new TreeNode(4), new TreeNode(3)));\n        Console.WriteLine(IsSymmetric(sym));\n        Console.WriteLine(IsSymmetricIterative(sym));\n\n        // Same values, but the children are not mirrored.\n        var notSym = new TreeNode(1,\n            new TreeNode(2, null, new TreeNode(3)),\n            new TreeNode(2, null, new TreeNode(3)));\n        Console.WriteLine(IsSymmetric(notSym));\n\n        Console.WriteLine(IsSymmetric(null));\n        Console.WriteLine(IsSymmetric(new TreeNode(1)));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nTrue\nTrue\n```",
   "tags": [
    "trees",
    "recursion",
-   "symmetric",
-   "mirror"
+   "mirror",
+   "symmetry",
+   "csharp"
   ],
-  "id": 1596
+  "id": 1596,
+  "followups": [
+   {
+    "q": "Why can't you just compare the left subtree to the right subtree directly?",
+    "a": "Because that tests identity rather than mirroring. The second test case has two identical subtrees, each with only a right child, and a direct comparison would call it symmetric; but folding the tree along its centre puts those two children on the same side, so it is not. The crosswise pairing is what encodes the reflection, and getting it wrong produces a function that passes every symmetric test case while also passing some asymmetric ones."
+   },
+   {
+    "q": "Could you invert the right subtree and then compare?",
+    "a": "Yes, and it is a legitimate answer: mirror one side, then run the identical-trees check. It costs an extra O(n) pass and either mutates the tree or allocates a copy, so the direct crosswise comparison is better. It is worth mentioning because it shows you see the relationship between the two problems, which an interviewer often probes by asking them back to back."
+   },
+   {
+    "q": "Why does the iterative version use a queue rather than a stack?",
+    "a": "Either works. The pairs are independent, so the order in which they are checked does not affect the result, only which mismatch is found first. A queue checks level by level, which tends to find a shallow asymmetry sooner and is easier to reason about when debugging; a stack goes depth-first and uses less memory on a wide tree. This is unlike problems such as flattening a tree, where the traversal order is load-bearing."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23211,40 +23307,87 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Lowest common ancestor in a BST.",
-  "answer": "Walk from the root: if both values are less than the node, go left; if both greater, go right; otherwise the node is the split point / LCA. O(h) time, O(1) space (iterative). BST ordering lets you decide direction without exploring subtrees.",
+  "answer": "**Logic**\n\nThe BST ordering does the work. Starting at the root: if both targets are smaller than the current node, the answer must be in the left subtree; if both are larger, it is in the right. The moment they diverge, or one equals the current node, that node is the lowest common ancestor, because it is the first point where their paths split.\n\nNo recursion or extra storage is needed, just a walk down one path: O(h) time, O(1) space. On a balanced tree that is O(log n).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static TreeNode LowestCommonAncestor(TreeNode root, int p, int q)\n    {\n        var node = root;\n\n        while (node != null)\n        {\n            if (p < node.Val && q < node.Val)        // both on the left\n                node = node.Left;\n            else if (p > node.Val && q > node.Val)   // both on the right\n                node = node.Right;\n            else\n                return node;                         // paths split here, or one IS here\n        }\n\n        return null;\n    }\n\n    public static void Main()\n    {\n        //       6\n        //     /   \\\n        //    2     8\n        //   / \\   / \\\n        //  0   4 7   9\n        //     / \\\n        //    3   5\n        var root = new TreeNode(6,\n            new TreeNode(2, new TreeNode(0),\n                new TreeNode(4, new TreeNode(3), new TreeNode(5))),\n            new TreeNode(8, new TreeNode(7), new TreeNode(9)));\n\n        Console.WriteLine(LowestCommonAncestor(root, 2, 8).Val);   // splits at the root\n        Console.WriteLine(LowestCommonAncestor(root, 2, 4).Val);   // an ancestor IS a target\n        Console.WriteLine(LowestCommonAncestor(root, 3, 5).Val);\n        Console.WriteLine(LowestCommonAncestor(root, 7, 9).Val);\n        Console.WriteLine(LowestCommonAncestor(root, 0, 5).Val);\n        Console.WriteLine(LowestCommonAncestor(root, 6, 6).Val);   // same node twice\n    }\n}\n```\n\n**Output**\n\n```\n6\n2\n4\n8\n2\n6\n```",
   "tags": [
    "trees",
    "bst",
-   "lca"
+   "lca",
+   "iterative",
+   "csharp"
   ],
-  "id": 1599
+  "id": 1599,
+  "followups": [
+   {
+    "q": "Why is a node considered its own ancestor here?",
+    "a": "It is a definitional choice that the standard problem makes, and it is worth confirming with the interviewer. Under it, the LCA of 2 and 4 is 2 itself, as the second test shows. The alternative definition, requiring a strict ancestor, would return 6 instead and needs extra handling once you have found the split point. Neither is more correct; what matters is stating which you are implementing, since the two produce different answers on exactly the inputs people forget to test."
+   },
+   {
+    "q": "How does this change for a general binary tree with no ordering?",
+    "a": "You lose the ability to choose a direction, so you must search. Recurse into both subtrees looking for either target: if they are found on opposite sides the current node is the LCA, and if both come back from the same side that side's result bubbles up. That is O(n) time and O(h) space, against O(h) and O(1) here. The contrast is the point of asking both versions, because it shows exactly what the BST invariant is buying you."
+   },
+   {
+    "q": "What if the values might not be in the tree at all?",
+    "a": "This version does not verify that, and will confidently return a node for two values that were never present. If the inputs are untrusted you need an explicit search for each first, which doubles the traversal but makes the contract honest, or a variant that tracks whether both were seen during the descent. It is the same class of issue as an algorithm that assumes a majority element exists: the guarantee lives in the problem statement, not in the code."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Lowest common ancestor in a binary tree (not BST).",
-  "answer": "Recurse: if the node is null or equals p or q, return it. Recurse left and right; if both return non-null, the current node is the LCA. If only one side is non-null, propagate it up. O(n) time, O(h) space.",
+  "answer": "**Logic**\n\nWithout an ordering you cannot pick a direction, so search both subtrees and let the results tell you where the targets are. At each node: if the node itself is one of the targets, return it. Otherwise recurse both ways. If both sides return something, the targets lie on opposite sides and this node is the lowest common ancestor. If only one side returns, pass that result up.\n\nOne post-order pass, O(n) time, O(h) stack space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static TreeNode LowestCommonAncestor(TreeNode root, int p, int q)\n    {\n        if (root == null) return null;\n\n        // A target found here: report it upward. A node counts as its own ancestor.\n        if (root.Val == p || root.Val == q) return root;\n\n        var left = LowestCommonAncestor(root.Left, p, q);\n        var right = LowestCommonAncestor(root.Right, p, q);\n\n        if (left != null && right != null) return root;   // they split here\n\n        return left ?? right;                             // both on one side, or neither\n    }\n\n    public static void Main()\n    {\n        //        3\n        //      /   \\\n        //     5     1\n        //    / \\   / \\\n        //   6   2 0   8\n        //      / \\\n        //     7   4\n        var root = new TreeNode(3,\n            new TreeNode(5, new TreeNode(6),\n                new TreeNode(2, new TreeNode(7), new TreeNode(4))),\n            new TreeNode(1, new TreeNode(0), new TreeNode(8)));\n\n        Console.WriteLine(LowestCommonAncestor(root, 5, 1).Val);\n        Console.WriteLine(LowestCommonAncestor(root, 5, 4).Val);   // ancestor is a target\n        Console.WriteLine(LowestCommonAncestor(root, 7, 4).Val);\n        Console.WriteLine(LowestCommonAncestor(root, 6, 8).Val);\n        Console.WriteLine(LowestCommonAncestor(root, 7, 8).Val);\n        Console.WriteLine(LowestCommonAncestor(root, 6, 2).Val);\n    }\n}\n```\n\n**Output**\n\n```\n3\n5\n2\n3\n3\n5\n```",
   "tags": [
    "trees",
    "lca",
-   "recursion"
+   "post-order",
+   "recursion",
+   "csharp"
   ],
-  "id": 1600
+  "id": 1600,
+  "followups": [
+   {
+    "q": "What happens if only one of the two values exists in the tree?",
+    "a": "It returns that node, as if it were the answer, which is wrong: there is no common ancestor of a present and an absent value. The usual problem statement guarantees both exist, so the code is correct under its stated contract, but shipping it without that guarantee is a bug. The fix is to carry two booleans recording whether each target was actually seen, and return null unless both were, which costs nothing asymptotically."
+   },
+   {
+    "q": "How would you solve it if nodes had parent pointers?",
+    "a": "It becomes the same problem as finding the intersection of two linked lists. Walk up from each node collecting ancestors, and the first shared one is the answer; with a set of one node's ancestors that is O(h) time and O(h) space. Better still, compute both depths, advance the deeper pointer to match, then step both up together for O(1) space. That equivalence between tree ancestry and list intersection is a satisfying thing to point out."
+   },
+   {
+    "q": "What if you must answer many LCA queries on the same tree?",
+    "a": "Then O(n) per query is wasteful and you preprocess instead. Binary lifting stores each node's 2^k-th ancestor, giving O(n log n) build and O(log n) per query. The Euler-tour plus sparse-table approach reduces LCA to a range-minimum query and answers in O(1) after O(n log n) preprocessing. Recognising that repeated queries change the right answer entirely is the real content of the follow-up."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Binary tree in-order/pre-order/post-order traversal (iterative).",
-  "answer": "In-order: push left spine onto a stack, pop and visit, then go right. Pre-order: use a stack pushing right then left children. Post-order: use two stacks or a modified pre-order reversed. All O(n) time, O(h) space, avoiding recursion.",
+  "answer": "**Logic**\n\nEach traversal replaces the call stack with an explicit one.\n\nIn-order: walk left pushing every node, pop and visit, then move right. Pre-order: push the root, then repeatedly pop and visit, pushing right before left so left is processed first. Post-order is the awkward one, because a node can only be visited after both children; the neat trick is to run a modified pre-order visiting root, right, left, then reverse the result.\n\nAll three are O(n) time and O(h) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static IList<int> InOrder(TreeNode root)\n    {\n        var result = new List<int>();\n        var stack = new Stack<TreeNode>();\n        var node = root;\n\n        while (node != null || stack.Count > 0)\n        {\n            while (node != null) { stack.Push(node); node = node.Left; }  // dive left\n            node = stack.Pop();\n            result.Add(node.Val);\n            node = node.Right;\n        }\n        return result;\n    }\n\n    public static IList<int> PreOrder(TreeNode root)\n    {\n        var result = new List<int>();\n        if (root == null) return result;\n\n        var stack = new Stack<TreeNode>();\n        stack.Push(root);\n\n        while (stack.Count > 0)\n        {\n            var node = stack.Pop();\n            result.Add(node.Val);\n            if (node.Right != null) stack.Push(node.Right);   // right first...\n            if (node.Left != null) stack.Push(node.Left);     // ...so left pops first\n        }\n        return result;\n    }\n\n    // root-right-left, reversed, gives left-right-root.\n    public static IList<int> PostOrder(TreeNode root)\n    {\n        var result = new List<int>();\n        if (root == null) return result;\n\n        var stack = new Stack<TreeNode>();\n        stack.Push(root);\n\n        while (stack.Count > 0)\n        {\n            var node = stack.Pop();\n            result.Add(node.Val);\n            if (node.Left != null) stack.Push(node.Left);\n            if (node.Right != null) stack.Push(node.Right);\n        }\n\n        result.Reverse();\n        return result;\n    }\n\n    public static void Main()\n    {\n        //     1\n        //    / \\\n        //   2   3\n        //  / \\\n        // 4   5\n        var root = new TreeNode(1,\n            new TreeNode(2, new TreeNode(4), new TreeNode(5)),\n            new TreeNode(3));\n\n        Console.WriteLine(string.Join(\",\", InOrder(root)));\n        Console.WriteLine(string.Join(\",\", PreOrder(root)));\n        Console.WriteLine(string.Join(\",\", PostOrder(root)));\n        Console.WriteLine(string.Join(\",\", InOrder(null)));\n        Console.WriteLine(string.Join(\",\", PreOrder(new TreeNode(7))));\n    }\n}\n```\n\n**Output**\n\n```\n4,2,5,1,3\n1,2,4,5,3\n4,5,2,3,1\n\n7\n```",
   "tags": [
    "trees",
    "traversal",
    "stack",
-   "iterative"
+   "iterative",
+   "csharp"
   ],
-  "id": 1601
+  "id": 1601,
+  "followups": [
+   {
+    "q": "Why push right before left in the pre-order version?",
+    "a": "Because a stack reverses the order of insertion. Pre-order must visit left before right, so left has to come off the stack first, which means it must go on last. Pushing left first would produce root, right, left, which is the mirror image. It is a small thing that is easy to get backwards, and the reliable way to reason about it is to trace a three-node tree rather than trying to remember the rule."
+   },
+   {
+    "q": "Is the reverse trick for post-order cheating?",
+    "a": "It is a legitimate and widely used solution, but an interviewer may ask for the version without the final reverse, since that one needs O(n) extra ordering work and cannot stream results. The honest single-stack post-order tracks the last visited node and only pops a node once its right child has been processed, or uses a second stack. Say which you are giving and why, because offering the reverse trick while showing you know its limitation reads much better than presenting it as the only way."
+   },
+   {
+    "q": "Can you traverse with O(1) space?",
+    "a": "Yes, with Morris traversal. It temporarily rewires the tree, making each node's in-order predecessor point to it as a thread, follows the thread back up, and then restores the original pointer. That gives O(n) time and O(1) space with no stack at all. The catch is that it mutates the tree during traversal, so it is unusable if anything else can read the tree concurrently, which is worth stating alongside the trick."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23266,42 +23409,87 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Right side view of a binary tree.",
-  "answer": "BFS level order, taking the last node of each level. Or DFS visiting right child first and recording the first node seen at each depth. O(n) time, O(h or n) space. Returns the nodes visible from the right.",
+  "answer": "**Logic**\n\nThe right side view is the last node of each level, so it is a level-order traversal that keeps one node per level. Using the level-snapshot pattern, take the element at index `levelSize - 1` of each level.\n\nThe common mistake is assuming the answer is always a right child. When the right subtree is shorter, a node from the left subtree becomes visible, so the view is genuinely about depth, not about direction. O(n) time, O(w) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static IList<int> RightSideView(TreeNode root)\n    {\n        var view = new List<int>();\n        if (root == null) return view;\n\n        var queue = new Queue<TreeNode>();\n        queue.Enqueue(root);\n\n        while (queue.Count > 0)\n        {\n            int levelSize = queue.Count;\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                var node = queue.Dequeue();\n\n                if (i == levelSize - 1) view.Add(node.Val);   // last node on this level\n\n                if (node.Left != null) queue.Enqueue(node.Left);\n                if (node.Right != null) queue.Enqueue(node.Right);\n            }\n        }\n\n        return view;\n    }\n\n    public static void Main()\n    {\n        //   1\n        //  / \\\n        // 2   3\n        //  \\   \\\n        //   5   4\n        var a = new TreeNode(1,\n            new TreeNode(2, null, new TreeNode(5)),\n            new TreeNode(3, null, new TreeNode(4)));\n        Console.WriteLine(string.Join(\",\", RightSideView(a)));\n\n        //   1\n        //  / \\\n        // 2   3\n        // |\n        // 4          4 is visible: the right subtree does not reach that depth\n        var b = new TreeNode(1,\n            new TreeNode(2, new TreeNode(4), null),\n            new TreeNode(3));\n        Console.WriteLine(string.Join(\",\", RightSideView(b)));\n\n        Console.WriteLine(string.Join(\",\", RightSideView(null)));\n        Console.WriteLine(string.Join(\",\", RightSideView(new TreeNode(1))));\n\n        // A purely left-leaning tree: every node is visible from the right.\n        var left = new TreeNode(1, new TreeNode(2, new TreeNode(3), null), null);\n        Console.WriteLine(string.Join(\",\", RightSideView(left)));\n    }\n}\n```\n\n**Output**\n\n```\n1,3,4\n1,3,4\n\n1\n1,2,3\n```",
   "tags": [
    "trees",
    "bfs",
-   "dfs",
-   "right-view"
+   "level-order",
+   "views",
+   "csharp"
   ],
-  "id": 1603
+  "id": 1603,
+  "followups": [
+   {
+    "q": "Why isn't the answer simply the rightmost path from the root?",
+    "a": "Because visibility depends on depth, not on which child you are. The second test case has a node 4 hanging off the left subtree at a depth the right subtree never reaches, so it is visible from the right even though every step to it went left. The last case makes the point sharply: a purely left-leaning tree is entirely visible from the right. Walking the right children only would return 1,3 and 1 respectively, both wrong."
+   },
+   {
+    "q": "Can you do it depth-first?",
+    "a": "Yes, and it is neat: traverse right subtree before left, carrying the current depth, and record a node only when the depth first exceeds the number of values collected so far. Because the right side is visited first at every level, the first node seen at each new depth is the visible one. It uses O(h) space instead of O(w), which is a real win on a wide tree, and it is a good answer to give after the BFS version."
+   },
+   {
+    "q": "How would you get the left side view, or the top view?",
+    "a": "The left side view is the same code taking index 0 of each level instead of the last. The top view is different in kind: it needs a horizontal offset per node, decrementing going left and incrementing going right, recording the first node seen at each offset, which requires BFS specifically since DFS could reach a deeper node at an offset first. That distinction, where BFS is mandatory rather than merely convenient, is worth making explicit."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Path sum: does a root-to-leaf path sum to a target?",
-  "answer": "Recurse subtracting the node's value from the target; at a leaf, check if the remaining target equals the leaf value (or if remaining is 0 after subtracting). Return true if any path matches. O(n) time, O(h) space. Path Sum II collects all such paths via backtracking.",
+  "answer": "**Logic**\n\nSubtract as you descend. At each node, reduce the remaining target by the node's value, then ask the same question of its children. At a leaf, the answer is whether the remainder is exactly zero.\n\nThe detail that catches people is what counts as a leaf: a node with no children at all, not a node with one null child. Treating a half-empty node as a leaf accepts paths that stop in mid-air. O(n) time, O(h) stack.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static bool HasPathSum(TreeNode root, int target)\n    {\n        if (root == null) return false;\n\n        int remaining = target - root.Val;\n\n        // A leaf is a node with NO children, not one with a single null child.\n        if (root.Left == null && root.Right == null) return remaining == 0;\n\n        return HasPathSum(root.Left, remaining)\n            || HasPathSum(root.Right, remaining);\n    }\n\n    public static void Main()\n    {\n        //       5\n        //      / \\\n        //     4   8\n        //    /   / \\\n        //   11  13  4\n        //  /  \\      \\\n        // 7    2      1\n        var root = new TreeNode(5,\n            new TreeNode(4, new TreeNode(11, new TreeNode(7), new TreeNode(2)), null),\n            new TreeNode(8, new TreeNode(13), new TreeNode(4, null, new TreeNode(1))));\n\n        Console.WriteLine(HasPathSum(root, 22));   // 5+4+11+2\n        Console.WriteLine(HasPathSum(root, 26));   // 5+8+13\n        Console.WriteLine(HasPathSum(root, 9));    // 5+4 stops at a non-leaf\n        Console.WriteLine(HasPathSum(null, 0));    // no path exists at all\n        Console.WriteLine(HasPathSum(new TreeNode(1), 1));\n\n        // Negative values: the sum is not monotonic, so no early exit is possible.\n        var neg = new TreeNode(1, new TreeNode(-2, new TreeNode(3), null), null);\n        Console.WriteLine(HasPathSum(neg, 2));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nFalse\nTrue\nTrue\n```",
   "tags": [
    "trees",
-   "dfs",
+   "recursion",
    "path-sum",
-   "recursion"
+   "leaf",
+   "csharp"
   ],
-  "id": 1604
+  "id": 1604,
+  "followups": [
+   {
+    "q": "Why does an empty tree return false even when the target is 0?",
+    "a": "Because the question asks whether a root-to-leaf path exists with that sum, and an empty tree has no paths at all, so no path can satisfy anything. Returning true for a target of 0 would be treating the absence of a path as a path of sum zero, which also breaks the recursion: a node with one null child would then accept a path descending into nothing. The fourth test case pins this down."
+   },
+   {
+    "q": "Can you stop early once the running sum exceeds the target?",
+    "a": "Only if every value is guaranteed non-negative, in which case the sum grows monotonically and overshooting means the branch is dead. With negative values allowed, as in the last test case, a path can exceed the target and come back, so pruning would produce wrong answers. This is the same monotonicity question that decides whether a sliding window is valid for subarray sums, and the honest answer is to ask about the value range before optimising."
+   },
+   {
+    "q": "How does path sum III differ?",
+    "a": "It counts paths that may start and end anywhere, as long as they go downward, so the root-to-leaf structure disappears. The efficient solution uses prefix sums along the current root-to-node path with a hash map of counts, exactly as in subarray sum equals k, giving O(n). The crucial extra step is removing the current node's prefix from the map as the recursion unwinds, otherwise sums leak across sibling branches. It is a nice demonstration that a tree path problem can reduce to an array technique."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Hard",
   "question": "Binary tree maximum path sum (any node to any node).",
-  "answer": "Post-order recursion returning the max downward gain from each node (max(0, left) and max(0, right) plus node value). At each node, update a global max with node.val + leftGain + rightGain (a path through the node). Return node.val + max(leftGain, rightGain). O(n) time.",
+  "answer": "**Logic**\n\nA path may start and end anywhere, so at each node consider the path that turns at it: the node's value plus the best downward contribution from each side. Track the maximum of those as you go.\n\nTwo subtleties. First, a negative contribution should be discarded with `Math.Max(0, ...)`, since leaving a subtree out is always at least as good. Second, the value returned to the parent is the node plus only *one* side, because a parent cannot use a path that already turned. That difference between what is recorded and what is returned is the entire problem.\n\nO(n) time, O(h) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static int MaxPathSum(TreeNode root)\n    {\n        int best = int.MinValue;\n        Gain(root, ref best);\n        return best;\n    }\n\n    // Returns the best DOWNWARD path starting at this node (one side only),\n    // while recording the best path that TURNS at this node.\n    private static int Gain(TreeNode node, ref int best)\n    {\n        if (node == null) return 0;\n\n        // A negative branch is worth skipping entirely, hence the clamp at 0.\n        int left = Math.Max(0, Gain(node.Left, ref best));\n        int right = Math.Max(0, Gain(node.Right, ref best));\n\n        int throughHere = node.Val + left + right;\n        if (throughHere > best) best = throughHere;\n\n        return node.Val + Math.Max(left, right);   // the parent can only use one side\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxPathSum(new TreeNode(1, new TreeNode(2), new TreeNode(3))));\n\n        //    -10\n        //    /  \\\n        //   9   20\n        //      /  \\\n        //     15   7      best is 15+20+7, skipping the root\n        var t = new TreeNode(-10,\n            new TreeNode(9),\n            new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n        Console.WriteLine(MaxPathSum(t));\n\n        Console.WriteLine(MaxPathSum(new TreeNode(-3)));            // all negative\n        Console.WriteLine(MaxPathSum(new TreeNode(2, new TreeNode(-1), null)));\n        Console.WriteLine(MaxPathSum(new TreeNode(-2, new TreeNode(-1), null)));\n    }\n}\n```\n\n**Output**\n\n```\n6\n42\n-3\n2\n-1\n```",
   "tags": [
    "trees",
-   "dfs",
-   "max-path-sum",
-   "hard"
+   "post-order",
+   "kadane",
+   "max-path",
+   "csharp"
   ],
-  "id": 1605
+  "id": 1605,
+  "followups": [
+   {
+    "q": "Why does the method return one side but record both?",
+    "a": "Because a path is a simple path: it cannot branch. A path that uses both of a node's children already turns at that node, so it cannot then continue upward through the parent without revisiting the node. The parent therefore needs the best straight-line descent, which is the node plus the better single side. Recording both while returning one is how a single traversal answers a question about paths that turn anywhere. Returning the recorded value instead is the standard bug, and it yields sums for paths that are not paths."
+   },
+   {
+    "q": "Why initialise best to int.MinValue rather than 0?",
+    "a": "Because the path must contain at least one node, so an all-negative tree has a negative answer, and starting at 0 would wrongly return 0 for it. The last two test cases pin this down: a single -3 node must give -3. Note the asymmetry with the clamp inside the function, which is correct precisely because skipping a subtree is allowed while skipping every node is not."
+   },
+   {
+    "q": "How is this related to Kadane's algorithm?",
+    "a": "It is Kadane's on a tree. Kadane's asks whether to extend the previous run or start fresh, which is exactly what `Math.Max(0, gain)` decides for each branch, and it tracks a global best separately from the running value, just as here. Seeing maximum subarray, maximum path sum and house robber III as the same recurrence over different structures is the point of the cluster, and saying so out loud lands well."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23322,56 +23510,116 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Kth smallest element in a BST.",
-  "answer": "In-order traversal yields sorted order; stop at the kth visited node. Iterative with a stack lets you stop early: O(h + k) time. If frequent queries, augment nodes with subtree counts for O(h) lookups.",
+  "answer": "**Logic**\n\nAn in-order traversal of a BST yields values in ascending order, so the kth element visited is the answer. Do it iteratively with an explicit stack and stop as soon as the count reaches k, rather than materialising the whole traversal.\n\nThat early exit matters: it makes the cost O(h + k) rather than O(n), so finding the smallest element in a large balanced tree is logarithmic rather than linear.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static int KthSmallest(TreeNode root, int k)\n    {\n        var stack = new Stack<TreeNode>();\n        var node = root;\n        int seen = 0;\n\n        while (node != null || stack.Count > 0)\n        {\n            while (node != null) { stack.Push(node); node = node.Left; }\n\n            node = stack.Pop();\n            if (++seen == k) return node.Val;    // stop the moment we arrive\n\n            node = node.Right;\n        }\n\n        throw new ArgumentOutOfRangeException(nameof(k), \"k exceeds the number of nodes\");\n    }\n\n    public static void Main()\n    {\n        //     5\n        //    / \\\n        //   3   6\n        //  / \\\n        // 2   4\n        //  \n        var root = new TreeNode(5,\n            new TreeNode(3, new TreeNode(2, new TreeNode(1), null), new TreeNode(4)),\n            new TreeNode(6));\n\n        Console.WriteLine(KthSmallest(root, 1));\n        Console.WriteLine(KthSmallest(root, 3));\n        Console.WriteLine(KthSmallest(root, 6));    // the largest\n\n        Console.WriteLine(KthSmallest(new TreeNode(1), 1));\n\n        try { KthSmallest(root, 99); }\n        catch (ArgumentOutOfRangeException e) { Console.WriteLine(e.ParamName + \" out of range\"); }\n    }\n}\n```\n\n**Output**\n\n```\n1\n3\n6\n1\nk out of range\n```",
   "tags": [
    "trees",
    "bst",
    "in-order",
-   "kth-smallest"
+   "early-exit",
+   "csharp"
   ],
-  "id": 1607
+  "id": 1607,
+  "followups": [
+   {
+    "q": "What if the tree is modified frequently and this query is hot?",
+    "a": "Augment each node with the size of its subtree. Then finding the kth smallest is a descent: compare k against the left subtree's size to decide whether to go left, take the current node, or go right with k reduced. That is O(h) rather than O(h + k), and insertions and deletions maintain the counts in O(h) as they already walk the path. This is the standard order-statistic tree, and proposing it is the expected answer to this follow-up."
+   },
+   {
+    "q": "Why iterative rather than recursive here?",
+    "a": "Because the early exit is awkward to express in a recursive in-order traversal: you have to thread a counter and a found flag through every frame, or throw an exception to unwind, both of which are uglier than the explicit stack. The iterative version also cannot overflow the stack on a degenerate tree, which a recursive version can. When a traversal needs to stop partway, an explicit stack is usually the cleaner tool."
+   },
+   {
+    "q": "How would you get the kth LARGEST instead?",
+    "a": "Mirror the traversal: go right, visit, then left, which yields descending order, and take the kth. It is a two-character change and avoids the temptation to compute the total node count and ask for the (n-k+1)th smallest, which requires an extra full traversal to count. That reversed in-order walk is the same technique that answers 'convert a BST to a greater tree', where each node is replaced by the sum of all larger values."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Serialize and deserialize a binary tree.",
-  "answer": "Preorder with null markers: serialize by recording node values and '#' for nulls (comma-separated). Deserialize by reading tokens in the same preorder, building nodes recursively, and returning null on '#'. O(n) time. BFS-based serialization is an alternative.",
+  "answer": "**Logic**\n\nA pre-order traversal that writes an explicit marker for every null is enough to reconstruct the tree exactly. Without null markers the encoding is ambiguous, because different trees can share a traversal; with them, the structure is fully determined and deserialisation is a single recursive pass consuming tokens in the same order.\n\nBoth directions are O(n) time and O(n) space. This is the general case: for a BST alone you could omit nulls and use the ordering to rebuild, and for a complete tree an array layout would do.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Codec\n{\n    private const string Null = \"#\";\n\n    public string Serialize(TreeNode root)\n    {\n        var sb = new StringBuilder();\n        Write(root, sb);\n        return sb.ToString().TrimEnd(',');\n    }\n\n    private void Write(TreeNode node, StringBuilder sb)\n    {\n        if (node == null) { sb.Append(Null).Append(','); return; }\n\n        sb.Append(node.Val).Append(',');   // pre-order: root, then left, then right\n        Write(node.Left, sb);\n        Write(node.Right, sb);\n    }\n\n    public TreeNode Deserialize(string data)\n    {\n        if (string.IsNullOrEmpty(data)) return null;\n        var tokens = new Queue<string>(data.Split(','));\n        return Read(tokens);\n    }\n\n    private TreeNode Read(Queue<string> tokens)\n    {\n        if (tokens.Count == 0) return null;\n\n        string token = tokens.Dequeue();\n        if (token == Null) return null;\n\n        // Same order as Write, so the tokens line up exactly.\n        return new TreeNode(int.Parse(token))\n        {\n            Left = Read(tokens),\n            Right = Read(tokens),\n        };\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var codec = new Codec();\n\n        var root = new TreeNode(1,\n            new TreeNode(2),\n            new TreeNode(3, new TreeNode(4), new TreeNode(5)));\n\n        string s = codec.Serialize(root);\n        Console.WriteLine(s);\n\n        // Round-trip: serialising the rebuilt tree must give the identical string.\n        Console.WriteLine(codec.Serialize(codec.Deserialize(s)) == s);\n\n        Console.WriteLine(codec.Serialize(null));\n        Console.WriteLine(codec.Serialize(codec.Deserialize(codec.Serialize(null))));\n\n        var negative = new TreeNode(-7, new TreeNode(-8), null);\n        Console.WriteLine(codec.Serialize(negative));\n\n        var skew = new TreeNode(1, new TreeNode(2, new TreeNode(3), null), null);\n        Console.WriteLine(codec.Serialize(skew));\n    }\n}\n```\n\n**Output**\n\n```\n1,2,#,#,3,4,#,#,5,#,#\nTrue\n#\n#\n-7,-8,#,#,#\n1,2,3,#,#,#,#\n```",
   "tags": [
    "trees",
-   "serialize",
-   "deserialize",
-   "preorder"
+   "serialization",
+   "pre-order",
+   "round-trip",
+   "csharp"
   ],
-  "id": 1608
+  "id": 1608,
+  "followups": [
+   {
+    "q": "Why are the null markers essential?",
+    "a": "Because without them the encoding is ambiguous: the pre-order sequence 1,2 could mean 2 is the left child of 1 or the right child, and those are different trees. That ambiguity is the same reason reconstructing a tree from a single traversal is impossible, and why the classic problem gives you both pre-order and in-order. The null markers restore the missing information by making the shape explicit, which is why they cost space but buy a single-traversal encoding."
+   },
+   {
+    "q": "This uses a delimiter and int.Parse. What breaks in production?",
+    "a": "Several things. If node values were strings rather than ints, any value containing a comma or a '#' would corrupt the format, so you would need escaping or a length-prefixed encoding. Malformed input causes int.Parse to throw rather than reporting a parse failure, so a real deserialiser should validate and return a clear error. And a deeply skewed tree overflows the stack in both directions. A production version would use a length-prefixed binary format and an explicit stack, which is roughly what protobuf does."
+   },
+   {
+    "q": "How would you serialise an n-ary tree, where nodes have any number of children?",
+    "a": "Write each node followed by its child count, then its children recursively. The count replaces the null markers, since it says exactly how many sub-trees to consume, and it generalises to any arity without a fixed left and right. The alternative is a sentinel marking the end of a child list, which is closer to the format here. Either works; the count version is more compact and the sentinel version is easier to read by eye."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Diameter of a binary tree.",
-  "answer": "Post-order recursion returning each node's height; the diameter through a node = leftHeight + rightHeight. Track a global max of these sums. Return 1 + max(leftHeight, rightHeight). O(n) time, O(h) space. Diameter counts edges (or nodes-1).",
+  "answer": "**Logic**\n\nThe diameter is the longest path between any two nodes, which need not pass through the root. For each node, the longest path *through* it is the height of its left subtree plus the height of its right subtree. So compute heights bottom-up and, at every node, update a running maximum with that sum.\n\nThe key is that the recursion returns a height while the answer is tracked on the side. Trying to return the diameter directly fails, because a parent needs its children's heights, not their diameters. One post-order pass, O(n) time, O(h) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static int Diameter(TreeNode root)\n    {\n        int best = 0;\n        Height(root, ref best);\n        return best;   // measured in edges\n    }\n\n    // Returns the height of this subtree, and updates the best diameter seen.\n    private static int Height(TreeNode node, ref int best)\n    {\n        if (node == null) return 0;\n\n        int left = Height(node.Left, ref best);\n        int right = Height(node.Right, ref best);\n\n        // Longest path passing THROUGH this node, in edges.\n        if (left + right > best) best = left + right;\n\n        return 1 + Math.Max(left, right);   // what the parent needs\n    }\n\n    public static void Main()\n    {\n        //     1\n        //    / \\\n        //   2   3\n        //  / \\\n        // 4   5        longest: 4-2-1-3 = 3 edges\n        var root = new TreeNode(1,\n            new TreeNode(2, new TreeNode(4), new TreeNode(5)),\n            new TreeNode(3));\n        Console.WriteLine(Diameter(root));\n\n        Console.WriteLine(Diameter(new TreeNode(1, new TreeNode(2), null)));\n        Console.WriteLine(Diameter(new TreeNode(1)));\n        Console.WriteLine(Diameter(null));\n\n        // The diameter avoids the root entirely: it lies inside the left subtree.\n        var skew = new TreeNode(1,\n            new TreeNode(2,\n                new TreeNode(4, new TreeNode(6), null),\n                new TreeNode(5, null, new TreeNode(7))),\n            null);\n        Console.WriteLine(Diameter(skew));\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n0\n0\n4\n```",
   "tags": [
    "trees",
-   "dfs",
+   "post-order",
+   "height",
    "diameter",
-   "height"
+   "csharp"
   ],
-  "id": 1609
+  "id": 1609,
+  "followups": [
+   {
+    "q": "Why must the recursion return height rather than diameter?",
+    "a": "Because the two quantities compose differently. A node's height is one plus the larger child height, which is a local rule. Its diameter is not derivable from its children's diameters, since the longest path through it depends on how deep each side reaches, not on how long the paths within each side were. So the traversal computes the composable quantity and accumulates the non-composable one in a side variable. That pattern, return one thing and accumulate another, recurs in maximum path sum and house robber III."
+   },
+   {
+    "q": "Edges or nodes: which is the diameter?",
+    "a": "Ask, because both conventions exist and they differ by one. This implementation counts edges, so a single node has diameter 0 and the last test case gives 4. If the problem counts nodes on the path, the answer is edges plus one, and a single node has diameter 1. Getting this wrong is an off-by-one that passes most tests and fails the degenerate ones, which is exactly why the empty and single-node cases are in the output above."
+   },
+   {
+    "q": "Why pass best by ref rather than using a field?",
+    "a": "To keep the method free of shared mutable state, which makes it safe to call concurrently on different trees and obvious to read. A private field would work in single-threaded code but turns the method into something that cannot be reentered, and two threads calling it at once would corrupt each other's results. The alternative is returning a tuple of height and best diameter, which is purely functional and arguably cleaner, at the cost of slightly noisier code."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Check if a binary tree is height-balanced.",
-  "answer": "Bottom-up recursion returning each subtree's height, or -1 if unbalanced. A node is unbalanced if |leftHeight - rightHeight| > 1 or a child is unbalanced. Propagate -1 upward to short-circuit. O(n) time (vs O(n^2) naive), O(h) space.",
+  "answer": "**Logic**\n\nBalanced means every node's two subtree heights differ by at most one. The naive version computes the height at every node and is O(n²), because heights are recomputed on the way down.\n\nThe linear version computes heights bottom-up and propagates failure. Use -1 as a sentinel meaning 'already unbalanced': as soon as a subtree reports it, every ancestor short-circuits without further work. One post-order pass, O(n) time, O(h) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static bool IsBalanced(TreeNode root) => Height(root) != -1;\n\n    // Returns the height, or -1 meaning \"a subtree below here is unbalanced\".\n    private static int Height(TreeNode node)\n    {\n        if (node == null) return 0;\n\n        int left = Height(node.Left);\n        if (left == -1) return -1;            // bail out early\n\n        int right = Height(node.Right);\n        if (right == -1) return -1;\n\n        if (Math.Abs(left - right) > 1) return -1;\n\n        return 1 + Math.Max(left, right);\n    }\n\n    public static void Main()\n    {\n        //     3\n        //    / \\\n        //   9  20\n        //     /  \\\n        //    15   7\n        var balanced = new TreeNode(3,\n            new TreeNode(9),\n            new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n        Console.WriteLine(IsBalanced(balanced));\n\n        //       1\n        //      / \\\n        //     2   2\n        //    / \\\n        //   3   3\n        //  / \\\n        // 4   4\n        var unbalanced = new TreeNode(1,\n            new TreeNode(2,\n                new TreeNode(3, new TreeNode(4), new TreeNode(4)),\n                new TreeNode(3)),\n            new TreeNode(2));\n        Console.WriteLine(IsBalanced(unbalanced));\n\n        Console.WriteLine(IsBalanced(null));\n        Console.WriteLine(IsBalanced(new TreeNode(1)));\n\n        // Height differs by exactly one: still balanced.\n        Console.WriteLine(IsBalanced(new TreeNode(1, new TreeNode(2), null)));\n\n        // Differs by two: not.\n        Console.WriteLine(IsBalanced(new TreeNode(1, new TreeNode(2, new TreeNode(3), null), null)));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nTrue\nFalse\n```",
   "tags": [
    "trees",
-   "balanced",
-   "height",
-   "dfs"
+   "balance",
+   "post-order",
+   "sentinel",
+   "csharp"
   ],
-  "id": 1610
+  "id": 1610,
+  "followups": [
+   {
+    "q": "Why is the naive version O(n squared)?",
+    "a": "Because it asks each node for the heights of its subtrees, and computing a height is itself a full traversal of that subtree. So a node at depth d has its subtree walked once for every ancestor above it. On a degenerate tree that is the classic 1+2+3+...+n sum, giving quadratic time. The fix is the standard one for this shape of problem: compute the expensive quantity once on the way back up and pass it to the parent, rather than asking for it again on the way down."
+   },
+   {
+    "q": "Is a sentinel of -1 safe here?",
+    "a": "Yes, because a real height is always at least 0, so -1 is outside the valid range and cannot be confused with data. That is the test any in-band sentinel must pass, and it is why int.MinValue fails as a BST bound while -1 succeeds here. If you disliked it, the alternatives are returning a tuple of height and a balanced flag, or a nullable int, both of which are more explicit at a small cost in noise."
+   },
+   {
+    "q": "What definition of balanced do real self-balancing trees use?",
+    "a": "AVL trees use exactly this one, a height difference of at most one at every node, which keeps them tightly balanced but makes insertions rotate more often. Red-black trees use a looser colour-based invariant that allows one path to be up to twice as long as another, trading slightly worse lookup depth for noticeably cheaper insertion and deletion. That is why .NET's SortedDictionary and most standard libraries use red-black rather than AVL: mutation cost usually matters more than the last few percent of lookup depth."
+   }
+  ]
  },
  {
   "category": "Coding",
