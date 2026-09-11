@@ -21346,66 +21346,145 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Product of Array Except Self (no division).",
-  "answer": "Build a prefix-product array (product of all elements to the left) and a suffix product (to the right), then result[i] = prefix[i] * suffix[i]. Optimize to O(1) extra space by computing prefixes into the result array, then multiplying by a running suffix product in a second pass. O(n) time.",
+  "answer": "**Logic**\n\nFor each position the answer is the product of everything to its left times the product of everything to its right. Compute both with two sweeps: a left-to-right pass writing the running prefix product into the output, then a right-to-left pass multiplying by the running suffix product held in a single variable. O(n) time, and O(1) extra space if the output array does not count.\n\nDivision is banned because a single zero makes it invalid, and two zeros make it invalid everywhere. The prefix-suffix method handles zeros with no special cases at all.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int[] ProductExceptSelf(int[] nums)\n    {\n        int n = nums.Length;\n        var result = new int[n];\n\n        // Pass 1: result[i] = product of everything strictly left of i.\n        result[0] = 1;\n        for (int i = 1; i < n; i++)\n            result[i] = result[i - 1] * nums[i - 1];\n\n        // Pass 2: multiply in the product of everything strictly right of i,\n        // carried in a single variable rather than a second array.\n        int suffix = 1;\n        for (int i = n - 1; i >= 0; i--)\n        {\n            result[i] *= suffix;\n            suffix *= nums[i];\n        }\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", ProductExceptSelf(new[] { 1, 2, 3, 4 })));\n        Console.WriteLine(string.Join(\",\", ProductExceptSelf(new[] { -1, 1, 0, -3, 3 })));\n        Console.WriteLine(string.Join(\",\", ProductExceptSelf(new[] { 0, 0 })));\n        Console.WriteLine(string.Join(\",\", ProductExceptSelf(new[] { 2, 3 })));\n        Console.WriteLine(string.Join(\",\", ProductExceptSelf(new[] { 5 })));\n    }\n}\n```\n\n**Output**\n\n```\n24,12,8,6\n0,0,9,0,0\n0,0\n3,2\n1\n```\n\nThe single-element case returning `1` is the empty product, which is correct: there is nothing to multiply.",
   "tags": [
    "arrays",
    "prefix-product",
-   "two-pass"
+   "two-pass",
+   "no-division",
+   "csharp"
   ],
-  "id": 1506
+  "id": 1506,
+  "followups": [
+   {
+    "q": "Why is division disallowed, beyond it being an arbitrary rule?",
+    "a": "Because it breaks on zeros. With one zero, every other position is 0 and the zero position is the product of the rest, so you need a special case. With two or more zeros every position is 0, so you need a second special case. And dividing the total product by each element means the total can overflow even when no individual answer would. The prefix-suffix solution has none of those problems, which is why the constraint is really pointing you at the better algorithm rather than forbidding a shortcut."
+   },
+   {
+    "q": "Is this really O(1) space when it allocates an output array?",
+    "a": "By the usual convention, yes: space required for the output does not count toward auxiliary space, since the problem demands it. The claim is that beyond the output you use only a constant number of variables, which is true here because the suffix product is one int rather than a second array. Say it that way in an interview, since claiming O(1) flatly while allocating an array invites a challenge you would then have to walk back."
+   },
+   {
+    "q": "How would you handle overflow on large inputs?",
+    "a": "Products grow much faster than sums, so even a modest array of values around 1,000 overflows int within four elements. The options are to accumulate in `long` and document the assumption about input range, to use `System.Numerics.BigInteger` at a significant performance cost, or to work modulo some value if the problem asks for that. The critical part in an interview is naming the risk, because unlike the sum-based problems here it bites at realistic sizes, not just theoretical ones."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find the missing number in an array containing 0..n with one missing.",
-  "answer": "Sum approach: expected sum n*(n+1)/2 minus actual sum gives the missing number. Or XOR all indices 0..n and all values; equal numbers cancel, leaving the missing one (avoids overflow). Both O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nTwo clean approaches. The sum approach: the numbers 0 to n add up to `n(n+1)/2`, so subtracting the actual sum leaves the missing value. The XOR approach: XOR every index and every value together; each present number appears twice and cancels, leaving only the missing one.\n\nBoth are O(n) time and O(1) space. XOR is preferred when overflow is a concern, since the sum of a large range can exceed `int.MaxValue` while XOR never overflows by construction.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Gauss: expected total minus actual total. Use long for the expected sum,\n    // because n(n+1)/2 overflows int well before n reaches int.MaxValue.\n    public static int MissingNumberSum(int[] nums)\n    {\n        int n = nums.Length;\n        long expected = (long)n * (n + 1) / 2;\n        long actual = 0;\n        foreach (int v in nums) actual += v;\n        return (int)(expected - actual);\n    }\n\n    // XOR: a ^ a == 0, so every matched index/value pair cancels out.\n    public static int MissingNumberXor(int[] nums)\n    {\n        int result = nums.Length;              // start with n, the index never visited\n        for (int i = 0; i < nums.Length; i++)\n            result ^= i ^ nums[i];\n        return result;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MissingNumberSum(new[] { 3, 0, 1 }));\n        Console.WriteLine(MissingNumberXor(new[] { 3, 0, 1 }));\n        Console.WriteLine(MissingNumberSum(new[] { 0, 1 }));          // 2 missing at the end\n        Console.WriteLine(MissingNumberXor(new[] { 1 }));             // 0 missing at the start\n        Console.WriteLine(MissingNumberSum(new[] { 9, 6, 4, 2, 3, 5, 7, 0, 1 }));\n        Console.WriteLine(MissingNumberXor(new[] { 9, 6, 4, 2, 3, 5, 7, 0, 1 }));\n    }\n}\n```\n\n**Output**\n\n```\n2\n2\n2\n0\n8\n8\n```",
   "tags": [
    "arrays",
    "xor",
-   "math",
-   "missing-number"
+   "gauss-sum",
+   "overflow",
+   "csharp"
   ],
-  "id": 1507
+  "id": 1507,
+  "followups": [
+   {
+    "q": "Why prefer XOR over the sum?",
+    "a": "Because it cannot overflow. The sum of 0 to n grows quadratically, so for n around 65,536 the total already exceeds int.MaxValue and an int accumulator wraps silently, giving a wrong answer with no exception. Using long, as above, fixes it for any realistic n, but XOR sidesteps the question entirely: every intermediate value stays within the range of the inputs. XOR also extends naturally to the harder variants where sums do not."
+   },
+   {
+    "q": "What if two numbers are missing?",
+    "a": "The single equation is no longer enough, so you need two. Sum and sum-of-squares give a solvable pair of equations, though the squares overflow quickly. The cleaner route is XOR everything to get `a ^ b`, take any set bit of that result, which must be a bit where a and b differ, and partition all indices and values by that bit: XOR-ing each partition independently yields a and b separately. Same O(n) time and O(1) space, and it is the standard 'two single numbers' technique."
+   },
+   {
+    "q": "What if you may modify the array and want to find it without arithmetic at all?",
+    "a": "Cyclic sort: walk the array placing each value v at index v by swapping, then scan for the first index whose value does not match. That is O(n) time and O(1) space, and it generalises to the whole family of problems where values are constrained to the range 0..n, including finding all missing numbers, finding duplicates, and finding the first missing positive. It is worth knowing as a pattern, since one implementation covers four common questions."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Move all zeros to the end while keeping non-zero order.",
-  "answer": "Two pointers: keep an insert position; iterate, and whenever you see a non-zero, place it at insertPos and increment. After the pass, fill the rest with zeros (or swap as you go). O(n) time, O(1) space, stable order preserved.",
+  "answer": "**Logic**\n\nA write pointer marking where the next non-zero belongs. Scan with a read pointer; every time a non-zero is found, write it at the write position and advance it. After the scan the first `write` slots hold all non-zeros in their original relative order, so fill the rest with zeros. Two passes at most, O(n) time, O(1) space, and stable by construction.\n\nThe variant that swaps instead of overwriting does it in a single pass, which is neater but performs a write even when the element is already in place.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void MoveZeroes(int[] nums)\n    {\n        if (nums == null || nums.Length < 2) return;\n\n        int write = 0;\n\n        // Pass 1: compact the non-zeros to the front, order preserved.\n        for (int read = 0; read < nums.Length; read++)\n            if (nums[read] != 0) nums[write++] = nums[read];\n\n        // Pass 2: everything from write onwards must be zero.\n        while (write < nums.Length) nums[write++] = 0;\n    }\n\n    // Single pass: swap instead of overwrite. Same complexity, fewer passes,\n    // but it writes even when the element is already where it belongs.\n    public static void MoveZeroesSwap(int[] nums)\n    {\n        int write = 0;\n        for (int read = 0; read < nums.Length; read++)\n            if (nums[read] != 0)\n                (nums[write], nums[read]) = (nums[read], nums[write++]);\n    }\n\n    public static void Main()\n    {\n        var a = new[] { 0, 1, 0, 3, 12 };\n        MoveZeroes(a);\n        Console.WriteLine(string.Join(\",\", a));\n\n        var b = new[] { 0, 0, 1 };\n        MoveZeroes(b);\n        Console.WriteLine(string.Join(\",\", b));\n\n        var c = new[] { 1, 2, 3 };            // nothing to move\n        MoveZeroes(c);\n        Console.WriteLine(string.Join(\",\", c));\n\n        var d = new[] { 0, 0 };               // all zeros\n        MoveZeroes(d);\n        Console.WriteLine(string.Join(\",\", d));\n\n        var e = new[] { 4, 0, 5, 0, 0, 6 };\n        MoveZeroesSwap(e);\n        Console.WriteLine(string.Join(\",\", e));\n    }\n}\n```\n\n**Output**\n\n```\n1,3,12,0,0\n1,0,0\n1,2,3\n0,0\n4,5,6,0,0,0\n```",
   "tags": [
    "arrays",
-   "two-pointer",
-   "in-place"
+   "two-pointers",
+   "in-place",
+   "partition",
+   "csharp"
   ],
-  "id": 1508
+  "id": 1508,
+  "followups": [
+   {
+    "q": "Why not just remove the zeros and append them?",
+    "a": "Because building a new list allocates O(n) extra memory, and the problem asks for an in-place transform. It also changes the method's contract: the caller holds a reference to the original array and expects to see it modified, so returning a new array silently does nothing from their point of view. That mismatch between an in-place signature returning void and an implementation that builds a copy is a real bug, not a style preference."
+   },
+   {
+    "q": "Which version would you ship, two-pass or swap?",
+    "a": "Usually the two-pass one. It touches memory sequentially in both passes, which is cache-friendly, and the second pass is a trivial fill the JIT can vectorise. The swap version looks cleverer but performs a redundant self-swap for every non-zero in an array with no zeros, meaning the common case of already-clean data costs the most. If the array is mostly zeros the swap version wins. Measure rather than assume, but the two-pass version is the safer default."
+   },
+   {
+    "q": "How would you generalise this to move all elements failing an arbitrary predicate to the end?",
+    "a": "Replace `nums[read] != 0` with `predicate(nums[read])` and the fill value with whatever the caller supplies, or drop the second pass entirely and return the count of kept elements, which is exactly the partition primitive underlying `List<T>.RemoveAll` and C++'s `std::remove_if`. That framing, as a stable partition rather than a zero-moving trick, is what lets the same five lines solve a whole family of problems."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Container With Most Water: max area between two vertical lines.",
-  "answer": "Two pointers at both ends. Area = min(height[l], height[r]) * (r - l). Move the pointer at the shorter line inward (moving the taller can't increase area). Update max as you go. O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nTwo pointers at both ends. The area is the shorter of the two lines times the distance between them. Move the pointer at the shorter line inward, because moving the taller one can never help: the width always shrinks, and the height is capped by the shorter line, so the area cannot improve. Moving the shorter one is the only move with any chance of a taller minimum. O(n) time, O(1) space.\n\nThat exchange argument is the whole question. Brute force over all pairs is O(n²).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxArea(int[] height)\n    {\n        if (height == null || height.Length < 2) return 0;\n\n        int left = 0, right = height.Length - 1, best = 0;\n\n        while (left < right)\n        {\n            int shorter = Math.Min(height[left], height[right]);\n            int area = shorter * (right - left);\n            if (area > best) best = area;\n\n            // Only moving the shorter line can ever raise the limiting height.\n            if (height[left] < height[right]) left++;\n            else right--;\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxArea(new[] { 1, 8, 6, 2, 5, 4, 8, 3, 7 }));\n        Console.WriteLine(MaxArea(new[] { 1, 1 }));\n        Console.WriteLine(MaxArea(new[] { 4, 3, 2, 1, 4 }));   // the two outermost\n        Console.WriteLine(MaxArea(new[] { 1, 2, 1 }));\n        Console.WriteLine(MaxArea(new[] { 5 }));\n        Console.WriteLine(MaxArea(new[] { 2, 3, 4, 5, 18, 17, 6 }));\n    }\n}\n```\n\n**Output**\n\n```\n49\n1\n16\n2\n0\n17\n```",
   "tags": [
    "arrays",
-   "two-pointer",
-   "greedy"
+   "two-pointers",
+   "greedy",
+   "exchange-argument",
+   "csharp"
   ],
-  "id": 1509
+  "id": 1509,
+  "followups": [
+   {
+    "q": "Prove that moving the taller pointer is safe to skip.",
+    "a": "Suppose the left line is shorter. Any container using that left line with a partner strictly inside the current right pointer has width less than the current width and height at most the current left height, since the left line caps it. So its area is strictly less than the area just computed. Every container involving the left line is therefore already accounted for, and the left line can be discarded. That exchange argument is what makes the two-pointer sweep complete rather than merely plausible, and it is what the interviewer wants to hear."
+   },
+   {
+    "q": "How is this different from Trapping Rain Water, which looks similar?",
+    "a": "Container With Most Water picks exactly two lines and ignores everything between them, so the answer is a single rectangle. Trapping Rain Water sums the water sitting above every position, and the bars in between matter because they displace water. They share the two-pointer skeleton and the insight that the shorter side is the constraint, but the quantity accumulated is different: a maximum over pairs in one, a sum over positions in the other. Candidates who pattern-match on the picture rather than the quantity often answer the wrong one."
+   },
+   {
+    "q": "What if the lines had non-zero thickness?",
+    "a": "Then the water displaced by the intervening bars matters and the greedy two-pointer no longer applies, since the volume is no longer just min-height times width. It becomes closer to the trapping-water formulation, where each position's contribution is computed against the bounding heights. It is worth saying out loud that the clean two-pointer answer depends on the problem's idealisation, because recognising which assumption the algorithm rests on is what makes it safe to reuse."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Trapping Rain Water: compute water trapped between bars.",
-  "answer": "Two pointers with leftMax and rightMax. Move the smaller side inward; water at a position = max on its side minus its height. Add the difference when the current bar is below the running max. O(n) time, O(1) space. Alternatively precompute leftMax/rightMax arrays.",
+  "answer": "**Logic**\n\nWater above any position is bounded by the tallest bar to its left and the tallest to its right: `min(maxLeft, maxRight) - height[i]`, when positive. Computing those two arrays explicitly is O(n) time and O(n) space.\n\nThe two-pointer refinement removes the arrays. Walk inward from both ends carrying the running maximum on each side. Whichever side is currently shorter is the binding constraint for its position, so that side's water can be settled immediately using only that side's running maximum, and that pointer advances. O(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Trap(int[] height)\n    {\n        if (height == null || height.Length < 3) return 0;\n\n        int left = 0, right = height.Length - 1;\n        int leftMax = height[left], rightMax = height[right];\n        int water = 0;\n\n        while (left < right)\n        {\n            if (leftMax <= rightMax)\n            {\n                left++;\n                leftMax = Math.Max(leftMax, height[left]);\n                // leftMax is the binding constraint here, so this is exact.\n                water += leftMax - height[left];\n            }\n            else\n            {\n                right--;\n                rightMax = Math.Max(rightMax, height[right]);\n                water += rightMax - height[right];\n            }\n        }\n\n        return water;\n    }\n\n    // The explicit version, easier to justify: two prefix-maximum arrays.\n    public static int TrapArrays(int[] height)\n    {\n        int n = height.Length;\n        if (n < 3) return 0;\n\n        var maxLeft = new int[n];\n        var maxRight = new int[n];\n\n        maxLeft[0] = height[0];\n        for (int i = 1; i < n; i++) maxLeft[i] = Math.Max(maxLeft[i - 1], height[i]);\n\n        maxRight[n - 1] = height[n - 1];\n        for (int i = n - 2; i >= 0; i--) maxRight[i] = Math.Max(maxRight[i + 1], height[i]);\n\n        int water = 0;\n        for (int i = 0; i < n; i++) water += Math.Min(maxLeft[i], maxRight[i]) - height[i];\n        return water;\n    }\n\n    public static void Main()\n    {\n        int[] a = { 0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1 };\n        Console.WriteLine(Trap(a));\n        Console.WriteLine(TrapArrays(a));\n\n        Console.WriteLine(Trap(new[] { 4, 2, 0, 3, 2, 5 }));\n        Console.WriteLine(Trap(new[] { 1, 2, 3, 4 }));     // monotonic: holds nothing\n        Console.WriteLine(Trap(new[] { 4, 3, 2, 1 }));\n        Console.WriteLine(Trap(new[] { 2, 0, 2 }));\n        Console.WriteLine(Trap(new int[0]));\n    }\n}\n```\n\n**Output**\n\n```\n6\n6\n9\n0\n0\n2\n0\n```",
   "tags": [
    "arrays",
-   "two-pointer",
-   "water"
+   "two-pointers",
+   "prefix-max",
+   "monotonic-stack",
+   "csharp"
   ],
-  "id": 1510
+  "id": 1510,
+  "followups": [
+   {
+    "q": "Why is it safe to settle a position using only one side's maximum?",
+    "a": "Because of the branch condition. When `leftMax <= rightMax`, there exists some bar on the right at least as tall as leftMax, so the true bound `min(maxLeft, maxRight)` must equal leftMax regardless of what else lies to the right. The unknown side cannot lower the bound below the known one. That is why the pointer comparison is on the running maxima rather than on the current heights, which is the detail most incorrect implementations get wrong."
+   },
+   {
+    "q": "Solve it with a stack instead.",
+    "a": "Maintain a stack of decreasing bar indices. When a bar taller than the stack top arrives, it forms the right wall of a basin: pop the bottom of the basin, and with the new bar and the element now on top as walls, add the water for that horizontal layer. It accumulates water in layers rather than in columns, which is a genuinely different decomposition. Same O(n), but O(n) space. It is worth knowing because the same monotonic-stack shape solves largest rectangle in a histogram."
+   },
+   {
+    "q": "What about the 2D version, trapping water on a heightmap?",
+    "a": "The one-dimensional reasoning fails, because water escapes through the lowest point on the whole boundary rather than along a single axis. The right approach is a min-heap seeded with all border cells, repeatedly popping the lowest boundary cell and flooding inward: any unvisited neighbour lower than the current water level traps the difference, and its own level becomes the maximum of the two. That is effectively Dijkstra over the boundary, at O(mn log(mn)), and it is a common follow-up for a strong candidate."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21440,28 +21519,58 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "3Sum: find all unique triplets that sum to zero.",
-  "answer": "Sort the array. Fix each i, then use two pointers (l, r) on the rest to find pairs summing to -nums[i]. Skip duplicates for i, l, and r to avoid repeated triplets. O(n^2) time, O(1) or O(n) space (excluding output).",
+  "answer": "**Logic**\n\nSort, then fix each element and two-pointer the remainder. With the array sorted, for a fixed index `i` the remaining problem is two-sum on a sorted range, solvable in linear time by moving pointers inward: too small means advance the left pointer, too large means retreat the right one. O(n²) overall, dominated by the nested scan rather than the O(n log n) sort.\n\nSorting also makes deduplication cheap: skip over any value equal to the previous one, at all three positions. Without those skips the result contains repeated triplets, which is the main thing this question tests.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<IList<int>> ThreeSum(int[] nums)\n    {\n        var result = new List<IList<int>>();\n        if (nums == null || nums.Length < 3) return result;\n\n        Array.Sort(nums);\n\n        for (int i = 0; i < nums.Length - 2; i++)\n        {\n            if (nums[i] > 0) break;                       // sorted: no way back to zero\n            if (i > 0 && nums[i] == nums[i - 1]) continue; // skip duplicate anchors\n\n            int left = i + 1, right = nums.Length - 1;\n\n            while (left < right)\n            {\n                int sum = nums[i] + nums[left] + nums[right];\n\n                if (sum < 0) left++;\n                else if (sum > 0) right--;\n                else\n                {\n                    result.Add(new List<int> { nums[i], nums[left], nums[right] });\n\n                    // Move past every copy of both values, or the same triplet repeats.\n                    while (left < right && nums[left] == nums[left + 1]) left++;\n                    while (left < right && nums[right] == nums[right - 1]) right--;\n\n                    left++;\n                    right--;\n                }\n            }\n        }\n\n        return result;\n    }\n\n    private static string Render(IList<IList<int>> r) =>\n        r.Count == 0 ? \"(none)\" : string.Join(\" | \", r.Select(t => \"[\" + string.Join(\",\", t) + \"]\"));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(ThreeSum(new[] { -1, 0, 1, 2, -1, -4 })));\n        Console.WriteLine(Render(ThreeSum(new[] { 0, 1, 1 })));\n        Console.WriteLine(Render(ThreeSum(new[] { 0, 0, 0 })));\n        Console.WriteLine(Render(ThreeSum(new[] { 0, 0, 0, 0 })));   // must not repeat\n        Console.WriteLine(Render(ThreeSum(new[] { -2, 0, 1, 1, 2 })));\n        Console.WriteLine(Render(ThreeSum(new int[0])));\n    }\n}\n```\n\n**Output**\n\n```\n[-1,-1,2] | [-1,0,1]\n(none)\n[0,0,0]\n[0,0,0]\n[-2,0,2] | [-2,1,1]\n(none)\n```",
   "tags": [
    "arrays",
-   "two-pointer",
-   "3sum",
-   "sorting"
+   "two-pointers",
+   "sorting",
+   "deduplication",
+   "csharp"
   ],
-  "id": 1513
+  "id": 1513,
+  "followups": [
+   {
+    "q": "Why deduplicate by skipping rather than with a HashSet of triplets?",
+    "a": "A set works and is a legitimate fallback, but it costs memory proportional to the output and requires hashing each triplet, which means either a value tuple or a canonical string key. Skipping is free: the array is already sorted, so equal values are adjacent, and a comparison against the previous element is all that is needed. It also keeps the output naturally ordered. Reaching for a set is the sign of someone who has not noticed the sort already solved it."
+   },
+   {
+    "q": "Generalise to 4Sum, or k-Sum.",
+    "a": "Recursively. k-Sum reduces to fixing one element and solving (k-1)-Sum on the remainder, bottoming out at 2-Sum with two pointers. That gives O(n^(k-1)), so 4Sum is O(n³). The same duplicate-skipping applies at every level. Write it as a recursive helper taking k and a starting index rather than nesting loops by hand, otherwise 4Sum becomes an unreadable four-deep nest and 5Sum is unwritable."
+   },
+   {
+    "q": "Can 3Sum be solved faster than O(n²)?",
+    "a": "Not by any known general method. 3SUM is conjectured to require quadratic time, and that conjecture is used as a hardness assumption to prove lower bounds for a family of computational-geometry problems, which are called 3SUM-hard. There are slightly sub-quadratic results using clever bit tricks, but nothing that changes the practical picture. So O(n²) is the expected answer, and saying why no better one is expected is a strong close."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find the majority element (appears more than n/2 times).",
-  "answer": "Boyer-Moore voting: maintain a candidate and a count. Increment count when the element equals the candidate, decrement otherwise; when count hits 0, pick the current element as the new candidate. The survivor is the majority (guaranteed to exist). O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nBoyer-Moore voting. Keep a candidate and a counter. When the counter hits zero, adopt the current element as the candidate; otherwise increment on a match and decrement on a mismatch. Because the majority element occurs more than n/2 times, it survives every cancellation against all other elements combined. O(n) time, O(1) space.\n\nCounting with a dictionary also works in O(n) time but uses O(n) space, and sorting and taking the middle element is O(n log n). Boyer-Moore is the expected answer precisely because it needs no extra memory.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MajorityElement(int[] nums)\n    {\n        int candidate = 0, count = 0;\n\n        // Pass 1: whatever survives the cancellations is the only possible majority.\n        foreach (int n in nums)\n        {\n            if (count == 0) candidate = n;\n            count += (n == candidate) ? 1 : -1;\n        }\n\n        // Pass 2: verify. Without a guarantee that a majority exists, pass 1 alone\n        // returns a meaningless value rather than reporting its absence.\n        count = 0;\n        foreach (int n in nums) if (n == candidate) count++;\n\n        return count > nums.Length / 2 ? candidate : -1;   // -1: no majority\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MajorityElement(new[] { 3, 2, 3 }));\n        Console.WriteLine(MajorityElement(new[] { 2, 2, 1, 1, 1, 2, 2 }));\n        Console.WriteLine(MajorityElement(new[] { 1 }));\n        Console.WriteLine(MajorityElement(new[] { 1, 2, 3, 4 }));       // none\n        Console.WriteLine(MajorityElement(new[] { 1, 1, 2, 2 }));       // exactly half: not a majority\n        Console.WriteLine(MajorityElement(new[] { 6, 5, 5 }));\n    }\n}\n```\n\n**Output**\n\n```\n3\n2\n1\n-1\n-1\n5\n```\n\nThe `1,1,2,2` case matters: *more than* n/2 is strict, so exactly half does not qualify.",
   "tags": [
    "arrays",
    "boyer-moore",
    "voting",
-   "majority"
+   "streaming",
+   "csharp"
   ],
-  "id": 1514
+  "id": 1514,
+  "followups": [
+   {
+    "q": "Why is the verification pass necessary?",
+    "a": "Because the voting pass assumes a majority exists. Given [1,2,3,4] it returns whichever element happened to be last adopted, which is not a majority and not meaningful. Many published solutions omit the check because the problem statement promises a majority, but shipping that is a trap: the guarantee lives in the problem text, not in the code, and the first caller with unvalidated input gets a silently wrong answer instead of an error."
+   },
+   {
+    "q": "Extend it to elements appearing more than n/3 times.",
+    "a": "There can be at most two such elements, so track two candidates and two counters with the same cancellation logic, then verify both at the end. The pattern generalises: for more than n/k there are at most k-1 candidates, needing k-1 counters, which is the Misra-Gries summary. The verification pass becomes mandatory rather than merely prudent, since with two candidates it is entirely possible that only one or neither actually qualifies."
+   },
+   {
+    "q": "What if the data is a stream too large to store?",
+    "a": "Boyer-Moore already handles it: it is one pass with O(1) memory and never revisits an element. The catch is the verification pass, which needs a second read of the stream. If the stream can only be read once, you cannot verify exactly, and the honest answers are either to accept the candidate under an assumed guarantee or to use a Count-Min Sketch for approximate frequencies with a bounded error. That constraint, one pass versus two, is what the question is usually driving at."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21482,13 +21591,29 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Search in a rotated sorted array.",
-  "answer": "Modified binary search: at mid, determine which half is sorted (compare nums[left] to nums[mid]). If the target lies within the sorted half's range, search there; otherwise search the other half. O(log n) time. Handle duplicates as a special case if present.",
+  "answer": "**Logic**\n\nBinary search still applies, because a rotated sorted array always has at least one sorted half around the midpoint. Identify which half is sorted by comparing the midpoint to the low end, then check whether the target falls inside that half's range: if it does, search there; otherwise search the other half. O(log n) time, O(1) space.\n\nThe trap is deciding sortedness from the midpoint alone. It must be a comparison against an endpoint, and the boundary case where `nums[low] == nums[mid]` needs care.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Search(int[] nums, int target)\n    {\n        if (nums == null || nums.Length == 0) return -1;\n\n        int low = 0, high = nums.Length - 1;\n\n        while (low <= high)\n        {\n            int mid = low + (high - low) / 2;\n            if (nums[mid] == target) return mid;\n\n            if (nums[low] <= nums[mid])          // left half is sorted\n            {\n                if (nums[low] <= target && target < nums[mid]) high = mid - 1;\n                else low = mid + 1;\n            }\n            else                                  // right half must be sorted\n            {\n                if (nums[mid] < target && target <= nums[high]) low = mid + 1;\n                else high = mid - 1;\n            }\n        }\n\n        return -1;\n    }\n\n    public static void Main()\n    {\n        int[] rotated = { 4, 5, 6, 7, 0, 1, 2 };\n\n        Console.WriteLine(Search(rotated, 0));\n        Console.WriteLine(Search(rotated, 3));\n        Console.WriteLine(Search(rotated, 4));    // first element\n        Console.WriteLine(Search(rotated, 2));    // last element\n        Console.WriteLine(Search(new[] { 1 }, 1));\n        Console.WriteLine(Search(new[] { 1, 3 }, 3));\n        Console.WriteLine(Search(new[] { 3, 1 }, 1));\n        Console.WriteLine(Search(new[] { 1, 2, 3, 4, 5 }, 4));   // not rotated at all\n    }\n}\n```\n\n**Output**\n\n```\n4\n-1\n0\n6\n0\n1\n1\n3\n```",
   "tags": [
-   "arrays",
+   "searching",
    "binary-search",
-   "rotated"
+   "rotated-array",
+   "duplicates",
+   "csharp"
   ],
-  "id": 1516
+  "id": 1516,
+  "followups": [
+   {
+    "q": "What breaks when duplicates are allowed?",
+    "a": "The sortedness test does. With [1,0,1,1,1] the low, mid and high values are all 1, so you cannot tell which half is sorted. The standard fix is that when `nums[low] == nums[mid] == nums[high]` you cannot decide, so you shrink the range by one from each end and continue. That makes the worst case O(n), for example an array of all equal values, and no better bound is possible: an adversary can hide the target behind an indistinguishable run."
+   },
+   {
+    "q": "Would you instead find the pivot first and then binary search?",
+    "a": "It is a perfectly good answer and often easier to get right: one binary search to locate the minimum, which is the rotation point, then a normal binary search in the correct segment, or a single search over the whole array with index arithmetic modulo the length. It is two passes of O(log n), so the same complexity. The one-pass version above is tighter, but under interview pressure the two-step version has fewer conditions to get backwards, and being able to explain both is the strongest position."
+   },
+   {
+    "q": "Why compare nums[low] <= nums[mid] rather than nums[mid] <= nums[high]?",
+    "a": "Either works as long as you are consistent and handle the equality correctly, but the low comparison needs `<=` rather than `<` for the two-element case where low and mid are the same index. Choosing one and deriving the four range conditions from it is what matters. Mixing the two conventions mid-solution is how this problem usually goes wrong, and it produces bugs that only appear on specific rotations, which are miserable to find under time pressure."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21654,27 +21779,58 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Group anagrams together from a list of strings.",
-  "answer": "For each string, compute a key (sorted characters, or a 26-length count signature), and group strings by that key in a hash map. Return the map's values. O(n * k log k) with sorting keys (k = word length), or O(n*k) with count keys.",
+  "answer": "**Logic**\n\nGive every string a canonical key that is identical for anagrams and different otherwise, then group on it in one pass with a dictionary. Sorting the characters is the simplest key, at O(k log k) per string. A 26-slot character count rendered to a string is an O(k) key and avoids the sort.\n\nTotal cost is O(n·k log k) with the sorted key, versus O(n²·k) for comparing every pair, which is the point of the question.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\nusing System.Text;\n\npublic class Solution\n{\n    public static IList<IList<string>> GroupAnagrams(string[] strs)\n    {\n        var groups = new Dictionary<string, IList<string>>();\n\n        foreach (string s in strs)\n        {\n            string key = CountKey(s);\n            if (!groups.TryGetValue(key, out var bucket))\n                groups[key] = bucket = new List<string>();\n            bucket.Add(s);\n        }\n\n        return groups.Values.ToList();\n    }\n\n    // O(k) key: counts of each letter, not a sort. \"#\" separates the counts so\n    // that 1,11 and 11,1 cannot collide into the same string.\n    private static string CountKey(string s)\n    {\n        var counts = new int[26];\n        foreach (char c in s) counts[c - 'a']++;\n\n        var sb = new StringBuilder();\n        for (int i = 0; i < 26; i++) sb.Append(counts[i]).Append('#');\n        return sb.ToString();\n    }\n\n    // The simpler key, for comparison: O(k log k) but three lines.\n    private static string SortKey(string s)\n    {\n        var chars = s.ToCharArray();\n        Array.Sort(chars);\n        return new string(chars);\n    }\n\n    private static string Render(IList<IList<string>> groups) =>\n        string.Join(\" | \", groups.Select(g => \"[\" + string.Join(\",\", g) + \"]\"));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(GroupAnagrams(new[] { \"eat\", \"tea\", \"tan\", \"ate\", \"nat\", \"bat\" })));\n        Console.WriteLine(Render(GroupAnagrams(new[] { \"\" })));\n        Console.WriteLine(Render(GroupAnagrams(new[] { \"a\" })));\n        Console.WriteLine(Render(GroupAnagrams(new[] { \"abc\", \"cba\", \"bac\", \"xyz\" })));\n    }\n}\n```\n\n**Output**\n\n```\n[eat,tea,ate] | [tan,nat] | [bat]\n[]\n[a]\n[abc,cba,bac] | [xyz]\n```",
   "tags": [
    "strings",
    "hashmap",
-   "anagram",
-   "grouping"
+   "grouping",
+   "canonical-key",
+   "csharp"
   ],
-  "id": 1525
+  "id": 1525,
+  "followups": [
+   {
+    "q": "Why the '#' separator in the count key?",
+    "a": "Without it the counts run together and different inputs can produce the same key. A string with 1 'a' and 11 'b's gives \"111...\" and so does one with 11 'a's and 1 'b'. Concatenating variable-length numbers without a delimiter is a general hazard, and the same class of bug appears when people build cache keys or hashes by string concatenation. The separator makes the encoding unambiguous."
+   },
+   {
+    "q": "Sorted key or count key: which would you use?",
+    "a": "The sorted key, usually. It is three lines, obviously correct, works for any alphabet including Unicode, and for typical word lengths the log factor is irrelevant. The count key wins only when strings are long and the alphabet is small and fixed, and it silently breaks on any character outside a-z, which is a nasty failure since it indexes out of the array or corrupts a neighbouring count. Simplicity first, and switch if profiling says so."
+   },
+   {
+    "q": "Is the output order guaranteed?",
+    "a": "No. Dictionary enumeration order in .NET is unspecified and must not be relied on, even though it often looks insertion-ordered in practice. If the caller needs deterministic output, sort the groups explicitly by some stable criterion before returning. Tests that assert an exact group order without sorting are a well-known source of failures that appear only after an unrelated change, which is worth flagging when you write them."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Longest palindromic substring.",
-  "answer": "Expand around center: for each index (and each gap between indices for even-length palindromes), expand outward while characters match, tracking the longest. O(n^2) time, O(1) space. Manacher's algorithm achieves O(n) but is more complex.",
+  "answer": "**Logic**\n\nExpand around every possible centre. A palindrome is defined by its centre, and there are 2n-1 of them: n single characters for odd-length palindromes, and n-1 gaps between characters for even-length ones. From each centre, expand outward while the characters match and record the longest span seen. O(n²) time, O(1) space.\n\nThe common mistake is only checking odd centres, which misses `\"abba\"` entirely. The DP table is also O(n²) but uses O(n²) space, so expansion is strictly better.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static string LongestPalindrome(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return \"\";\n\n        int bestStart = 0, bestLength = 1;\n\n        for (int centre = 0; centre < s.Length; centre++)\n        {\n            Expand(s, centre, centre, ref bestStart, ref bestLength);       // odd length\n            Expand(s, centre, centre + 1, ref bestStart, ref bestLength);   // even length\n        }\n\n        return s.Substring(bestStart, bestLength);\n    }\n\n    private static void Expand(string s, int left, int right, ref int bestStart, ref int bestLength)\n    {\n        while (left >= 0 && right < s.Length && s[left] == s[right])\n        {\n            left--;\n            right++;\n        }\n\n        // The loop exits one step past the match, so the span is (left+1 .. right-1).\n        int length = right - left - 1;\n        if (length > bestLength)\n        {\n            bestLength = length;\n            bestStart = left + 1;\n        }\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestPalindrome(\"babad\"));   // \"bab\" or \"aba\"\n        Console.WriteLine(LongestPalindrome(\"cbbd\"));    // even-length centre\n        Console.WriteLine(LongestPalindrome(\"a\"));\n        Console.WriteLine(LongestPalindrome(\"\"));\n        Console.WriteLine(LongestPalindrome(\"ac\"));      // no palindrome longer than 1\n        Console.WriteLine(LongestPalindrome(\"aaaa\"));\n        Console.WriteLine(LongestPalindrome(\"forgeeksskeegfor\"));\n    }\n}\n```\n\n**Output**\n\n```\nbab\nbb\na\n\na\naaaa\ngeeksskeeg\n```",
   "tags": [
    "strings",
+   "expand-around-centre",
    "palindrome",
-   "expand-around-center"
+   "two-pointers",
+   "csharp"
   ],
-  "id": 1526
+  "id": 1526,
+  "followups": [
+   {
+    "q": "Why does the length come out as right - left - 1?",
+    "a": "Because the while loop only stops after a failed comparison, so when it exits `left` is one before the palindrome's first character and `right` is one past its last. The inclusive span is therefore `(left+1)` to `(right-1)`, whose length is `(right-1) - (left+1) + 1`, which simplifies to `right - left - 1`. Off-by-one errors here are the single most common way this solution breaks, so deriving it out loud rather than recalling it is worth doing."
+   },
+   {
+    "q": "Is there a linear-time solution?",
+    "a": "Manacher's algorithm, which is O(n). It reuses the palindrome radii already computed on the left of a known centre to skip work on the right, in the same spirit as the KMP failure function. It is rarely expected in an interview and is hard to reproduce correctly under pressure, so the right move is to name it, say that expansion is O(n²) and that Manacher's brings it to O(n), and offer to write it only if they want it."
+   },
+   {
+    "q": "How does this differ from the longest palindromic subsequence?",
+    "a": "Completely. A substring is contiguous, a subsequence is not, so the subsequence version cannot use centre expansion at all. It is a two-dimensional DP over the string and its reverse, equivalent to the longest common subsequence of s and reverse(s), at O(n²) time and space. The names are close enough that candidates answer the wrong question, so the first thing to do is confirm which one is being asked."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22673,28 +22829,54 @@
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Maximum depth of a binary tree.",
-  "answer": "Recursion: depth = 1 + max(depth(left), depth(right)), base case null → 0. O(n) time, O(h) stack space. Iterative BFS counting levels also works. Height is the number of nodes on the longest root-to-leaf path.",
+  "answer": "**Logic**\n\nThe depth of a tree is one plus the deeper of its two subtrees, and an empty tree has depth 0. That recurrence is the whole solution: recurse both sides, take the larger, add one. Every node is visited once, so O(n) time. Space is O(h) for the call stack, which is O(log n) on a balanced tree but O(n) on a degenerate one.\n\nThe iterative alternative is a level-order traversal counting levels, which uses O(w) space for the widest level and avoids the stack-overflow risk entirely.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static int MaxDepth(TreeNode root)\n    {\n        if (root == null) return 0;                    // base case: empty tree\n        return 1 + Math.Max(MaxDepth(root.Left), MaxDepth(root.Right));\n    }\n\n    // Level-order version: no recursion, so no stack-overflow risk on deep trees.\n    public static int MaxDepthIterative(TreeNode root)\n    {\n        if (root == null) return 0;\n        var queue = new Queue<TreeNode>();\n        queue.Enqueue(root);\n        int depth = 0;\n\n        while (queue.Count > 0)\n        {\n            int levelSize = queue.Count;               // snapshot: this level only\n            for (int i = 0; i < levelSize; i++)\n            {\n                var node = queue.Dequeue();\n                if (node.Left != null) queue.Enqueue(node.Left);\n                if (node.Right != null) queue.Enqueue(node.Right);\n            }\n            depth++;\n        }\n        return depth;\n    }\n\n    public static void Main()\n    {\n        //     3\n        //    / \\\n        //   9  20\n        //     /  \\\n        //    15   7\n        var root = new TreeNode(3,\n            new TreeNode(9),\n            new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n\n        Console.WriteLine(MaxDepth(root));\n        Console.WriteLine(MaxDepthIterative(root));\n        Console.WriteLine(MaxDepth(null));\n        Console.WriteLine(MaxDepth(new TreeNode(1)));\n\n        // Degenerate: a 1-2-3 right chain behaves like a linked list.\n        var chain = new TreeNode(1, null, new TreeNode(2, null, new TreeNode(3)));\n        Console.WriteLine(MaxDepth(chain));\n    }\n}\n```\n\n**Output**\n\n```\n3\n3\n0\n1\n3\n```",
   "tags": [
    "trees",
    "recursion",
+   "bfs",
    "depth",
-   "dfs"
+   "csharp"
   ],
-  "id": 1593
+  "id": 1593,
+  "followups": [
+   {
+    "q": "When would the recursive version actually fail?",
+    "a": "On a degenerate tree, where every node has one child and the depth equals the node count. A million-node chain means a million stack frames and a StackOverflowException, which in .NET cannot be caught and kills the process outright. That is the argument for the iterative version in any code path where the tree shape is not controlled by you: parsing user-supplied JSON or XML into a tree is the classic case."
+   },
+   {
+    "q": "How does minimum depth differ, and why is it trickier?",
+    "a": "Minimum depth is the distance to the nearest leaf, and the naive mirror of this code is wrong: taking `Math.Min` of both subtrees returns 1 for a node with only a right child, because the null left subtree reports 0. A leaf is a node with no children, so when one side is null you must take the other side's depth rather than the minimum. BFS is also the better strategy here since it can stop at the first leaf it meets instead of exploring the whole tree."
+   },
+   {
+    "q": "Why snapshot queue.Count into levelSize?",
+    "a": "Because the loop enqueues children while iterating, so reading `queue.Count` directly inside the condition would keep consuming the next level as part of this one and the depth counter would never advance correctly. Capturing the size first fixes the boundary of the current level. That level-snapshot pattern is the backbone of every level-order problem: right-side view, level averages, zigzag traversal all use it."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Invert / mirror a binary tree.",
-  "answer": "Recursively swap the left and right children of each node (swap then recurse, or recurse then swap). O(n) time, O(h) space. Iterative with a queue/stack also works. Produces the mirror image of the tree.",
+  "answer": "**Logic**\n\nSwap the left and right child of every node. Recursively: swap the current node's children, then invert each subtree. The order does not matter, since swapping references and recursing are independent. O(n) time, O(h) stack space.\n\nThis is famously the question that got the author of Homebrew rejected by Google. It is four lines, and what is really being tested is whether you mutate in place correctly rather than building a new tree by accident.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static TreeNode Invert(TreeNode root)\n    {\n        if (root == null) return null;\n\n        (root.Left, root.Right) = (root.Right, root.Left);   // tuple swap, no temp\n        Invert(root.Left);\n        Invert(root.Right);\n\n        return root;\n    }\n\n    // Iterative: any traversal works, since the swap is per node and order-free.\n    public static TreeNode InvertIterative(TreeNode root)\n    {\n        if (root == null) return null;\n        var stack = new Stack<TreeNode>();\n        stack.Push(root);\n\n        while (stack.Count > 0)\n        {\n            var node = stack.Pop();\n            (node.Left, node.Right) = (node.Right, node.Left);\n            if (node.Left != null) stack.Push(node.Left);\n            if (node.Right != null) stack.Push(node.Right);\n        }\n        return root;\n    }\n\n    private static string LevelOrder(TreeNode root)\n    {\n        if (root == null) return \"(empty)\";\n        var outp = new List<string>();\n        var q = new Queue<TreeNode>();\n        q.Enqueue(root);\n        while (q.Count > 0)\n        {\n            var n = q.Dequeue();\n            outp.Add(n.Val.ToString());\n            if (n.Left != null) q.Enqueue(n.Left);\n            if (n.Right != null) q.Enqueue(n.Right);\n        }\n        return string.Join(\",\", outp);\n    }\n\n    public static void Main()\n    {\n        //      4\n        //    /   \\\n        //   2     7\n        //  / \\   / \\\n        // 1   3 6   9\n        var root = new TreeNode(4,\n            new TreeNode(2, new TreeNode(1), new TreeNode(3)),\n            new TreeNode(7, new TreeNode(6), new TreeNode(9)));\n\n        Console.WriteLine(LevelOrder(root));\n        Console.WriteLine(LevelOrder(Invert(root)));\n        Console.WriteLine(LevelOrder(InvertIterative(root)));   // back to the original\n        Console.WriteLine(LevelOrder(Invert(null)));\n    }\n}\n```\n\n**Output**\n\n```\n4,2,7,1,3,6,9\n4,7,2,9,6,3,1\n4,2,7,1,3,6,9\n(empty)\n```",
   "tags": [
    "trees",
    "recursion",
-   "invert",
-   "mirror"
+   "swap",
+   "mirror",
+   "csharp"
   ],
-  "id": 1594
+  "id": 1594,
+  "followups": [
+   {
+    "q": "Does the traversal order matter here?",
+    "a": "No, and that is worth saying explicitly because it is unusual. Preorder, postorder, BFS or DFS all produce the same result, since each node's swap is independent of every other node's. Contrast it with flattening a tree to a linked list, where preorder is mandatory and any other order gives the wrong answer. Recognising which problems are order-sensitive is the more transferable point."
+   },
+   {
+    "q": "What if the tree is a BST?",
+    "a": "Inverting a BST destroys the BST property: the in-order traversal goes from ascending to descending, so search, insert and delete all break. If the goal is to iterate in reverse order, do not invert the tree at all, just do a reversed in-order traversal, visiting right, then node, then left. That is O(h) space and leaves the structure intact, which is almost always what the caller actually wanted."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22728,28 +22910,58 @@
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Binary tree level order traversal (BFS).",
-  "answer": "Use a queue; process level by level by recording the queue size at the start of each level, dequeuing that many nodes, collecting their values, and enqueuing their children. O(n) time, O(n) space. Produces a list of levels.",
+  "answer": "**Logic**\n\nA queue, processing one level at a time. Enqueue the root, then repeatedly take a snapshot of the current queue size, dequeue exactly that many nodes into the current level's list, and enqueue their children for the next round. The snapshot is what separates levels, since children added during the loop belong to the next level.\n\nO(n) time. Space is O(w), the maximum width, which for a complete tree is about n/2 at the bottom level.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static IList<IList<int>> LevelOrder(TreeNode root)\n    {\n        var levels = new List<IList<int>>();\n        if (root == null) return levels;\n\n        var queue = new Queue<TreeNode>();\n        queue.Enqueue(root);\n\n        while (queue.Count > 0)\n        {\n            int levelSize = queue.Count;      // snapshot: this level, not the next\n            var level = new List<int>(levelSize);\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                var node = queue.Dequeue();\n                level.Add(node.Val);\n\n                if (node.Left != null) queue.Enqueue(node.Left);\n                if (node.Right != null) queue.Enqueue(node.Right);\n            }\n\n            levels.Add(level);\n        }\n\n        return levels;\n    }\n\n    private static string Render(IList<IList<int>> levels) =>\n        levels.Count == 0 ? \"(empty)\"\n            : string.Join(\" | \", levels.Select(l => \"[\" + string.Join(\",\", l) + \"]\"));\n\n    public static void Main()\n    {\n        //     3\n        //    / \\\n        //   9  20\n        //     /  \\\n        //    15   7\n        var root = new TreeNode(3,\n            new TreeNode(9),\n            new TreeNode(20, new TreeNode(15), new TreeNode(7)));\n\n        Console.WriteLine(Render(LevelOrder(root)));\n        Console.WriteLine(Render(LevelOrder(null)));\n        Console.WriteLine(Render(LevelOrder(new TreeNode(1))));\n\n        // Left-leaning chain: one node per level.\n        var chain = new TreeNode(1, new TreeNode(2, new TreeNode(3)));\n        Console.WriteLine(Render(LevelOrder(chain)));\n    }\n}\n```\n\n**Output**\n\n```\n[3] | [9,20] | [15,7]\n(empty)\n[1]\n[1] | [2] | [3]\n```",
   "tags": [
    "trees",
    "bfs",
+   "queue",
    "level-order",
-   "queue"
+   "csharp"
   ],
-  "id": 1597
+  "id": 1597,
+  "followups": [
+   {
+    "q": "How would you produce a zigzag traversal?",
+    "a": "Keep the same BFS and reverse alternate levels, either by reversing the list after building it or by inserting at the front on odd levels. Reversing afterwards is better: inserting at index 0 of a List is O(n) per insert, which makes the level O(n²), whereas a single reverse is O(n). If you want to avoid even that, build into an array and fill it from either end depending on the direction."
+   },
+   {
+    "q": "Give the right-side view using this skeleton.",
+    "a": "Take the last node of each level, which is the element at index levelSize-1 in the inner loop. The whole change is one condition. That is the real value of the level-snapshot pattern: right-side view, level averages, maximum per level, level order bottom-up and zigzag are all the same loop with a different line inside, so learning it once covers a whole family of interview questions."
+   },
+   {
+    "q": "When is BFS the wrong choice for a tree?",
+    "a": "When the tree is wide and shallow, because the queue holds an entire level and that can approach n, whereas DFS would use only O(h). It is also wrong whenever the problem needs information flowing up from children, such as height, diameter or subtree sums, since those are naturally postorder. BFS earns its place when the answer depends on distance from the root, which is why it is the right tool for shortest path in an unweighted graph."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Validate a binary search tree.",
-  "answer": "Recurse passing down valid (min, max) bounds; each node must be strictly within its range, left subtree gets (min, node.val), right gets (node.val, max). Or do an in-order traversal and verify values are strictly increasing. O(n) time, O(h) space.",
+  "answer": "**Logic**\n\nThe BST property is global, not local: every node in the left subtree must be less than the node, not merely its immediate child. So checking `left.Val < node.Val < right.Val` at each node is wrong, and it is the classic failure of this question.\n\nCarry a valid range down instead. The root may be anything; moving left tightens the upper bound to the current value, moving right tightens the lower bound. A node outside its inherited range fails. O(n) time, O(h) stack space.\n\nThe alternative is an in-order traversal, which must produce strictly increasing values.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static bool IsValidBst(TreeNode root) => Validate(root, null, null);\n\n    // long? bounds rather than int: a node holding int.MinValue is legal data and\n    // must not be confused with \"no bound set\".\n    private static bool Validate(TreeNode node, long? min, long? max)\n    {\n        if (node == null) return true;\n\n        if (min.HasValue && node.Val <= min.Value) return false;\n        if (max.HasValue && node.Val >= max.Value) return false;\n\n        return Validate(node.Left, min, node.Val)     // left: tighten the upper bound\n            && Validate(node.Right, node.Val, max);   // right: tighten the lower bound\n    }\n\n    // In-order must be strictly increasing. Iterative, so no stack-overflow risk.\n    public static bool IsValidBstInOrder(TreeNode root)\n    {\n        var stack = new Stack<TreeNode>();\n        long? previous = null;\n        var current = root;\n\n        while (current != null || stack.Count > 0)\n        {\n            while (current != null) { stack.Push(current); current = current.Left; }\n            current = stack.Pop();\n\n            if (previous.HasValue && current.Val <= previous.Value) return false;\n            previous = current.Val;\n\n            current = current.Right;\n        }\n        return true;\n    }\n\n    public static void Main()\n    {\n        var valid = new TreeNode(2, new TreeNode(1), new TreeNode(3));\n        Console.WriteLine(IsValidBst(valid));\n\n        //   5\n        //  / \\\n        // 1   4      <- 4 is less than 5 but sits in the right subtree\n        //    / \\\n        //   3   6\n        var invalid = new TreeNode(5,\n            new TreeNode(1),\n            new TreeNode(4, new TreeNode(3), new TreeNode(6)));\n        Console.WriteLine(IsValidBst(invalid));\n\n        //   10\n        //  /\n        // 5\n        //   \\\n        //    12   <- locally fine, globally invalid: 12 > 10 in the left subtree\n        var sneaky = new TreeNode(10, new TreeNode(5, null, new TreeNode(12)), null);\n        Console.WriteLine(IsValidBst(sneaky));\n        Console.WriteLine(IsValidBstInOrder(sneaky));\n\n        Console.WriteLine(IsValidBst(null));\n        Console.WriteLine(IsValidBst(new TreeNode(int.MinValue)));   // the sentinel trap\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nFalse\nFalse\nTrue\nTrue\n```",
   "tags": [
    "trees",
    "bst",
    "validation",
-   "in-order"
+   "in-order",
+   "csharp"
   ],
-  "id": 1598
+  "id": 1598,
+  "followups": [
+   {
+    "q": "Why long? for the bounds rather than int sentinels?",
+    "a": "Because using int.MinValue and int.MaxValue as 'no bound' makes a tree containing those exact values fail incorrectly: a single root node holding int.MinValue would be rejected, as the last test case shows. Widening to long gives room outside the int range, and a nullable makes the absence of a bound explicit rather than encoded as a magic value. This is the general argument against in-band sentinels, and it recurs constantly in real code."
+   },
+   {
+    "q": "Should duplicates be allowed?",
+    "a": "The definition has to come from the interviewer, and asking is the right move. The strict version, used here, rejects equal values on both sides. Some definitions permit duplicates on the right, which changes the comparison from `>=` to `>` on one side only. Most importantly, the two conventions must not be mixed: allowing duplicates on both sides makes search ambiguous, because a value could legitimately sit in either subtree and lookups would have to explore both."
+   },
+   {
+    "q": "Which of the two implementations do you prefer?",
+    "a": "The in-order one, for production. It is iterative so it cannot overflow the stack, it returns false as soon as the first out-of-order pair appears rather than always descending, and it only needs the previous value rather than a pair of bounds threaded through the recursion. The range version is easier to explain and the better one to reach for first in an interview, since it makes the global-versus-local insight visible, which is the thing being tested."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22965,15 +23177,29 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Number of islands (connected components in a grid).",
-  "answer": "Iterate cells; on an unvisited '1', run DFS/BFS to sink the whole island (mark visited/flip to '0'), incrementing the island count. O(rows*cols) time. Each cell is visited once; the flood fill explores connected land.",
+  "answer": "**Logic**\n\nScan the grid. Every time an unvisited land cell is found, it must belong to a new island, so increment the count and flood the whole connected region so it is never counted again. The flood can be DFS or BFS; both visit each cell once, giving O(rows × cols) time.\n\nSinking visited land by overwriting it with water avoids a separate visited array. That mutates the caller's grid, so if the input must be preserved, use a visited bitmap instead and say so.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int NumIslands(char[][] grid)\n    {\n        if (grid == null || grid.Length == 0) return 0;\n\n        int rows = grid.Length, cols = grid[0].Length, count = 0;\n\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n                if (grid[r][c] == '1')\n                {\n                    count++;\n                    Sink(grid, r, c);     // remove the whole island from play\n                }\n\n        return count;\n    }\n\n    // Iterative BFS rather than recursive DFS: a 1000x1000 all-land grid would\n    // recurse a million deep and overflow the stack.\n    private static void Sink(char[][] grid, int startRow, int startCol)\n    {\n        int rows = grid.Length, cols = grid[0].Length;\n        var queue = new Queue<(int r, int c)>();\n\n        grid[startRow][startCol] = '0';\n        queue.Enqueue((startRow, startCol));\n\n        int[] dr = { -1, 1, 0, 0 };\n        int[] dc = { 0, 0, -1, 1 };\n\n        while (queue.Count > 0)\n        {\n            var (r, c) = queue.Dequeue();\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = r + dr[d], nc = c + dc[d];\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n                if (grid[nr][nc] != '1') continue;\n\n                grid[nr][nc] = '0';       // mark on enqueue, not on dequeue\n                queue.Enqueue((nr, nc));\n            }\n        }\n    }\n\n    private static char[][] Parse(params string[] rows)\n    {\n        var g = new char[rows.Length][];\n        for (int i = 0; i < rows.Length; i++) g[i] = rows[i].ToCharArray();\n        return g;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(NumIslands(Parse(\n            \"11110\",\n            \"11010\",\n            \"11000\",\n            \"00000\")));\n\n        Console.WriteLine(NumIslands(Parse(\n            \"11000\",\n            \"11000\",\n            \"00100\",\n            \"00011\")));\n\n        Console.WriteLine(NumIslands(Parse(\"000\", \"000\")));\n        Console.WriteLine(NumIslands(Parse(\"1\")));\n        Console.WriteLine(NumIslands(Parse(\"101\", \"010\", \"101\")));   // diagonals do not connect\n    }\n}\n```\n\n**Output**\n\n```\n1\n3\n0\n1\n5\n```",
   "tags": [
    "graphs",
-   "dfs",
    "bfs",
    "grid",
-   "islands"
+   "connected-components",
+   "csharp"
   ],
-  "id": 1614
+  "id": 1614,
+  "followups": [
+   {
+    "q": "Why mark cells on enqueue rather than on dequeue?",
+    "a": "Because a cell can be reached from several neighbours. If you only mark it when it comes off the queue, it can be enqueued multiple times before the first one is processed, which in the worst case makes the queue grow far beyond the grid size and the algorithm do redundant work. Marking at enqueue time guarantees every cell enters the queue exactly once. It is a small change that turns a subtly quadratic implementation into a linear one."
+   },
+   {
+    "q": "The grid is a million by a million and cannot fit in memory. Now what?",
+    "a": "Process it in tiles that do fit, running the count within each tile, then reconcile islands that straddle tile boundaries by recording the border cells and unioning components across edges with a disjoint-set structure. That is the standard connected-components-at-scale approach and maps cleanly onto a distributed job. The insight to state is that only the boundaries need to cross tile lines, so the merge data is proportional to the perimeter rather than the area."
+   },
+   {
+    "q": "How would you solve it with union-find instead?",
+    "a": "Give every land cell an id, union it with its right and down neighbours if they are also land, then count the distinct roots. With path compression and union by rank it is effectively O(rows × cols). It is more code than BFS for this problem, so it is not the first answer, but it becomes the right one when islands must be counted repeatedly as cells are added, since union-find handles incremental connection while BFS would need a full rescan each time."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23224,13 +23450,29 @@
   "subcategory": "DP",
   "difficulty": "Easy",
   "question": "Climbing stairs: how many ways to reach step n taking 1 or 2 steps.",
-  "answer": "dp[i] = dp[i-1] + dp[i-2] (Fibonacci-like); base dp[0]=dp[1]=1. Use two rolling variables for O(1) space, O(n) time. Each step can be reached from one or two below.",
+  "answer": "**Logic**\n\nTo arrive at step n you came either from n-1 with a single step or from n-2 with a double step, so `ways(n) = ways(n-1) + ways(n-2)`. That is the Fibonacci recurrence with `ways(1) = 1` and `ways(2) = 2`.\n\nThe naive recursion recomputes the same subproblems exponentially, at roughly O(2^n). Since each value depends only on the previous two, you do not need an array at all: two rolling variables give O(n) time and O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static long ClimbStairs(int n)\n    {\n        if (n <= 0) return 0;\n        if (n <= 2) return n;          // 1 step -> 1 way, 2 steps -> 2 ways\n\n        long prev = 1, current = 2;    // ways(1), ways(2)\n\n        for (int i = 3; i <= n; i++)\n        {\n            long next = prev + current;\n            prev = current;\n            current = next;\n        }\n\n        return current;\n    }\n\n    // Generalised: any set of allowed step sizes. Same recurrence, summed over\n    // every step that could have been the last one taken.\n    public static long ClimbStairs(int n, int[] steps)\n    {\n        var ways = new long[n + 1];\n        ways[0] = 1;                   // one way to stand at the bottom: do nothing\n\n        for (int i = 1; i <= n; i++)\n            foreach (int s in steps)\n                if (i - s >= 0) ways[i] += ways[i - s];\n\n        return ways[n];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ClimbStairs(2));\n        Console.WriteLine(ClimbStairs(3));\n        Console.WriteLine(ClimbStairs(5));\n        Console.WriteLine(ClimbStairs(45));\n        Console.WriteLine(ClimbStairs(0));\n        Console.WriteLine(ClimbStairs(7, new[] { 1, 2, 3 }));   // with triple steps too\n    }\n}\n```\n\n**Output**\n\n```\n2\n3\n8\n1836311903\n0\n44\n```",
   "tags": [
    "dp",
    "fibonacci",
-   "climbing-stairs"
+   "rolling-variables",
+   "overflow",
+   "csharp"
   ],
-  "id": 1632
+  "id": 1632,
+  "followups": [
+   {
+    "q": "Why return long rather than int?",
+    "a": "Because the answer is Fibonacci and grows exponentially: it overflows a signed 32-bit int at n = 47. LeetCode caps n at 45 precisely to hide that, which is a bad habit to pick up. In real code either return long, document the maximum supported n, or return BigInteger. Noticing the overflow boundary unprompted is usually worth more in the interview than the algorithm itself, which most candidates get."
+   },
+   {
+    "q": "Can it be done faster than O(n)?",
+    "a": "Yes. Fibonacci can be computed by matrix exponentiation in O(log n), raising the 2x2 matrix [[1,1],[1,0]] to the nth power by repeated squaring. There is also the closed-form Binet formula, but it relies on floating point and loses accuracy above roughly n = 70, so it is unusable for exact answers. Matrix exponentiation is the real answer, and it matters when n is enormous and you are working modulo something."
+   },
+   {
+    "q": "What does this problem have in common with House Robber and Coin Change?",
+    "a": "All three are one-dimensional DP where the state is the position and each transition looks back a fixed distance. Climbing stairs sums the ways, house robber maximises with a skip constraint, coin change minimises the count. Once you see that the recurrence shape is shared, the implementations differ only in the operator and the base case. That recognition is what interviewers are checking with this cluster of questions, which is why they often ask two of them back to back."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23250,13 +23492,29 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Coin change: fewest coins to make an amount.",
-  "answer": "dp[a] = min over coins c of dp[a-c] + 1, with dp[0]=0 and infinity for unreachable amounts. Bottom-up over amounts 1..target. O(amount * coins) time, O(amount) space. Return -1 if dp[target] stays infinity.",
+  "answer": "**Logic**\n\nBottom-up DP over amounts. `best[a]` is the fewest coins making amount `a`; it is one more than the cheapest `best[a - coin]` over every coin that fits. Start with `best[0] = 0` and fill upward. O(amount × coins) time, O(amount) space.\n\nGreedy, taking the largest coin that fits, is wrong for arbitrary denominations: with coins 1, 3 and 4 making 6, greedy takes 4+1+1 for three coins while the optimum is 3+3 for two. It happens to work for real currency systems, which is why the mistake is so easy to make.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int CoinChange(int[] coins, int amount)\n    {\n        if (amount < 0) return -1;\n\n        const int Unreachable = int.MaxValue - 1;   // -1 so that +1 cannot overflow\n        var best = new int[amount + 1];\n\n        for (int a = 1; a <= amount; a++) best[a] = Unreachable;\n        best[0] = 0;                                 // zero coins make zero\n\n        for (int a = 1; a <= amount; a++)\n            foreach (int coin in coins)\n                if (coin <= a && best[a - coin] != Unreachable)\n                    best[a] = Math.Min(best[a], best[a - coin] + 1);\n\n        return best[amount] == Unreachable ? -1 : best[amount];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CoinChange(new[] { 1, 2, 5 }, 11));   // 5+5+1\n        Console.WriteLine(CoinChange(new[] { 2 }, 3));          // impossible\n        Console.WriteLine(CoinChange(new[] { 1 }, 0));          // nothing to make\n        Console.WriteLine(CoinChange(new[] { 1, 3, 4 }, 6));    // greedy would say 3\n        Console.WriteLine(CoinChange(new[] { 186, 419, 83, 408 }, 6249));\n        Console.WriteLine(CoinChange(new[] { 2, 5, 10 }, 1));   // no coin small enough\n    }\n}\n```\n\n**Output**\n\n```\n3\n-1\n0\n2\n20\n-1\n```\n\nThe fourth case is the greedy counterexample: 3+3 beats 4+1+1.",
   "tags": [
    "dp",
    "coin-change",
-   "unbounded-knapsack"
+   "bottom-up",
+   "greedy-fails",
+   "csharp"
   ],
-  "id": 1634
+  "id": 1634,
+  "followups": [
+   {
+    "q": "Why the Unreachable sentinel rather than filling with int.MaxValue?",
+    "a": "Because `best[a - coin] + 1` would overflow to int.MinValue if the entry were int.MaxValue, and Math.Min would then happily pick that negative value as the new best, silently corrupting the table. Using MaxValue - 1 and guarding with the explicit `!= Unreachable` check makes it impossible. An alternative many prefer is to fill with `amount + 1`, which is larger than any real answer yet small enough that adding one cannot overflow."
+   },
+   {
+    "q": "How does coin change II, counting combinations, differ?",
+    "a": "It counts ways rather than minimising, and the loop order becomes load-bearing. Putting the coin loop outside and the amount loop inside counts combinations, treating 1+2 and 2+1 as the same. Swapping them counts permutations instead. The minimisation version here is indifferent to the order, which is exactly why people carry the habit over and get the counting version wrong. Being able to say which loop order gives which semantics is the whole follow-up."
+   },
+   {
+    "q": "How would you return which coins were used, not just how many?",
+    "a": "Store the coin that produced each improvement in a parallel array, then walk backwards from the amount, subtracting each recorded coin until you reach zero. That adds O(amount) space and reconstructs in O(answer) time. It is the same parent-pointer technique used to recover a path from Dijkstra or an alignment from edit distance: the DP computes the cost, a parallel array remembers the choice, and a backward walk recovers the decisions."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -23713,12 +23971,29 @@
   "subcategory": "Searching",
   "difficulty": "Easy",
   "question": "Binary search: find a target in a sorted array.",
-  "answer": "Maintain low/high bounds; compute mid = low + (high-low)/2 (avoid overflow); if nums[mid]==target return mid, if less search right (low=mid+1), else search left (high=mid-1). O(log n) time, O(1) space. Return -1 if not found.",
+  "answer": "**Logic**\n\nHalve the search range each step. Compare the middle element to the target: equal means found, smaller means discard the left half, larger means discard the right half. O(log n) time, O(1) space.\n\nTwo details cause almost every binary-search bug. First, compute the midpoint as `low + (high - low) / 2` rather than `(low + high) / 2`, since the latter overflows when both indices are large. Second, be consistent about whether `high` is inclusive; here it is, so the loop condition is `low <= high` and the halves move to `mid + 1` and `mid - 1`.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Search(int[] nums, int target)\n    {\n        if (nums == null || nums.Length == 0) return -1;\n\n        int low = 0, high = nums.Length - 1;    // high is inclusive\n\n        while (low <= high)\n        {\n            int mid = low + (high - low) / 2;   // overflow-safe midpoint\n\n            if (nums[mid] == target) return mid;\n            if (nums[mid] < target) low = mid + 1;\n            else high = mid - 1;\n        }\n\n        return -1;\n    }\n\n    // Leftmost insertion point: where target would go to keep the array sorted.\n    // This is the form that generalises to first/last occurrence problems.\n    public static int LowerBound(int[] nums, int target)\n    {\n        int low = 0, high = nums.Length;        // high is exclusive here\n        while (low < high)\n        {\n            int mid = low + (high - low) / 2;\n            if (nums[mid] < target) low = mid + 1;\n            else high = mid;\n        }\n        return low;\n    }\n\n    public static void Main()\n    {\n        int[] nums = { -1, 0, 3, 5, 9, 12 };\n\n        Console.WriteLine(Search(nums, 9));\n        Console.WriteLine(Search(nums, 2));\n        Console.WriteLine(Search(nums, -1));     // first element\n        Console.WriteLine(Search(nums, 12));     // last element\n        Console.WriteLine(Search(new int[0], 1));\n\n        Console.WriteLine(LowerBound(nums, 4));  // would insert at index 3\n        Console.WriteLine(LowerBound(nums, 13)); // past the end\n    }\n}\n```\n\n**Output**\n\n```\n4\n-1\n0\n5\n-1\n3\n6\n```",
   "tags": [
    "searching",
-   "binary-search"
+   "binary-search",
+   "overflow",
+   "lower-bound",
+   "csharp"
   ],
-  "id": 1668
+  "id": 1668,
+  "followups": [
+   {
+    "q": "Why is the overflow in (low + high) / 2 not theoretical?",
+    "a": "It was a real bug in Java's standard library for nine years, and in the binary search that Jon Bentley published and that was widely copied. With arrays near two billion elements the sum exceeds int.MaxValue and wraps negative, producing a negative index and an exception. It needs a genuinely huge array to trigger, which is exactly why it survived so long in code everyone believed was correct. Writing `low + (high - low) / 2` costs nothing and removes the class of bug."
+   },
+   {
+    "q": "How do you find the first and last occurrence of a duplicated target?",
+    "a": "Use the lower-bound form twice. The first occurrence is the lower bound of the target; the last is the lower bound of target + 1, minus one. The key change from the plain search is that on an equal comparison you do not return, you keep narrowing toward the side you want. Trying to bolt a linear scan onto a plain binary search once a match is found ruins the complexity: on an array that is entirely the target, that degrades to O(n)."
+   },
+   {
+    "q": "What is 'binary search on the answer'?",
+    "a": "Searching over a range of candidate answers rather than over array indices, valid whenever the predicate is monotonic: if a capacity of 10 works, so does 11. Koko eating bananas, splitting an array to minimise the largest sum, and the minimum ship capacity in D days are all this. You binary search the answer space and use a linear feasibility check as the comparison, giving O(n log(range)). Spotting that a problem has a monotonic predicate is the actual skill being tested."
+   }
+  ]
  },
  {
   "category": "Coding",
