@@ -4924,13 +4924,31 @@
   "subcategory": "Design",
   "difficulty": "Hard",
   "question": "Design an LFU cache.",
-  "answer": "Maintain a hash map key→(value, freq), a map freq→ordered set/list of keys at that frequency, and track the minimum frequency. On access, move the key to the next frequency bucket; on eviction, remove the least-recently-used key from the min-frequency bucket. O(1) operations with careful bookkeeping.",
+  "answer": "**Logic**\n\nLFU evicts the least *frequently* used item, breaking ties by least recently used. Achieving O(1) for both get and put needs three structures working together.\n\nA map from key to node holds the data. A map from frequency to a doubly linked list holds all keys at that frequency, in recency order. And a single `minFrequency` counter tracks which list to evict from.\n\nThe insight that makes `minFrequency` maintainable in O(1): it only ever increases by one when the item at the minimum frequency is promoted and its list empties, and it resets to 1 whenever a new item is inserted.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class LfuCache\n{\n    private sealed class Entry\n    {\n        public int Key;\n        public int Value;\n        public int Frequency;\n    }\n\n    private readonly int _capacity;\n    private readonly Dictionary<int, LinkedListNode<Entry>> _entries = new();\n    private readonly Dictionary<int, LinkedList<Entry>> _byFrequency = new();\n    private int _minFrequency;\n\n    public LfuCache(int capacity)\n    {\n        if (capacity < 0) throw new ArgumentOutOfRangeException(nameof(capacity));\n        _capacity = capacity;\n    }\n\n    public int Get(int key)\n    {\n        if (!_entries.TryGetValue(key, out var node)) return -1;\n\n        Promote(node);\n        return node.Value.Value;\n    }\n\n    public void Put(int key, int value)\n    {\n        if (_capacity == 0) return;\n\n        if (_entries.TryGetValue(key, out var existing))\n        {\n            existing.Value.Value = value;\n            Promote(existing);\n            return;\n        }\n\n        if (_entries.Count >= _capacity) Evict();\n\n        var entry = new Entry { Key = key, Value = value, Frequency = 1 };\n        _entries[key] = GetList(1).AddFirst(entry);\n        _minFrequency = 1;                  // a brand new item is always the minimum\n    }\n\n    // Move a node from its frequency list to the next one up.\n    private void Promote(LinkedListNode<Entry> node)\n    {\n        int oldFrequency = node.Value.Frequency;\n        var oldList = _byFrequency[oldFrequency];\n        oldList.Remove(node);\n\n        // If that emptied the minimum list, the minimum has moved up by exactly one.\n        if (oldList.Count == 0 && _minFrequency == oldFrequency) _minFrequency++;\n\n        node.Value.Frequency = oldFrequency + 1;\n        _entries[node.Value.Key] = GetList(node.Value.Frequency).AddFirst(node.Value);\n    }\n\n    private void Evict()\n    {\n        var list = _byFrequency[_minFrequency];\n        var victim = list.Last;             // least recently used among the least frequent\n        list.RemoveLast();\n        _entries.Remove(victim.Value.Key);\n    }\n\n    private LinkedList<Entry> GetList(int frequency)\n    {\n        if (!_byFrequency.TryGetValue(frequency, out var list))\n            _byFrequency[frequency] = list = new LinkedList<Entry>();\n        return list;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var cache = new LfuCache(2);\n\n        cache.Put(1, 1);\n        cache.Put(2, 2);\n        Console.WriteLine(cache.Get(1));      // 1 now has frequency 2\n\n        cache.Put(3, 3);                      // evicts key 2, the least frequent\n        Console.WriteLine(cache.Get(2));      // gone\n        Console.WriteLine(cache.Get(3));\n\n        cache.Put(4, 4);                      // 1 and 3 both at 2; 1 is older, so it goes\n        Console.WriteLine(cache.Get(1));\n        Console.WriteLine(cache.Get(4));\n\n        var zero = new LfuCache(0);\n        zero.Put(1, 1);\n        Console.WriteLine(zero.Get(1));       // capacity 0 stores nothing\n    }\n}\n```\n\n**Output**\n\n```\n1\n-1\n3\n-1\n4\n-1\n```",
   "tags": [
    "design",
    "lfu-cache",
-   "frequency",
-   "hashmap",
-   "hard"
+   "linked-list",
+   "eviction",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why can minFrequency be maintained in O(1) rather than searched for?",
+    "a": "Because it only changes in two ways. Inserting a new item sets it to 1, since nothing can be less frequent. Promoting an item raises its frequency by exactly one, so if that emptied the minimum list, the new minimum must be exactly one higher; nothing else could have become the minimum in between. Those two rules cover every mutation, so no search over the frequency keys is ever needed. Without that observation you would scan for the minimum and lose the O(1) guarantee."
+   },
+   {
+    "q": "How does LFU compare with LRU in practice?",
+    "a": "LFU resists scans better: a one-off sweep through many keys does not evict the genuinely popular items, whereas it flushes an LRU cache entirely. Its weakness is the mirror image, cache pollution: an item that was very popular last week keeps a high count and refuses to leave even though it is now dead. Real caches therefore use aged or windowed variants such as TinyLFU, which decays counts over time, or W-TinyLFU as used by Caffeine, which combines a small LRU window with a frequency sketch."
+   },
+   {
+    "q": "Suppose the interviewer says this uses too much memory for millions of keys.",
+    "a": "The per-entry overhead is the problem: two dictionary entries plus a linked-list node per key. The standard answer is to stop tracking exact frequencies and use a Count-Min Sketch, which estimates counts in a fixed amount of memory with a bounded error and never underestimates. Combined with a small admission window that keeps new items alive long enough to prove themselves, that is exactly the TinyLFU design, and it gives near-optimal hit rates at a fraction of the memory."
+   },
+   {
+    "q": "How would you make this thread-safe?",
+    "a": "A single lock around both operations, because even Get mutates three structures and a reader would otherwise observe a node mid-move between frequency lists. A reader-writer lock buys nothing since every path writes. That makes the cache a contention point, so the realistic fixes are sharding by key hash, which cuts contention roughly by the shard count, or moving to an approximate policy where reads only touch a sketch and reordering happens in batches off the hot path."
+   }
   ]
  },
  {
@@ -4970,13 +4988,31 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Insert Delete GetRandom in O(1).",
-  "answer": "Use a dynamic array (for O(1) random access) plus a hash map from value→index. Insert appends and records the index; delete swaps the target with the last element, updates the map, and pops; getRandom picks a random array index. All O(1) average.",
+  "answer": "**Logic**\n\nRandom selection needs contiguous indexing, which an array gives, but arbitrary removal from an array is O(n) because of the shifting. The trick removes the shifting: swap the doomed element with the last one, then remove from the end.\n\nA dictionary from value to index makes lookup O(1), and it must be updated for the element that was swapped into the vacated slot. Forgetting that update is the classic bug and leaves a stale index behind.\n\nAll three operations are O(1), with O(n) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class RandomisedSet\n{\n    private readonly List<int> _items = new();\n    private readonly Dictionary<int, int> _indexOf = new();\n    private readonly Random _rng;\n\n    public RandomisedSet(int seed = 42) => _rng = new Random(seed);\n\n    public bool Insert(int value)\n    {\n        if (_indexOf.ContainsKey(value)) return false;\n\n        _indexOf[value] = _items.Count;\n        _items.Add(value);\n        return true;\n    }\n\n    public bool Remove(int value)\n    {\n        if (!_indexOf.TryGetValue(value, out int index)) return false;\n\n        int lastIndex = _items.Count - 1;\n        int lastValue = _items[lastIndex];\n\n        // Move the last element into the hole, then trim. No shifting.\n        _items[index] = lastValue;\n        _indexOf[lastValue] = index;       // the moved element has a new index\n\n        _items.RemoveAt(lastIndex);\n        _indexOf.Remove(value);\n\n        return true;\n    }\n\n    public int GetRandom()\n    {\n        if (_items.Count == 0) throw new InvalidOperationException(\"set is empty\");\n        return _items[_rng.Next(_items.Count)];\n    }\n\n    public int Count => _items.Count;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var set = new RandomisedSet();\n\n        Console.WriteLine(set.Insert(1));      // true\n        Console.WriteLine(set.Insert(1));      // already present\n        Console.WriteLine(set.Remove(2));      // not present\n\n        set.Insert(2);\n        set.Insert(3);\n        Console.WriteLine(set.Count);\n\n        // Removing the element that is NOT last exercises the swap.\n        Console.WriteLine(set.Remove(1));\n        Console.WriteLine(set.Count);\n\n        // Whatever comes back must still be a member.\n        int drawn = set.GetRandom();\n        Console.WriteLine(drawn == 2 || drawn == 3);\n\n        set.Remove(2); set.Remove(3);\n        try { set.GetRandom(); }\n        catch (InvalidOperationException e) { Console.WriteLine(e.Message); }\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nFalse\n3\nTrue\n2\nTrue\nset is empty\n```",
   "tags": [
    "design",
    "hashmap",
-   "array",
-   "randomized",
-   "o1"
+   "swap-remove",
+   "random",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What exactly breaks if you forget to update the moved element's index?",
+    "a": "The dictionary keeps pointing the moved value at its old, now-invalid position. A later Remove of that value would overwrite the wrong slot, corrupting the list and losing a different element, and GetRandom could return a value no longer in the set. It is a silent corruption rather than an exception, which makes it the worst kind of bug. The test removing a non-last element exists specifically to exercise that path."
+   },
+   {
+    "q": "Why not just use a HashSet and pick a random element from it?",
+    "a": "Because a HashSet has no indexing, so selecting a uniformly random member means enumerating to a random position, which is O(n). The whole design exists to give random access, and the list provides that while the dictionary provides membership. It is a good example of combining two structures so that each covers the other's weakness, which is the same idea as the LRU cache pairing a dictionary with a linked list."
+   },
+   {
+    "q": "How would you support duplicates?",
+    "a": "Change the dictionary to map each value to a HashSet of indices rather than a single one. Remove takes any index from that set, and the swap updates the moved value's index set by removing the old position and adding the new one. GetRandom is unchanged and naturally becomes weighted by multiplicity, which is usually what is wanted. The fiddly case is when the element being removed is itself the last one, where the swap is a no-op and the order of the set updates matters."
+   },
+   {
+    "q": "Why does the test assert membership rather than a specific random value?",
+    "a": "Because the output of a seeded Random is an implementation detail that is not guaranteed stable across .NET versions, so asserting an exact draw would make the test fragile for reasons unrelated to the code. Checking that the drawn value is a current member tests the actual contract. The same reasoning applies to Fisher-Yates and to any problem where several answers are correct."
+   }
   ]
  },
  {
@@ -4984,13 +5020,31 @@
   "subcategory": "Design",
   "difficulty": "Hard",
   "question": "Design a data structure for autocomplete / typeahead.",
-  "answer": "Use a Trie where each node stores (or caches) the top-k completions/frequencies for its prefix. On input, walk to the prefix node and return its cached top-k suggestions. Update frequencies on selection. Trades memory for O(prefix length) lookups; a ternary search tree is an alternative.",
+  "answer": "**Logic**\n\nA trie over the stored phrases, where each node caches the top k completions beneath it. Walking the prefix is O(prefix length), and the answer is then read straight from the node rather than searched for.\n\nThe alternative, walking the prefix and then traversing the whole subtree to collect and rank candidates, is correct but slow when a common prefix has thousands of descendants. Caching at each node moves that cost to insertion time, which is the right trade when reads vastly outnumber writes.\n\nTie-breaking must be defined: here by descending frequency, then alphabetically, so results are deterministic.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Autocomplete\n{\n    private sealed class Node\n    {\n        public readonly Dictionary<char, Node> Children = new();\n        // Cached top suggestions beneath this node, best first.\n        public readonly List<(string Phrase, int Count)> Top = new();\n    }\n\n    private readonly Node _root = new();\n    private readonly Dictionary<string, int> _counts = new();\n    private readonly int _k;\n\n    public Autocomplete(int k = 3) => _k = k;\n\n    public void Add(string phrase, int times = 1)\n    {\n        if (string.IsNullOrEmpty(phrase)) return;\n\n        _counts[phrase] = _counts.TryGetValue(phrase, out int c) ? c + times : times;\n        int total = _counts[phrase];\n\n        var node = _root;\n        UpdateTop(node, phrase, total);\n\n        foreach (char ch in phrase)\n        {\n            if (!node.Children.TryGetValue(ch, out var next))\n                node.Children[ch] = next = new Node();\n            node = next;\n\n            UpdateTop(node, phrase, total);\n        }\n    }\n\n    // Keep each node's cached list sorted and capped at k.\n    private void UpdateTop(Node node, string phrase, int count)\n    {\n        int existing = node.Top.FindIndex(t => t.Phrase == phrase);\n        if (existing >= 0) node.Top.RemoveAt(existing);\n\n        node.Top.Add((phrase, count));\n\n        // Frequency descending, then alphabetical: deterministic ties.\n        node.Top.Sort((a, b) => b.Count != a.Count\n            ? b.Count.CompareTo(a.Count)\n            : string.CompareOrdinal(a.Phrase, b.Phrase));\n\n        if (node.Top.Count > _k) node.Top.RemoveAt(node.Top.Count - 1);\n    }\n\n    public IList<string> Suggest(string prefix)\n    {\n        var node = _root;\n\n        foreach (char ch in prefix)\n            if (!node.Children.TryGetValue(ch, out node)) return Array.Empty<string>();\n\n        return node.Top.Select(t => t.Phrase).ToList();   // already ranked\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var ac = new Autocomplete(3);\n\n        ac.Add(\"cat\", 5);\n        ac.Add(\"car\", 8);\n        ac.Add(\"card\", 2);\n        ac.Add(\"care\", 9);\n        ac.Add(\"dog\", 4);\n\n        Console.WriteLine(string.Join(\",\", ac.Suggest(\"ca\")));\n        Console.WriteLine(string.Join(\",\", ac.Suggest(\"car\")));\n        Console.WriteLine(string.Join(\",\", ac.Suggest(\"d\")));\n        Console.WriteLine(string.Join(\",\", ac.Suggest(\"z\")).Length);   // no match\n\n        ac.Add(\"cat\", 10);                                  // now the most frequent\n        Console.WriteLine(string.Join(\",\", ac.Suggest(\"ca\")));\n        Console.WriteLine(string.Join(\",\", ac.Suggest(\"\")));\n    }\n}\n```\n\n**Output**\n\n```\ncare,car,cat\ncar,care,card\ndog\n0\ncat,care,car\ncat,care,car\n```",
   "tags": [
    "design",
    "trie",
    "autocomplete",
-   "top-k",
-   "hard"
+   "caching",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why cache the top k at every node rather than collecting on demand?",
+    "a": "Because a short prefix can have an enormous subtree: typing 'a' on a real search engine matches millions of phrases, and traversing them per keystroke is hopeless. Caching moves the work to write time, where it happens far less often, and makes the read O(prefix length) regardless of how popular the prefix is. The cost is memory, k entries per node, and slower writes. For a read-dominated workload like typeahead that is exactly the right direction."
+   },
+   {
+    "q": "The Add path re-sorts a list at every node. Is that acceptable?",
+    "a": "It is O(prefix length x k log k), which is fine for k of three or ten but sloppy. A production version would keep each node's list as a small bounded heap or do an insertion into an already-sorted list, which is O(k) rather than O(k log k). The bigger real-world change is to rebuild the caches offline in batch rather than updating synchronously on every write, since suggestion freshness rarely needs to be immediate."
+   },
+   {
+    "q": "Suppose suggestions must be personalised per user.",
+    "a": "A single shared trie no longer suffices, since ranking differs per user. The usual architecture is a shared global trie for candidate generation, returning a few dozen prefix matches cheaply, followed by a per-user ranking pass that blends global popularity with personal history. That separation of candidate generation from ranking is the standard shape of every recommendation system, and it keeps the expensive personalised work proportional to the candidate count rather than the corpus."
+   },
+   {
+    "q": "How would you handle typos, so 'recieve' still suggests 'receive'?",
+    "a": "Exact prefix matching cannot, so you add fuzzy matching: either a BK-tree or a Levenshtein automaton, which walks the trie allowing a bounded edit distance, or a precomputed set of common misspellings. Walking the trie with an edit budget is the elegant option because it reuses the structure you already have, and pruning branches whose best possible distance already exceeds the budget keeps it tractable."
+   }
   ]
  },
  {
@@ -4998,12 +5052,27 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Implement a min stack / max stack with O(1) extremum.",
-  "answer": "Alongside the main stack, keep an auxiliary stack tracking the running min (or max): push the min of the new value and the current min; pop both together. getMin/getMax reads the auxiliary top. All operations O(1). Storing pairs (value, extremum) is an equivalent approach.",
+  "answer": "**Logic**\n\nA single tracked minimum fails, because popping the minimum must restore the *previous* minimum, which requires history. So keep a parallel stack whose top is always the minimum of everything currently stored.\n\nThe space-efficient refinement pushes onto the auxiliary stack only when the incoming value is less than or equal to the current minimum, and pops only when the removed value equals the top. The `equal to` in both conditions is essential: with two copies of the minimum, tracking only one would report a stale minimum after the first pop.\n\nAll operations are O(1).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class MinMaxStack\n{\n    private readonly Stack<int> _values = new();\n    private readonly Stack<int> _minima = new();\n    private readonly Stack<int> _maxima = new();\n\n    public void Push(int value)\n    {\n        _values.Push(value);\n\n        // <= and >= so duplicates of the extremum are each recorded.\n        if (_minima.Count == 0 || value <= _minima.Peek()) _minima.Push(value);\n        if (_maxima.Count == 0 || value >= _maxima.Peek()) _maxima.Push(value);\n    }\n\n    public int Pop()\n    {\n        if (_values.Count == 0) throw new InvalidOperationException(\"stack is empty\");\n\n        int value = _values.Pop();\n\n        if (_minima.Count > 0 && value == _minima.Peek()) _minima.Pop();\n        if (_maxima.Count > 0 && value == _maxima.Peek()) _maxima.Pop();\n\n        return value;\n    }\n\n    public int Peek() => _values.Count > 0\n        ? _values.Peek()\n        : throw new InvalidOperationException(\"stack is empty\");\n\n    public int Min() => _minima.Count > 0\n        ? _minima.Peek()\n        : throw new InvalidOperationException(\"stack is empty\");\n\n    public int Max() => _maxima.Count > 0\n        ? _maxima.Peek()\n        : throw new InvalidOperationException(\"stack is empty\");\n\n    public int Count => _values.Count;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var s = new MinMaxStack();\n        s.Push(5); s.Push(2); s.Push(8); s.Push(2);\n\n        Console.WriteLine($\"{s.Min()} {s.Max()}\");\n\n        s.Pop();                       // removes one of the two 2s\n        Console.WriteLine(s.Min());    // still 2: the duplicate was recorded\n\n        s.Pop();                       // removes the 8\n        Console.WriteLine(s.Max());\n\n        s.Pop();                       // removes the other 2\n        Console.WriteLine($\"{s.Min()} {s.Max()}\");\n\n        Console.WriteLine(s.Count);\n\n        s.Pop();\n        try { s.Min(); }\n        catch (InvalidOperationException e) { Console.WriteLine(e.Message); }\n    }\n}\n```\n\n**Output**\n\n```\n2 8\n2\n5\n5 5\n1\nstack is empty\n```",
   "tags": [
    "design",
-   "min-stack",
-   "max-stack",
-   "o1"
+   "stack",
+   "auxiliary-stack",
+   "duplicates",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the comparison need to be <= rather than <?",
+    "a": "Because equal values must each be recorded. With two 2s pushed and a strict less-than, only the first would go onto the minima stack; popping the second 2 would then match the top and pop the record, leaving the stack reporting a minimum of 5 while a 2 is still present. The test does exactly this. The mirror argument applies to the maxima stack with >=. It is one character and it decides correctness."
+   },
+   {
+    "q": "Can this be done in O(1) extra space?",
+    "a": "There is a well-known encoding trick: when a new minimum arrives, push `2 * value - currentMin`, a value provably below the new minimum, and decode the previous minimum on pop. It achieves O(1) extra space but risks overflow for values near the type's limits and is genuinely hard to read. I would not ship it. The conditional-push version above is already O(1) amortised for typical data and stays obvious, which is the better trade outside a puzzle."
+   },
+   {
+    "q": "How does this relate to the sliding window maximum problem?",
+    "a": "Both maintain an extremum under changing contents, but the access patterns differ. A stack only ever adds and removes at one end, so a parallel stack suffices. A window adds at one end and removes at the other, which a stack cannot express, so it needs a monotonic deque instead. Recognising that the structure follows from where mutations happen, rather than from what is being computed, is the transferable point."
+   }
   ]
  },
  {
@@ -5011,13 +5080,31 @@
   "subcategory": "Design",
   "difficulty": "Hard",
   "question": "Design Twitter (post tweet, get news feed, follow/unfollow).",
-  "answer": "Store per-user tweet lists (with timestamps) and a follow graph. getNewsFeed merges the user's and followees' recent tweets using a max-heap by timestamp to get the latest 10 (merge-k-lists pattern). Post/follow are O(1). Feed generation is O(followees * log). Consider fan-out-on-write for scale.",
+  "answer": "**Logic**\n\nThe feed is the interesting part: the ten most recent tweets from a user and everyone they follow, merged by time. That is merging k sorted lists, so a heap over each followee's most recent tweets gives O(k log k) rather than gathering and sorting everything.\n\nA global counter as the timestamp avoids clock resolution problems: two tweets in the same millisecond would otherwise tie and order non-deterministically.\n\nStoring each user's tweets newest-first means the heap only needs the head of each list, pulling the next one lazily as tweets are consumed.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Twitter\n{\n    private const int FeedSize = 10;\n\n    private int _clock;   // monotonic counter, not a wall clock\n\n    private readonly Dictionary<int, List<(int Time, int TweetId)>> _tweets = new();\n    private readonly Dictionary<int, HashSet<int>> _following = new();\n\n    public void PostTweet(int userId, int tweetId)\n    {\n        if (!_tweets.TryGetValue(userId, out var list))\n            _tweets[userId] = list = new List<(int, int)>();\n\n        list.Add((_clock++, tweetId));\n    }\n\n    public IList<int> GetNewsFeed(int userId)\n    {\n        // The user's own tweets plus everyone they follow.\n        var sources = new HashSet<int> { userId };\n        if (_following.TryGetValue(userId, out var followed)) sources.UnionWith(followed);\n\n        // Max-heap on time, seeded with each source's most recent tweet.\n        var heap = new PriorityQueue<(int UserId, int Index), int>();\n\n        foreach (int source in sources)\n            if (_tweets.TryGetValue(source, out var list) && list.Count > 0)\n            {\n                int last = list.Count - 1;\n                heap.Enqueue((source, last), -list[last].Time);\n            }\n\n        var feed = new List<int>(FeedSize);\n\n        while (heap.Count > 0 && feed.Count < FeedSize)\n        {\n            var (source, index) = heap.Dequeue();\n            feed.Add(_tweets[source][index].TweetId);\n\n            if (index > 0)   // pull that user's next-most-recent tweet lazily\n                heap.Enqueue((source, index - 1), -_tweets[source][index - 1].Time);\n        }\n\n        return feed;\n    }\n\n    public void Follow(int followerId, int followeeId)\n    {\n        if (followerId == followeeId) return;             // following yourself is implicit\n\n        if (!_following.TryGetValue(followerId, out var set))\n            _following[followerId] = set = new HashSet<int>();\n\n        set.Add(followeeId);\n    }\n\n    public void Unfollow(int followerId, int followeeId)\n    {\n        if (_following.TryGetValue(followerId, out var set)) set.Remove(followeeId);\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var t = new Twitter();\n\n        t.PostTweet(1, 5);\n        Console.WriteLine(string.Join(\",\", t.GetNewsFeed(1)));\n\n        t.Follow(1, 2);\n        t.PostTweet(2, 6);\n        Console.WriteLine(string.Join(\",\", t.GetNewsFeed(1)));   // newest first\n\n        t.Unfollow(1, 2);\n        Console.WriteLine(string.Join(\",\", t.GetNewsFeed(1)));\n\n        Console.WriteLine(string.Join(\",\", t.GetNewsFeed(99)).Length);   // unknown user\n\n        // The feed is capped at ten.\n        for (int i = 0; i < 15; i++) t.PostTweet(3, 100 + i);\n        Console.WriteLine(t.GetNewsFeed(3).Count);\n        Console.WriteLine(t.GetNewsFeed(3)[0]);                  // the most recent\n    }\n}\n```\n\n**Output**\n\n```\n5\n6,5\n5\n0\n10\n114\n```",
   "tags": [
    "design",
-   "twitter",
    "heap",
    "feed",
-   "hard"
+   "fan-out",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why a counter rather than DateTime for the timestamp?",
+    "a": "Because two tweets posted in the same tick would tie, and the ordering between them would then depend on unspecified sort stability. A monotonic counter guarantees a strict total order with no ties. It also avoids clock adjustments moving tweets around, which is the same reason Stopwatch is preferred over DateTime.UtcNow for measuring elapsed time. In a distributed system this becomes a logical clock or a Snowflake-style id embedding both time and a sequence number."
+   },
+   {
+    "q": "This is pull-on-read. When would you push on write instead?",
+    "a": "Fan-out on write precomputes each follower's feed when a tweet is posted, making reads a single lookup. That suits the common case where reads vastly outnumber writes. It collapses for celebrities: a user with fifty million followers would trigger fifty million writes per tweet. Real systems use a hybrid, fanning out for ordinary users and merging on read for the few accounts with huge followings, which is exactly the design Twitter published."
+   },
+   {
+    "q": "Why pull each user's next tweet lazily rather than loading all of them?",
+    "a": "Because the feed needs only ten entries, so loading every tweet from every followee would be enormously wasteful for an active user following hundreds of accounts. The heap holds at most one entry per source and pulls the next only when one is consumed, so the total work is proportional to the feed size and the number of sources rather than to the total tweet count. It is the same merge-k-sorted-lists technique, and the laziness is what makes it practical."
+   },
+   {
+    "q": "What breaks first if this were real?",
+    "a": "Memory, since everything is in process and nothing is evicted or persisted. Then the follow set for celebrity accounts, which would be millions of entries in a single HashSet. Then the lack of any pagination, since GetNewsFeed only ever returns the newest ten with no cursor to continue from. In a real design the tweets live in a partitioned store keyed by user and time, feeds are cached in Redis, and the API is cursor-based so clients can page backwards."
+   }
   ]
  },
  {
@@ -5221,13 +5308,31 @@
   "subcategory": "Design",
   "difficulty": "Hard",
   "question": "Design a URL shortener (encode/decode).",
-  "answer": "Map a unique numeric id to a short code via base-62 encoding (0-9,a-z,A-Z), storing id↔longUrl. Encode: assign an incrementing id, convert to base-62. Decode: convert the code back to the id and look up the URL. Handle collisions/custom aliases and use a KV store + cache for scale.",
+  "answer": "**Logic**\n\nMap each long URL to a short, unique key and store both directions. The key design decision is how the key is generated.\n\nA counter encoded in base 62 gives the shortest possible keys with no collisions ever, since each id is used once. Hashing the URL and truncating is the common alternative but requires collision handling, because truncated hashes will collide.\n\nA second map from URL to key makes the encoder idempotent, so shortening the same URL twice returns the same key rather than leaking a new one each time.\n\nAll operations are O(1).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class UrlShortener\n{\n    private const string Alphabet =\n        \"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\";   // base 62\n\n    private readonly Dictionary<string, string> _keyToUrl = new();\n    private readonly Dictionary<string, string> _urlToKey = new();\n    private long _nextId = 1;\n\n    public string Encode(string longUrl)\n    {\n        if (string.IsNullOrEmpty(longUrl)) throw new ArgumentException(\"url required\");\n\n        // Idempotent: the same URL always yields the same key.\n        if (_urlToKey.TryGetValue(longUrl, out string existing)) return existing;\n\n        string key = ToBase62(_nextId++);\n        _keyToUrl[key] = longUrl;\n        _urlToKey[longUrl] = key;\n\n        return key;\n    }\n\n    public string Decode(string key) =>\n        _keyToUrl.TryGetValue(key, out string url)\n            ? url\n            : throw new KeyNotFoundException($\"unknown key '{key}'\");\n\n    private static string ToBase62(long value)\n    {\n        if (value == 0) return \"0\";\n\n        var sb = new StringBuilder();\n        while (value > 0)\n        {\n            sb.Insert(0, Alphabet[(int)(value % 62)]);\n            value /= 62;\n        }\n        return sb.ToString();\n    }\n\n    public int Count => _keyToUrl.Count;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var s = new UrlShortener();\n\n        string a = s.Encode(\"https://example.com/a/very/long/path\");\n        string b = s.Encode(\"https://example.com/another\");\n\n        Console.WriteLine($\"{a} {b}\");\n        Console.WriteLine(s.Decode(a));\n        Console.WriteLine(s.Encode(\"https://example.com/a/very/long/path\") == a);   // idempotent\n        Console.WriteLine(s.Count);\n\n        try { s.Decode(\"nope\"); }\n        catch (KeyNotFoundException) { Console.WriteLine(\"unknown key\"); }\n\n        // Base 62 stays short as ids grow: 62^6 is over 56 billion.\n        var big = new UrlShortener();\n        for (int i = 0; i < 1000; i++) big.Encode(\"https://example.com/\" + i);\n        Console.WriteLine(big.Encode(\"https://example.com/last\").Length);\n    }\n}\n```\n\n**Output**\n\n```\n1 2\nhttps://example.com/a/very/long/path\nTrue\n2\nunknown key\n3\n```",
   "tags": [
    "design",
-   "url-shortener",
-   "base-62",
-   "encoding",
-   "hard"
+   "base62",
+   "idempotency",
+   "distributed-ids",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Counter or hash for key generation?",
+    "a": "A counter never collides, produces the shortest keys, and is trivially fast, but it makes ids guessable and enumerable, which leaks how many URLs exist and lets anyone walk the whole corpus. Hashing avoids that but must handle collisions, usually by probing with a salt until a free key is found. The common compromise is a counter passed through a reversible obfuscation such as Feistel or multiplication by a modular inverse, which keeps uniqueness while making the sequence unguessable."
+   },
+   {
+    "q": "How would this work across multiple servers?",
+    "a": "A single in-process counter does not survive multiple instances. The usual options are a ticket server or database sequence handing out ranges, so each instance takes a block of a thousand ids and issues them locally without coordination; a Snowflake-style id combining a machine identifier with a timestamp and sequence; or a hash-based scheme, which needs no coordination at all but reintroduces collision handling. The range-allocation approach is usually the pragmatic winner."
+   },
+   {
+    "q": "Why base 62 rather than base 64?",
+    "a": "Because base 64 includes characters such as plus, slash and equals that require URL encoding, which defeats the purpose of a short link. Base 62 uses only alphanumerics, which are safe in a URL path unencoded. Some services go further and exclude visually ambiguous characters such as 0, O, l and I so that links can be read aloud or copied from print without error, trading a slightly longer key for fewer support tickets."
+   },
+   {
+    "q": "What would you add before calling this production-ready?",
+    "a": "Persistence, since an in-memory dictionary loses everything on restart. Expiry, so dead links are reclaimed. Rate limiting on the encode endpoint, or it becomes a free open redirector for spam. Validation and a blocklist on the target URL for the same reason, since open redirectors are used in phishing. And analytics on decode, which is usually the actual product. The data structures here are the easy part; the abuse surface is what makes it a real system."
+   }
   ]
  },
  {
@@ -5235,12 +5340,31 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Design a hit counter (hits in the last 5 minutes).",
-  "answer": "Store timestamps in a queue (or a circular buffer of 300 second-buckets). On hit, record the timestamp; on getHits(t), evict entries older than t-300 and return the count. Bucketing gives O(1) space bounded by the window and O(1) amortized operations.",
+  "answer": "**Logic**\n\nStoring every hit timestamp works but grows without bound under load. Since the window is 300 seconds and the resolution is one second, a fixed circular buffer of 300 slots suffices.\n\nEach slot holds a timestamp and a count. On a hit, if the slot's stored timestamp is stale, it belonged to a previous window, so reset it rather than adding to it. Counting sums only the slots whose timestamps fall inside the window.\n\nO(1) per hit, O(window) per query, and constant memory regardless of traffic.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class HitCounter\n{\n    private const int WindowSeconds = 300;\n\n    private readonly int[] _timestamps = new int[WindowSeconds];\n    private readonly int[] _counts = new int[WindowSeconds];\n\n    public void Hit(int timestamp)\n    {\n        int slot = timestamp % WindowSeconds;\n\n        if (_timestamps[slot] != timestamp)\n        {\n            // Stale slot from an earlier window: overwrite rather than accumulate.\n            _timestamps[slot] = timestamp;\n            _counts[slot] = 1;\n        }\n        else\n        {\n            _counts[slot]++;\n        }\n    }\n\n    public int GetHits(int timestamp)\n    {\n        int total = 0;\n\n        for (int i = 0; i < WindowSeconds; i++)\n            if (timestamp - _timestamps[i] < WindowSeconds) total += _counts[i];\n\n        return total;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var counter = new HitCounter();\n\n        counter.Hit(1);\n        counter.Hit(2);\n        counter.Hit(3);\n        Console.WriteLine(counter.GetHits(4));\n\n        counter.Hit(300);\n        Console.WriteLine(counter.GetHits(300));\n\n        // At 301 the hit from second 1 has fallen out of the window.\n        Console.WriteLine(counter.GetHits(301));\n\n        // Many hits in the same second collapse into one slot.\n        var busy = new HitCounter();\n        for (int i = 0; i < 1000; i++) busy.Hit(50);\n        Console.WriteLine(busy.GetHits(50));\n        Console.WriteLine(busy.GetHits(349));   // still inside the window\n        Console.WriteLine(busy.GetHits(350));   // just outside\n    }\n}\n```\n\n**Output**\n\n```\n3\n4\n3\n1000\n1000\n0\n```",
   "tags": [
    "design",
-   "hit-counter",
+   "circular-buffer",
    "sliding-window",
-   "queue"
+   "metrics",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the stale-slot check necessary?",
+    "a": "Because the buffer wraps, so slot 5 is reused by second 5, second 305, second 605 and so on. Without comparing the stored timestamp, a hit at second 305 would add to the count left over from second 5, inflating the total with data that should have expired. Comparing and resetting is what makes the fixed-size buffer behave like an expiring window. It is the same idea as a generation counter used to invalidate stale entries without clearing them."
+   },
+   {
+    "q": "GetHits is O(300). Could it be O(1)?",
+    "a": "You could maintain a running total, adjusting it as slots expire, but expiry is driven by the passage of time rather than by an event, so you would still need to sweep the slots that have gone stale since the last query. In practice 300 iterations over two small arrays is a few microseconds and entirely fine. If the window were far larger, say a day at second resolution, you would switch to hierarchical buckets: seconds rolled up into minutes and minutes into hours."
+   },
+   {
+    "q": "What if hits arrive out of order, or from several threads?",
+    "a": "Out-of-order timestamps break the stale check, since an older hit would reset a newer slot and lose counts. The fix is to ignore hits older than the current window, which is what a real metrics pipeline does. For concurrency, the increments need to be atomic and the timestamp check and reset need to happen together, so either a lock per slot or an interlocked compare-and-swap on a packed timestamp-and-count value. Sharding the counter per thread and summing on read is the usual high-throughput answer."
+   },
+   {
+    "q": "How does this relate to rate limiting?",
+    "a": "It is the same counting machinery with a different purpose: a fixed-window or sliding-window rate limiter asks whether the count in the recent window exceeds a threshold. The bucket-per-second approach here is effectively a sliding window log compressed into counters, which avoids the fixed-window boundary problem where twice the limit can pass across the seam of two adjacent windows. Recognising that a hit counter and a rate limiter share an implementation is a good observation to offer."
+   }
   ]
  },
  {
@@ -6458,11 +6582,31 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Design a browser history with back, forward and visit.",
-  "answer": "Two stacks, or a list with a current index. visit truncates everything after the current position and appends; back and forward move the index within bounds. All operations O(1) amortised, space O(n) in visited pages.",
+  "answer": "**Logic**\n\nA list plus a current index, rather than two stacks. The list holds the whole history in order and the index marks where you are, so back and forward are just index moves and are O(1).\n\nThe rule that defines browser behaviour: visiting a new page from anywhere but the end discards the entire forward history. That is why a plain stack pair is awkward and an index into a list is natural, since truncation is a single operation.\n\nBack and forward take a step count and must clamp rather than throw when the requested number of steps exceeds what is available.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class BrowserHistory\n{\n    private readonly List<string> _pages = new();\n    private int _current;\n\n    public BrowserHistory(string homepage)\n    {\n        _pages.Add(homepage);\n        _current = 0;\n    }\n\n    public void Visit(string url)\n    {\n        // Everything ahead of the current page is discarded.\n        if (_current < _pages.Count - 1)\n            _pages.RemoveRange(_current + 1, _pages.Count - _current - 1);\n\n        _pages.Add(url);\n        _current = _pages.Count - 1;\n    }\n\n    public string Back(int steps)\n    {\n        _current = Math.Max(0, _current - steps);   // clamp, do not throw\n        return _pages[_current];\n    }\n\n    public string Forward(int steps)\n    {\n        _current = Math.Min(_pages.Count - 1, _current + steps);\n        return _pages[_current];\n    }\n\n    public string Current => _pages[_current];\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var h = new BrowserHistory(\"home\");\n\n        h.Visit(\"a\");\n        h.Visit(\"b\");\n        h.Visit(\"c\");\n\n        Console.WriteLine(h.Back(1));       // b\n        Console.WriteLine(h.Back(1));       // a\n        Console.WriteLine(h.Forward(1));    // b\n\n        h.Visit(\"d\");                       // discards c\n        Console.WriteLine(h.Forward(2));    // nothing ahead: stays on d\n\n        Console.WriteLine(h.Back(7));       // clamps at the homepage\n        Console.WriteLine(h.Current);\n    }\n}\n```\n\n**Output**\n\n```\nb\na\nb\nd\nhome\nhome\n```",
   "tags": [
    "design",
-   "stack",
-   "data-structures"
+   "list",
+   "index",
+   "history",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why a list with an index rather than two stacks?",
+    "a": "Two stacks work, with back and forward stacks exchanging entries, but visiting a page must then clear the entire forward stack, and moving several steps at once means popping and pushing repeatedly rather than a single index arithmetic. The list version makes a multi-step move O(1) and truncation a single RemoveRange. The stack version is arguably more intuitive to describe, so it is worth mentioning, but the index version is cleaner to implement."
+   },
+   {
+    "q": "Why clamp rather than throw when there are not enough steps?",
+    "a": "Because it matches what a browser does: holding the back button past the start of history simply stops at the first page. Throwing would force every caller into a try/catch for an entirely normal situation. It is the same reasoning as returning 0 profit for an empty price array. Where the distinction matters, a method returning how many steps were actually taken would let a caller detect the clamp without exceptions."
+   },
+   {
+    "q": "RemoveRange is O(n). Does that matter?",
+    "a": "Rarely, because it only runs when visiting after going back, and it removes entries that are being discarded anyway. The worst case is a long forward history discarded repeatedly, which is unusual behaviour. If it did matter, you would keep a logical end index rather than physically truncating, treating entries beyond it as invisible, which makes Visit O(1) at the cost of not releasing the discarded strings for garbage collection."
+   },
+   {
+    "q": "What would a real browser need beyond this?",
+    "a": "Per-tab history, since each tab has its own stack, plus session restore, which means persisting it. Entries carry scroll position and form state, not just a URL. Back and forward interact with the page cache, which is why going back is often instant. And redirects must not create extra history entries, or the back button would bounce the user through a redirect chain, which is a classic bug in single-page applications that push state manually."
+   }
   ]
  },
  {
@@ -6470,11 +6614,31 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Design an underground system tracking average travel time between stations.",
-  "answer": "One map from customer id to their check-in station and time, and another from a station pair to the running total and count. Check-out finalises the trip and updates the pair statistics. All operations O(1), space proportional to active travellers plus station pairs.",
+  "answer": "**Logic**\n\nTwo maps. One tracks passengers currently travelling, keyed by card id, holding their entry station and time. The other accumulates, per station pair, the total time and the number of journeys.\n\nStoring the running total and count rather than a list of times keeps memory constant per route and makes the average an O(1) division. Keeping the individual times would grow without bound and buy nothing unless percentiles were needed.\n\nAll operations are O(1).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class UndergroundSystem\n{\n    // Card id -> where and when they entered.\n    private readonly Dictionary<int, (string Station, int Time)> _travelling = new();\n\n    // \"from->to\" -> running total and count. Not a list of times: constant memory.\n    private readonly Dictionary<string, (long Total, int Count)> _routes = new();\n\n    public void CheckIn(int cardId, string station, int time)\n    {\n        if (_travelling.ContainsKey(cardId))\n            throw new InvalidOperationException($\"card {cardId} is already travelling\");\n\n        _travelling[cardId] = (station, time);\n    }\n\n    public void CheckOut(int cardId, string station, int time)\n    {\n        if (!_travelling.TryGetValue(cardId, out var start))\n            throw new InvalidOperationException($\"card {cardId} never checked in\");\n\n        _travelling.Remove(cardId);\n\n        string route = start.Station + \"->\" + station;\n        int duration = time - start.Time;\n\n        var current = _routes.TryGetValue(route, out var r) ? r : (0L, 0);\n        _routes[route] = (current.Item1 + duration, current.Item2 + 1);\n    }\n\n    public double GetAverageTime(string from, string to)\n    {\n        string route = from + \"->\" + to;\n\n        if (!_routes.TryGetValue(route, out var r) || r.Count == 0)\n            throw new KeyNotFoundException($\"no journeys recorded for {route}\");\n\n        return (double)r.Total / r.Count;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var system = new UndergroundSystem();\n\n        system.CheckIn(45, \"Leyton\", 3);\n        system.CheckOut(45, \"Waterloo\", 15);          // 12\n\n        system.CheckIn(27, \"Leyton\", 10);\n        system.CheckOut(27, \"Waterloo\", 20);          // 10\n\n        Console.WriteLine(system.GetAverageTime(\"Leyton\", \"Waterloo\"));   // 11\n\n        system.CheckIn(10, \"Leyton\", 24);\n        system.CheckOut(10, \"Waterloo\", 38);          // 14\n        Console.WriteLine(system.GetAverageTime(\"Leyton\", \"Waterloo\"));   // 12\n\n        // Direction matters: the reverse route is separate.\n        try { system.GetAverageTime(\"Waterloo\", \"Leyton\"); }\n        catch (KeyNotFoundException) { Console.WriteLine(\"no data for the reverse route\"); }\n\n        try { system.CheckOut(99, \"Leyton\", 5); }\n        catch (InvalidOperationException e) { Console.WriteLine(e.Message); }\n    }\n}\n```\n\n**Output**\n\n```\n11\n12\nno data for the reverse route\ncard 99 never checked in\n```",
   "tags": [
    "design",
    "hashmap",
-   "data-structures"
+   "aggregation",
+   "running-total",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why store a running total rather than every journey time?",
+    "a": "Because the total and count give the average in O(1) with two fields per route, whereas a list grows without bound and would eventually exhaust memory on a busy network. The trade-off is that you can no longer compute anything the running aggregate does not capture: percentiles, the median, or the distribution. If those were needed you would keep a histogram of bucketed durations, which is still bounded, or a t-digest for approximate quantiles."
+   },
+   {
+    "q": "Is the route key of concatenated strings a problem?",
+    "a": "It is a small one. Building a string on every checkout allocates, and if a station name could contain the separator the key would be ambiguous. A tuple key, `(string, string)`, avoids both: .NET value tuples have structural equality and hashing, so they work directly as dictionary keys with no allocation for the key itself. I would use a tuple in production and would mention that the string concatenation is a shortcut."
+   },
+   {
+    "q": "What happens if a passenger never checks out?",
+    "a": "Their entry stays in the travelling map forever, which is a slow memory leak and, in a real system, an unresolved fare. Transport networks handle this with a maximum journey time after which the entry is expired and a penalty fare is charged. Here you would sweep entries older than some threshold, or store an expiry alongside the entry and clean lazily on access. It is worth raising unprompted, because the happy path hides it entirely."
+   },
+   {
+    "q": "Why does the code throw on a double check-in rather than overwriting?",
+    "a": "Because a card checking in twice without checking out means either a hardware fault or fare evasion, and silently overwriting would discard the first journey and hide the problem. Failing loudly surfaces it. That said, in a real system throwing at the barrier is unacceptable, so you would log and apply a business rule instead. The general point is that the data structure should not paper over an inconsistency it has detected."
+   }
   ]
  },
  {
@@ -6482,12 +6646,27 @@
   "subcategory": "Design",
   "difficulty": "Hard",
   "question": "Design a data structure supporting insert, delete, getRandom and duplicates.",
-  "answer": "An array of values for uniform random access plus a map from value to a set of its indices. Deletion swaps the target with the last element, updating both index sets, then pops. All operations average O(1).",
+  "answer": "**Logic**\n\nThe duplicate-free version maps each value to a single index. With duplicates, a value occupies several positions, so the map must hold a *set* of indices per value.\n\nRemoval still uses the swap-with-last trick, but now three index sets need care: remove the doomed index from the target's set, move the last element into the hole, and update the moved element's set by removing its old index and adding the new one.\n\nThe subtle case is when the element being removed *is* the last one, where the swap is a no-op and doing the updates in the wrong order corrupts the set.\n\nAll operations remain O(1) on average.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class RandomisedCollection\n{\n    private readonly List<int> _items = new();\n    private readonly Dictionary<int, HashSet<int>> _indices = new();\n    private readonly Random _rng;\n\n    public RandomisedCollection(int seed = 7) => _rng = new Random(seed);\n\n    // Returns true if the value was not already present.\n    public bool Insert(int value)\n    {\n        if (!_indices.TryGetValue(value, out var set))\n            _indices[value] = set = new HashSet<int>();\n\n        bool wasAbsent = set.Count == 0;\n\n        set.Add(_items.Count);\n        _items.Add(value);\n\n        return wasAbsent;\n    }\n\n    public bool Remove(int value)\n    {\n        if (!_indices.TryGetValue(value, out var set) || set.Count == 0) return false;\n\n        int index = set.First();          // any occurrence will do\n        set.Remove(index);\n\n        int lastIndex = _items.Count - 1;\n\n        // Only swap when the victim is not already last; otherwise the set\n        // updates below would re-add an index that is about to disappear.\n        if (index != lastIndex)\n        {\n            int lastValue = _items[lastIndex];\n            _items[index] = lastValue;\n\n            _indices[lastValue].Remove(lastIndex);\n            _indices[lastValue].Add(index);\n        }\n\n        _items.RemoveAt(lastIndex);\n        if (set.Count == 0) _indices.Remove(value);\n\n        return true;\n    }\n\n    public int GetRandom()\n    {\n        if (_items.Count == 0) throw new InvalidOperationException(\"collection is empty\");\n        return _items[_rng.Next(_items.Count)];\n    }\n\n    public int Count => _items.Count;\n}\n\npublic static class SetExtensions\n{\n    public static int First(this HashSet<int> set)\n    {\n        foreach (int v in set) return v;\n        throw new InvalidOperationException(\"empty set\");\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var c = new RandomisedCollection();\n\n        Console.WriteLine(c.Insert(1));    // newly present\n        Console.WriteLine(c.Insert(1));    // duplicate\n        Console.WriteLine(c.Insert(2));\n        Console.WriteLine(c.Count);\n\n        Console.WriteLine(c.Remove(1));    // removes one of the two 1s\n        Console.WriteLine(c.Count);\n        Console.WriteLine(c.Remove(1));    // the other one\n        Console.WriteLine(c.Remove(1));    // none left\n\n        int drawn = c.GetRandom();\n        Console.WriteLine(drawn == 2);\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\n3\nTrue\n2\nTrue\nFalse\nTrue\n```",
   "tags": [
    "design",
-   "hashmap",
-   "arrays",
-   "randomisation"
+   "duplicates",
+   "swap-remove",
+   "hashset",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the index == lastIndex case special?",
+    "a": "Because when the element being removed is already at the end, there is nothing to swap, and performing the swap logic anyway would re-add `index` to the moved value's set even though that slot is about to be trimmed away. The set would then contain a dangling index pointing past the end of the list, and a later operation would read or write out of bounds. Guarding the swap is the fix, and this case is the single most common bug in the duplicate-supporting version."
+   },
+   {
+    "q": "Does GetRandom return each distinct value with equal probability?",
+    "a": "No, and that is usually the desired behaviour. It picks a uniformly random *slot*, so a value present three times is three times more likely to be drawn, which is what 'random element of the collection' normally means. If equal probability per distinct value were wanted, you would need to select uniformly from the keys of the index map instead, which the current layout does not support in O(1) since dictionary keys are not indexable."
+   },
+   {
+    "q": "Why a HashSet of indices rather than a list?",
+    "a": "Because removal of a specific index must be O(1), and removing an arbitrary element from a list is O(n). The set also makes the moved element's index update a pair of O(1) operations. The cost is higher constant factors and more allocation per distinct value. For values that appear only once or twice, which is the common case, the set overhead dominates, so a hybrid storing a single index inline and promoting to a set only when a duplicate arrives would be leaner."
+   }
   ]
  },
  {
@@ -6495,12 +6674,31 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Design a circular deque with fixed capacity.",
-  "answer": "A fixed array with front and rear indices moving modulo capacity, plus a size counter to distinguish full from empty - the classic ambiguity when only two pointers are used. All operations O(1), space O(k).",
+  "answer": "**Logic**\n\nA fixed array with a head index and a count. Deriving the tail from head plus count means the two indices can never drift out of sync, and the full-versus-empty ambiguity disappears because the count distinguishes them.\n\nInserting at the front moves the head backwards with wraparound, which needs the non-negative modulo idiom since subtracting one from index zero must land on the last slot rather than on minus one.\n\nAll operations are O(1) with no allocation after construction.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class CircularDeque\n{\n    private readonly int[] _items;\n    private int _head;\n    private int _count;\n\n    public CircularDeque(int capacity)\n    {\n        if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity));\n        _items = new int[capacity];\n    }\n\n    public bool IsFull => _count == _items.Length;\n    public bool IsEmpty => _count == 0;\n    public int Count => _count;\n\n    public bool PushFront(int value)\n    {\n        if (IsFull) return false;\n\n        // Step back with wraparound: -1 must land on the last slot, not on -1.\n        _head = (_head - 1 + _items.Length) % _items.Length;\n        _items[_head] = value;\n        _count++;\n        return true;\n    }\n\n    public bool PushBack(int value)\n    {\n        if (IsFull) return false;\n\n        _items[(_head + _count) % _items.Length] = value;   // tail derived, never stored\n        _count++;\n        return true;\n    }\n\n    public bool PopFront(out int value)\n    {\n        if (IsEmpty) { value = default; return false; }\n\n        value = _items[_head];\n        _head = (_head + 1) % _items.Length;\n        _count--;\n        return true;\n    }\n\n    public bool PopBack(out int value)\n    {\n        if (IsEmpty) { value = default; return false; }\n\n        value = _items[(_head + _count - 1) % _items.Length];\n        _count--;\n        return true;\n    }\n\n    public bool PeekFront(out int value)\n    {\n        if (IsEmpty) { value = default; return false; }\n        value = _items[_head];\n        return true;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var d = new CircularDeque(3);\n\n        Console.WriteLine(d.PushBack(1));\n        Console.WriteLine(d.PushBack(2));\n        Console.WriteLine(d.PushFront(0));    // wraps the head backwards\n        Console.WriteLine(d.PushBack(9));     // full\n\n        d.PeekFront(out int front);\n        Console.WriteLine(front);\n\n        d.PopBack(out int back);\n        Console.WriteLine(back);\n\n        Console.WriteLine(d.PushBack(3));     // space freed\n        Console.WriteLine(d.Count);\n\n        var empty = new CircularDeque(1);\n        Console.WriteLine(empty.PopFront(out _));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nTrue\nFalse\n0\n2\nTrue\n3\nFalse\n```",
   "tags": [
    "design",
-   "queue",
-   "arrays",
-   "data-structures"
+   "ring-buffer",
+   "deque",
+   "modulo",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why the + length before the modulo when moving the head backwards?",
+    "a": "Because C#'s modulo follows the sign of the dividend, so `(0 - 1) % 3` is -1 rather than 2, which would index out of bounds. Adding the length first brings the value into the positive range before the modulo, giving the wraparound you want. It is the same idiom needed in array rotation and in counting subarrays divisible by k, and it is the single most common bug when implementing a ring buffer by hand."
+   },
+   {
+    "q": "Why derive the tail rather than store it?",
+    "a": "Because two independently maintained indices can fall out of sync if a code path updates one and forgets the other, and the invariant linking them stays implicit. Deriving the tail from head and count makes an inconsistent state unrepresentable, at the cost of one addition and a modulo. The trade-off reverses for a lock-free single-producer single-consumer queue, where separate head and tail indices are essential precisely because each has exactly one writer."
+   },
+   {
+    "q": "How would you make it grow when full instead of rejecting?",
+    "a": "Allocate a larger array, typically double, and copy the elements in logical order rather than physical order, since the data wraps. The simplest approach is to copy from head to the end of the buffer and then from the start up to the tail, resetting head to zero. That is what List<T> does internally, giving amortised O(1) appends. You lose the fixed-memory guarantee, which is often exactly why a ring buffer was chosen, so growth should be a deliberate decision rather than a default."
+   },
+   {
+    "q": "Why return bool with an out parameter rather than throwing on empty?",
+    "a": "Because for a bounded structure, full and empty are ordinary expected states rather than errors, and a caller draining a queue would otherwise need a try/catch in the loop. The TryGet pattern matches .NET conventions such as Dictionary.TryGetValue and Queue.TryDequeue. Throwing would be defensible for a Peek that the caller has already guarded, but consistency across the API matters more than the individual choice."
+   }
   ]
  },
  {
@@ -6508,12 +6706,31 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Design a key-value store with time-based get.",
-  "answer": "Map each key to a list of timestamped values appended in increasing time order, and answer a query with a binary search for the largest timestamp not exceeding the requested one. set is O(1), get is O(log n).",
+  "answer": "**Logic**\n\nEach key holds a list of versions, appended in timestamp order. A get asks for the value at or before a given time, which is a binary search for the rightmost entry not exceeding the target.\n\nBecause writes arrive with non-decreasing timestamps, the list is already sorted and needs no insertion cost beyond the append. That assumption is what makes set O(1) and get O(log n) rather than requiring a sorted structure.\n\nThe binary search is an upper bound minus one: find the first entry strictly after the target, and step back.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TimeMap\n{\n    // Key -> versions, appended in non-decreasing timestamp order.\n    private readonly Dictionary<string, List<(int Time, string Value)>> _store = new();\n\n    public void Set(string key, string value, int timestamp)\n    {\n        if (!_store.TryGetValue(key, out var versions))\n            _store[key] = versions = new List<(int, string)>();\n\n        versions.Add((timestamp, value));   // already ordered, so a plain append\n    }\n\n    public string Get(string key, string timestamp)\n    {\n        throw new NotSupportedException(\"use the int overload\");\n    }\n\n    public string Get(string key, int timestamp)\n    {\n        if (!_store.TryGetValue(key, out var versions)) return \"\";\n\n        // Rightmost entry with Time <= timestamp.\n        int low = 0, high = versions.Count;\n\n        while (low < high)\n        {\n            int mid = low + (high - low) / 2;\n\n            if (versions[mid].Time <= timestamp) low = mid + 1;   // look further right\n            else high = mid;\n        }\n\n        return low == 0 ? \"\" : versions[low - 1].Value;           // step back one\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var map = new TimeMap();\n\n        map.Set(\"foo\", \"bar\", 1);\n        Console.WriteLine(map.Get(\"foo\", 1));\n        Console.WriteLine(map.Get(\"foo\", 3));      // nothing newer, so still bar\n\n        map.Set(\"foo\", \"bar2\", 4);\n        Console.WriteLine(map.Get(\"foo\", 4));\n        Console.WriteLine(map.Get(\"foo\", 5));\n\n        Console.WriteLine($\"[{map.Get(\"foo\", 0)}]\");        // before any write\n        Console.WriteLine($\"[{map.Get(\"missing\", 1)}]\");    // unknown key\n    }\n}\n```\n\n**Output**\n\n```\nbar\nbar\nbar2\nbar2\n[]\n[]\n```",
   "tags": [
    "design",
    "binary-search",
-   "hashmap",
-   "time-series"
+   "versioning",
+   "mvcc",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What breaks if timestamps arrive out of order?",
+    "a": "The list is no longer sorted, so the binary search returns arbitrary results. The fix is either to insert at the correct position, making Set O(n) for the shift, or to use a sorted structure such as SortedList, which gives O(log n) set and get. Most problem statements guarantee non-decreasing timestamps precisely so the cheap append works, and relying on that guarantee without stating it is how this quietly breaks in a real system where clock skew is normal."
+   },
+   {
+    "q": "Why upper bound minus one rather than a lower bound?",
+    "a": "Because the query is 'the most recent value at or before this time', which is the rightmost qualifying entry, not the leftmost. An upper-bound search finds the first entry strictly greater than the target, so the one before it is the answer. Getting this backwards returns the value that came *after* the requested time, which is wrong in a way that only shows up when the exact timestamp is not present. Returning empty when the index is zero handles a query before any write."
+   },
+   {
+    "q": "How would you stop this growing forever?",
+    "a": "Retention: drop versions older than some window, or keep at most n versions per key, trimming from the front. Trimming the front of a List is O(n), so a deque or a ring buffer per key is better if trimming is frequent. Real versioned stores also compact, merging or discarding intermediate versions no longer reachable by any active reader, which is exactly what database MVCC vacuuming does."
+   },
+   {
+    "q": "Where does this pattern appear in real systems?",
+    "a": "It is the core of multi-version concurrency control in databases: each row keeps versions tagged with transaction timestamps, and a reader sees the newest version at or before its snapshot time, which is why readers never block writers in PostgreSQL. The same idea underpins time-travel queries in data warehouses and event-sourced systems replaying state at a point in time. Recognising the problem as MVCC rather than a puzzle is a strong answer."
+   }
   ]
  },
  {
@@ -6521,12 +6738,31 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Design a logger that rate-limits identical messages to once every 10 seconds.",
-  "answer": "A map from message to the next allowed timestamp; accept and update when the current time reaches it. Memory grows with distinct messages, so a production version needs eviction - a queue of expiring entries cleaned lazily on each call.",
+  "answer": "**Logic**\n\nA map from message to the earliest timestamp at which it may next print. On arrival, if the current time is at or past that value, print and set the next allowed time; otherwise suppress.\n\nStoring the *next allowed* time rather than the last printed time removes an addition from the hot path and makes the comparison a single check.\n\nO(1) per message, but the map grows without bound, which is the real design issue and the thing an interviewer will push on.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Logger\n{\n    private const int CooldownSeconds = 10;\n\n    // Message -> the earliest time it may print again.\n    private readonly Dictionary<string, int> _nextAllowed = new();\n\n    public bool ShouldPrint(int timestamp, string message)\n    {\n        if (_nextAllowed.TryGetValue(message, out int allowedAt) && timestamp < allowedAt)\n            return false;\n\n        _nextAllowed[message] = timestamp + CooldownSeconds;\n        return true;\n    }\n\n    // Optional sweep: discard entries whose cooldown has fully expired.\n    public int Prune(int timestamp)\n    {\n        var stale = new List<string>();\n\n        foreach (var (message, allowedAt) in _nextAllowed)\n            if (allowedAt <= timestamp) stale.Add(message);\n\n        foreach (string m in stale) _nextAllowed.Remove(m);\n        return stale.Count;\n    }\n\n    public int TrackedCount => _nextAllowed.Count;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var logger = new Logger();\n\n        Console.WriteLine(logger.ShouldPrint(1, \"foo\"));    // first time\n        Console.WriteLine(logger.ShouldPrint(2, \"bar\"));\n        Console.WriteLine(logger.ShouldPrint(3, \"foo\"));    // still in cooldown\n        Console.WriteLine(logger.ShouldPrint(8, \"bar\"));\n        Console.WriteLine(logger.ShouldPrint(10, \"foo\"));   // one second early\n        Console.WriteLine(logger.ShouldPrint(11, \"foo\"));   // exactly 10 seconds later\n\n        Console.WriteLine(logger.TrackedCount);\n        Console.WriteLine(logger.Prune(100));               // both expired\n        Console.WriteLine(logger.TrackedCount);\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nFalse\nFalse\nTrue\n2\n2\n0\n```",
   "tags": [
    "design",
-   "hashmap",
    "rate-limiting",
-   "data-structures"
+   "hashmap",
+   "memory-bounds",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "The map grows forever. How would you bound it?",
+    "a": "Three options. A periodic sweep removing entries whose cooldown has expired, as Prune does, which is cheap if run rarely but is O(n) each time. A bounded LRU cache of recent messages, accepting that a very old message might print twice if it was evicted, which is usually harmless. Or a time-bucketed structure where entries are grouped by expiry second and whole buckets are discarded at once, which makes cleanup O(1) amortised. For a logger, the LRU is usually the pragmatic choice."
+   },
+   {
+    "q": "Why store the next allowed time rather than the last printed time?",
+    "a": "It removes an addition from the read path and makes the condition a single comparison rather than a subtraction and comparison. More importantly it encodes the intent directly: the stored value is the answer to 'when may this print again', so the cooldown constant appears once, at write time, rather than being re-applied at every check. If the cooldown ever became per-message, this layout handles it with no change to the read path."
+   },
+   {
+    "q": "How does this differ from a token bucket rate limiter?",
+    "a": "This allows exactly one event per key per window with no burst, which is really a per-key debounce. A token bucket accumulates allowance while idle, so it permits a burst up to its capacity and then settles to an average rate. For log suppression the strict one-per-window behaviour is usually right, since the goal is readability rather than throughput. Real logging frameworks go further and print a summary such as 'repeated 412 times' when the cooldown ends, which needs a counter alongside the timestamp."
+   },
+   {
+    "q": "What about concurrency?",
+    "a": "As written it is not thread-safe: two threads could both find the message absent and both decide to print. A ConcurrentDictionary with AddOrUpdate is not sufficient either, because the decision and the update must be atomic together. The clean approach is a lock per key, or `GetOrAdd` returning a small object holding the timestamp that is then updated under a compare-and-swap. Since logging is on every code path, the cost of that synchronisation is exactly why real loggers batch and do the suppression off-thread."
+   }
   ]
  },
  {
@@ -7553,12 +7789,27 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Design a tic-tac-toe game that determines a winner in constant time per move.",
-  "answer": "Maintain running counters per row, column and the two diagonals, incrementing for one player and decrementing for the other. A counter reaching plus or minus n means that player has won. Each move is O(1) rather than scanning the board.",
+  "answer": "**Logic**\n\nScanning the board after each move is O(n²) for an n×n grid. Instead keep running sums: one per row, one per column, and one for each diagonal. A move by player one adds one to the relevant sums, a move by player two subtracts one.\n\nA sum reaching plus or minus n means that line is complete, so the winner is known immediately. That makes each move O(1) regardless of board size.\n\nThe anti-diagonal condition is `row + col == n - 1`, which is the pairing that is easiest to get wrong.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TicTacToe\n{\n    private readonly int _size;\n    private readonly int[] _rows;\n    private readonly int[] _cols;\n    private int _diagonal;\n    private int _antiDiagonal;\n\n    public TicTacToe(int size)\n    {\n        if (size <= 0) throw new ArgumentOutOfRangeException(nameof(size));\n        _size = size;\n        _rows = new int[size];\n        _cols = new int[size];\n    }\n\n    // Returns 0 for no winner yet, or the player number that has just won.\n    public int Move(int row, int col, int player)\n    {\n        if (player != 1 && player != 2) throw new ArgumentException(\"player must be 1 or 2\");\n\n        int delta = player == 1 ? 1 : -1;\n\n        _rows[row] += delta;\n        _cols[col] += delta;\n\n        if (row == col) _diagonal += delta;\n        if (row + col == _size - 1) _antiDiagonal += delta;   // the easy one to get wrong\n\n        int target = _size * delta;\n\n        if (_rows[row] == target || _cols[col] == target ||\n            _diagonal == target || _antiDiagonal == target)\n            return player;\n\n        return 0;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var game = new TicTacToe(3);\n\n        Console.WriteLine(game.Move(0, 0, 1));   // 0\n        Console.WriteLine(game.Move(0, 2, 2));   // 0\n        Console.WriteLine(game.Move(2, 2, 1));   // 0\n        Console.WriteLine(game.Move(1, 1, 2));   // 0\n        Console.WriteLine(game.Move(2, 0, 1));   // 0\n        Console.WriteLine(game.Move(1, 0, 2));   // 0\n        Console.WriteLine(game.Move(2, 1, 1));   // completes the bottom row\n\n        // Anti-diagonal win for player 2 on a fresh board.\n        var anti = new TicTacToe(3);\n        anti.Move(0, 2, 2);\n        anti.Move(1, 1, 2);\n        Console.WriteLine(anti.Move(2, 0, 2));\n    }\n}\n```\n\n**Output**\n\n```\n0\n0\n0\n0\n0\n0\n1\n2\n```",
   "tags": [
    "design",
-   "data-structures",
-   "counting",
-   "games"
+   "counters",
+   "game",
+   "constant-time",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the plus-one minus-one encoding work?",
+    "a": "Because it lets one counter track both players without ambiguity. A line is won by player one when its sum reaches n and by player two when it reaches negative n, and any mixed line can never reach either extreme since the contributions cancel. Using separate counters per player per line would also work but doubles the state for no benefit. The encoding is the same trick as mapping zeros to -1 in the equal-zeros-and-ones problem: turn a two-category count into a single signed sum."
+   },
+   {
+    "q": "What does this design not validate?",
+    "a": "A good deal. It does not check that the cell is empty, that players are alternating, that the game has not already been won, or that the coordinates are in range. In an interview those are worth naming as deliberate omissions rather than leaving them implicit. A real implementation would track occupancy in a grid anyway, at which point the memory saving of the counters disappears and their value is purely the O(1) win check."
+   },
+   {
+    "q": "How would this extend to a game like Connect Four or Gomoku?",
+    "a": "It does not, because those need runs of k in a row anywhere rather than a full line, so a sum over an entire row says nothing. You instead check outward from the placed piece in each of the four directions, counting consecutive matching pieces, which is O(k) per move and still effectively constant. That is a good illustration that an optimisation can be tightly coupled to the exact win condition, and changing the rules slightly can invalidate it entirely."
+   }
   ]
  },
  {
@@ -7566,12 +7817,31 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "Design a snake game.",
-  "answer": "A deque of body coordinates plus a set for constant-time self-collision checks. Each move appends the new head and pops the tail unless food was eaten. The subtle case is moving into the current tail position, which is legal because the tail moves away in the same step.",
+  "answer": "**Logic**\n\nTwo structures. A deque holds the snake's body in order, so moving is an O(1) push at the head and pop at the tail. A hash set of occupied cells makes the self-collision check O(1) instead of scanning the body.\n\nThe subtlety that catches people: the tail must be removed *before* testing whether the new head collides with the body, because the tail cell is vacated in the same tick. Testing first wrongly ends the game when the snake follows its own tail.\n\nEating food skips the tail removal, which is what makes the snake grow.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class SnakeGame\n{\n    private readonly int _width, _height;\n    private readonly Queue<(int r, int c)> _body = new();\n    private readonly HashSet<(int r, int c)> _occupied = new();\n    private readonly Queue<(int r, int c)> _food = new();\n    private int _score;\n\n    public SnakeGame(int width, int height, IEnumerable<(int r, int c)> food)\n    {\n        _width = width;\n        _height = height;\n        _body.Enqueue((0, 0));\n        _occupied.Add((0, 0));\n        foreach (var f in food) _food.Enqueue(f);\n    }\n\n    // Returns the score, or -1 when the game is over.\n    public int Move(char direction)\n    {\n        var head = PeekHead();\n\n        var next = direction switch\n        {\n            'U' => (head.r - 1, head.c),\n            'D' => (head.r + 1, head.c),\n            'L' => (head.r, head.c - 1),\n            'R' => (head.r, head.c + 1),\n            _ => throw new ArgumentException($\"bad direction '{direction}'\"),\n        };\n\n        if (next.Item1 < 0 || next.Item1 >= _height ||\n            next.Item2 < 0 || next.Item2 >= _width) return -1;   // hit a wall\n\n        bool eating = _food.Count > 0 && _food.Peek() == next;\n\n        if (eating) { _food.Dequeue(); _score++; }\n        else\n        {\n            // Free the tail BEFORE the collision test: following your own tail is legal.\n            var tail = _body.Dequeue();\n            _occupied.Remove(tail);\n        }\n\n        if (_occupied.Contains(next)) return -1;                 // hit itself\n\n        _body.Enqueue(next);\n        _occupied.Add(next);\n\n        return _score;\n    }\n\n    private (int r, int c) PeekHead()\n    {\n        (int r, int c) last = default;\n        foreach (var cell in _body) last = cell;\n        return last;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var game = new SnakeGame(3, 2, new[] { (1, 2), (0, 1) });\n\n        Console.WriteLine(game.Move('R'));   // 0\n        Console.WriteLine(game.Move('D'));   // 0\n        Console.WriteLine(game.Move('R'));   // eats: 1\n        Console.WriteLine(game.Move('U'));   // 1\n        Console.WriteLine(game.Move('L'));   // eats: 2\n        Console.WriteLine(game.Move('U'));   // hits the wall\n    }\n}\n```\n\n**Output**\n\n```\n0\n0\n1\n1\n2\n-1\n```",
   "tags": [
    "design",
-   "deque",
-   "simulation",
-   "games"
+   "queue",
+   "hashset",
+   "game-loop",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must the tail be removed before the collision check?",
+    "a": "Because the tail vacates its cell in the same tick that the head moves, so a head arriving at the old tail position is legal, not a collision. Checking first would end the game whenever the snake moves in a tight loop following itself, which is normal play. Removing first and then checking gets it right. It is the classic bug in this problem and it only appears once the snake is long enough to curl back on itself."
+   },
+   {
+    "q": "Why keep both a queue and a hash set?",
+    "a": "Because they answer different questions. The queue preserves order, which is what lets you remove the tail, and the set answers 'is this cell occupied' in O(1). Scanning the queue for the collision check would be O(length), turning each move linear and the whole game quadratic. Maintaining two views of the same data with a strict invariant between them is the same pattern as the LRU cache, and the risk is equally the same: any code path that updates one and not the other corrupts the structure."
+   },
+   {
+    "q": "PeekHead enumerates the whole body. Would you ship that?",
+    "a": "No, it is O(length) and turns every move linear, which defeats the point. .NET's Queue does not expose the tail, so the right fix is a LinkedList, which gives O(1) access to both ends, or to track the head position in a separate field updated on each move. I would use the field, since it is one line and the head is already computed. It is worth flagging explicitly because it is the sort of hidden cost that makes an otherwise O(1) design quietly linear."
+   },
+   {
+    "q": "How would a real game differ?",
+    "a": "Food would be placed randomly among the free cells rather than from a fixed queue, which needs an efficient way to pick a random empty cell, and the obvious approaches degrade badly as the board fills. Direction changes would be rejected if they reverse into the neck. And the game loop would be time-driven rather than move-driven, so input buffering matters: two quick turns within one tick must both be honoured or the controls feel unresponsive."
+   }
   ]
  },
  {
@@ -7579,12 +7849,31 @@
   "subcategory": "Design",
   "difficulty": "Hard",
   "question": "Design an in-memory file system with mkdir, ls, addContentToFile and readContentFromFile.",
-  "answer": "A tree of nodes each holding a name, a flag for file or directory, a map of children, and content for files. Path operations split on the separator and walk or create nodes. ls returns sorted child names for a directory or the single name for a file. Operations are O(path length plus children).",
+  "answer": "**Logic**\n\nA tree of nodes, each either a directory holding named children or a file holding content. A single node type with a nullable content field keeps it simple; the presence of content distinguishes a file from a directory.\n\nPath resolution walks the components, and `mkdir` creates missing directories along the way, which is the recursive behaviour the problem specifies.\n\n`ls` returns the sorted children of a directory, or the file name itself if the path is a file, which is a small asymmetry worth noting.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\nusing System.Text;\n\npublic class FileSystem\n{\n    private sealed class Node\n    {\n        public readonly SortedDictionary<string, Node> Children = new(StringComparer.Ordinal);\n        public StringBuilder Content;                  // non-null means this is a file\n        public bool IsFile => Content != null;\n    }\n\n    private readonly Node _root = new();\n\n    private static string[] Split(string path) =>\n        path.Split('/', StringSplitOptions.RemoveEmptyEntries);\n\n    public IList<string> Ls(string path)\n    {\n        var node = Resolve(path, create: false);\n        if (node == null) return Array.Empty<string>();\n\n        // A file lists itself; a directory lists its children.\n        if (node.IsFile)\n        {\n            var parts = Split(path);\n            return new List<string> { parts[^1] };\n        }\n\n        return node.Children.Keys.ToList();             // SortedDictionary: already ordered\n    }\n\n    public void Mkdir(string path) => Resolve(path, create: true);\n\n    public void AddContentToFile(string path, string content)\n    {\n        var node = Resolve(path, create: true);\n        node.Content ??= new StringBuilder();\n        node.Content.Append(content);                   // append, not overwrite\n    }\n\n    public string ReadContentFromFile(string path)\n    {\n        var node = Resolve(path, create: false);\n\n        if (node == null || !node.IsFile)\n            throw new InvalidOperationException($\"'{path}' is not a file\");\n\n        return node.Content.ToString();\n    }\n\n    private Node Resolve(string path, bool create)\n    {\n        var node = _root;\n\n        foreach (string part in Split(path))\n        {\n            if (!node.Children.TryGetValue(part, out var next))\n            {\n                if (!create) return null;\n                node.Children[part] = next = new Node();\n            }\n            node = next;\n        }\n\n        return node;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var fs = new FileSystem();\n\n        Console.WriteLine(string.Join(\",\", fs.Ls(\"/\")).Length);     // empty root\n\n        fs.Mkdir(\"/a/b/c\");                                         // creates all levels\n        fs.AddContentToFile(\"/a/b/c/d\", \"hello\");\n\n        Console.WriteLine(string.Join(\",\", fs.Ls(\"/\")));\n        Console.WriteLine(string.Join(\",\", fs.Ls(\"/a/b/c\")));\n        Console.WriteLine(fs.ReadContentFromFile(\"/a/b/c/d\"));\n\n        fs.AddContentToFile(\"/a/b/c/d\", \" world\");                  // appends\n        Console.WriteLine(fs.ReadContentFromFile(\"/a/b/c/d\"));\n\n        Console.WriteLine(string.Join(\",\", fs.Ls(\"/a/b/c/d\")));     // a file lists itself\n\n        try { fs.ReadContentFromFile(\"/a/b\"); }\n        catch (InvalidOperationException) { Console.WriteLine(\"not a file\"); }\n    }\n}\n```\n\n**Output**\n\n```\n0\na\nd\nhello\nhello world\nd\nnot a file\n```",
   "tags": [
    "design",
-   "trees",
-   "filesystem",
-   "data-structures"
+   "tree",
+   "file-system",
+   "sorted-dictionary",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why SortedDictionary rather than Dictionary?",
+    "a": "Because ls must return entries in lexicographic order, and a plain Dictionary has no defined enumeration order. Using a sorted structure makes the ordering an invariant of the data rather than something ls has to re-establish by sorting on every call, which would be O(n log n) per listing. The trade-off is O(log n) rather than O(1) insertion and lookup, which is entirely acceptable for a directory. StringComparer.Ordinal is specified so the ordering does not shift with the machine's culture."
+   },
+   {
+    "q": "Is using a nullable content field to distinguish files from directories a good design?",
+    "a": "It is compact and works, but it makes an invalid state representable: a node could in principle have both content and children. A cleaner model uses a discriminated shape, either two subclasses or a sealed hierarchy, so the type system prevents it. In C# that means more ceremony for a small benefit, which is why the single-node approach is common in interview answers. Naming the trade-off is better than pretending it is not one."
+   },
+   {
+    "q": "What is missing before this resembles a real file system?",
+    "a": "Deletion, which raises the question of what happens to a non-empty directory. Moving and renaming, which must be atomic. Permissions and ownership. Path normalisation for '.' and '..', which is the simplify-path problem and is security-critical since unresolved '..' allows traversal outside a root. Symbolic links, which break the assumption that the structure is a tree. And concurrency, since two threads creating the same directory would race in Resolve as written."
+   },
+   {
+    "q": "Why does AddContentToFile append rather than overwrite?",
+    "a": "Because that is what the problem specifies, and it models opening a file in append mode. It matters for the API contract: a caller expecting overwrite semantics would silently accumulate duplicated content. The StringBuilder is chosen for the same reason, since repeated string concatenation would be quadratic in the total content length. If overwrite were wanted it would be a separate method rather than a flag, so the intent is visible at the call site."
+   }
   ]
  },
  {
