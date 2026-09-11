@@ -21491,28 +21491,58 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Rotate an array to the right by k steps in-place.",
-  "answer": "Normalize k = k % n. Reverse the whole array, then reverse the first k elements, then reverse the remaining n-k. This rotates in O(n) time and O(1) space using three reversals.",
+  "answer": "**Logic**\n\nThree reversals. Reverse the whole array, then reverse the first k elements, then reverse the rest. The first reversal puts the last k elements at the front but backwards; the two partial reversals correct the order within each part. O(n) time, O(1) space.\n\nNormalising `k = k % n` first is essential: rotating a 5-element array by 7 is the same as by 2, and without it the partial reversals index out of range.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void Rotate(int[] nums, int k)\n    {\n        if (nums == null || nums.Length < 2) return;\n\n        int n = nums.Length;\n        k = ((k % n) + n) % n;      // normalise, and handle negative k as a left rotation\n        if (k == 0) return;\n\n        Reverse(nums, 0, n - 1);    // whole array\n        Reverse(nums, 0, k - 1);    // first k\n        Reverse(nums, k, n - 1);    // the rest\n    }\n\n    private static void Reverse(int[] nums, int i, int j)\n    {\n        while (i < j)\n        {\n            (nums[i], nums[j]) = (nums[j], nums[i]);\n            i++;\n            j--;\n        }\n    }\n\n    private static string Rotated(int[] nums, int k)\n    {\n        var copy = (int[])nums.Clone();\n        Rotate(copy, k);\n        return string.Join(\",\", copy);\n    }\n\n    public static void Main()\n    {\n        int[] a = { 1, 2, 3, 4, 5, 6, 7 };\n\n        Console.WriteLine(Rotated(a, 3));\n        Console.WriteLine(Rotated(a, 0));\n        Console.WriteLine(Rotated(a, 7));    // a full turn: unchanged\n        Console.WriteLine(Rotated(a, 10));   // same as 3\n        Console.WriteLine(Rotated(a, -2));   // rotate left by 2\n        Console.WriteLine(Rotated(new[] { 1, 2 }, 1));\n    }\n}\n```\n\n**Output**\n\n```\n5,6,7,1,2,3,4\n1,2,3,4,5,6,7\n1,2,3,4,5,6,7\n5,6,7,1,2,3,4\n3,4,5,6,7,1,2\n2,1\n```",
   "tags": [
    "arrays",
-   "reverse",
-   "rotation",
-   "in-place"
+   "reversal",
+   "in-place",
+   "modulo",
+   "csharp"
   ],
-  "id": 1511
+  "id": 1511,
+  "followups": [
+   {
+    "q": "Why the double modulo in ((k % n) + n) % n?",
+    "a": "Because C#'s `%` follows the sign of the dividend, so `-2 % 5` is -2, not 3. A single modulo therefore leaves a negative k, which would make the partial reversals index below zero. Adding n and taking the modulo again maps it into the range 0 to n-1 for any integer. It is the standard idiom whenever a modulus must be non-negative, and it comes up constantly in circular buffers and hash bucket indexing."
+   },
+   {
+    "q": "What is the cyclic-replacement alternative?",
+    "a": "Move each element directly to its final position, following the cycle it belongs to, and repeat from the next unvisited start until n elements have moved. It touches each element exactly once rather than three times, so it is theoretically fewer writes. In practice it is harder to get right because the number of cycles is gcd(n, k) and the bookkeeping is fiddly, and its scattered memory access pattern often makes it slower than three cache-friendly sequential reversals despite doing less work."
+   },
+   {
+    "q": "What if O(n) extra space were allowed?",
+    "a": "Then it is one line of intent: copy element i to position (i + k) % n in a new array, or use `Array.Copy` twice to move the two blocks. That is clearer and probably faster for moderate sizes, since it is two bulk memory moves rather than three passes of pairwise swaps. The in-place constraint is what makes the reversal trick necessary, and it is worth saying that you would take the simpler version unless memory genuinely mattered."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Merge two sorted arrays into one sorted array in-place (nums1 has extra space).",
-  "answer": "Fill from the end: three pointers (i at end of nums1's real data, j at end of nums2, k at end of nums1's full length). Compare and place the larger at k, decrement. Filling backwards avoids overwriting unmerged nums1 elements. O(m+n) time, O(1) space.",
+  "answer": "**Logic**\n\nFill from the back. Writing forward would overwrite elements of the first array that have not been read yet, so instead compare the last unmerged element of each array and place the larger at the end of the free space, working leftward. Every write lands in a slot that is either empty or already consumed, so nothing is clobbered. O(m + n) time, O(1) space.\n\nIf the second array is exhausted first, the remaining elements of the first are already in place and need no copying. If the first is exhausted, the rest of the second must be copied down.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // nums1 has length m + n: m real values followed by n empty slots.\n    public static void Merge(int[] nums1, int m, int[] nums2, int n)\n    {\n        int i = m - 1;        // last real value in nums1\n        int j = n - 1;        // last value in nums2\n        int write = m + n - 1; // last slot overall\n\n        while (j >= 0)         // only nums2 needs draining\n        {\n            if (i >= 0 && nums1[i] > nums2[j])\n                nums1[write--] = nums1[i--];\n            else\n                nums1[write--] = nums2[j--];\n        }\n        // Anything left in nums1 is already in its final position.\n    }\n\n    private static string Merged(int[] a, int m, int[] b, int n)\n    {\n        var copy = (int[])a.Clone();\n        Merge(copy, m, b, n);\n        return string.Join(\",\", copy);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Merged(new[] { 1, 2, 3, 0, 0, 0 }, 3, new[] { 2, 5, 6 }, 3));\n        Console.WriteLine(Merged(new[] { 1 }, 1, new int[0], 0));            // nothing to merge\n        Console.WriteLine(Merged(new[] { 0 }, 0, new[] { 1 }, 1));           // nums1 empty\n        Console.WriteLine(Merged(new[] { 4, 5, 6, 0, 0, 0 }, 3, new[] { 1, 2, 3 }, 3));\n        Console.WriteLine(Merged(new[] { 1, 2, 3, 0, 0, 0 }, 3, new[] { 4, 5, 6 }, 3));\n        Console.WriteLine(Merged(new[] { 2, 0 }, 1, new[] { 1 }, 1));\n    }\n}\n```\n\n**Output**\n\n```\n1,2,2,3,5,6\n1\n1\n1,2,3,4,5,6\n1,2,3,4,5,6\n1,2\n```",
   "tags": [
    "arrays",
-   "merge",
-   "two-pointer",
-   "sorted"
+   "two-pointers",
+   "in-place",
+   "backward-fill",
+   "csharp"
   ],
-  "id": 1512
+  "id": 1512,
+  "followups": [
+   {
+    "q": "Why does filling from the back work when filling from the front does not?",
+    "a": "Because the free space is at the back. Writing forward from index 0 would immediately overwrite nums1[0], which is still needed if nums2's first element is smaller. Writing backward, every destination index is at or beyond the position of the last unread element of nums1, so a write can only ever land on an empty slot or one already copied. That invariant, that the write pointer never overtakes the read pointer, is the whole argument and is worth stating explicitly."
+   },
+   {
+    "q": "Why is the loop condition j >= 0 rather than i >= 0 || j >= 0?",
+    "a": "Because once nums2 is drained, every remaining element of nums1 is already sitting in its correct final position: it was never moved, and everything larger has been placed after it. Continuing to copy nums1 onto itself would be harmless but pointless work. The reverse is not true, which is why nums2 running out is the terminating condition and nums1 running out is handled by the `i >= 0` guard inside."
+   },
+   {
+    "q": "Why does the caller pass m and n rather than using nums1.Length?",
+    "a": "Because nums1.Length is m + n, so the array cannot tell you where the real data ends and the padding begins. The trailing zeros are not sentinels: zero is a legitimate value. This is the same reason `List<T>` tracks Count separately from Capacity, and why APIs that take a buffer almost always take a length alongside it. Treating the padding as meaningful data is the mistake the signature is designed to prevent."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21870,14 +21900,29 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "String to integer (atoi) with edge cases.",
-  "answer": "Skip leading whitespace, read optional sign, then digits until a non-digit; build the number, clamping to int min/max on overflow. Handle empty/invalid input returning 0. Careful overflow checking before multiplying by 10 and adding. O(n) time.",
+  "answer": "**Logic**\n\nThe algorithm is easy; the edge cases are the question. In order: skip leading whitespace, read an optional single sign, consume digits until a non-digit, and clamp to int.MinValue or int.MaxValue on overflow rather than wrapping. Anything unparseable yields 0.\n\nOverflow is the part that separates answers. Detect it *before* multiplying, by checking whether the accumulated value already exceeds `int.MaxValue / 10`, or accumulate in a long and clamp. Multiplying first and checking afterwards is already too late, because the overflow has happened.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MyAtoi(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        int i = 0;\n        while (i < s.Length && s[i] == ' ') i++;          // 1. leading whitespace only\n\n        if (i == s.Length) return 0;\n\n        int sign = 1;                                     // 2. one optional sign\n        if (s[i] == '+' || s[i] == '-')\n        {\n            sign = s[i] == '-' ? -1 : 1;\n            i++;\n        }\n\n        long value = 0;                                   // 3. digits, clamping as we go\n        while (i < s.Length && char.IsAsciiDigit(s[i]))\n        {\n            value = value * 10 + (s[i] - '0');\n            i++;\n\n            // Clamp early: a long cannot absorb an arbitrarily long digit run either.\n            if (sign == 1 && value > int.MaxValue) return int.MaxValue;\n            if (sign == -1 && -value < int.MinValue) return int.MinValue;\n        }\n\n        return (int)(sign * value);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MyAtoi(\"42\"));\n        Console.WriteLine(MyAtoi(\"   -42\"));\n        Console.WriteLine(MyAtoi(\"4193 with words\"));      // stops at the space\n        Console.WriteLine(MyAtoi(\"words and 987\"));        // never starts\n        Console.WriteLine(MyAtoi(\"-91283472332\"));         // clamps to int.MinValue\n        Console.WriteLine(MyAtoi(\"91283472332\"));          // clamps to int.MaxValue\n        Console.WriteLine(MyAtoi(\"+-12\"));                 // two signs: invalid\n        Console.WriteLine(MyAtoi(\"00000123\"));             // leading zeros\n        Console.WriteLine(MyAtoi(\"\"));\n        Console.WriteLine(MyAtoi(\"3.14\"));                 // stops at the dot\n    }\n}\n```\n\n**Output**\n\n```\n42\n-42\n4193\n0\n-2147483648\n2147483647\n0\n123\n0\n3\n```",
   "tags": [
    "strings",
    "parsing",
-   "atoi",
-   "overflow"
+   "overflow",
+   "edge-cases",
+   "csharp"
   ],
-  "id": 1528
+  "id": 1528,
+  "followups": [
+   {
+    "q": "Why clamp inside the loop rather than after it?",
+    "a": "Because a long overflows too. An input of forty digits would overflow the long accumulator long before the loop ends, wrapping to some arbitrary value that might even look valid, so a single check at the end cannot save you. Clamping on every iteration bounds the accumulator permanently. The general lesson is that widening the type only buys headroom, it does not remove the overflow case, so the check has to be inside the loop that grows the value."
+   },
+   {
+    "q": "Why write this at all when int.TryParse exists?",
+    "a": "In production you would use `int.TryParse`, and saying so is the right instinct. The behaviours differ though: TryParse rejects trailing garbage rather than stopping at it, returns false instead of clamping on overflow, and is culture-sensitive by default, so it accepts thousands separators and locale-specific signs. This problem specifies C's atoi semantics, which are deliberately permissive. The interview value is that the edge cases here are exactly the ones any real parser must decide on."
+   },
+   {
+    "q": "Why char.IsAsciiDigit rather than char.IsDigit?",
+    "a": "Because `char.IsDigit` returns true for decimal digits in every script, including Arabic-Indic and Devanagari numerals. Subtracting '0' from those produces nonsense, so the parse would silently compute a garbage value rather than stopping. `IsAsciiDigit`, added in .NET 7, says exactly what is meant. It is a small example of a wider rule: when a routine assumes ASCII, assert ASCII rather than relying on a broader predicate that happens to work for the inputs you tested."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21912,14 +21957,29 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Implement strStr / substring search (find needle in haystack).",
-  "answer": "Naive: slide the needle over the haystack comparing characters, O(n*m). KMP achieves O(n+m) by precomputing a longest-prefix-suffix (failure) table to skip redundant comparisons on mismatch. Rabin-Karp uses rolling hashes for average O(n+m).",
+  "answer": "**Logic**\n\nThe straightforward approach tries every alignment: for each starting position in the haystack, compare characters until a mismatch. That is O(n·m) in the worst case, for example searching `\"aaab\"` in a long run of `\"a\"`s, though it is close to O(n) on typical text.\n\nKMP brings it to O(n + m) by precomputing, for each prefix of the needle, the length of the longest proper prefix that is also a suffix. On a mismatch, that table says how far the needle can shift without re-examining characters already matched, so the haystack pointer never moves backwards.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Naive: simple, and genuinely fine for short needles.\n    public static int StrStr(string haystack, string needle)\n    {\n        if (string.IsNullOrEmpty(needle)) return 0;\n        if (haystack == null || needle.Length > haystack.Length) return -1;\n\n        for (int start = 0; start <= haystack.Length - needle.Length; start++)\n        {\n            int k = 0;\n            while (k < needle.Length && haystack[start + k] == needle[k]) k++;\n            if (k == needle.Length) return start;\n        }\n        return -1;\n    }\n\n    // KMP: O(n + m), no backtracking in the haystack.\n    public static int StrStrKmp(string haystack, string needle)\n    {\n        if (string.IsNullOrEmpty(needle)) return 0;\n        if (haystack == null || needle.Length > haystack.Length) return -1;\n\n        int[] lps = BuildLps(needle);\n        int i = 0, j = 0;\n\n        while (i < haystack.Length)\n        {\n            if (haystack[i] == needle[j])\n            {\n                i++; j++;\n                if (j == needle.Length) return i - j;\n            }\n            else if (j > 0) j = lps[j - 1];   // shift the needle, keep i put\n            else i++;\n        }\n        return -1;\n    }\n\n    // lps[k] = length of the longest proper prefix of needle[0..k] that is also its suffix.\n    private static int[] BuildLps(string needle)\n    {\n        var lps = new int[needle.Length];\n        int length = 0;\n\n        for (int i = 1; i < needle.Length; )\n        {\n            if (needle[i] == needle[length]) lps[i++] = ++length;\n            else if (length > 0) length = lps[length - 1];\n            else lps[i++] = 0;\n        }\n        return lps;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(StrStr(\"sadbutsad\", \"sad\"));\n        Console.WriteLine(StrStrKmp(\"sadbutsad\", \"sad\"));\n        Console.WriteLine(StrStr(\"leetcode\", \"leeto\"));\n        Console.WriteLine(StrStrKmp(\"aaaaab\", \"aab\"));      // the naive worst case\n        Console.WriteLine(StrStr(\"abc\", \"\"));               // empty needle\n        Console.WriteLine(StrStrKmp(\"a\", \"aa\"));            // needle longer\n        Console.WriteLine(string.Join(\",\", BuildLps(\"aabaaac\")));\n    }\n}\n```\n\n**Output**\n\n```\n0\n0\n-1\n3\n0\n-1\n0,1,0,1,2,2,0\n```",
   "tags": [
    "strings",
    "kmp",
-   "substring-search",
-   "pattern-matching"
+   "pattern-matching",
+   "lps",
+   "csharp"
   ],
-  "id": 1531
+  "id": 1531,
+  "followups": [
+   {
+    "q": "Explain what the LPS table means, using aabaaac.",
+    "a": "Each entry is the length of the longest proper prefix of that position's prefix which is also its suffix. At index 4, the prefix is \"aabaa\", whose longest border is \"aa\", so the entry is 2. That means if a mismatch happens after matching five characters, two of them are already re-matched by shifting, so comparison resumes at needle index 2 without moving back in the haystack. The table encodes what the needle knows about its own self-similarity, which is why no re-examination is ever needed."
+   },
+   {
+    "q": "Is KMP what a real library uses?",
+    "a": "Usually not. .NET's `IndexOf` uses vectorised SIMD scanning, and many libraries use Boyer-Moore or a hybrid, because Boyer-Moore can skip ahead by the needle length on a mismatch and is sub-linear on typical text, which beats KMP's guaranteed linearity in the average case. KMP's value is its worst-case bound and the fact that it never backs up in the input, which makes it the right choice for streaming data you cannot rewind."
+   },
+   {
+    "q": "Why does an empty needle return 0 rather than -1?",
+    "a": "By convention, the empty string is found at every position, so the first occurrence is index 0. It matches `string.IndexOf(\"\")` in .NET and the equivalent in most languages. It is worth calling out explicitly because it is an arbitrary convention rather than a derivable fact, and an interviewer asking about it is checking whether you clarify undefined behaviour rather than silently picking one."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21940,13 +22000,29 @@
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "Reverse words in a string.",
-  "answer": "Trim and split on whitespace into words, reverse the word order, and join with single spaces. Or in-place (char array): reverse the whole string, then reverse each word, and clean up spaces. O(n) time.",
+  "answer": "**Logic**\n\nThe requirement is usually to reverse the word order while leaving each word intact, and to normalise whitespace: no leading or trailing spaces, and exactly one space between words.\n\nScanning from the end and collecting each word is a single pass, O(n) time. The classic in-place variant for a character array is the same three-reversal trick as array rotation: reverse the entire string, then reverse each word back to the correct order.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    // One pass from the right, emitting whole words as they are found.\n    public static string ReverseWords(string s)\n    {\n        if (string.IsNullOrWhiteSpace(s)) return \"\";\n\n        var sb = new StringBuilder(s.Length);\n        int i = s.Length - 1;\n\n        while (i >= 0)\n        {\n            while (i >= 0 && s[i] == ' ') i--;               // skip trailing/extra spaces\n            if (i < 0) break;\n\n            int end = i;\n            while (i >= 0 && s[i] != ' ') i--;               // walk to the word's start\n\n            if (sb.Length > 0) sb.Append(' ');               // single separator\n            sb.Append(s, i + 1, end - i);\n        }\n\n        return sb.ToString();\n    }\n\n    // In-place on a char array: reverse everything, then reverse each word back.\n    public static string ReverseWordsInPlace(char[] chars)\n    {\n        Reverse(chars, 0, chars.Length - 1);\n\n        int start = 0;\n        for (int i = 0; i <= chars.Length; i++)\n        {\n            if (i == chars.Length || chars[i] == ' ')\n            {\n                Reverse(chars, start, i - 1);\n                start = i + 1;\n            }\n        }\n        return new string(chars);\n    }\n\n    private static void Reverse(char[] c, int i, int j)\n    {\n        while (i < j) { (c[i], c[j]) = (c[j], c[i]); i++; j--; }\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine($\"[{ReverseWords(\"the sky is blue\")}]\");\n        Console.WriteLine($\"[{ReverseWords(\"  hello world  \")}]\");        // trimmed\n        Console.WriteLine($\"[{ReverseWords(\"a good   example\")}]\");       // collapsed\n        Console.WriteLine($\"[{ReverseWords(\"single\")}]\");\n        Console.WriteLine($\"[{ReverseWords(\"   \")}]\");                    // only spaces\n        Console.WriteLine($\"[{ReverseWordsInPlace(\"the sky is blue\".ToCharArray())}]\");\n    }\n}\n```\n\n**Output**\n\n```\n[blue is sky the]\n[world hello]\n[example good a]\n[single]\n[]\n[blue is sky the]\n```",
   "tags": [
    "strings",
-   "reverse",
-   "split"
+   "stringbuilder",
+   "in-place",
+   "whitespace",
+   "csharp"
   ],
-  "id": 1533
+  "id": 1533,
+  "followups": [
+   {
+    "q": "Why not just Split, Reverse and Join?",
+    "a": "You can, and `string.Join(\" \", s.Split(' ', StringSplitOptions.RemoveEmptyEntries).Reverse())` is one readable line that I would happily ship. The reason the manual version exists is memory: Split allocates an array plus a string per word, so a large input creates substantial garbage, whereas the StringBuilder version allocates once. In an interview the one-liner is the right first answer, followed by the manual version when they ask you to avoid the intermediate allocations."
+   },
+   {
+    "q": "How does the three-reversal trick relate to rotating an array?",
+    "a": "It is the same identity: reversing the whole thing and then reversing the pieces restores internal order while moving the blocks. Array rotation reverses two fixed-size blocks; word reversal reverses variable-length blocks delimited by spaces. Recognising that one technique covers both, and also the in-place rotation of a matrix by transpose-then-reverse, is more valuable than memorising three separate tricks."
+   },
+   {
+    "q": "What about Unicode text, where words are not just space-delimited?",
+    "a": "Then splitting on the space character is wrong. Some scripts do not use spaces between words at all, and others use non-breaking or ideographic spaces that this code would treat as part of a word. Correct word segmentation needs the Unicode text-segmentation rules, available through `System.Globalization.StringInfo` for graphemes or a proper ICU-backed library for word boundaries. It is worth flagging, because 'reverse the words' quietly assumes an English-shaped world."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -21980,13 +22056,29 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Longest common prefix among an array of strings.",
-  "answer": "Vertical scanning: compare characters column by column across all strings until a mismatch or a string ends. Or horizontal: reduce the prefix against each string. Or sort and compare only the first and last strings. O(total characters) time.",
+  "answer": "**Logic**\n\nTake the first string as a working prefix and shorten it against each subsequent string until it matches as a prefix. Equivalently, and more simply, compare column by column: check character position 0 across all strings, then position 1, and stop at the first mismatch or when any string ends.\n\nO(S) where S is the total number of characters, since in the worst case every character of every string is examined once. O(1) extra space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static string LongestCommonPrefix(string[] strs)\n    {\n        if (strs == null || strs.Length == 0) return \"\";\n\n        // Vertical scan: position by position across every string.\n        for (int pos = 0; pos < strs[0].Length; pos++)\n        {\n            char c = strs[0][pos];\n\n            for (int s = 1; s < strs.Length; s++)\n                if (pos >= strs[s].Length || strs[s][pos] != c)\n                    return strs[0].Substring(0, pos);   // first divergence\n        }\n\n        return strs[0];    // the first string is itself the common prefix\n    }\n\n    // Horizontal scan: shrink a running prefix. Same complexity, different shape.\n    public static string LongestCommonPrefixHorizontal(string[] strs)\n    {\n        if (strs == null || strs.Length == 0) return \"\";\n\n        string prefix = strs[0];\n        foreach (string s in strs)\n        {\n            while (!s.StartsWith(prefix, StringComparison.Ordinal))\n            {\n                prefix = prefix.Substring(0, prefix.Length - 1);\n                if (prefix.Length == 0) return \"\";\n            }\n        }\n        return prefix;\n    }\n\n    private static string Show(string s) => s.Length == 0 ? \"(empty)\" : s;\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(LongestCommonPrefix(new[] { \"flower\", \"flow\", \"flight\" })));\n        Console.WriteLine(Show(LongestCommonPrefix(new[] { \"dog\", \"racecar\", \"car\" })));\n        Console.WriteLine(Show(LongestCommonPrefix(new[] { \"interspecies\", \"interstellar\", \"interstate\" })));\n        Console.WriteLine(Show(LongestCommonPrefix(new[] { \"alone\" })));\n        Console.WriteLine(Show(LongestCommonPrefix(new[] { \"\", \"abc\" })));        // empty string wins\n        Console.WriteLine(Show(LongestCommonPrefixHorizontal(new[] { \"ab\", \"a\" })));\n    }\n}\n```\n\n**Output**\n\n```\nfl\n(empty)\ninters\nalone\n(empty)\na\n```",
   "tags": [
    "strings",
    "prefix",
-   "comparison"
+   "ordinal-comparison",
+   "trie",
+   "csharp"
   ],
-  "id": 1536
+  "id": 1536,
+  "followups": [
+   {
+    "q": "Why StringComparison.Ordinal on StartsWith?",
+    "a": "Because the default overload is culture-sensitive, which is both slower and semantically wrong here. Culture-aware comparison applies linguistic rules: certain sequences compare as equal to others, and zero-width characters can be ignored entirely, so two strings that differ by code point can be reported as a prefix match. For structural comparison of identifiers, paths or keys, always use Ordinal. This is one of the most common performance and correctness defects in real .NET code."
+   },
+   {
+    "q": "Which scan direction is better?",
+    "a": "The vertical scan usually. It stops at the very first differing character, so a set of strings that diverge immediately costs O(n) rather than requiring any string manipulation, and it allocates only the final substring. The horizontal version allocates a new string on every shrink step, which for a long first string and an early mismatch means many wasted allocations. Both are O(S) in the worst case, but the constants differ noticeably."
+   },
+   {
+    "q": "What if you must answer this repeatedly for many query sets?",
+    "a": "Build a trie of all the strings once; the longest common prefix is then the path from the root down to the first node that either branches or marks the end of a word. The build is O(S), and each query becomes proportional to the prefix length rather than to the total input. That is the right structure whenever prefix questions are asked repeatedly, which is exactly why autocomplete and routing tables are built on tries."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22067,14 +22159,29 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Insert Interval / Merge Intervals.",
-  "answer": "Merge Intervals: sort by start, then iterate merging overlapping intervals (if current.start <= last.end, extend last.end = max(...)). Insert Interval: add non-overlapping before, merge overlapping with the new one, add the rest. O(n log n) for merge (sorting), O(n) for insert into sorted intervals.",
+  "answer": "**Logic**\n\nSort by start time, then sweep. Keep the current interval; if the next one starts at or before the current end, they overlap, so extend the end to the larger of the two; otherwise close the current interval and start a new one. O(n log n) dominated by the sort, O(n) output.\n\nFor inserting into an already-sorted list, the sort is unnecessary and it becomes three linear phases: intervals entirely before the new one, intervals overlapping it (absorbed by widening), and intervals entirely after. That is O(n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[][] Merge(int[][] intervals)\n    {\n        if (intervals == null || intervals.Length == 0) return Array.Empty<int[]>();\n\n        var sorted = intervals.OrderBy(i => i[0]).ToArray();\n        var merged = new List<int[]>();\n        var current = new[] { sorted[0][0], sorted[0][1] };\n\n        foreach (var next in sorted.Skip(1))\n        {\n            if (next[0] <= current[1])                       // touching counts as overlapping\n                current[1] = Math.Max(current[1], next[1]);  // max, not next[1]: nesting\n            else\n            {\n                merged.Add(current);\n                current = new[] { next[0], next[1] };\n            }\n        }\n\n        merged.Add(current);\n        return merged.ToArray();\n    }\n\n    // Already sorted and non-overlapping: insert in O(n), no sort needed.\n    public static int[][] Insert(int[][] intervals, int[] newInterval)\n    {\n        var result = new List<int[]>();\n        int i = 0, n = intervals.Length;\n        int start = newInterval[0], end = newInterval[1];\n\n        while (i < n && intervals[i][1] < start) result.Add(intervals[i++]);      // strictly before\n\n        while (i < n && intervals[i][0] <= end)                                   // overlapping\n        {\n            start = Math.Min(start, intervals[i][0]);\n            end = Math.Max(end, intervals[i][1]);\n            i++;\n        }\n        result.Add(new[] { start, end });\n\n        while (i < n) result.Add(intervals[i++]);                                 // strictly after\n        return result.ToArray();\n    }\n\n    private static string Render(int[][] r) =>\n        r.Length == 0 ? \"(none)\" : string.Join(\" \", r.Select(x => $\"[{x[0]},{x[1]}]\"));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(Merge(new[] {\n            new[] { 1, 3 }, new[] { 2, 6 }, new[] { 8, 10 }, new[] { 15, 18 } })));\n\n        Console.WriteLine(Render(Merge(new[] { new[] { 1, 4 }, new[] { 4, 5 } })));   // touching\n        Console.WriteLine(Render(Merge(new[] { new[] { 1, 10 }, new[] { 2, 3 } })));  // nested\n        Console.WriteLine(Render(Merge(new[] { new[] { 5, 6 }, new[] { 1, 2 } })));   // unsorted input\n\n        Console.WriteLine(Render(Insert(new[] {\n            new[] { 1, 3 }, new[] { 6, 9 } }, new[] { 2, 5 })));\n\n        Console.WriteLine(Render(Insert(Array.Empty<int[]>(), new[] { 4, 8 })));\n    }\n}\n```\n\n**Output**\n\n```\n[1,6] [8,10] [15,18]\n[1,5]\n[1,10]\n[1,2] [5,6]\n[1,5] [6,9]\n[4,8]\n```",
   "tags": [
    "arrays",
    "intervals",
    "sorting",
-   "merge"
+   "sweep-line",
+   "csharp"
   ],
-  "id": 1541
+  "id": 1541,
+  "followups": [
+   {
+    "q": "Why Math.Max on the end rather than just taking the next interval's end?",
+    "a": "Because of nesting. If the current interval is [1,10] and the next is [2,3], the next one is entirely inside it, and assigning its end would shrink the merged interval to [1,3], silently losing coverage. Sorting by start does not guarantee the ends are ordered, so the maximum is required. It is the single most common bug in this problem and it only shows up on inputs containing a contained interval, which is exactly why that test case is there."
+   },
+   {
+    "q": "Should [1,4] and [4,5] merge?",
+    "a": "It depends on whether the intervals are closed or half-open, and asking is the right move. For closed intervals sharing the endpoint 4, they overlap and merge to [1,5], which is what the code does with `<=`. For half-open intervals such as time slots, where [1,4) ends the instant [4,5) begins, they are adjacent but disjoint and the comparison should be `<`. Getting this wrong in a calendar system produces meetings that either falsely conflict or falsely do not."
+   },
+   {
+    "q": "What is the general pattern behind interval problems?",
+    "a": "The sweep line: sort the endpoints, move through them in order, and maintain a running state. Merging keeps the current interval; counting overlaps increments on each start and decrements on each end, which is how meeting rooms II works; finding the maximum concurrency tracks the peak of that counter. Once you see a problem as events on a timeline rather than as pairs of numbers, the whole family reduces to choosing what to track during the sweep."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22095,43 +22202,87 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Meeting rooms II: minimum meeting rooms required.",
-  "answer": "Sort start and end times separately; use two pointers or a min-heap of end times. Iterate meetings by start; if the earliest end <= current start, reuse a room (pop), else allocate a new one. The peak concurrent count is the answer. O(n log n) time.",
+  "answer": "**Logic**\n\nThe answer is the maximum number of meetings running at the same time. Treat starts and ends as events on a timeline: a start needs a room, an end frees one. Sort both arrays independently, then sweep with two pointers, incrementing a counter on each start and decrementing when the next end has already passed. The peak of that counter is the answer. O(n log n) for the sorts, O(n) space.\n\nThe min-heap formulation is equivalent: keep the end times of occupied rooms and reuse the earliest-finishing room whenever the next meeting starts after it.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    // Two sorted arrays of events. Sorting starts and ends independently is\n    // legitimate: the pairing does not matter, only how many are active.\n    public static int MinMeetingRooms(int[][] intervals)\n    {\n        if (intervals == null || intervals.Length == 0) return 0;\n\n        var starts = intervals.Select(i => i[0]).OrderBy(x => x).ToArray();\n        var ends = intervals.Select(i => i[1]).OrderBy(x => x).ToArray();\n\n        int rooms = 0, peak = 0, e = 0;\n\n        foreach (int start in starts)\n        {\n            // Free every room whose meeting finished at or before this start.\n            while (e < ends.Length && ends[e] <= start) { rooms--; e++; }\n\n            rooms++;\n            if (rooms > peak) peak = rooms;\n        }\n\n        return peak;\n    }\n\n    // Min-heap of end times: the root is the room that frees up soonest.\n    public static int MinMeetingRoomsHeap(int[][] intervals)\n    {\n        if (intervals == null || intervals.Length == 0) return 0;\n\n        var sorted = intervals.OrderBy(i => i[0]).ToArray();\n        var rooms = new PriorityQueue<int, int>();      // end times\n\n        foreach (var meeting in sorted)\n        {\n            if (rooms.Count > 0 && rooms.Peek() <= meeting[0])\n                rooms.Dequeue();                        // reuse that room\n\n            rooms.Enqueue(meeting[1], meeting[1]);\n        }\n\n        return rooms.Count;\n    }\n\n    public static void Main()\n    {\n        var a = new[] { new[] { 0, 30 }, new[] { 5, 10 }, new[] { 15, 20 } };\n        Console.WriteLine(MinMeetingRooms(a));\n        Console.WriteLine(MinMeetingRoomsHeap(a));\n\n        Console.WriteLine(MinMeetingRooms(new[] { new[] { 7, 10 }, new[] { 2, 4 } }));\n        Console.WriteLine(MinMeetingRooms(new[] { new[] { 1, 5 }, new[] { 5, 9 } }));   // back to back\n        Console.WriteLine(MinMeetingRooms(new[] { new[] { 1, 5 }, new[] { 2, 6 }, new[] { 3, 7 } }));\n        Console.WriteLine(MinMeetingRooms(Array.Empty<int[]>()));\n    }\n}\n```\n\n**Output**\n\n```\n2\n2\n1\n1\n3\n0\n```",
   "tags": [
    "arrays",
    "intervals",
+   "sweep-line",
    "heap",
-   "scheduling"
+   "csharp"
   ],
-  "id": 1543
+  "id": 1543,
+  "followups": [
+   {
+    "q": "Is it really valid to sort the start and end times separately, breaking the pairing?",
+    "a": "Yes, and it is the part worth justifying. The question is only how many meetings are active at a given moment, which depends on how many starts have occurred minus how many ends have. Which specific end belongs to which start never affects that count. So the two sorted sequences can be swept independently. It feels wrong at first glance, which is exactly why an interviewer asks, and being able to explain why it is sound is the answer they want."
+   },
+   {
+    "q": "Why does ends[e] <= start free a room, rather than a strict less-than?",
+    "a": "Because a meeting ending at 10 and another starting at 10 can share a room, under the usual half-open interpretation of time slots. Using strict less-than would allocate a second room for back-to-back meetings, which is the third test case: it would return 2 instead of 1. If the convention were that a room needs turnover time, the comparison would change, which is another instance of the closed-versus-half-open decision that has to be made explicitly."
+   },
+   {
+    "q": "How would you also report which meetings go in which room?",
+    "a": "Use the heap version and store the room index alongside the end time, so that when you reuse the earliest-finishing room you know its number, and when you allocate a new one you assign the next index. That gives a concrete schedule rather than just a count, which is what any real booking system actually needs. It is the same relationship as between computing a shortest path's length and recovering the path itself: one extra field, tracked as you go."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find the kth largest element in an array.",
-  "answer": "Min-heap of size k: push elements, evict the smallest when size exceeds k; the heap root is the kth largest. O(n log k). Alternatively Quickselect (partition-based) gives average O(n), worst O(n^2). Sorting is O(n log n).",
+  "answer": "**Logic**\n\nA min-heap of size k. Push elements while the heap is smaller than k; after that, if an element is larger than the heap's smallest, replace it. The heap ends up holding the k largest elements, and its root is the kth largest. O(n log k) time, O(k) space.\n\nQuickselect is the other answer: partition as in quicksort but recurse only into the side containing the target rank, giving O(n) average time and O(1) extra space, though O(n²) in the worst case. The heap is preferred when the data is a stream or k is much smaller than n.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    // Min-heap of size k: O(n log k), and works on a stream.\n    public static int FindKthLargestHeap(int[] nums, int k)\n    {\n        var heap = new PriorityQueue<int, int>();   // min-heap by priority\n\n        foreach (int n in nums)\n        {\n            heap.Enqueue(n, n);\n            if (heap.Count > k) heap.Dequeue();      // drop the smallest\n        }\n\n        return heap.Peek();\n    }\n\n    // Quickselect: O(n) average, in place, but needs the whole array up front.\n    public static int FindKthLargestQuickselect(int[] nums, int k)\n    {\n        int target = nums.Length - k;               // kth largest = this index when sorted\n        int low = 0, high = nums.Length - 1;\n        var rng = new Random(42);                   // fixed seed: reproducible output\n\n        while (true)\n        {\n            if (low == high) return nums[low];\n\n            // Random pivot: guards against the sorted-input worst case.\n            int pivotIndex = low + rng.Next(high - low + 1);\n            pivotIndex = Partition(nums, low, high, pivotIndex);\n\n            if (pivotIndex == target) return nums[pivotIndex];\n            if (pivotIndex < target) low = pivotIndex + 1;\n            else high = pivotIndex - 1;\n        }\n    }\n\n    private static int Partition(int[] nums, int low, int high, int pivotIndex)\n    {\n        int pivot = nums[pivotIndex];\n        (nums[pivotIndex], nums[high]) = (nums[high], nums[pivotIndex]);   // park the pivot\n\n        int store = low;\n        for (int i = low; i < high; i++)\n            if (nums[i] < pivot)\n                (nums[store], nums[i]) = (nums[i], nums[store++]);\n\n        (nums[high], nums[store]) = (nums[store], nums[high]);             // pivot to its place\n        return store;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindKthLargestHeap(new[] { 3, 2, 1, 5, 6, 4 }, 2));\n        Console.WriteLine(FindKthLargestQuickselect(new[] { 3, 2, 1, 5, 6, 4 }, 2));\n\n        Console.WriteLine(FindKthLargestHeap(new[] { 3, 2, 3, 1, 2, 4, 5, 5, 6 }, 4));\n        Console.WriteLine(FindKthLargestQuickselect(new[] { 3, 2, 3, 1, 2, 4, 5, 5, 6 }, 4));\n\n        Console.WriteLine(FindKthLargestHeap(new[] { 1 }, 1));\n        Console.WriteLine(FindKthLargestHeap(new[] { 7, 7, 7 }, 2));   // duplicates count separately\n    }\n}\n```\n\n**Output**\n\n```\n5\n5\n4\n4\n1\n7\n```",
   "tags": [
    "arrays",
    "heap",
    "quickselect",
-   "kth-largest"
+   "top-k",
+   "csharp"
   ],
-  "id": 1544
+  "id": 1544,
+  "followups": [
+   {
+    "q": "Why a min-heap for the kth LARGEST? It feels backwards.",
+    "a": "Because you want cheap access to the weakest member of the winning set, so it can be evicted when something better arrives. The heap holds the k largest seen so far, and its root is the smallest of those, which is precisely the kth largest overall. Using a max-heap would put the biggest element at the root, which you never need to evict, and you would have to hold all n elements to find the kth. The rule of thumb is that a bounded top-k needs a heap ordered opposite to the direction you are selecting."
+   },
+   {
+    "q": "When is quickselect's O(n²) worst case a real problem?",
+    "a": "When the pivot is chosen deterministically, for example always the last element, and the input is sorted or adversarial: every partition removes one element and it degrades to quadratic. That is exploitable if inputs come from users, which is a genuine denial-of-service vector. Randomising the pivot, as above, makes the bad case vanishingly unlikely. The median-of-medians algorithm gives a guaranteed O(n) worst case but has constants bad enough that it is rarely used in practice."
+   },
+   {
+    "q": "Which would you use for a continuous stream of values?",
+    "a": "The heap, because it handles unbounded input in O(k) memory and gives the answer at any moment. Quickselect needs the entire array materialised and reorders it, so it cannot apply. This is also why the heap approach generalises to top-k frequent elements, k closest points and the sliding-window problems, all of which are really 'maintain a bounded best set as data arrives'."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Top K frequent elements.",
-  "answer": "Count frequencies with a hash map, then use a min-heap of size k by frequency, or bucket sort by frequency (buckets indexed 0..n). Bucket sort gives O(n); heap gives O(n log k). Return the k most frequent.",
+  "answer": "**Logic**\n\nCount frequencies with a dictionary, then select the k highest counts. The selection can be a min-heap of size k, giving O(n log k), or bucket sort, giving O(n).\n\nBucket sort wins here because of a bound the problem hands you: no frequency can exceed n. So make n+1 buckets indexed by frequency, drop each value into its bucket, and read buckets from the top down until k values are collected. That is O(n) time and O(n) space, and it beats the heap.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    // O(n) via bucket sort on frequency, which cannot exceed n.\n    public static int[] TopKFrequent(int[] nums, int k)\n    {\n        var counts = new Dictionary<int, int>();\n        foreach (int n in nums)\n            counts[n] = counts.TryGetValue(n, out int c) ? c + 1 : 1;\n\n        // buckets[f] holds every value occurring exactly f times.\n        var buckets = new List<int>[nums.Length + 1];\n        foreach (var (value, count) in counts)\n            (buckets[count] ??= new List<int>()).Add(value);\n\n        var result = new List<int>(k);\n        for (int f = buckets.Length - 1; f >= 1 && result.Count < k; f--)\n        {\n            if (buckets[f] == null) continue;\n            foreach (int v in buckets[f])\n            {\n                result.Add(v);\n                if (result.Count == k) break;\n            }\n        }\n\n        return result.ToArray();\n    }\n\n    // O(n log k) with a bounded min-heap: better when k is tiny and n is huge,\n    // and the only option when the input is a stream.\n    public static int[] TopKFrequentHeap(int[] nums, int k)\n    {\n        var counts = new Dictionary<int, int>();\n        foreach (int n in nums)\n            counts[n] = counts.TryGetValue(n, out int c) ? c + 1 : 1;\n\n        var heap = new PriorityQueue<int, int>();\n        foreach (var (value, count) in counts)\n        {\n            heap.Enqueue(value, count);\n            if (heap.Count > k) heap.Dequeue();     // evict the least frequent\n        }\n\n        var result = new List<int>();\n        while (heap.Count > 0) result.Add(heap.Dequeue());\n        result.Reverse();                          // heap pops ascending\n        return result.ToArray();\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", TopKFrequent(new[] { 1, 1, 1, 2, 2, 3 }, 2)));\n        Console.WriteLine(string.Join(\",\", TopKFrequentHeap(new[] { 1, 1, 1, 2, 2, 3 }, 2)));\n        Console.WriteLine(string.Join(\",\", TopKFrequent(new[] { 1 }, 1)));\n        Console.WriteLine(string.Join(\",\", TopKFrequent(new[] { 4, 4, 5, 5, 6 }, 3)));\n        Console.WriteLine(string.Join(\",\", TopKFrequent(new[] { 7, 7, 7 }, 1)));\n    }\n}\n```\n\n**Output**\n\n```\n1,2\n1,2\n1\n4,5,6\n7\n```",
   "tags": [
    "arrays",
-   "hashmap",
-   "heap",
    "bucket-sort",
-   "top-k"
+   "heap",
+   "frequency",
+   "csharp"
   ],
-  "id": 1545
+  "id": 1545,
+  "followups": [
+   {
+    "q": "Why can bucket sort beat the O(n log n) sorting lower bound here?",
+    "a": "Because that bound applies to comparison-based sorting, and bucket sort is not comparison-based. It exploits a structural fact about the data: frequencies are integers in the range 1 to n, so a value can be placed directly at its index rather than compared into position. Counting sort and radix sort do the same thing. Whenever keys are bounded small integers, the comparison lower bound simply does not apply, and noticing that is the real insight of this problem."
+   },
+   {
+    "q": "How would you break ties, and is the output order defined?",
+    "a": "It is not defined here: elements with equal frequency come out in dictionary enumeration order, which .NET does not guarantee. If the problem needs deterministic output, such as 'ties broken alphabetically' in the top-k-words variant, you must sort within each bucket or use a comparer in the heap that compares frequency first and then the value. Tests that assert an exact order without specifying tie-breaking are a classic source of intermittent failures."
+   },
+   {
+    "q": "What if the data does not fit on one machine?",
+    "a": "Count locally on each shard, then combine: since counts are additive, each shard sends its own top candidates plus their counts to a coordinator that sums and selects. The subtlety is that an element outside every shard's local top-k can still be globally top-k, so shards must send more than k, or you accept an approximation. The exact fix is a two-pass approach, and the approximate one is a Count-Min Sketch, which is how real streaming systems compute heavy hitters."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22389,13 +22540,29 @@
   "subcategory": "LinkedList",
   "difficulty": "Easy",
   "question": "Find the middle of a linked list.",
-  "answer": "Two pointers: slow moves one step, fast two. When fast reaches the end, slow is at the middle. For even length, this returns the second middle (adjust fast's start/condition for the first). O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nSlow and fast pointers. The fast one moves two nodes per step, the slow one moves one, so when the fast pointer reaches the end the slow pointer is at the middle. One pass, O(n) time, O(1) space, and it never needs the length.\n\nThe only decision is which middle to return for an even-length list. Looping while `fast != null && fast.Next != null` returns the second of the two; stopping one step earlier returns the first. Both are defensible, so state which one you are giving.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    // Even length: returns the SECOND middle. 1->2->3->4 gives 3.\n    public static ListNode MiddleNode(ListNode head)\n    {\n        ListNode slow = head, fast = head;\n\n        while (fast != null && fast.Next != null)\n        {\n            slow = slow.Next;\n            fast = fast.Next.Next;\n        }\n\n        return slow;\n    }\n\n    // Even length: returns the FIRST middle. 1->2->3->4 gives 2. This is the one\n    // you want when splitting a list for merge sort, so neither half is empty.\n    public static ListNode FirstMiddle(ListNode head)\n    {\n        if (head == null) return null;\n        ListNode slow = head, fast = head.Next;\n\n        while (fast != null && fast.Next != null)\n        {\n            slow = slow.Next;\n            fast = fast.Next.Next;\n        }\n\n        return slow;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        for (; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(null)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(MiddleNode(Build(1, 2, 3, 4, 5))));\n        Console.WriteLine(Render(MiddleNode(Build(1, 2, 3, 4, 5, 6))));\n        Console.WriteLine(Render(FirstMiddle(Build(1, 2, 3, 4, 5, 6))));\n        Console.WriteLine(Render(MiddleNode(Build(1))));\n        Console.WriteLine(Render(MiddleNode(null)));\n    }\n}\n```\n\n**Output**\n\n```\n3->4->5\n4->5->6\n3->4->5->6\n1\n(null)\n```",
   "tags": [
    "linkedlist",
-   "two-pointer",
-   "middle"
+   "two-pointers",
+   "slow-fast",
+   "merge-sort",
+   "csharp"
   ],
-  "id": 1562
+  "id": 1562,
+  "followups": [
+   {
+    "q": "Why not just count the nodes and walk half way?",
+    "a": "It works and is O(n) either way, but it needs two passes over the list. That is irrelevant for an in-memory list and important when the list is a stream you can only read once, or when each traversal has real cost such as following pointers across pages. The two-pointer version also composes: the same slow and fast walk detects a cycle, finds the nth node from the end, and splits a list for merge sort, so it is the technique worth having in your hands."
+   },
+   {
+    "q": "Which middle should you return, and does it matter?",
+    "a": "It matters a great deal for merge sort. If you split at the second middle, a two-node list splits into an empty half and a two-node half, so the recursion never shrinks and you get infinite recursion. Splitting at the first middle guarantees both halves are strictly smaller. For a plain 'find the middle' API either is fine as long as it is documented, but the merge sort case is the concrete reason the distinction exists."
+   },
+   {
+    "q": "What if the list has a cycle?",
+    "a": "The loop never terminates, because the fast pointer never reaches null. If a cycle is possible you have to detect it first with the same slow and fast walk, since 'the middle' of a cyclic list is not a well-defined concept anyway. In practice this is why library code that walks user-supplied linked structures either guarantees acyclicity by construction or carries an explicit visited check, rather than assuming a well-formed input."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22431,27 +22598,58 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Remove the nth node from the end of a linked list.",
-  "answer": "Two pointers with a dummy head: advance the fast pointer n+1 steps, then move both until fast is null; slow now points to the node before the target—unlink it. Single pass O(n) time, O(1) space. The dummy handles removing the head.",
+  "answer": "**Logic**\n\nTwo pointers separated by exactly n nodes. Advance the leading pointer n steps, then move both together; when the leader reaches the end, the trailing pointer sits just before the node to delete. One pass, O(n) time, O(1) space.\n\nA dummy node in front of the head removes the special case where the node to delete is the head itself, which is where this problem usually breaks. With the dummy, deletion is always 'skip the node after the trailing pointer'.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static ListNode RemoveNthFromEnd(ListNode head, int n)\n    {\n        var dummy = new ListNode(0, head);      // makes deleting the head ordinary\n        ListNode lead = dummy, trail = dummy;\n\n        // Open a gap of exactly n nodes between the two pointers.\n        for (int i = 0; i < n; i++)\n        {\n            if (lead.Next == null) return head;  // n is larger than the list\n            lead = lead.Next;\n        }\n\n        // Move together; when lead hits the last node, trail is before the target.\n        while (lead.Next != null)\n        {\n            lead = lead.Next;\n            trail = trail.Next;\n        }\n\n        trail.Next = trail.Next.Next;            // unlink\n        return dummy.Next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        for (; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(RemoveNthFromEnd(Build(1, 2, 3, 4, 5), 2)));\n        Console.WriteLine(Render(RemoveNthFromEnd(Build(1, 2, 3, 4, 5), 5)));  // the head\n        Console.WriteLine(Render(RemoveNthFromEnd(Build(1, 2, 3, 4, 5), 1)));  // the tail\n        Console.WriteLine(Render(RemoveNthFromEnd(Build(1), 1)));              // empties it\n        Console.WriteLine(Render(RemoveNthFromEnd(Build(1, 2), 3)));           // n too large\n    }\n}\n```\n\n**Output**\n\n```\n1->2->3->5\n2->3->4->5\n1->2->3->4\n(empty)\n1->2\n```",
   "tags": [
    "linkedlist",
-   "two-pointer",
-   "dummy-node"
+   "two-pointers",
+   "dummy-node",
+   "one-pass",
+   "csharp"
   ],
-  "id": 1564
+  "id": 1564,
+  "followups": [
+   {
+    "q": "What exactly does the dummy node buy you here?",
+    "a": "Without it, deleting the head is a different operation from deleting any other node: you must return `head.Next` rather than relink a predecessor, so the code needs a branch and a separate return path. With the dummy, the head has a predecessor like everything else, so there is exactly one deletion path and one return statement. The same trick applies to any list operation where the head might change, and it removes the single most common source of null-reference bugs in these problems."
+   },
+   {
+    "q": "How should an out-of-range n behave?",
+    "a": "Silently returning the list unchanged, as above, is one choice; throwing ArgumentOutOfRangeException is another. What matters is deciding deliberately and documenting it, because the two lead to very different debugging experiences. My preference in library code is to throw, since a caller asking for the fifth-from-last node of a two-element list has a bug and a silent no-op hides it. For a forgiving API, returning unchanged is defensible."
+   },
+   {
+    "q": "Could you delete a node given only a reference to it, with no access to the head?",
+    "a": "Yes, with a trick: copy the next node's value into the current node, then unlink the next node. You are not really deleting the given node, you are making it impersonate its successor. It fails for the tail, since there is no successor to copy from, and it is invisible to any other reference to that specific node, which will now see a different value. That caveat is the point of the question, and mentioning it is what separates a real answer from a memorised one."
+   }
+  ]
  },
  {
   "category": "Coding",
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Add two numbers represented as linked lists (digits reversed).",
-  "answer": "Traverse both lists with a carry; at each step sum the two digits plus carry, create a node with sum%10, and carry = sum/10. Continue until both lists and the carry are exhausted. Use a dummy head. O(max(m,n)) time.",
+  "answer": "**Logic**\n\nBecause the digits are stored least-significant first, the lists line up exactly the way long addition works: walk both together, add the digits plus the carry, write the units digit and carry the tens. Continue while either list has nodes left or a carry remains, so a final carry produces one more node.\n\nO(max(m, n)) time, O(1) extra space beyond the result. A dummy head again removes the special case for the first digit.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static ListNode AddTwoNumbers(ListNode a, ListNode b)\n    {\n        var dummy = new ListNode();\n        var tail = dummy;\n        int carry = 0;\n\n        // The carry is part of the loop condition: 5 + 5 must produce a second node.\n        while (a != null || b != null || carry != 0)\n        {\n            int sum = carry;\n            if (a != null) { sum += a.Val; a = a.Next; }\n            if (b != null) { sum += b.Val; b = b.Next; }\n\n            carry = sum / 10;\n            tail.Next = new ListNode(sum % 10);\n            tail = tail.Next;\n        }\n\n        return dummy.Next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        for (; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        // 342 + 465 = 807, stored reversed\n        Console.WriteLine(Render(AddTwoNumbers(Build(2, 4, 3), Build(5, 6, 4))));\n\n        Console.WriteLine(Render(AddTwoNumbers(Build(0), Build(0))));\n        Console.WriteLine(Render(AddTwoNumbers(Build(5), Build(5))));            // carry creates a node\n        Console.WriteLine(Render(AddTwoNumbers(Build(9, 9, 9), Build(1))));      // cascading carry\n        Console.WriteLine(Render(AddTwoNumbers(Build(1, 8), Build(0))));         // different lengths\n    }\n}\n```\n\n**Output**\n\n```\n7->0->8\n0\n0->1\n0->0->0->1\n1->8\n```",
   "tags": [
    "linkedlist",
-   "math",
+   "arithmetic",
    "carry",
-   "dummy-node"
+   "bignum",
+   "csharp"
   ],
-  "id": 1565
+  "id": 1565,
+  "followups": [
+   {
+    "q": "What changes if the digits are stored most-significant first?",
+    "a": "The alignment breaks, because addition proceeds from the least significant end and you can no longer walk forward in step. Three options: reverse both lists, add, then reverse the result; push both onto stacks and pop to get least-significant-first order; or recurse to the end after padding the shorter list and carry back up the return path. The stack version is usually cleanest and does not mutate the inputs, which matters if the caller still needs them."
+   },
+   {
+    "q": "Why is carry part of the loop condition rather than handled after the loop?",
+    "a": "Because handling it afterwards means a duplicated node-append and an easily forgotten branch, and forgetting it is exactly why 5 + 5 returns 0 instead of 10 in many first attempts. Folding it into the condition makes the final carry just another iteration with both lists exhausted. The same structure handles all three ragged cases uniformly: one list longer, the other longer, or a carry outliving both."
+   },
+   {
+    "q": "Why use a linked list at all rather than parsing to a number?",
+    "a": "Because the representation exists to handle numbers larger than any built-in type. Converting to long works for short lists and overflows silently beyond nineteen digits, which is precisely the case the data structure is designed for. This is a miniature bignum implementation, and the same digit-by-digit-with-carry logic underpins BigInteger, with the real version storing several digits per element for efficiency rather than one."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22472,14 +22670,29 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Check if a linked list is a palindrome.",
-  "answer": "Find the middle, reverse the second half, then compare the first half with the reversed second half node by node. Optionally restore the list afterward. O(n) time, O(1) space. Alternatively push values to a stack/array (O(n) space).",
+  "answer": "**Logic**\n\nFind the middle with slow and fast pointers, reverse the second half in place, then walk the two halves together comparing values. O(n) time and O(1) space.\n\nThe courteous detail is restoring the list before returning: a method named `IsPalindrome` that silently leaves its input reversed is a nasty surprise for the caller. Copying the values into a list and using two pointers is simpler but O(n) space, which is the answer the interviewer is asking you to improve on.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static bool IsPalindrome(ListNode head)\n    {\n        if (head?.Next == null) return true;     // empty or single node\n\n        // 1. Find the first middle, so the second half is never longer.\n        ListNode slow = head, fast = head.Next;\n        while (fast != null && fast.Next != null)\n        {\n            slow = slow.Next;\n            fast = fast.Next.Next;\n        }\n\n        // 2. Reverse the second half, detaching it from the first.\n        ListNode secondHalf = Reverse(slow.Next);\n        slow.Next = null;\n\n        // 3. Compare. The second half may be one shorter on odd lengths, which is\n        //    why it drives the loop: the extra middle element is irrelevant.\n        bool palindrome = true;\n        for (ListNode a = head, b = secondHalf; b != null; a = a.Next, b = b.Next)\n            if (a.Val != b.Val) { palindrome = false; break; }\n\n        // 4. Put the list back the way it was found.\n        slow.Next = Reverse(secondHalf);\n\n        return palindrome;\n    }\n\n    private static ListNode Reverse(ListNode head)\n    {\n        ListNode prev = null, current = head;\n        while (current != null)\n        {\n            ListNode next = current.Next;\n            current.Next = prev;\n            prev = current;\n            current = next;\n        }\n        return prev;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsPalindrome(Build(1, 2, 2, 1)));\n        Console.WriteLine(IsPalindrome(Build(1, 2)));\n        Console.WriteLine(IsPalindrome(Build(1, 2, 3, 2, 1)));   // odd length\n        Console.WriteLine(IsPalindrome(Build(1)));\n        Console.WriteLine(IsPalindrome(null));\n        Console.WriteLine(IsPalindrome(Build(1, 0, 1)));\n\n        // The list survives the check unmodified.\n        var list = Build(1, 2, 2, 1);\n        IsPalindrome(list);\n        var parts = new System.Collections.Generic.List<string>();\n        for (var n = list; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        Console.WriteLine(string.Join(\"->\", parts));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nTrue\nTrue\n1->2->2->1\n```",
   "tags": [
    "linkedlist",
-   "palindrome",
+   "two-pointers",
    "reverse",
-   "two-pointer"
+   "palindrome",
+   "csharp"
   ],
-  "id": 1567
+  "id": 1567,
+  "followups": [
+   {
+    "q": "Is mutating the list to answer a read-only question acceptable?",
+    "a": "Only if you restore it, as here, and even then it is not thread-safe: another thread reading the list during the check sees it half-reversed, and an exception thrown mid-comparison would leave it broken permanently. If the structure is shared or the code must be reentrant, the O(n) copy is the correct choice and the space is the price of safety. Being able to name that trade-off rather than reflexively optimising for space is the better answer."
+   },
+   {
+    "q": "Why compare using the second half as the loop driver?",
+    "a": "Because on an odd-length list the halves differ by one node, and the middle element has no partner and never needs comparing. Driving the loop from the shorter second half makes that automatic, with no length bookkeeping and no separate odd and even cases. Driving it from the first half instead would run one step past the end of the second and dereference null, which is the standard bug in this problem."
+   },
+   {
+    "q": "How would you do it recursively in O(n) time?",
+    "a": "Recurse to the end while keeping a front pointer in an outer variable; as each frame returns, compare the front pointer's value to the current node's and advance the front pointer. It is elegant and uses O(n) stack space, which on a long list risks the same stack overflow as any deep list recursion. It is a good thing to mention as an alternative, and a bad thing to actually ship for lists whose length you do not control."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22513,15 +22726,29 @@
   "subcategory": "LinkedList",
   "difficulty": "Hard",
   "question": "Merge k sorted linked lists.",
-  "answer": "Min-heap of the head nodes: pop the smallest, attach it, push its next. O(N log k) where N is total nodes, k is list count. Alternatively divide-and-conquer: pairwise merge lists (log k rounds of O(N) merges), also O(N log k).",
+  "answer": "**Logic**\n\nTwo good approaches. A min-heap holding the current head of every list: pop the smallest, append it, push its successor. Each of the N nodes enters and leaves a heap of size at most k, giving O(N log k) time and O(k) space.\n\nOr merge pairwise in rounds, halving the number of lists each round until one remains. That is also O(N log k), needs no heap, and reuses the two-list merge you already have.\n\nThe approach to avoid is merging one list at a time into an accumulator: the accumulator is re-walked on every merge, making it O(Nk).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    // Heap: O(N log k). PriorityQueue is built in from .NET 6.\n    public static ListNode MergeKHeap(ListNode[] lists)\n    {\n        var heap = new PriorityQueue<ListNode, int>();\n        foreach (var head in lists)\n            if (head != null) heap.Enqueue(head, head.Val);\n\n        var dummy = new ListNode();\n        var tail = dummy;\n\n        while (heap.Count > 0)\n        {\n            var node = heap.Dequeue();\n            tail.Next = node;\n            tail = node;\n\n            if (node.Next != null) heap.Enqueue(node.Next, node.Next.Val);\n        }\n\n        tail.Next = null;      // the last node may still point into its old list\n        return dummy.Next;\n    }\n\n    // Pairwise halving: same complexity, no heap, reuses the two-list merge.\n    public static ListNode MergeKPairwise(ListNode[] lists)\n    {\n        if (lists == null || lists.Length == 0) return null;\n\n        var current = new List<ListNode>(lists);\n        while (current.Count > 1)\n        {\n            var next = new List<ListNode>();\n            for (int i = 0; i < current.Count; i += 2)\n                next.Add(i + 1 < current.Count ? Merge2(current[i], current[i + 1]) : current[i]);\n            current = next;\n        }\n        return current[0];\n    }\n\n    private static ListNode Merge2(ListNode a, ListNode b)\n    {\n        var dummy = new ListNode();\n        var tail = dummy;\n        while (a != null && b != null)\n        {\n            if (a.Val <= b.Val) { tail.Next = a; a = a.Next; }\n            else                { tail.Next = b; b = b.Next; }\n            tail = tail.Next;\n        }\n        tail.Next = a ?? b;\n        return dummy.Next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        for (; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(MergeKHeap(new[] {\n            Build(1, 4, 5), Build(1, 3, 4), Build(2, 6) })));\n\n        Console.WriteLine(Render(MergeKPairwise(new[] {\n            Build(1, 4, 5), Build(1, 3, 4), Build(2, 6) })));\n\n        Console.WriteLine(Render(MergeKHeap(new ListNode[0])));\n        Console.WriteLine(Render(MergeKHeap(new ListNode[] { null, null })));\n        Console.WriteLine(Render(MergeKPairwise(new[] { Build(3), null, Build(1, 2) })));\n    }\n}\n```\n\n**Output**\n\n```\n1->1->2->3->4->4->5->6\n1->1->2->3->4->4->5->6\n(empty)\n(empty)\n1->2->3\n```",
   "tags": [
    "linkedlist",
    "heap",
-   "merge",
    "divide-and-conquer",
-   "hard"
+   "merge",
+   "csharp"
   ],
-  "id": 1570
+  "id": 1570,
+  "followups": [
+   {
+    "q": "Why is merging one at a time O(Nk) rather than O(N log k)?",
+    "a": "Because the accumulated list is traversed again on every merge. After merging j lists the accumulator holds roughly jN/k nodes, and merging the next list walks all of them, so the total is the sum over j, which is quadratic in k. Pairwise halving avoids it because each round touches every node exactly once and there are only log k rounds. It is the same reason building a string by repeated concatenation in a loop is quadratic while a StringBuilder is linear."
+   },
+   {
+    "q": "Why set tail.Next = null at the end of the heap version?",
+    "a": "Because the final node appended still carries its original `Next` pointer into whatever followed it in its own list. Those nodes were already consumed and appended elsewhere, so leaving the pointer creates a stale link, and in the worst case a cycle that makes the result list infinite. Nulling the tail is one line and the kind of omission that produces a hang rather than a clean failure, which is far harder to diagnose."
+   },
+   {
+    "q": "Which would you ship?",
+    "a": "Pairwise, usually. It has no heap allocation, no comparer indirection, and excellent memory locality, and in practice it tends to beat the heap version despite identical asymptotics. The heap wins when the lists arrive as streams of unknown length or when k is large and you cannot hold all the heads at once, and it is the version that generalises to an external merge over files, which is how database sort-merge joins and log-structured merge trees work."
+   }
+  ]
  },
  {
   "category": "Coding",
@@ -22596,13 +22823,29 @@
   "subcategory": "Stack",
   "difficulty": "Medium",
   "question": "Min stack: stack with O(1) getMin.",
-  "answer": "Maintain an auxiliary stack of minimums (or store pairs of (value, currentMin)) alongside the main stack. On push, record the min of the new value and the previous min; on pop, remove both. getMin returns the top of the min stack. All operations O(1).",
+  "answer": "**Logic**\n\nKeep a second stack of minimums alongside the main one. On push, also push the smaller of the new value and the current minimum, so the auxiliary stack's top is always the minimum of everything currently in the stack. On pop, pop both. Every operation is O(1), at the cost of O(n) extra space.\n\nThe reason a single tracked minimum fails is that popping the minimum must restore the *previous* minimum, which requires history. The auxiliary stack is that history, aligned one-for-one with the main stack so the two never drift apart.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class MinStack\n{\n    private readonly Stack<int> _values = new();\n    private readonly Stack<int> _minima = new();   // minimum of everything below and including\n\n    public void Push(int value)\n    {\n        _values.Push(value);\n        _minima.Push(_minima.Count == 0 ? value : Math.Min(value, _minima.Peek()));\n    }\n\n    public void Pop()\n    {\n        if (_values.Count == 0) throw new InvalidOperationException(\"stack is empty\");\n        _values.Pop();\n        _minima.Pop();          // popped together, so the two stacks stay aligned\n    }\n\n    public int Top() => _values.Count > 0\n        ? _values.Peek()\n        : throw new InvalidOperationException(\"stack is empty\");\n\n    public int GetMin() => _minima.Count > 0\n        ? _minima.Peek()\n        : throw new InvalidOperationException(\"stack is empty\");\n\n    public int Count => _values.Count;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var s = new MinStack();\n        s.Push(-2); s.Push(0); s.Push(-3);\n\n        Console.WriteLine(s.GetMin());   // -3\n        s.Pop();\n        Console.WriteLine(s.Top());      // 0\n        Console.WriteLine(s.GetMin());   // back to -2\n\n        // Duplicated minimum: both copies must be recorded, or the second pop\n        // would wrongly discard the minimum while a copy is still present.\n        var d = new MinStack();\n        d.Push(1); d.Push(1); d.Push(2);\n        Console.WriteLine(d.GetMin());\n        d.Pop(); d.Pop();\n        Console.WriteLine(d.GetMin());\n\n        try { new MinStack().GetMin(); }\n        catch (InvalidOperationException e) { Console.WriteLine(e.Message); }\n    }\n}\n```\n\n**Output**\n\n```\n-3\n0\n-2\n1\n1\nstack is empty\n```",
   "tags": [
    "stack",
    "design",
-   "min-stack"
+   "auxiliary-stack",
+   "constant-time",
+   "csharp"
   ],
-  "id": 1576
+  "id": 1576,
+  "followups": [
+   {
+    "q": "Can you avoid the O(n) extra space?",
+    "a": "Partly. One approach stores encoded values: when a new minimum arrives, push `2*value - currentMin`, which is below the new minimum and can be decoded on pop to recover the previous one. It reaches O(1) extra space but risks overflow and is genuinely hard to read. The gentler optimisation is to push onto the minimum stack only when the value is less than or equal to the current minimum, and pop only when the popped value equals the top: that keeps it O(1) amortised for typical data while staying obvious. The `equal to` in both conditions is essential, as the duplicate test above shows."
+   },
+   {
+    "q": "How would you make it thread-safe?",
+    "a": "A single lock around every operation, because the two stacks must move together: without that, another thread could observe the value pushed but not its minimum, and `GetMin` would be wrong. A lock-free version is much harder here than for a plain stack, since the invariant spans two structures, which is an argument for holding a single immutable node with both the value and the running minimum instead. That reduces it to one reference to swap atomically, and is how you would actually build a lock-free version."
+   },
+   {
+    "q": "Why throw rather than return a sentinel when empty?",
+    "a": "Because there is no int value that cannot legitimately be in the stack, so any sentinel is ambiguous with real data. That is the same in-band sentinel problem as using int.MinValue for BST bounds. The alternatives are throwing, as here, matching the behaviour of .NET's own `Stack<T>.Pop`, or a `TryGetMin(out int)` pattern for callers who expect emptiness. Returning 0 or -1 silently is the one option that is actually wrong."
+   }
+  ]
  },
  {
   "category": "Coding",
