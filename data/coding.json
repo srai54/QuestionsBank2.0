@@ -346,12 +346,31 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Find the median of two sorted arrays in O(log(min(m,n))).",
-  "answer": "Binary search on the smaller array's partition point; partition both arrays so the left halves have the correct total count and maxLeft <= minRight on both sides. Adjust the search based on the comparison. The median comes from the boundary elements. O(log(min(m,n))) time.",
+  "answer": "**Logic**\n\nBinary search on the partition point rather than on values. Split the smaller array at some index i and the larger at j, chosen so the two left parts together hold exactly half the elements. The partition is correct when every element left of the cut is at most every element right of it, which reduces to two comparisons across the cut.\n\nIf the left part of the first array is too large, move the cut left; otherwise move right. Searching only the smaller array gives O(log(min(m,n))).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static double FindMedianSortedArrays(int[] a, int[] b)\n    {\n        // Always binary search the SHORTER array: that is where the log bound comes from.\n        if (a.Length > b.Length) (a, b) = (b, a);\n\n        int m = a.Length, n = b.Length;\n        if (m + n == 0) throw new ArgumentException(\"both arrays are empty\");\n\n        int low = 0, high = m;\n        int half = (m + n + 1) / 2;      // +1 makes the odd case land on the left side\n\n        while (low <= high)\n        {\n            int i = (low + high) / 2;    // elements taken from a\n            int j = half - i;            // elements taken from b\n\n            // Sentinels remove the empty-side special cases.\n            int aLeft  = i == 0 ? int.MinValue : a[i - 1];\n            int aRight = i == m ? int.MaxValue : a[i];\n            int bLeft  = j == 0 ? int.MinValue : b[j - 1];\n            int bRight = j == n ? int.MaxValue : b[j];\n\n            if (aLeft <= bRight && bLeft <= aRight)      // correct partition\n            {\n                if ((m + n) % 2 == 1) return Math.Max(aLeft, bLeft);\n                return (Math.Max(aLeft, bLeft) + Math.Min(aRight, bRight)) / 2.0;\n            }\n\n            if (aLeft > bRight) high = i - 1;            // took too many from a\n            else low = i + 1;\n        }\n\n        throw new ArgumentException(\"inputs are not sorted\");\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindMedianSortedArrays(new[] { 1, 3 }, new[] { 2 }));\n        Console.WriteLine(FindMedianSortedArrays(new[] { 1, 2 }, new[] { 3, 4 }));\n        Console.WriteLine(FindMedianSortedArrays(new int[0], new[] { 1 }));\n        Console.WriteLine(FindMedianSortedArrays(new[] { 2 }, new int[0]));\n        Console.WriteLine(FindMedianSortedArrays(new[] { 1, 1 }, new[] { 1, 1 }));\n        Console.WriteLine(FindMedianSortedArrays(new[] { 1, 2, 3 }, new[] { 4, 5, 6, 7, 8 }));\n    }\n}\n```\n\n**Output**\n\n```\n2\n2.5\n1\n2\n1\n4.5\n```",
   "tags": [
    "arrays",
    "binary-search",
+   "partition",
    "median",
-   "hard"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why binary search the shorter array specifically?",
+    "a": "Because the complexity is logarithmic in whatever you search, so searching the shorter one gives O(log(min(m,n))) rather than O(log(max(m,n))). It also guarantees the derived index j stays within the longer array's bounds, which would need extra guarding otherwise. Swapping at the top costs nothing and removes a whole class of edge cases. If one array is tiny and the other is enormous, this is the difference between a handful of iterations and dozens."
+   },
+   {
+    "q": "What are the int.MinValue and int.MaxValue sentinels for?",
+    "a": "They represent 'nothing on that side', so a cut at the very start or end of an array needs no special branch: a missing left neighbour compares as smaller than everything, a missing right neighbour as larger. That collapses four edge cases into the ordinary comparison. It is the acceptable use of in-band sentinels because the comparison is directional rather than an equality test, though if the data could legitimately contain int.MinValue you would widen to long, exactly as in the BST validation problem."
+   },
+   {
+    "q": "Why half = (m + n + 1) / 2 rather than (m + n) / 2?",
+    "a": "The +1 biases the extra element to the left partition when the total is odd, which means the median is simply the largest element on the left and needs no separate case. Without it, an odd total would leave the median on the right and the two branches would differ more than necessary. It is a small choice that makes the odd and even cases share almost all their code, and getting it wrong produces answers that are off by one position on odd inputs only."
+   },
+   {
+    "q": "Suppose you only needed an approximate median over a stream.",
+    "a": "Then this is the wrong tool entirely, since it needs both arrays materialised and sorted. For streaming you would use two heaps to maintain an exact running median, or for very large volumes a t-digest or reservoir sample for an approximation with bounded error and constant memory. Naming the constraint that changes the answer, batch and sorted versus streaming and unbounded, is more valuable than the binary search itself."
+   }
   ]
  },
  {
@@ -387,11 +406,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find first and last position of a target in a sorted array.",
-  "answer": "Two binary searches: one for the leftmost occurrence (when found, keep searching left) and one for the rightmost (keep searching right). O(log n) time. Returns [-1,-1] if not present.",
+  "answer": "**Logic**\n\nTwo binary searches using the lower-bound form. The first occurrence is the lower bound of the target: the first index whose value is at least the target. The last occurrence is the lower bound of target + 1, minus one.\n\nThe key change from a plain binary search is that an equal comparison does not return; it keeps narrowing toward the side you want. Bolting a linear scan onto a plain search would degrade to O(n) on an array that is entirely the target, which is exactly the case the question is testing.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int[] SearchRange(int[] nums, int target)\n    {\n        int first = LowerBound(nums, target);\n\n        // Not present at all: either past the end, or a different value sits there.\n        if (first == nums.Length || nums[first] != target) return new[] { -1, -1 };\n\n        int last = LowerBound(nums, target + 1) - 1;\n        return new[] { first, last };\n    }\n\n    // First index whose value is >= target; nums.Length if there is none.\n    private static int LowerBound(int[] nums, int target)\n    {\n        int low = 0, high = nums.Length;      // high is EXCLUSIVE here\n\n        while (low < high)\n        {\n            int mid = low + (high - low) / 2;\n\n            if (nums[mid] < target) low = mid + 1;\n            else high = mid;                   // equal keeps searching leftwards\n        }\n\n        return low;\n    }\n\n    private static string Show(int[] r) => $\"[{r[0]},{r[1]}]\";\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(SearchRange(new[] { 5, 7, 7, 8, 8, 10 }, 8)));\n        Console.WriteLine(Show(SearchRange(new[] { 5, 7, 7, 8, 8, 10 }, 6)));\n        Console.WriteLine(Show(SearchRange(new int[0], 0)));\n        Console.WriteLine(Show(SearchRange(new[] { 1 }, 1)));\n        Console.WriteLine(Show(SearchRange(new[] { 2, 2, 2, 2 }, 2)));   // entirely the target\n        Console.WriteLine(Show(SearchRange(new[] { 1, 2, 3 }, 3)));\n    }\n}\n```\n\n**Output**\n\n```\n[3,4]\n[-1,-1]\n[-1,-1]\n[0,0]\n[0,3]\n[2,2]\n```",
   "tags": [
-   "arrays",
+   "searching",
    "binary-search",
-   "boundaries"
+   "lower-bound",
+   "duplicates",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the lower bound use an exclusive high and low < high?",
+    "a": "Because the answer may legitimately be 'past the last element', which an inclusive high cannot represent. With `high = nums.Length` and the loop condition `low < high`, the search converges on an insertion point in the range 0 to n inclusive, which is exactly what a lower bound means. Mixing the inclusive and exclusive conventions within one function is the usual way binary searches go wrong, so picking one and deriving every bound from it is the discipline that matters."
+   },
+   {
+    "q": "Why search for target + 1 rather than writing a separate upper-bound search?",
+    "a": "Because it reuses the one primitive you have already got right, and the first index greater than the target is by definition the lower bound of target + 1. Writing a second search with subtly different comparisons doubles the chance of an off-by-one. The one caveat is overflow: if the target were int.MaxValue then target + 1 wraps, so production code would either use long or write the upper bound explicitly. Worth mentioning, since it is a real edge case the reuse introduces."
+   },
+   {
+    "q": "Suppose you needed the count of occurrences rather than the positions.",
+    "a": "It falls straight out: last minus first plus one, or equivalently the lower bound of target + 1 minus the lower bound of target, which needs no presence check at all and returns zero naturally when absent. That subtraction form is the cleaner implementation and generalises to counting elements in any value range, which is a common requirement when bucketing sorted data."
+   }
   ]
  },
  {
@@ -654,12 +689,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Find all anagrams of a pattern in a string.",
-  "answer": "Sliding window of the pattern's length with a frequency count. Maintain a window count and compare to the pattern's count as the window slides (add the entering char, remove the leaving char). Record start indices where counts match. O(n) time.",
+  "answer": "**Logic**\n\nAn anagram has the same length as the pattern, so the window is fixed rather than elastic. Slide it one character at a time, adding the entering character's count and removing the leaving one, and record a match whenever the two frequency profiles agree.\n\nComparing full count arrays each step would cost O(alphabet) per position. Instead track how many letters currently have the correct count, so a match is the single test `matches == 26`. That gives O(n) overall.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static IList<int> FindAnagrams(string s, string p)\n    {\n        var result = new List<int>();\n        if (string.IsNullOrEmpty(s) || string.IsNullOrEmpty(p) || s.Length < p.Length)\n            return result;\n\n        var need = new int[26];\n        var window = new int[26];\n        foreach (char c in p) need[c - 'a']++;\n\n        // How many of the 26 letters currently have exactly the right count.\n        int matches = 0;\n        for (int i = 0; i < 26; i++) if (need[i] == 0) matches++;\n\n        for (int i = 0; i < s.Length; i++)\n        {\n            int entering = s[i] - 'a';\n            window[entering]++;\n            if (window[entering] == need[entering]) matches++;\n            else if (window[entering] == need[entering] + 1) matches--;   // just broke it\n\n            if (i >= p.Length)\n            {\n                int leaving = s[i - p.Length] - 'a';\n                window[leaving]--;\n                if (window[leaving] == need[leaving]) matches++;\n                else if (window[leaving] == need[leaving] - 1) matches--;\n            }\n\n            if (matches == 26) result.Add(i - p.Length + 1);\n        }\n\n        return result;\n    }\n\n    private static string Show(IList<int> r) => r.Count == 0 ? \"(none)\" : string.Join(\",\", r);\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(FindAnagrams(\"cbaebabacd\", \"abc\")));\n        Console.WriteLine(Show(FindAnagrams(\"abab\", \"ab\")));\n        Console.WriteLine(Show(FindAnagrams(\"aaaaa\", \"a\")));\n        Console.WriteLine(Show(FindAnagrams(\"ab\", \"abc\")));      // pattern longer\n        Console.WriteLine(Show(FindAnagrams(\"abcd\", \"xyz\")));\n        Console.WriteLine(Show(FindAnagrams(\"baa\", \"aa\")));\n    }\n}\n```\n\n**Output**\n\n```\n0,6\n0,1,2\n0,1,2,3,4\n(none)\n(none)\n1\n```",
   "tags": [
    "strings",
    "sliding-window",
-   "anagram",
-   "counting"
+   "fixed-window",
+   "frequency",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the matches counter updated with those two specific conditions?",
+    "a": "Because a letter's contribution changes only at the boundary. When a count rises to exactly the needed value, that letter has just become correct, so matches increases. When it rises to one above, it has just stopped being correct, so matches decreases. Every other increment moves between two wrong values and changes nothing. The removal side mirrors it. Reasoning at the transition rather than recomputing is what makes the update O(1), and it is the same idea as maintaining a running aggregate in any sliding window."
+   },
+   {
+    "q": "Why is this window fixed while the minimum-window-substring one is elastic?",
+    "a": "Because an anagram must use exactly the pattern's characters with exactly its multiplicities, which pins the length. Minimum window asks for a superset, so extra characters are permitted and the window must be free to grow and shrink to find the tightest valid span. The 'exactly' versus 'at least' distinction is what decides between a fixed and an elastic window, and spotting it from the problem statement saves a lot of wrong turns."
+   },
+   {
+    "q": "The int[26] assumes lowercase ASCII. What would you do otherwise?",
+    "a": "Switch to a dictionary keyed by character and replace `matches == 26` with a comparison against the number of distinct required characters, tracking how many of those are satisfied. That keeps the O(1) update while removing the alphabet assumption, at the cost of hashing. The array version is genuinely faster when the constraint holds, so I would keep it and assert the assumption rather than leave it implicit, since `c - 'a'` on an unexpected character indexes out of bounds or silently corrupts a neighbouring count."
+   }
   ]
  },
  {
@@ -667,12 +717,27 @@
   "subcategory": "Strings",
   "difficulty": "Hard",
   "question": "Minimum window substring containing all characters of a pattern.",
-  "answer": "Sliding window with two counts (need vs have). Expand right until all required chars are covered, then contract left to shrink the window while still valid, tracking the minimum. O(n) time. Track how many required characters are fully satisfied to know when the window is valid.",
+  "answer": "**Logic**\n\nA sliding window with a counter of how many required characters are still missing. Expand the right edge, decrementing the need for each character consumed; when nothing is missing, contract the left edge as far as possible while the window stays valid, recording the best.\n\nThe counter is what keeps it linear. Comparing two frequency maps on every step would add an alphabet-sized factor; tracking a single number of satisfied characters makes validity an O(1) test. Each character enters and leaves the window at most once, so O(n + m).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static string MinWindow(string s, string t)\n    {\n        if (string.IsNullOrEmpty(s) || string.IsNullOrEmpty(t) || s.Length < t.Length)\n            return \"\";\n\n        var need = new Dictionary<char, int>();\n        foreach (char c in t) need[c] = need.TryGetValue(c, out int n) ? n + 1 : 1;\n\n        int missing = t.Length;          // total characters still owed, counting duplicates\n        int bestStart = 0, bestLength = int.MaxValue;\n        int left = 0;\n\n        for (int right = 0; right < s.Length; right++)\n        {\n            char c = s[right];\n\n            // Only a character we still owe reduces the deficit.\n            if (need.TryGetValue(c, out int owed))\n            {\n                if (owed > 0) missing--;\n                need[c] = owed - 1;      // may go negative: a surplus copy\n            }\n\n            while (missing == 0)         // valid: try to shrink from the left\n            {\n                if (right - left + 1 < bestLength)\n                {\n                    bestLength = right - left + 1;\n                    bestStart = left;\n                }\n\n                char leaving = s[left++];\n                if (need.TryGetValue(leaving, out int have))\n                {\n                    need[leaving] = have + 1;\n                    if (have + 1 > 0) missing++;   // only a needed copy breaks validity\n                }\n            }\n        }\n\n        return bestLength == int.MaxValue ? \"\" : s.Substring(bestStart, bestLength);\n    }\n\n    private static string Show(string s) => s.Length == 0 ? \"(none)\" : s;\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(MinWindow(\"ADOBECODEBANC\", \"ABC\")));\n        Console.WriteLine(Show(MinWindow(\"a\", \"a\")));\n        Console.WriteLine(Show(MinWindow(\"a\", \"aa\")));       // not enough copies\n        Console.WriteLine(Show(MinWindow(\"ab\", \"b\")));\n        Console.WriteLine(Show(MinWindow(\"aaflslflsldkalskaaa\", \"aaa\")));\n        Console.WriteLine(Show(MinWindow(\"abc\", \"\")));\n    }\n}\n```\n\n**Output**\n\n```\nBANC\na\n(none)\nb\naaa\n(none)\n```",
   "tags": [
    "strings",
    "sliding-window",
-   "minimum-window",
-   "hard"
+   "hashmap",
+   "two-pointers",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the need count allowed to go negative?",
+    "a": "Because a negative value records a surplus: the window holds more copies of that character than required. That surplus is exactly what lets the left edge advance without breaking validity, and the `have + 1 > 0` test on removal distinguishes giving up a surplus copy, which is free, from giving up a required one, which invalidates the window. Clamping the count at zero loses that information and the shrink loop stops too early, producing windows that are valid but not minimal."
+   },
+   {
+    "q": "Why track a single missing counter rather than comparing the two maps?",
+    "a": "Because a map comparison is O(alphabet) and would run on every one of the n steps, making the algorithm O(n x alphabet) rather than O(n). The counter compresses the entire validity question into one integer by exploiting the fact that validity changes by at most one character per step. That pattern, maintaining an aggregate rather than recomputing a predicate, is the general technique behind most efficient sliding-window solutions."
+   },
+   {
+    "q": "Suppose duplicates in the pattern had to be matched exactly, not at least.",
+    "a": "Then a surplus would make the window invalid rather than merely wasteful, so the shrink condition changes from 'still valid' to 'exactly matching', and the window can no longer grow freely past a surplus. In practice that becomes the fixed-length window of the anagram-search problem, since an exact multiset match forces the window length to equal the pattern length. It is a good illustration that 'at least' and 'exactly' produce genuinely different algorithms from nearly identical statements."
+   }
   ]
  },
  {
@@ -1032,11 +1097,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Decode ways: count how many ways to decode a digit string to letters (A=1..Z=26).",
-  "answer": "Dynamic programming: dp[i] = ways to decode the first i chars. dp[i] += dp[i-1] if the single digit is valid (1-9), and dp[i] += dp[i-2] if the two-digit number is 10-26. Handle leading zeros. O(n) time, O(1) space with two variables.",
+  "answer": "**Logic**\n\nAt each position you may take one digit, if it is not zero, or two digits, if they form a number between 10 and 26. So `ways[i] = ways[i-1] (if valid single) + ways[i-2] (if valid pair)`, which is Fibonacci with validity conditions.\n\nZero is the whole difficulty. A zero cannot stand alone, so it must pair with the digit before it, and that pair must be 10 or 20; anything else makes the string undecodable and the count zero.\n\nTwo rolling variables give O(n) time and O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int NumDecodings(string s)\n    {\n        if (string.IsNullOrEmpty(s) || s[0] == '0') return 0;\n\n        int twoBack = 1;   // the empty prefix: one way to decode nothing\n        int oneBack = 1;   // the first character, already known not to be '0'\n\n        for (int i = 1; i < s.Length; i++)\n        {\n            int current = 0;\n\n            // Single digit: valid unless it is zero.\n            if (s[i] != '0') current += oneBack;\n\n            // Pair with the previous digit: valid only in 10..26.\n            int pair = (s[i - 1] - '0') * 10 + (s[i] - '0');\n            if (pair >= 10 && pair <= 26) current += twoBack;\n\n            if (current == 0) return 0;   // this position cannot be decoded at all\n\n            twoBack = oneBack;\n            oneBack = current;\n        }\n\n        return oneBack;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(NumDecodings(\"12\"));      // AB or L\n        Console.WriteLine(NumDecodings(\"226\"));     // BZ, VF, BBF\n        Console.WriteLine(NumDecodings(\"06\"));      // leading zero\n        Console.WriteLine(NumDecodings(\"10\"));      // only J\n        Console.WriteLine(NumDecodings(\"100\"));     // the second zero has no partner\n        Console.WriteLine(NumDecodings(\"27\"));      // 27 > 26, so only B G\n        Console.WriteLine(NumDecodings(\"11106\"));\n    }\n}\n```\n\n**Output**\n\n```\n2\n3\n0\n1\n0\n1\n2\n```",
   "tags": [
-   "strings",
    "dp",
-   "decode"
+   "fibonacci",
+   "decode-ways",
+   "edge-cases",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is zero the hard part?",
+    "a": "Because it is the only digit with no single-character decoding, so it cannot stand alone and must be absorbed into a pair. That pair can only be 10 or 20, since 30 and above exceed Z. So \"100\" fails: the first zero pairs with the one to make 10, but the second zero has nothing valid before it. Most wrong solutions handle a leading zero and miss the interior case, which is why \"100\" and \"301\" are the test cases that matter."
+   },
+   {
+    "q": "Why return 0 immediately when current hits zero?",
+    "a": "Because an undecodable position makes the whole string undecodable, and continuing would let later positions read a stale rolling value and produce a non-zero answer. It is also a genuine early exit rather than only a correctness guard. The alternative is to keep going with zeros propagating naturally, which also works if the recurrence is written carefully, but the explicit return states the intent and avoids relying on zero-multiplication behaviour."
+   },
+   {
+    "q": "Suppose the alphabet were larger, say 1 to 100.",
+    "a": "The recurrence generalises to looking back up to three digits, with the validity test becoming a range check on one, two and three-digit numbers. The structure is unchanged: sum the ways from each position that can reach here by a valid token. That is the general 'count the tokenisations' shape, and it is the same DP that underlies counting the ways to segment a string, which is why word break and decode ways feel related despite looking different."
+   }
   ]
  },
  {
@@ -1044,12 +1125,27 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Sliding window maximum: max in each window of size k.",
-  "answer": "Use a deque storing indices in decreasing value order. For each element, pop smaller values from the back, add the current index, remove front indices out of the window, and the front is the window max. Each index is added/removed once: O(n) time.",
+  "answer": "**Logic**\n\nA monotonic deque holding indices whose values decrease from front to back. Before adding a new index, pop from the back every index whose value is smaller, because a smaller value with a later index can never again be the maximum. Pop from the front any index that has slid out of the window. The front is then always the current maximum.\n\nEach index is pushed and popped at most once, so O(n) overall, against O(n·k) for rescanning each window and O(n log n) for a heap.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[] MaxSlidingWindow(int[] nums, int k)\n    {\n        if (nums == null || nums.Length == 0 || k <= 0) return Array.Empty<int>();\n        if (k == 1) return nums;\n\n        var deque = new LinkedList<int>();     // indices, values decreasing front to back\n        var result = new int[nums.Length - k + 1];\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            // Drop indices that have fallen out of the window.\n            if (deque.Count > 0 && deque.First.Value <= i - k) deque.RemoveFirst();\n\n            // A smaller earlier value can never be the max while this one is in range.\n            while (deque.Count > 0 && nums[deque.Last.Value] <= nums[i]) deque.RemoveLast();\n\n            deque.AddLast(i);\n\n            if (i >= k - 1) result[i - k + 1] = nums[deque.First.Value];\n        }\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", MaxSlidingWindow(new[] { 1, 3, -1, -3, 5, 3, 6, 7 }, 3)));\n        Console.WriteLine(string.Join(\",\", MaxSlidingWindow(new[] { 1 }, 1)));\n        Console.WriteLine(string.Join(\",\", MaxSlidingWindow(new[] { 9, 8, 7, 6 }, 2)));  // decreasing\n        Console.WriteLine(string.Join(\",\", MaxSlidingWindow(new[] { 1, 2, 3, 4 }, 2)));  // increasing\n        Console.WriteLine(string.Join(\",\", MaxSlidingWindow(new[] { 7, 7, 7 }, 2)));     // duplicates\n        Console.WriteLine(string.Join(\",\", MaxSlidingWindow(new[] { 4, 2, 12 }, 3)));\n    }\n}\n```\n\n**Output**\n\n```\n3,3,5,5,6,7\n1\n9,8,7\n2,3,4\n7,7\n12\n```",
   "tags": [
    "arrays",
-   "deque",
+   "monotonic-deque",
    "sliding-window",
-   "monotonic"
+   "linear-time",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why store indices rather than values in the deque?",
+    "a": "Because the window's left boundary is expressed in index terms, and without indices you cannot tell whether the front element has expired. Values alone would leave you unable to distinguish a maximum still inside the window from one that slid out, especially with duplicates. Storing indices also makes the value lookup trivial, since `nums[index]` is always available. It is a small decision that makes the expiry check O(1) rather than impossible."
+   },
+   {
+    "q": "Why pop with <= rather than <, and does it matter for duplicates?",
+    "a": "Either works for correctness of the maximum, but `<=` keeps the deque smaller by evicting equal values, which is fine because the later duplicate survives at least as long as the earlier one. Using `<` would retain both, which costs memory but still yields the right answer since the front is the same value either way. The `[7,7,7]` test exercises this; if the expiry check were wrong, the retained-duplicate version would expose it sooner, which is a mild argument for keeping `<`."
+   },
+   {
+    "q": "Suppose you needed the median of each window rather than the maximum.",
+    "a": "The deque trick does not apply, because a median needs order statistics rather than a single extreme, and there is no way to discard elements as permanently useless. The standard approach is two heaps, a max-heap for the lower half and a min-heap for the upper, with lazy deletion of expired indices, giving O(n log k). An order-statistic tree or an indexed skip list is the cleaner alternative. It is a good illustration that a small change in the aggregate can change the required data structure entirely."
+   }
   ]
  },
  {
@@ -1109,12 +1205,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Palindrome partitioning: return all palindrome substring partitions.",
-  "answer": "Backtracking: try each prefix; if it's a palindrome, recurse on the remaining suffix, adding the prefix to the current partition. Backtrack after exploring. Optionally precompute a palindrome DP table for O(1) checks. Exponential in the worst case (number of partitions).",
+  "answer": "**Logic**\n\nBacktracking over cut positions. From the current index, try every prefix; when a prefix is a palindrome, take it as one part and recurse on the remainder. When the index reaches the end, the accumulated parts form a complete partition.\n\nThe useful optimisation is to precompute palindromic status for every substring with an O(n²) DP, so the palindrome test inside the recursion is a single lookup rather than an O(n) scan. That matters because the same substrings are tested repeatedly across branches.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<IList<string>> Partition(string s)\n    {\n        var result = new List<IList<string>>();\n        if (string.IsNullOrEmpty(s)) return result;\n\n        // isPalindrome[i,j] for the substring from i to j inclusive.\n        var isPalindrome = new bool[s.Length, s.Length];\n        for (int end = 0; end < s.Length; end++)\n            for (int start = end; start >= 0; start--)\n                isPalindrome[start, end] = s[start] == s[end]\n                    && (end - start < 2 || isPalindrome[start + 1, end - 1]);\n\n        Backtrack(s, 0, isPalindrome, new List<string>(), result);\n        return result;\n    }\n\n    private static void Backtrack(string s, int start, bool[,] isPalindrome,\n                                  List<string> current, IList<IList<string>> result)\n    {\n        if (start == s.Length)\n        {\n            result.Add(new List<string>(current));\n            return;\n        }\n\n        for (int end = start; end < s.Length; end++)\n        {\n            if (!isPalindrome[start, end]) continue;   // O(1) lookup, not a rescan\n\n            current.Add(s[start..(end + 1)]);\n            Backtrack(s, end + 1, isPalindrome, current, result);\n            current.RemoveAt(current.Count - 1);\n        }\n    }\n\n    private static string Render(IList<IList<string>> r) =>\n        r.Count == 0 ? \"(none)\" : string.Join(\" \", r.Select(p => \"[\" + string.Join(\",\", p) + \"]\"));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(Partition(\"aab\")));\n        Console.WriteLine(Render(Partition(\"a\")));\n        Console.WriteLine(Render(Partition(\"ab\")));\n        Console.WriteLine(Render(Partition(\"aaa\")));\n        Console.WriteLine(Partition(\"aaaa\").Count);\n    }\n}\n```\n\n**Output**\n\n```\n[a,a,b] [aa,b]\n[a]\n[a,b]\n[a,a,a] [a,aa] [aa,a] [aaa]\n8\n```\n\nEvery single character is a palindrome, so a partition always exists — `ab` splits into `[a,b]` rather than returning nothing.",
   "tags": [
-   "strings",
    "backtracking",
+   "dp",
    "palindrome",
-   "partitioning"
+   "precomputation",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the palindrome DP loop start from the end and work backwards?",
+    "a": "Because `isPalindrome[start, end]` depends on `isPalindrome[start+1, end-1]`, a shorter substring starting one later. Iterating `start` downwards guarantees that inner value is already computed. Getting the loop order wrong here reads uninitialised entries, which default to false, so the code silently misses palindromes rather than crashing. Whenever a DP recurrence refers to a larger index, the loop over that index has to run in the opposite direction."
+   },
+   {
+    "q": "Suppose you only need the minimum number of cuts, not every partition.",
+    "a": "That is Palindrome Partitioning II, and it becomes a one-dimensional DP rather than an enumeration: `cuts[i]` is the fewest cuts for the first i characters, computed as the best over every j where the substring j..i is a palindrome. That is O(n^2) total, against exponential for listing all partitions. The distinction is worth stating explicitly, because the number of partitions can be exponential, so any problem asking for all of them cannot be polynomial no matter how clever the algorithm."
+   },
+   {
+    "q": "Is the precomputed table actually worth it here?",
+    "a": "It does not change the exponential output bound, but it removes an O(n) factor from every node of the recursion tree, which is a real constant-factor win on longer strings. It costs O(n^2) memory, which for a string of a few thousand characters is fine and for a very long one is not. If memory were the binding constraint, expanding around centres on demand and caching only recent results would be the compromise. Worth mentioning that the optimisation targets the per-node cost, not the tree size."
+   }
   ]
  },
  {
@@ -1147,11 +1258,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Word break: can a string be segmented into dictionary words?",
-  "answer": "Dynamic programming: dp[i] = can s[0..i) be segmented. dp[0]=true; dp[i] is true if some j<i has dp[j] true and s[j..i) is in the dictionary (use a set). O(n^2) time (or O(n*maxWordLen)). Return dp[n].",
+  "answer": "**Logic**\n\n`reachable[i]` means the first i characters can be split into dictionary words. It is true when some earlier position j is reachable and the slice from j to i is a word. Position 0 is reachable as the empty prefix.\n\nO(n²) substring checks against a hash set of words, so O(n²·L) overall with string comparison. The naive recursion without memoisation is exponential, which is the point of the exercise: strings like \"aaaaaaab\" over a dictionary of \"a\", \"aa\", \"aaa\" blow up.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool WordBreak(string s, IList<string> wordDict)\n    {\n        if (string.IsNullOrEmpty(s)) return true;\n\n        var words = new HashSet<string>(wordDict);\n        int longest = 0;\n        foreach (string w in words) longest = Math.Max(longest, w.Length);\n\n        var reachable = new bool[s.Length + 1];\n        reachable[0] = true;            // the empty prefix is trivially reachable\n\n        for (int i = 1; i <= s.Length; i++)\n        {\n            // Only look back as far as the longest dictionary word.\n            for (int j = Math.Max(0, i - longest); j < i; j++)\n            {\n                if (!reachable[j]) continue;\n\n                if (words.Contains(s[j..i]))\n                {\n                    reachable[i] = true;\n                    break;\n                }\n            }\n        }\n\n        return reachable[s.Length];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(WordBreak(\"leetcode\", new List<string> { \"leet\", \"code\" }));\n        Console.WriteLine(WordBreak(\"applepenapple\", new List<string> { \"apple\", \"pen\" }));\n        Console.WriteLine(WordBreak(\"catsandog\",\n            new List<string> { \"cats\", \"dog\", \"sand\", \"and\", \"cat\" }));\n        Console.WriteLine(WordBreak(\"\", new List<string> { \"a\" }));\n        Console.WriteLine(WordBreak(\"a\", new List<string>()));\n        Console.WriteLine(WordBreak(\"aaaaaaa\", new List<string> { \"aaa\", \"aaaa\" }));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\n```\n\n`catsandog` is the case that defeats greedy matching: taking \"cats\" then \"and\" leaves \"og\", and only backtracking to \"cat\" then \"sand\" reaches \"dog\" — which also fails, hence False.",
   "tags": [
-   "strings",
    "dp",
-   "word-break"
+   "word-break",
+   "memoisation",
+   "greedy-fails",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does greedy longest-match fail?",
+    "a": "Because an early choice can strand the remainder. In \"catsandog\" the longest first match is \"cats\", which leaves \"andog\" unsplittable, while \"cat\" would leave \"sandog\"; neither works here, but the same shape with \"catsanddog\" succeeds only via the shorter first word. Greedy has no way to undo a choice, so it needs the property that a locally longest match is always part of a solution, which segmentation does not have. That is what forces either backtracking or DP."
+   },
+   {
+    "q": "What does the longest-word bound actually save?",
+    "a": "It caps the inner loop at the length of the longest dictionary word rather than the whole prefix, turning O(n²) substring attempts into O(n·L). For a realistic dictionary where words are short and the input is long, that is a large constant-factor win and sometimes an asymptotic one. It costs one pass over the dictionary to compute. A trie does the same job more elegantly, walking character by character and stopping the moment no word continues with that prefix."
+   },
+   {
+    "q": "Suppose you must return all possible sentences, not just whether one exists.",
+    "a": "That is Word Break II, and the complexity changes fundamentally: the number of valid sentences can be exponential, so no polynomial algorithm exists for producing all of them. The practical approach is memoised recursion returning the list of sentences for each suffix, which avoids recomputing shared work but still pays for the output size. The important move is to run the boolean DP first as a feasibility check, so that hopeless inputs are rejected in polynomial time before the exponential enumeration starts."
+   }
   ]
  },
  {
@@ -1159,11 +1286,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find peak element (any local maximum) in O(log n).",
-  "answer": "Binary search: compare nums[mid] to nums[mid+1]. If nums[mid] < nums[mid+1], a peak lies to the right (move left=mid+1), else to the left or at mid (move right=mid). Converges to a peak. O(log n) time. Assumes nums[-1]=nums[n]=-inf.",
+  "answer": "**Logic**\n\nA peak is any element greater than both neighbours, with the array treated as bounded by negative infinity at both ends. Binary search works even though the array is unsorted: compare the midpoint with its right neighbour, and move toward whichever side is ascending, because an ascending direction must eventually reach a peak before running off the end.\n\nThat argument is the whole answer. It guarantees a peak exists in the chosen half, so the search never discards all peaks. O(log n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int FindPeakElement(int[] nums)\n    {\n        int low = 0, high = nums.Length - 1;\n\n        while (low < high)\n        {\n            int mid = low + (high - low) / 2;\n\n            // Ascending to the right: a peak must lie that way.\n            if (nums[mid] < nums[mid + 1]) low = mid + 1;\n            else high = mid;    // descending (or equal): mid could be the peak\n        }\n\n        return low;             // low == high, and that position is a peak\n    }\n\n    public static void Main()\n    {\n        int[] a = { 1, 2, 3, 1 };\n        Console.WriteLine(FindPeakElement(a));             // index 2\n\n        int[] b = { 1, 2, 1, 3, 5, 6, 4 };\n        int peak = FindPeakElement(b);\n        // Several peaks exist; assert the answer really is one rather than a fixed index.\n        bool valid = (peak == 0 || b[peak] > b[peak - 1])\n                  && (peak == b.Length - 1 || b[peak] > b[peak + 1]);\n        Console.WriteLine(valid);\n\n        Console.WriteLine(FindPeakElement(new[] { 1 }));\n        Console.WriteLine(FindPeakElement(new[] { 2, 1 }));       // descending: index 0\n        Console.WriteLine(FindPeakElement(new[] { 1, 2 }));       // ascending: index 1\n        Console.WriteLine(FindPeakElement(new[] { 5, 4, 3, 2, 1 }));\n    }\n}\n```\n\n**Output**\n\n```\n2\nTrue\n0\n0\n1\n0\n```",
   "tags": [
-   "arrays",
+   "searching",
    "binary-search",
-   "peak"
+   "peak",
+   "unsorted",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "How can binary search work on an unsorted array?",
+    "a": "Because the invariant is not sortedness but the existence of a peak within the current range. If the midpoint is lower than its right neighbour, the sequence ascends there, and since the array is bounded by negative infinity at the end, it must turn downward at some point on that side, so a peak exists to the right. The same argument mirrors leftwards. Binary search needs a decidable direction, not a total order, and that is a genuinely useful thing to internalise because it unlocks the whole 'binary search on the answer' family."
+   },
+   {
+    "q": "The answer is not unique. How would you test this?",
+    "a": "Not by asserting a fixed index, which is what the second test case demonstrates: [1,2,1,3,5,6,4] has peaks at index 1 and index 5, and either is correct. The right assertion is a property check that the returned index really is greater than its existing neighbours. Tests that pin down one valid answer among many are fragile and break when an implementation detail changes, which is a point worth making whenever a problem admits multiple correct outputs."
+   },
+   {
+    "q": "Suppose the array were two-dimensional and you needed a 2D peak.",
+    "a": "The same idea extends, but on columns rather than elements. Binary search the middle column, find its maximum element, and compare with the horizontal neighbours; move to whichever side is larger, because a peak must exist in that half by the same ascending argument. That gives O(rows log cols). The naive extension of comparing single elements does not work, which is why the column maximum is the necessary step and the usual sticking point."
+   }
   ]
  },
  {
@@ -1197,11 +1340,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Maximum number of consecutive ones III (flip at most k zeros).",
-  "answer": "Sliding window: expand right, counting zeros; when zeros exceed k, shrink from the left until zeros <= k. The max window size during the process is the answer. O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nThe question is really the longest window containing at most k zeros. Expand the right edge, counting zeros; when the count exceeds k, advance the left edge until it is back within budget. The answer is the largest width seen.\n\nThis is the clean version of the sliding-window skeleton: the invariant is a single counter, the shrink condition is exact, and each index moves forward only, so O(n) time and O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int LongestOnes(int[] nums, int k)\n    {\n        int left = 0, zeros = 0, best = 0;\n\n        for (int right = 0; right < nums.Length; right++)\n        {\n            if (nums[right] == 0) zeros++;\n\n            // Too many zeros: give ground on the left until the budget holds again.\n            while (zeros > k)\n            {\n                if (nums[left] == 0) zeros--;\n                left++;\n            }\n\n            best = Math.Max(best, right - left + 1);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestOnes(new[] { 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0 }, 2));\n        Console.WriteLine(LongestOnes(new[] { 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1 }, 3));\n        Console.WriteLine(LongestOnes(new[] { 0, 0, 0 }, 0));      // no flips allowed\n        Console.WriteLine(LongestOnes(new[] { 1, 1, 1 }, 0));\n        Console.WriteLine(LongestOnes(new[] { 0, 0, 0 }, 5));      // budget exceeds the zeros\n        Console.WriteLine(LongestOnes(new[] { 1, 0, 1, 0, 1 }, 1));\n    }\n}\n```\n\n**Output**\n\n```\n6\n10\n0\n3\n3\n3\n```",
   "tags": [
    "arrays",
    "sliding-window",
-   "binary"
+   "two-pointers",
+   "monotonic",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the left pointer never move backwards, and why does that matter?",
+    "a": "Because a window that was invalid at some left position can only become valid by shrinking, never by growing, so there is no reason to revisit an earlier left. Both pointers therefore advance monotonically, and each index is visited at most twice across the whole run, which is what makes the nested loop linear rather than quadratic. Whenever you see a while loop inside a for loop in a sliding window, that monotonic argument is the thing to state, because otherwise the complexity looks like O(n^2)."
+   },
+   {
+    "q": "Suppose you also needed to return the actual window, or which zeros to flip.",
+    "a": "Record the left index whenever the best improves, which gives the window's bounds directly; the zeros to flip are then simply the zero positions inside it, findable in one pass over that range. It costs one extra integer. The same pattern applies across this family: the algorithm naturally computes a length, and recovering the witness needs only the start index saved at the moment of improvement."
+   },
+   {
+    "q": "Suppose flipping a zero had a cost that varied by position, with a total budget.",
+    "a": "The counter becomes a running sum of costs rather than a count, and the shrink condition compares that sum against the budget. That still works because costs are non-negative, so the sum is monotonic in the window and the shrink rule remains valid. If costs could be negative the monotonicity breaks and sliding windows stop applying, exactly as they do for subarray sums with negative numbers, where prefix sums with a hash map take over."
+   }
   ]
  },
  {
@@ -2844,11 +3003,27 @@
   "subcategory": "DP",
   "difficulty": "Easy",
   "question": "House robber: max sum with no two adjacent elements.",
-  "answer": "dp[i] = max(dp[i-1], dp[i-2] + nums[i]) — either skip the current house or rob it plus the best up to two back. Two rolling variables give O(1) space, O(n) time. House Robber II (circular) runs it twice excluding either the first or last.",
+  "answer": "**Logic**\n\nAt each house there are two choices: rob it and add its value to the best total from two houses back, or skip it and keep the best total from the previous house. So `best[i] = max(best[i-1], best[i-2] + nums[i])`.\n\nBecause each value depends only on the previous two, no array is needed: two rolling variables give O(n) time and O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Rob(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        int twoBack = 0;   // best total up to i-2\n        int oneBack = 0;   // best total up to i-1\n\n        foreach (int value in nums)\n        {\n            // Rob this house (value + twoBack) or skip it (oneBack).\n            int current = Math.Max(oneBack, twoBack + value);\n            twoBack = oneBack;\n            oneBack = current;\n        }\n\n        return oneBack;\n    }\n\n    // Houses in a circle: the first and last are now adjacent, so the answer is\n    // the better of \"skip the last\" and \"skip the first\".\n    public static int RobCircular(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n        if (nums.Length == 1) return nums[0];\n\n        return Math.Max(Rob(nums[..^1]), Rob(nums[1..]));\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Rob(new[] { 1, 2, 3, 1 }));        // 1 + 3\n        Console.WriteLine(Rob(new[] { 2, 7, 9, 3, 1 }));      // 2 + 9 + 1\n        Console.WriteLine(Rob(new[] { 5 }));\n        Console.WriteLine(Rob(new int[0]));\n        Console.WriteLine(Rob(new[] { 2, 1, 1, 2 }));         // 2 + 2, skipping two in a row\n        Console.WriteLine(RobCircular(new[] { 2, 3, 2 }));    // cannot take both 2s\n    }\n}\n```\n\n**Output**\n\n```\n4\n12\n5\n0\n4\n3\n```\n\nThe `2,1,1,2` case matters: the optimum skips *two* houses in a row, which breaks any greedy rule like \"always take alternate houses\".",
   "tags": [
    "dp",
+   "rolling-variables",
    "house-robber",
-   "non-adjacent"
+   "greedy-fails",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does a greedy approach fail here?",
+    "a": "Because the best answer sometimes skips two houses in a row, which no local rule predicts. In [2,1,1,2] the greedy alternating pick gives 2+1 or 1+2, both 3, while the optimum takes the two ends for 4. Greedy works only when a locally optimal choice is provably part of a global optimum, and here it is not: taking a house forbids its neighbour, so the consequence of a choice extends beyond the current step. That is exactly the condition that calls for dynamic programming."
+   },
+   {
+    "q": "Suppose the houses are arranged in a circle instead of a row.",
+    "a": "The first and last become adjacent, so they cannot both be robbed. Rather than writing a new recurrence, run the linear solution twice: once on everything except the last house, once on everything except the first, and take the larger. Each run enforces the constraint by construction. The only special case is a single house, where both slices are empty and the answer is that house's value, which is why the code checks the length first."
+   },
+   {
+    "q": "Suppose the houses form a binary tree rather than a line.",
+    "a": "That is House Robber III, and the shape changes from a sequence to a post-order traversal. Each node returns a pair: the best total if this node is robbed, which is its value plus both children's not-robbed totals, and the best if it is not, which is the better of each child's two options summed. It is the same two-state recurrence, computed bottom-up over a tree instead of left-to-right over an array, and it is the same return-one-thing-accumulate-another shape as the tree diameter problem."
+   }
   ]
  },
  {
@@ -2884,11 +3059,27 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Coin change II: number of combinations to make an amount.",
-  "answer": "dp[a] = number of ways to make amount a. Iterate coins in the OUTER loop and amounts inner (dp[a] += dp[a-coin]) to count combinations (not permutations). O(amount * coins) time, O(amount) space. Loop order matters to avoid counting order-variants.",
+  "answer": "**Logic**\n\nCounting combinations rather than minimising coins, and here the loop order is load-bearing. Putting the coin loop *outside* counts combinations, treating 1+2 and 2+1 as the same. Swapping the loops counts permutations instead, which is a different problem.\n\nThe reason is that with coins outermost, each coin is fully absorbed before the next is considered, so a combination is always built in non-decreasing coin order and can only be produced once.\n\nO(coins × amount) time, O(amount) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Combinations: order does not matter. Coin loop OUTSIDE.\n    public static int Change(int amount, int[] coins)\n    {\n        var ways = new int[amount + 1];\n        ways[0] = 1;                     // one way to make nothing: take no coins\n\n        foreach (int coin in coins)\n            for (int a = coin; a <= amount; a++)\n                ways[a] += ways[a - coin];\n\n        return ways[amount];\n    }\n\n    // Permutations: order matters. Amount loop OUTSIDE. Same lines, swapped.\n    public static int Permutations(int amount, int[] coins)\n    {\n        var ways = new int[amount + 1];\n        ways[0] = 1;\n\n        for (int a = 1; a <= amount; a++)\n            foreach (int coin in coins)\n                if (coin <= a) ways[a] += ways[a - coin];\n\n        return ways[amount];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Change(5, new[] { 1, 2, 5 }));        // 5, 2+2+1, 2+1+1+1, 1x5\n        Console.WriteLine(Permutations(5, new[] { 1, 2, 5 }));  // many more, order counts\n\n        Console.WriteLine(Change(3, new[] { 2 }));              // impossible\n        Console.WriteLine(Change(0, new[] { 1, 2 }));           // the empty combination\n        Console.WriteLine(Change(10, new[] { 10 }));\n        Console.WriteLine(Change(4, new[] { 1, 2, 3 }));\n    }\n}\n```\n\n**Output**\n\n```\n4\n9\n0\n1\n1\n4\n```\n\nThe first two lines are the same input giving different answers, which is the whole lesson: 4 combinations, 9 permutations.",
   "tags": [
    "dp",
    "coin-change",
-   "combinations"
+   "loop-order",
+   "combinatorics",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Explain why the loop order changes combinations into permutations.",
+    "a": "With coins outermost, the table is completed for coin 1 before coin 2 is touched, so any combination counted is built with coins in the order they appear in the list and a given multiset is reached exactly once. With the amount outermost, every coin is considered at every amount, so reaching 3 as 1-then-2 and as 2-then-1 are counted as different paths. Neither is wrong; they answer different questions, and the trap is that the code looks almost identical."
+   },
+   {
+    "q": "Why does ways[0] = 1 rather than 0?",
+    "a": "Because there is exactly one way to make zero: choose nothing. It is the empty product, the same convention that makes 0 factorial equal 1. Setting it to 0 would make every entry zero, since every count is ultimately built from it. It is also the base case that lets a coin exactly equal to the amount be counted, which is the `Change(10, [10])` test. Getting this base case wrong produces an answer that is uniformly zero, which at least fails loudly."
+   },
+   {
+    "q": "Suppose each coin were available only a limited number of times.",
+    "a": "That is bounded knapsack, and neither loop order handles it directly. The straightforward fix is to add an inner loop over the allowed count for each coin, making it O(coins x amount x count). The better technique is binary splitting: represent a limit of, say, 13 copies as coins of size 1, 2, 4 and 6 times the value, so any count from 0 to 13 is expressible, turning it into a 0/1 knapsack with only log(count) items. That is a genuinely useful trick and a strong answer at this level."
+   }
   ]
  },
  {
@@ -2896,12 +3087,27 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Longest increasing subsequence.",
-  "answer": "O(n^2) DP: dp[i] = 1 + max(dp[j]) for j<i with nums[j]<nums[i]. O(n log n): maintain a 'tails' array where tails[k] is the smallest tail of an increasing subsequence of length k+1; binary-search each number's insert position. Length of tails is the LIS length.",
+  "answer": "**Logic**\n\nThe O(n²) dynamic programme sets `best[i]` to the longest increasing subsequence ending at index i, found by scanning every earlier smaller element. Simple and easy to justify.\n\nThe O(n log n) version keeps a `tails` array where `tails[k]` is the smallest possible tail value of an increasing subsequence of length k+1. For each number, binary search for the first tail that is greater than or equal to it and overwrite it, or append if it exceeds every tail. The length of `tails` is the answer.\n\nNote that `tails` is not itself a valid subsequence; only its length is meaningful.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    // O(n log n): tails[k] = smallest tail of any increasing subsequence of length k+1.\n    public static int LengthOfLis(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        var tails = new List<int>();\n\n        foreach (int n in nums)\n        {\n            int position = LowerBound(tails, n);\n\n            if (position == tails.Count) tails.Add(n);   // extends the longest run\n            else tails[position] = n;                    // a smaller tail for that length\n        }\n\n        return tails.Count;\n    }\n\n    // First index whose value is >= target.\n    private static int LowerBound(List<int> list, int target)\n    {\n        int low = 0, high = list.Count;\n        while (low < high)\n        {\n            int mid = low + (high - low) / 2;\n            if (list[mid] < target) low = mid + 1;\n            else high = mid;\n        }\n        return low;\n    }\n\n    // O(n^2): easier to justify, and the version that extends to reconstruction.\n    public static int LengthOfLisQuadratic(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        var best = new int[nums.Length];\n        Array.Fill(best, 1);\n        int answer = 1;\n\n        for (int i = 1; i < nums.Length; i++)\n            for (int j = 0; j < i; j++)\n                if (nums[j] < nums[i] && best[j] + 1 > best[i])\n                {\n                    best[i] = best[j] + 1;\n                    if (best[i] > answer) answer = best[i];\n                }\n\n        return answer;\n    }\n\n    public static void Main()\n    {\n        int[] a = { 10, 9, 2, 5, 3, 7, 101, 18 };\n        Console.WriteLine(LengthOfLis(a));\n        Console.WriteLine(LengthOfLisQuadratic(a));\n\n        Console.WriteLine(LengthOfLis(new[] { 0, 1, 0, 3, 2, 3 }));\n        Console.WriteLine(LengthOfLis(new[] { 7, 7, 7, 7 }));     // strictly increasing only\n        Console.WriteLine(LengthOfLis(new[] { 5 }));\n        Console.WriteLine(LengthOfLis(new int[0]));\n        Console.WriteLine(LengthOfLis(new[] { 4, 3, 2, 1 }));\n    }\n}\n```\n\n**Output**\n\n```\n4\n4\n4\n1\n1\n0\n1\n```",
   "tags": [
    "dp",
-   "lis",
    "binary-search",
-   "subsequence"
+   "lis",
+   "patience-sorting",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the tails array not the actual subsequence?",
+    "a": "Because entries are overwritten independently as better tails are found, so the array can end up holding values that never coexisted in one subsequence. For [10,9,2,5,3,7,101,18] the tails end as [2,3,7,18], which happens to look plausible, but on other inputs it does not even appear in order in the original array. Only the length is guaranteed correct. To recover the actual subsequence you record, for each element, the index of its predecessor at the time it was placed, then walk those links backwards."
+   },
+   {
+    "q": "What changes for a non-decreasing subsequence, where equal values are allowed?",
+    "a": "Switch the binary search from lower bound to upper bound: find the first tail strictly greater than the value rather than greater than or equal. With lower bound, an equal value replaces the existing tail and the length does not grow, which is what makes [7,7,7,7] answer 1. With upper bound it appends instead and the answer becomes 4. It is a one-character change in the comparison, and getting it backwards is the standard bug in this problem."
+   },
+   {
+    "q": "Suppose the interviewer asks for the longest bitonic subsequence, increasing then decreasing.",
+    "a": "Run the O(n²) LIS forwards from every index and again backwards, then for each index i the best bitonic length through it is forward[i] + backward[i] - 1, subtracting one because i is counted twice. Take the maximum. It is a good illustration of composing a known DP rather than inventing a new recurrence, and the same forward-and-backward trick solves problems like the candy distribution and trapping rain water."
+   }
   ]
  },
  {
@@ -2909,12 +3115,27 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Longest common subsequence of two strings.",
-  "answer": "dp[i][j] = LCS of the first i chars of A and first j of B. If A[i-1]==B[j-1], dp[i][j] = dp[i-1][j-1] + 1, else max(dp[i-1][j], dp[i][j-1]). O(m*n) time and space (reducible to O(min(m,n)) space). Answer is dp[m][n].",
+  "answer": "**Logic**\n\nA two-dimensional table where `best[i][j]` is the LCS length of the first i characters of one string and the first j of the other. If the characters match, the answer extends the diagonal by one. If they do not, it is the better of dropping one character from either string.\n\nO(m·n) time and space, reducible to O(min(m,n)) space by keeping only the previous row, since each cell looks only at the row above and the cell to its left.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    public static int LongestCommonSubsequence(string a, string b)\n    {\n        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return 0;\n\n        var best = new int[a.Length + 1, b.Length + 1];   // row/col 0 = empty prefix\n\n        for (int i = 1; i <= a.Length; i++)\n            for (int j = 1; j <= b.Length; j++)\n                best[i, j] = a[i - 1] == b[j - 1]\n                    ? best[i - 1, j - 1] + 1                          // match: extend diagonal\n                    : Math.Max(best[i - 1, j], best[i, j - 1]);       // drop one character\n\n        return best[a.Length, b.Length];\n    }\n\n    // Walk the table backwards to recover the subsequence itself.\n    public static string LcsString(string a, string b)\n    {\n        var best = new int[a.Length + 1, b.Length + 1];\n        for (int i = 1; i <= a.Length; i++)\n            for (int j = 1; j <= b.Length; j++)\n                best[i, j] = a[i - 1] == b[j - 1]\n                    ? best[i - 1, j - 1] + 1\n                    : Math.Max(best[i - 1, j], best[i, j - 1]);\n\n        var sb = new StringBuilder();\n        int x = a.Length, y = b.Length;\n        while (x > 0 && y > 0)\n        {\n            if (a[x - 1] == b[y - 1]) { sb.Insert(0, a[x - 1]); x--; y--; }\n            else if (best[x - 1, y] >= best[x, y - 1]) x--;\n            else y--;\n        }\n        return sb.ToString();\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestCommonSubsequence(\"abcde\", \"ace\"));\n        Console.WriteLine(LcsString(\"abcde\", \"ace\"));\n\n        Console.WriteLine(LongestCommonSubsequence(\"abc\", \"abc\"));\n        Console.WriteLine(LongestCommonSubsequence(\"abc\", \"def\"));\n        Console.WriteLine(LongestCommonSubsequence(\"\", \"abc\"));\n        Console.WriteLine(LcsString(\"AGGTAB\", \"GXTXAYB\"));\n    }\n}\n```\n\n**Output**\n\n```\n3\nace\n3\n0\n0\nGTAB\n```",
   "tags": [
    "dp",
    "lcs",
-   "2d-dp",
-   "strings"
+   "two-dimensional",
+   "diff",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between a subsequence and a substring here?",
+    "a": "A subsequence keeps order but allows gaps, so \"ace\" is a subsequence of \"abcde\". A substring must be contiguous. The recurrences differ accordingly: for the longest common substring, a mismatch resets the cell to 0 rather than carrying the better neighbour forward, and the answer is the maximum anywhere in the table rather than the bottom-right corner. Candidates frequently solve the wrong one, so confirming which is being asked is the first move."
+   },
+   {
+    "q": "How do you reduce the space to one row?",
+    "a": "Each cell depends only on the row above and the cell immediately to its left, so two rows suffice, and with care one row plus a saved diagonal value does. That brings it to O(min(m,n)) by iterating over the shorter string. The catch is that reconstruction becomes impossible: recovering the actual subsequence needs the full table to walk backwards. Hirschberg's algorithm solves that with divide and conquer, giving linear space and the sequence, at twice the time."
+   },
+   {
+    "q": "Where is this used in real systems?",
+    "a": "Diff tools. `git diff` computes a longest common subsequence of the two files' lines, and everything not in it is shown as an addition or deletion. That is also why diffs on large files can be slow and why Git uses heuristics such as Myers' algorithm rather than the plain quadratic table. It also underlies DNA sequence alignment and the similarity scoring in plagiarism detection."
+   }
   ]
  },
  {
@@ -2922,12 +3143,27 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Edit distance (Levenshtein) between two strings.",
-  "answer": "dp[i][j] = min edits to convert A[0..i) to B[0..j). If chars match, dp[i][j]=dp[i-1][j-1]; else 1 + min(insert dp[i][j-1], delete dp[i-1][j], replace dp[i-1][j-1]). Base cases fill first row/column. O(m*n) time and space.",
+  "answer": "**Logic**\n\n`best[i][j]` is the fewest single-character edits turning the first i characters of one string into the first j of the other. If the current characters match, nothing is spent and the answer is the diagonal. Otherwise it is one plus the cheapest of three moves: delete (cell above), insert (cell to the left), or replace (diagonal).\n\nThe base row and column are the costs of building a string from nothing, which is one insert per character. O(m·n) time and space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MinDistance(string a, string b)\n    {\n        a ??= \"\"; b ??= \"\";\n        var best = new int[a.Length + 1, b.Length + 1];\n\n        // Turning a prefix into the empty string costs one delete per character.\n        for (int i = 0; i <= a.Length; i++) best[i, 0] = i;\n        for (int j = 0; j <= b.Length; j++) best[0, j] = j;\n\n        for (int i = 1; i <= a.Length; i++)\n            for (int j = 1; j <= b.Length; j++)\n            {\n                if (a[i - 1] == b[j - 1])\n                {\n                    best[i, j] = best[i - 1, j - 1];        // free\n                }\n                else\n                {\n                    int delete = best[i - 1, j];\n                    int insert = best[i, j - 1];\n                    int replace = best[i - 1, j - 1];\n                    best[i, j] = 1 + Math.Min(replace, Math.Min(delete, insert));\n                }\n            }\n\n        return best[a.Length, b.Length];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinDistance(\"horse\", \"ros\"));\n        Console.WriteLine(MinDistance(\"intention\", \"execution\"));\n        Console.WriteLine(MinDistance(\"\", \"abc\"));        // three inserts\n        Console.WriteLine(MinDistance(\"abc\", \"\"));        // three deletes\n        Console.WriteLine(MinDistance(\"same\", \"same\"));\n        Console.WriteLine(MinDistance(\"a\", \"b\"));         // one replace\n    }\n}\n```\n\n**Output**\n\n```\n3\n5\n3\n3\n0\n1\n```",
   "tags": [
    "dp",
    "edit-distance",
    "levenshtein",
-   "strings"
+   "two-dimensional",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Suppose insert, delete and replace have different costs.",
+    "a": "Replace the three `1 +` terms with the respective costs and the recurrence still works, which is the usual weighted Levenshtein. It matters in practice: in spell checking, a replace between two adjacent keyboard keys is cheaper than between distant ones, and in DNA alignment a transition and a transversion have different penalties. One caution is that if replace costs more than an insert plus a delete, the replace branch becomes unreachable, which is a good sign the cost model needs rethinking."
+   },
+   {
+    "q": "How would you add transposition, so 'ab' to 'ba' costs one rather than two?",
+    "a": "That is Damerau-Levenshtein, adding a fourth branch: if the current two characters are the reverse of the previous two, consider the cell two back diagonally plus one. It matters because transposition is one of the most common human typing errors, so spell checkers that ignore it rank corrections badly. The recurrence stays O(mn); only the branch count grows."
+   },
+   {
+    "q": "Suppose you only need to know whether the distance is at most k, with very long strings.",
+    "a": "Then computing the whole table is wasteful. Because a path can only drift k cells from the diagonal without exceeding k edits, you can compute only a band of width 2k+1, giving O(k·n) rather than O(n²). That is a large saving for the typical use, since spell checkers care about distances of one or two. The short-circuit is also useful: if every value in a row exceeds k, you can stop early and report that the threshold is exceeded."
+   }
   ]
  },
  {
@@ -2935,11 +3171,31 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "0/1 knapsack: maximize value within a weight capacity.",
-  "answer": "dp[w] = best value with capacity w. For each item, iterate capacities from high to low (dp[w] = max(dp[w], dp[w-weight]+value)) so each item is used at most once. O(items * capacity) time, O(capacity) space. Backward iteration prevents reusing an item.",
+  "answer": "**Logic**\n\nFor each item there are two choices: leave it, keeping the best value for this capacity without it, or take it, adding its value to the best value for the remaining capacity using earlier items only. The \"earlier items only\" part is what makes it 0/1 rather than unbounded.\n\nThe two-dimensional table is O(items × capacity). It collapses to one row if the capacity loop runs *backwards*, because that guarantees each item is considered at most once. Running it forwards is the unbounded knapsack, where items may repeat.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // One row, capacity descending: each item used at most once.\n    public static int Knapsack(int[] weights, int[] values, int capacity)\n    {\n        var best = new int[capacity + 1];\n\n        for (int i = 0; i < weights.Length; i++)\n            for (int c = capacity; c >= weights[i]; c--)   // BACKWARDS: 0/1\n                best[c] = Math.Max(best[c], best[c - weights[i]] + values[i]);\n\n        return best[capacity];\n    }\n\n    // Same code, capacity ascending: items may be reused any number of times.\n    public static int UnboundedKnapsack(int[] weights, int[] values, int capacity)\n    {\n        var best = new int[capacity + 1];\n\n        for (int i = 0; i < weights.Length; i++)\n            for (int c = weights[i]; c <= capacity; c++)   // FORWARDS: unbounded\n                best[c] = Math.Max(best[c], best[c - weights[i]] + values[i]);\n\n        return best[capacity];\n    }\n\n    public static void Main()\n    {\n        int[] w = { 1, 3, 4, 5 };\n        int[] v = { 1, 4, 5, 7 };\n\n        Console.WriteLine(Knapsack(w, v, 7));              // 3 and 4: weight 7, value 9\n        Console.WriteLine(UnboundedKnapsack(w, v, 7));     // same answer on this input\n\n        // Where the loop direction actually shows: capacity 6 over two items.\n        int[] w2 = { 2, 3 };\n        int[] v2 = { 3, 4 };\n        Console.WriteLine(Knapsack(w2, v2, 6));            // 2+3, each once: 7\n        Console.WriteLine(UnboundedKnapsack(w2, v2, 6));   // 2+2+2, reused: 9\n\n        Console.WriteLine(Knapsack(new[] { 5 }, new[] { 10 }, 4));   // does not fit\n        Console.WriteLine(Knapsack(new int[0], new int[0], 10));\n        Console.WriteLine(Knapsack(new[] { 2, 2, 2 }, new[] { 3, 3, 3 }, 5));\n        Console.WriteLine(UnboundedKnapsack(new[] { 2 }, new[] { 3 }, 7));\n    }\n}\n```\n\n**Output**\n\n```\n9\n9\n7\n9\n0\n0\n6\n9\n```\n\nLines three and four are the point: identical items and capacity, 7 when each item may be used once and 9 when they may be reused. The only difference between the two methods is the direction of the capacity loop.",
   "tags": [
    "dp",
    "knapsack",
-   "0-1-knapsack"
+   "loop-direction",
+   "pseudo-polynomial",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Explain precisely why the loop direction changes the semantics.",
+    "a": "When the capacity loop runs backwards, `best[c - weight]` has not yet been updated for the current item, so it still represents a solution built from earlier items only, and the item is used at most once. Running forwards, `best[c - weight]` may already include the current item, so taking it again is possible and the item becomes reusable. It is a one-character change with a completely different meaning, and being able to explain it rather than recall it is what the question is really testing."
+   },
+   {
+    "q": "Is the O(items x capacity) complexity polynomial?",
+    "a": "Only pseudo-polynomial. The capacity appears as a magnitude, not as the size of its encoding, so a capacity of one billion makes the table enormous even though the input is short. The 0/1 knapsack is NP-hard, and this DP does not contradict that: it is efficient when the capacity is small, and useless when it is large. For large capacities you fall back on approximation schemes or branch and bound, which is worth saying because it shows you understand what the DP does and does not buy."
+   },
+   {
+    "q": "Suppose you must report which items were chosen.",
+    "a": "The single-row version cannot tell you, because it overwrites the history. Keep the full two-dimensional table and walk backwards from the last cell: if the value differs from the cell directly above, the current item was taken, so subtract its weight and move up; otherwise just move up. That costs O(items x capacity) space instead of O(capacity). It is the same parent-tracking pattern as recovering the coin list or a Dijkstra path."
+   },
+   {
+    "q": "How does partition equal subset sum relate to this?",
+    "a": "It is 0/1 knapsack with value equal to weight and the capacity set to half the total sum: a subset summing to half exists exactly when the knapsack can be filled precisely. An odd total is immediately impossible, which is the cheap first check. Recognising that a problem phrased about partitioning is really a knapsack in disguise is the transferable skill, and the same reframing turns target sum and last stone weight into the same algorithm."
+   }
   ]
  },
  {
@@ -2947,12 +3203,27 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Partition equal subset sum.",
-  "answer": "If the total sum is odd, impossible. Otherwise it's a subset-sum problem: can we reach sum/2? dp[s] = reachable, iterate items and capacities from high to low (dp[s] |= dp[s-num]). O(n * sum) time, O(sum) space (boolean DP).",
+  "answer": "**Logic**\n\nThe array splits into two equal-sum halves exactly when some subset sums to half the total. An odd total is impossible immediately, which is a free O(n) rejection.\n\nOtherwise it is a 0/1 knapsack over booleans: `reachable[t]` means some subset sums to t. For each number, iterate the target downwards so each number is used at most once, marking `reachable[t]` true when `reachable[t - num]` was.\n\nO(n × sum/2) time, O(sum/2) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool CanPartition(int[] nums)\n    {\n        int total = 0;\n        foreach (int n in nums) total += n;\n\n        if (total % 2 != 0) return false;   // an odd total cannot split evenly\n\n        int target = total / 2;\n        var reachable = new bool[target + 1];\n        reachable[0] = true;                // the empty subset sums to zero\n\n        foreach (int n in nums)\n        {\n            // Downwards, so each number contributes to at most one subset.\n            for (int t = target; t >= n; t--)\n                if (reachable[t - n]) reachable[t] = true;\n\n            if (reachable[target]) return true;   // early exit once it is achievable\n        }\n\n        return reachable[target];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CanPartition(new[] { 1, 5, 11, 5 }));      // 11 and 1+5+5\n        Console.WriteLine(CanPartition(new[] { 1, 2, 3, 5 }));       // total 11, odd\n        Console.WriteLine(CanPartition(new[] { 2, 2, 2, 2 }));\n        Console.WriteLine(CanPartition(new[] { 1, 1 }));\n        Console.WriteLine(CanPartition(new[] { 1 }));\n        Console.WriteLine(CanPartition(new[] { 3, 3, 3, 4, 5 }));    // total 18, target 9\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n```",
   "tags": [
    "dp",
    "subset-sum",
-   "partition",
-   "knapsack"
+   "knapsack",
+   "bitset",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why iterate the target downwards?",
+    "a": "So each number is used at most once. Going downwards, `reachable[t - n]` still reflects subsets formed without the current number, because that lower index has not been updated yet in this pass. Iterating upwards would let a number contribute to `reachable[t - n]` and then immediately to `reachable[t]`, effectively using it twice, which answers a different question: whether a target is reachable with unlimited copies. It is the same loop-direction distinction as 0/1 versus unbounded knapsack."
+   },
+   {
+    "q": "Suppose the array must split into three equal parts rather than two.",
+    "a": "It is substantially harder. The two-way version works because fixing one subset determines the other, but with three parts the subsets interact and a single boolean table no longer suffices. The usual approaches are a bitmask DP over subsets, which is exponential but feasible for small n, or backtracking with strong pruning: sort descending, place each number into the first bucket that fits, and skip buckets with identical running totals. This is the k-way partition problem and it is NP-hard in general."
+   },
+   {
+    "q": "Could a bitset make this faster?",
+    "a": "Yes, and it is a satisfying optimisation. Represent the reachable set as a bitset and the whole inner loop becomes `bits |= bits << n`, which processes 64 targets per machine word instead of one per iteration. That gives roughly a 64-fold constant-factor speedup with no change in asymptotic complexity. C# offers this through `System.Numerics.BigInteger` shifts or a hand-rolled `ulong[]`, and it is the standard trick for subset-sum problems where the target is large."
+   }
   ]
  },
  {
@@ -2960,12 +3231,27 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Unique paths in an m×n grid (only right/down moves).",
-  "answer": "dp[i][j] = dp[i-1][j] + dp[i][j-1], first row/column all 1. O(m*n) time, O(n) space with a rolling row. Closed form: C(m+n-2, m-1) combinations. With obstacles, set blocked cells to 0.",
+  "answer": "**Logic**\n\nEvery cell is reachable only from above or from the left, so the number of paths to a cell is the sum of those two. The top row and left column have exactly one path each, since there is only one way to walk straight along an edge.\n\nThat gives an O(m·n) table, reducible to a single row because each value needs only the cell above (the row's previous value) and the cell to the left (the value just computed).\n\nThere is also a closed form: the path is a sequence of (m-1) downs and (n-1) rights in some order, so the count is the binomial coefficient C(m+n-2, m-1).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // One row of DP: O(n) space.\n    public static long UniquePaths(int m, int n)\n    {\n        if (m <= 0 || n <= 0) return 0;\n\n        var row = new long[n];\n        Array.Fill(row, 1);           // the top row: one path to each cell\n\n        for (int r = 1; r < m; r++)\n            for (int c = 1; c < n; c++)\n                row[c] += row[c - 1];  // above (old value) + left (just updated)\n\n        return row[n - 1];\n    }\n\n    // Closed form: choose which of the m+n-2 moves are downs.\n    public static long UniquePathsFormula(int m, int n)\n    {\n        long result = 1;\n        int moves = m + n - 2, choose = Math.Min(m, n) - 1;\n\n        // Multiply then divide each step to keep the running value exact and small.\n        for (int i = 1; i <= choose; i++)\n            result = result * (moves - choose + i) / i;\n\n        return result;\n    }\n\n    // With obstacles: a blocked cell simply has zero paths through it.\n    public static long UniquePathsWithObstacles(int[][] grid)\n    {\n        int rows = grid.Length, cols = grid[0].Length;\n        var row = new long[cols];\n        row[0] = grid[0][0] == 1 ? 0 : 1;\n\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n            {\n                if (grid[r][c] == 1) row[c] = 0;        // unreachable\n                else if (c > 0) row[c] += row[c - 1];\n            }\n\n        return row[cols - 1];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(UniquePaths(3, 7));\n        Console.WriteLine(UniquePathsFormula(3, 7));\n        Console.WriteLine(UniquePaths(3, 2));\n        Console.WriteLine(UniquePaths(1, 1));\n        Console.WriteLine(UniquePaths(10, 10));\n\n        Console.WriteLine(UniquePathsWithObstacles(new[] {\n            new[] { 0, 0, 0 }, new[] { 0, 1, 0 }, new[] { 0, 0, 0 } }));\n    }\n}\n```\n\n**Output**\n\n```\n28\n28\n3\n1\n48620\n2\n```",
   "tags": [
    "dp",
    "grid",
-   "unique-paths",
-   "combinatorics"
+   "combinatorics",
+   "overflow",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why interleave the multiply and divide in the closed form?",
+    "a": "Because computing the full factorials first overflows almost immediately: 20 factorial already exceeds a signed 64-bit integer, so a 20x20 grid would fail even though its answer fits comfortably. Multiplying by one term and dividing by the next keeps the running value close to the final answer. The division is always exact at each step, since the product of any i consecutive integers is divisible by i factorial, which is the non-obvious fact that makes the loop safe."
+   },
+   {
+    "q": "Suppose some cells are blocked.",
+    "a": "A blocked cell contributes zero paths, so set its value to 0 and carry on; everything downstream naturally accounts for it. The one trap is the start cell being blocked, which makes the answer 0 immediately and is easy to miss when initialising. The obstacle version is the more realistic problem, and it shows why the DP is worth knowing even though the clean grid has a closed form that the DP does not generalise to."
+   },
+   {
+    "q": "Suppose diagonal moves were also allowed.",
+    "a": "Add the diagonal predecessor to the sum, so each cell becomes above plus left plus above-left. The counts grow much faster, which is worth flagging because overflow arrives sooner. Note the closed form disappears entirely: with three move types the paths are no longer a simple choice of positions among a fixed number of moves, so the DP is the only practical route. That is a neat demonstration that a formula is a special case while the DP is the general tool."
+   }
   ]
  },
  {
@@ -2973,11 +3259,27 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Minimum path sum in a grid.",
-  "answer": "dp[i][j] = grid[i][j] + min(dp[i-1][j], dp[i][j-1]); first row/column accumulate. O(m*n) time, O(n) space with a rolling row. Only right/down moves; dp[m-1][n-1] is the minimum total.",
+  "answer": "**Logic**\n\nSame shape as counting paths, but minimising a cost instead of summing counts. The cheapest way to reach a cell is its own value plus the cheaper of the cells above and to the left. The first row and column have only one predecessor each, so they are running totals.\n\nO(rows × cols) time, and O(cols) space with a single rolling row.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MinPathSum(int[][] grid)\n    {\n        if (grid == null || grid.Length == 0) return 0;\n\n        int rows = grid.Length, cols = grid[0].Length;\n        var row = new int[cols];\n\n        // First row: the only way in is from the left.\n        row[0] = grid[0][0];\n        for (int c = 1; c < cols; c++) row[c] = row[c - 1] + grid[0][c];\n\n        for (int r = 1; r < rows; r++)\n        {\n            row[0] += grid[r][0];                       // first column: only from above\n\n            for (int c = 1; c < cols; c++)\n                row[c] = grid[r][c] + Math.Min(row[c],   // above (not yet overwritten)\n                                               row[c - 1]); // left (already updated)\n        }\n\n        return row[cols - 1];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinPathSum(new[] {\n            new[] { 1, 3, 1 },\n            new[] { 1, 5, 1 },\n            new[] { 4, 2, 1 } }));      // 1+3+1+1+1\n\n        Console.WriteLine(MinPathSum(new[] {\n            new[] { 1, 2, 3 },\n            new[] { 4, 5, 6 } }));      // 1+2+3+6\n\n        Console.WriteLine(MinPathSum(new[] { new[] { 5 } }));\n        Console.WriteLine(MinPathSum(new[] { new[] { 1, 2, 5 } }));   // single row\n        Console.WriteLine(MinPathSum(new[] { new[] { 1 }, new[] { 2 }, new[] { 3 } }));\n    }\n}\n```\n\n**Output**\n\n```\n7\n12\n5\n8\n6\n```",
   "tags": [
    "dp",
    "grid",
-   "min-path-sum"
+   "rolling-row",
+   "minimisation",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "In the rolling row, how do you know row[c] still holds the value from above?",
+    "a": "Because the loop moves left to right and writes each cell after reading it. When computing column c, `row[c]` has not been touched yet in this row, so it is still the previous row's value, which is the cell above; `row[c-1]` was written a moment ago, so it is the current row's cell to the left. That read-before-write ordering is the whole trick, and reversing the loop direction would silently break it, which is a good thing to state rather than leave implicit."
+   },
+   {
+    "q": "Suppose movement in all four directions were allowed, not just right and down.",
+    "a": "The DP collapses, because a cell could be reached from a cell you have not computed yet, so there is no valid evaluation order. It becomes a shortest-path problem on a graph with non-negative weights, which is Dijkstra with a priority queue, at O(rc log(rc)). This is the cleanest illustration of when a grid DP stops applying: DP needs a partial order on the subproblems, and free movement destroys it."
+   },
+   {
+    "q": "Suppose some cells had negative values.",
+    "a": "With only right and down moves the DP still works, because the move set forbids revisiting a cell and so no negative cycle can form. If free movement were also allowed, negative values would break Dijkstra and you would need Bellman-Ford, and a negative cycle would mean no minimum exists at all. Pointing out that the answer depends on both the sign of the weights and the freedom of movement, rather than just one of them, is the strong version of this answer."
+   }
   ]
  },
  {
@@ -3038,11 +3340,27 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Maximal square: largest square of 1s in a binary matrix.",
-  "answer": "dp[i][j] = side length of the largest square ending at (i,j). If cell is 1, dp[i][j] = 1 + min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]). Track the max side; area = side^2. O(m*n) time, O(n) space with a rolling row.",
+  "answer": "**Logic**\n\n`side[r][c]` is the side length of the largest square whose bottom-right corner is at that cell. A cell holding 1 can extend a square only as far as its three neighbours allow, so the value is one plus the minimum of the cells above, to the left, and diagonally above-left. A cell holding 0 is zero.\n\nThe minimum is the crux: a square needs all three directions to support it, so the weakest one caps it. Track the largest side seen and return its square. O(rows × cols) time, and O(cols) space with a rolling row.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaximalSquare(char[][] matrix)\n    {\n        if (matrix == null || matrix.Length == 0) return 0;\n\n        int rows = matrix.Length, cols = matrix[0].Length;\n        var side = new int[rows + 1, cols + 1];   // padded, so no boundary checks\n        int best = 0;\n\n        for (int r = 1; r <= rows; r++)\n            for (int c = 1; c <= cols; c++)\n            {\n                if (matrix[r - 1][c - 1] != '1') continue;\n\n                // All three neighbours must support the square; the smallest caps it.\n                side[r, c] = 1 + Math.Min(side[r - 1, c],\n                                 Math.Min(side[r, c - 1], side[r - 1, c - 1]));\n\n                if (side[r, c] > best) best = side[r, c];\n            }\n\n        return best * best;      // the question asks for area, not side\n    }\n\n    private static char[][] Parse(params string[] rows)\n    {\n        var g = new char[rows.Length][];\n        for (int i = 0; i < rows.Length; i++) g[i] = rows[i].ToCharArray();\n        return g;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaximalSquare(Parse(\n            \"10100\",\n            \"10111\",\n            \"11111\",\n            \"10010\")));\n\n        Console.WriteLine(MaximalSquare(Parse(\"01\", \"10\")));\n        Console.WriteLine(MaximalSquare(Parse(\"0\")));\n        Console.WriteLine(MaximalSquare(Parse(\"1\")));\n        Console.WriteLine(MaximalSquare(Parse(\"111\", \"111\", \"111\")));\n        Console.WriteLine(MaximalSquare(Parse(\"1111\")));      // a single row caps at 1\n    }\n}\n```\n\n**Output**\n\n```\n4\n1\n0\n1\n9\n1\n```",
   "tags": [
    "dp",
    "matrix",
-   "maximal-square"
+   "maximal-square",
+   "padding",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why the minimum of three neighbours rather than, say, the smaller of two?",
+    "a": "Because a square of side k at a corner requires a square of side k-1 to exist in all three directions simultaneously. Using only the cell above and to the left would allow an L-shaped region to be counted as a square: imagine a full row and a full column meeting at a corner with a hole in between. The diagonal neighbour is what certifies the interior is filled. Dropping it is the classic wrong answer and it passes every test case with no holes."
+   },
+   {
+    "q": "Suppose it asked for the largest rectangle rather than the largest square.",
+    "a": "The DP does not generalise, because a rectangle has two independent dimensions and the min-of-three trick relies on a single one. The standard solution treats each row as the base of a histogram of consecutive 1s above it, then runs the largest-rectangle-in-a-histogram algorithm per row using a monotonic stack, giving O(rows x cols). It is a genuinely different technique, which is why interviewers sometimes ask the square first and the rectangle as the escalation."
+   },
+   {
+    "q": "Why pad the table with an extra row and column?",
+    "a": "So that cells on the first row or column can read their neighbours without a boundary check. The padded zeros correctly represent 'no square beyond the edge', which is exactly the right value, so correctness and convenience agree. It costs one extra row and column of memory and removes four conditionals from the hot loop. The offset by one between matrix and table indices is the price, and it is the usual source of confusion when reading this kind of code."
+   }
   ]
  },
  {
@@ -3090,11 +3408,27 @@
   "subcategory": "Backtracking",
   "difficulty": "Medium",
   "question": "Generate all subsets (the power set).",
-  "answer": "Backtracking: at each index decide to include or exclude the element, recursing to the next index; record the current subset at each node. Or iterative: for each element, add it to all existing subsets. 2^n subsets, O(n * 2^n) total.",
+  "answer": "**Logic**\n\nEvery element is either in a subset or not, so there are 2^n subsets. Two standard ways to enumerate them.\n\nBacktracking: walk the array, and at each index either include the element and recurse, or skip it and recurse, recording the current selection at every node of the recursion tree.\n\nBitmask: treat the numbers 0 to 2^n - 1 as membership masks, where bit i set means element i is included. That is iterative, allocation-light, and often clearer, though it caps out around 30 elements.\n\nEither way the output size is exponential, so O(n·2^n) is optimal.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<IList<int>> Subsets(int[] nums)\n    {\n        var result = new List<IList<int>>();\n        Backtrack(nums, 0, new List<int>(), result);\n        return result;\n    }\n\n    private static void Backtrack(int[] nums, int index, List<int> current, IList<IList<int>> result)\n    {\n        // Every node of the recursion tree is itself a valid subset.\n        result.Add(new List<int>(current));      // copy: current keeps mutating\n\n        for (int i = index; i < nums.Length; i++)\n        {\n            current.Add(nums[i]);\n            Backtrack(nums, i + 1, current, result);\n            current.RemoveAt(current.Count - 1);  // undo, the essence of backtracking\n        }\n    }\n\n    // Bitmask: bit i of the mask means \"element i is in this subset\".\n    public static IList<IList<int>> SubsetsBitmask(int[] nums)\n    {\n        var result = new List<IList<int>>();\n\n        for (int mask = 0; mask < (1 << nums.Length); mask++)\n        {\n            var subset = new List<int>();\n            for (int i = 0; i < nums.Length; i++)\n                if ((mask & (1 << i)) != 0) subset.Add(nums[i]);\n            result.Add(subset);\n        }\n\n        return result;\n    }\n\n    private static string Render(IList<IList<int>> r) =>\n        string.Join(\" \", r.Select(s => \"[\" + string.Join(\",\", s) + \"]\"));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(Subsets(new[] { 1, 2, 3 })));\n        Console.WriteLine(Render(SubsetsBitmask(new[] { 1, 2, 3 })));\n        Console.WriteLine(Render(Subsets(new[] { 0 })));\n        Console.WriteLine(Render(Subsets(new int[0])));\n        Console.WriteLine(Subsets(new[] { 1, 2, 3, 4, 5 }).Count);\n    }\n}\n```\n\n**Output**\n\n```\n[] [1] [1,2] [1,2,3] [1,3] [2] [2,3] [3]\n[] [1] [2] [1,2] [3] [1,3] [2,3] [1,2,3]\n[] [0]\n[]\n32\n```\n\nBoth produce all eight subsets, in different orders — worth noting, since a test asserting an exact order would wrongly reject one of them.",
   "tags": [
    "backtracking",
+   "bitmask",
    "subsets",
-   "power-set"
+   "power-set",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why copy current into a new list rather than adding it directly?",
+    "a": "Because `current` is a single mutable list that the recursion keeps changing. Adding it by reference would put the same object into the result eight times, and every entry would end up showing whatever state it held at the end, typically empty. It is the classic aliasing bug in backtracking, and it produces output that is uniformly wrong rather than subtly wrong, which at least makes it easy to spot. The copy is what makes each recorded subset a snapshot."
+   },
+   {
+    "q": "Suppose the input contains duplicates and subsets must be unique.",
+    "a": "Sort first, then in the loop skip any element equal to the previous one at the same recursion depth, using `if (i > index && nums[i] == nums[i-1]) continue;`. Sorting puts equal values adjacent so the check is local, and the `i > index` part is essential: it allows a duplicate to be used at a deeper level, where it legitimately extends a subset, while preventing it from starting a second identical branch at the same level. Getting that condition wrong either produces duplicates or drops valid subsets."
+   },
+   {
+    "q": "When would you choose the bitmask version?",
+    "a": "When n is at most about 20 to 30 and you want iteration without recursion, which avoids stack depth and is easier to parallelise since each mask is independent. It is also the natural representation for bitmask DP, where a subset is a state, as in the travelling salesman DP. The limit is real though: at n = 31 the shift overflows a signed int, and the enumeration itself is already astronomically large well before that, so in practice n is small whenever this approach applies at all."
+   }
   ]
  },
  {
@@ -3102,10 +3436,27 @@
   "subcategory": "Backtracking",
   "difficulty": "Medium",
   "question": "Generate all permutations of a list.",
-  "answer": "Backtracking: swap the current index with each later index (or track used elements), recurse, then undo. Records a permutation when the path length equals n. n! permutations, O(n * n!) total. Handle duplicates by sorting and skipping equal siblings.",
+  "answer": "**Logic**\n\nAt each depth choose which unused element comes next, recurse, then undo the choice. There are n! permutations and each costs O(n) to record, so O(n·n!) is optimal.\n\nTwo common shapes. A `used` flag array preserves the original order of the input, which matters when the output is expected in lexicographic order for sorted input. Swapping elements in place avoids the extra array and is slightly faster, but scrambles the order and makes duplicate handling harder.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<IList<int>> Permute(int[] nums)\n    {\n        var result = new List<IList<int>>();\n        Backtrack(nums, new bool[nums.Length], new List<int>(), result);\n        return result;\n    }\n\n    private static void Backtrack(int[] nums, bool[] used, List<int> current, IList<IList<int>> result)\n    {\n        if (current.Count == nums.Length)\n        {\n            result.Add(new List<int>(current));    // snapshot, not the live list\n            return;\n        }\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            if (used[i]) continue;\n\n            used[i] = true;\n            current.Add(nums[i]);\n\n            Backtrack(nums, used, current, result);\n\n            current.RemoveAt(current.Count - 1);   // undo both parts of the choice\n            used[i] = false;\n        }\n    }\n\n    // With duplicates: sort, then skip a repeat whose identical predecessor is\n    // not currently used, which would produce the same permutation again.\n    public static IList<IList<int>> PermuteUnique(int[] nums)\n    {\n        Array.Sort(nums);\n        var result = new List<IList<int>>();\n        BacktrackUnique(nums, new bool[nums.Length], new List<int>(), result);\n        return result;\n    }\n\n    private static void BacktrackUnique(int[] nums, bool[] used, List<int> current, IList<IList<int>> result)\n    {\n        if (current.Count == nums.Length) { result.Add(new List<int>(current)); return; }\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            if (used[i]) continue;\n            if (i > 0 && nums[i] == nums[i - 1] && !used[i - 1]) continue;\n\n            used[i] = true;\n            current.Add(nums[i]);\n            BacktrackUnique(nums, used, current, result);\n            current.RemoveAt(current.Count - 1);\n            used[i] = false;\n        }\n    }\n\n    private static string Render(IList<IList<int>> r) =>\n        string.Join(\" \", r.Select(s => \"[\" + string.Join(\",\", s) + \"]\"));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(Permute(new[] { 1, 2, 3 })));\n        Console.WriteLine(Render(Permute(new[] { 0, 1 })));\n        Console.WriteLine(Render(Permute(new[] { 1 })));\n        Console.WriteLine(Render(PermuteUnique(new[] { 1, 1, 2 })));\n        Console.WriteLine(Permute(new[] { 1, 2, 3, 4 }).Count);\n    }\n}\n```\n\n**Output**\n\n```\n[1,2,3] [1,3,2] [2,1,3] [2,3,1] [3,1,2] [3,2,1]\n[0,1] [1,0]\n[1]\n[1,1,2] [1,2,1] [2,1,1]\n24\n```",
   "tags": [
    "backtracking",
-   "permutations"
+   "permutations",
+   "duplicates",
+   "pruning",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Explain the duplicate-skipping condition, especially the !used[i-1] part.",
+    "a": "After sorting, equal values are adjacent. The rule is that among a run of identical values, they must be used left to right; picking a later duplicate while its identical predecessor is still unused would generate a permutation already produced by the mirror choice. So `!used[i-1]` detects exactly that situation and prunes it. Writing `used[i-1]` instead inverts the logic and drops valid permutations, which is the standard mistake. The condition is small and the reasoning is not, so it is worth deriving on a [1,1,2] example rather than reciting."
+   },
+   {
+    "q": "Suppose you need the next permutation in lexicographic order rather than all of them.",
+    "a": "That is a different, much cheaper algorithm: scan from the right for the first element smaller than its successor, find the rightmost element greater than it, swap them, then reverse the suffix. It is O(n) time and O(1) space, and it is what `std::next_permutation` does. When you only need to iterate permutations one at a time, or when n is large enough that n! is out of the question, generating the next one on demand is the right tool."
+   },
+   {
+    "q": "How does the swap-based version differ, and why might you avoid it?",
+    "a": "It permutes the array in place by swapping the current index with each later index, which avoids the `used` array and the per-level allocation. It is slightly faster, but it destroys the relative order of the remaining elements, so the output is not lexicographic even for sorted input, and the duplicate-skipping trick no longer works because equal values are no longer reliably adjacent. For the unique-permutations variant the `used` array version is the one to reach for."
+   }
   ]
  },
  {
@@ -3113,11 +3464,27 @@
   "subcategory": "Backtracking",
   "difficulty": "Medium",
   "question": "Combination sum: find combinations that sum to a target (reuse allowed).",
-  "answer": "Backtracking from a start index: subtract each candidate from the target and recurse allowing the same index (reuse); prune when the remainder goes negative; record when it hits zero. Sort to enable early pruning. Exponential; the search tree is bounded by target/min-candidate depth.",
+  "answer": "**Logic**\n\nBacktracking with one crucial detail: when recursing, pass the *same* index rather than the next one, which is what allows a candidate to be reused. Passing `i + 1` would give the each-used-once variant.\n\nSorting the candidates enables a strong prune: once the running total plus the current candidate exceeds the target, every later candidate is larger too, so the loop can break rather than continue. That turns a lot of dead exploration into an early exit.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<IList<int>> CombinationSum(int[] candidates, int target)\n    {\n        Array.Sort(candidates);          // enables the break below\n        var result = new List<IList<int>>();\n        Backtrack(candidates, target, 0, new List<int>(), result);\n        return result;\n    }\n\n    private static void Backtrack(int[] candidates, int remaining, int start,\n                                  List<int> current, IList<IList<int>> result)\n    {\n        if (remaining == 0)\n        {\n            result.Add(new List<int>(current));\n            return;\n        }\n\n        for (int i = start; i < candidates.Length; i++)\n        {\n            // Sorted, so if this one overshoots, so does every later one.\n            if (candidates[i] > remaining) break;\n\n            current.Add(candidates[i]);\n\n            // i, not i + 1: the same candidate may be used again.\n            Backtrack(candidates, remaining - candidates[i], i, current, result);\n\n            current.RemoveAt(current.Count - 1);\n        }\n    }\n\n    private static string Render(IList<IList<int>> r) =>\n        r.Count == 0 ? \"(none)\" : string.Join(\" \", r.Select(s => \"[\" + string.Join(\",\", s) + \"]\"));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(CombinationSum(new[] { 2, 3, 6, 7 }, 7)));\n        Console.WriteLine(Render(CombinationSum(new[] { 2, 3, 5 }, 8)));\n        Console.WriteLine(Render(CombinationSum(new[] { 2 }, 1)));       // impossible\n        Console.WriteLine(Render(CombinationSum(new[] { 7 }, 7)));\n        Console.WriteLine(Render(CombinationSum(new[] { 2, 4 }, 6)));\n    }\n}\n```\n\n**Output**\n\n```\n[2,2,3] [7]\n[2,2,2,2] [2,3,3] [3,5]\n(none)\n[7]\n[2,2,2] [2,4]\n```",
   "tags": [
    "backtracking",
-   "combination-sum",
-   "pruning"
+   "combinations",
+   "pruning",
+   "sorting",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does passing i rather than i + 1 give reuse, and why not pass 0?",
+    "a": "Passing `i` lets the current candidate be chosen again at the next level, which is the reuse the problem wants. Passing `0` would also allow reuse but would additionally revisit earlier candidates, generating [2,3] and [3,2] as separate results. Starting at `i` forces every combination to be built in non-decreasing order, so each multiset is produced exactly once. That is the same ordering trick that makes the coin-change combination count work, seen from the enumeration side."
+   },
+   {
+    "q": "Why break rather than continue when the candidate overshoots?",
+    "a": "Because the array is sorted, so if candidates[i] already exceeds the remaining target, every candidate after it exceeds it too and the rest of the loop is guaranteed to be fruitless. `continue` would test each of them individually, which is correct but wasteful. On inputs with many large candidates the difference is substantial, and it is the main reason to sort at all here, since sorting is not needed for correctness."
+   },
+   {
+    "q": "Suppose each candidate may be used at most once, and the input contains duplicates.",
+    "a": "That is Combination Sum II, and it needs two changes: recurse with `i + 1` so each element is consumed, and skip duplicates at the same level with `if (i > start && candidates[i] == candidates[i-1]) continue;`. The `i > start` guard is what distinguishes 'this is a repeat of a sibling choice' from 'this is a legitimate second copy deeper in the tree'. It is the same pruning condition as in subsets-with-duplicates, which is worth pointing out as the shared pattern."
+   }
   ]
  },
  {
@@ -3137,12 +3504,31 @@
   "subcategory": "Backtracking",
   "difficulty": "Hard",
   "question": "N-Queens: place N queens so none attack each other.",
-  "answer": "Backtrack row by row, trying each column; track attacked columns and both diagonals (col, row+col, row-col) with sets for O(1) checks. Place a queen, recurse to the next row, and undo. Count or collect boards. Exponential but pruned heavily by constraints.",
+  "answer": "**Logic**\n\nOne queen per row, so the search picks a column for each row in turn and recurses. A placement is legal when its column, its descending diagonal and its ascending diagonal are all unoccupied.\n\nThe key to making it fast is O(1) conflict checking with three boolean sets rather than scanning the board. Both diagonals have a constant identity along their length: `row - col` is fixed on one and `row + col` on the other. Offsetting `row - col` by n keeps the index non-negative.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    public static IList<IList<string>> SolveNQueens(int n)\n    {\n        var result = new List<IList<string>>();\n        if (n <= 0) return result;\n\n        var columns = new bool[n];\n        var descending = new bool[2 * n];   // indexed by row - col + n\n        var ascending = new bool[2 * n];    // indexed by row + col\n        var placement = new int[n];         // placement[row] = column\n\n        Backtrack(0, n, columns, descending, ascending, placement, result);\n        return result;\n    }\n\n    private static void Backtrack(int row, int n, bool[] columns, bool[] descending,\n                                  bool[] ascending, int[] placement, IList<IList<string>> result)\n    {\n        if (row == n)\n        {\n            result.Add(Render(placement, n));\n            return;\n        }\n\n        for (int col = 0; col < n; col++)\n        {\n            int d = row - col + n, a = row + col;\n\n            if (columns[col] || descending[d] || ascending[a]) continue;\n\n            columns[col] = descending[d] = ascending[a] = true;\n            placement[row] = col;\n\n            Backtrack(row + 1, n, columns, descending, ascending, placement, result);\n\n            columns[col] = descending[d] = ascending[a] = false;   // undo\n        }\n    }\n\n    private static IList<string> Render(int[] placement, int n)\n    {\n        var board = new List<string>(n);\n        for (int r = 0; r < n; r++)\n        {\n            var sb = new StringBuilder(new string('.', n));\n            sb[placement[r]] = 'Q';\n            board.Add(sb.ToString());\n        }\n        return board;\n    }\n\n    public static void Main()\n    {\n        var four = SolveNQueens(4);\n        Console.WriteLine(four.Count);\n        Console.WriteLine(string.Join(\" | \", four[0]));\n\n        Console.WriteLine(SolveNQueens(1).Count);\n        Console.WriteLine(SolveNQueens(2).Count);   // impossible\n        Console.WriteLine(SolveNQueens(3).Count);   // impossible\n        Console.WriteLine(SolveNQueens(6).Count);\n        Console.WriteLine(SolveNQueens(8).Count);   // the classic answer\n    }\n}\n```\n\n**Output**\n\n```\n2\n.Q.. | ...Q | Q... | ..Q.\n1\n0\n0\n4\n92\n```",
   "tags": [
    "backtracking",
    "n-queens",
-   "constraints",
-   "hard"
+   "diagonals",
+   "pruning",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why do row - col and row + col identify the diagonals?",
+    "a": "Moving one step down-right increases both row and column by one, so their difference is unchanged along that diagonal. Moving down-left increases the row and decreases the column, so their sum is unchanged. That gives each diagonal a constant identifier, turning an O(n) scan along the diagonal into an O(1) array lookup. Adding n to the difference shifts the range from -(n-1)..(n-1) into 0..2n-2 so it can index an array, which is the only reason the offset is there."
+   },
+   {
+    "q": "Suppose you only need the count, not the boards.",
+    "a": "Drop the rendering and the placement array, and the natural optimisation is a bitmask version: hold the three conflict sets as integers and use bit operations to compute all available columns at once, picking the lowest set bit each time. That removes the loop's repeated checks and is dramatically faster, comfortably handling n = 15 or so. Beyond that the count grows too fast for exhaustive search regardless of constant factors, and the known values come from specialised methods."
+   },
+   {
+    "q": "Why are n = 2 and n = 3 impossible?",
+    "a": "For n = 2, one queen on a 2x2 board attacks every remaining square. For n = 3, wherever the first queen goes, the remaining rows cannot both be filled without a diagonal or column conflict; exhausting the nine placements shows it. Solutions exist for n = 1 and for every n of 4 or more. It is worth stating because a candidate who only tests n = 8 may write code that silently mishandles the no-solution case, and returning an empty list rather than throwing is the right behaviour."
+   },
+   {
+    "q": "How would you exploit the board's symmetry?",
+    "a": "Solutions come in symmetry classes under the eight rotations and reflections of the square, so you can restrict the first queen to the left half of the first row and mirror the results, roughly halving the search. Full exploitation means canonicalising each solution under the symmetry group and expanding at the end, which is how published counts are computed efficiently. It is a good example of cutting a search by exploiting problem structure rather than by micro-optimising the inner loop."
+   }
   ]
  },
  {
@@ -3163,11 +3549,27 @@
   "subcategory": "Backtracking",
   "difficulty": "Medium",
   "question": "Letter combinations of a phone number.",
-  "answer": "Backtracking: map each digit to its letters, and build combinations by choosing one letter per digit, recursing to the next digit and recording complete combinations. Product of letters-per-digit results. O(4^n * n) worst case. BFS/iterative queue also works.",
+  "answer": "**Logic**\n\nEach digit maps to three or four letters, so the result is the Cartesian product of those sets: for a d-digit input there are roughly 3^d to 4^d combinations. Backtracking builds them one character at a time, recursing at each digit and undoing afterwards.\n\nThe only real edge case is the empty input, which should produce an empty list rather than a list containing one empty string, since there are no combinations of no digits.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    private static readonly Dictionary<char, string> Keys = new()\n    {\n        ['2'] = \"abc\", ['3'] = \"def\", ['4'] = \"ghi\", ['5'] = \"jkl\",\n        ['6'] = \"mno\", ['7'] = \"pqrs\", ['8'] = \"tuv\", ['9'] = \"wxyz\",\n    };\n\n    public static IList<string> LetterCombinations(string digits)\n    {\n        var result = new List<string>();\n\n        // No digits means no combinations, not one empty combination.\n        if (string.IsNullOrEmpty(digits)) return result;\n\n        Backtrack(digits, 0, new StringBuilder(), result);\n        return result;\n    }\n\n    private static void Backtrack(string digits, int index, StringBuilder current, IList<string> result)\n    {\n        if (index == digits.Length)\n        {\n            result.Add(current.ToString());\n            return;\n        }\n\n        if (!Keys.TryGetValue(digits[index], out string letters))\n        {\n            Backtrack(digits, index + 1, current, result);   // ignore 0, 1 and anything odd\n            return;\n        }\n\n        foreach (char c in letters)\n        {\n            current.Append(c);\n            Backtrack(digits, index + 1, current, result);\n            current.Length--;                                 // undo the append\n        }\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", LetterCombinations(\"23\")));\n        Console.WriteLine(string.Join(\",\", LetterCombinations(\"2\")));\n        Console.WriteLine(LetterCombinations(\"\").Count);\n        Console.WriteLine(string.Join(\",\", LetterCombinations(\"7\")));\n        Console.WriteLine(LetterCombinations(\"234\").Count);\n        Console.WriteLine(LetterCombinations(\"79\").Count);      // 4 x 4\n    }\n}\n```\n\n**Output**\n\n```\nad,ae,af,bd,be,bf,cd,ce,cf\na,b,c\n0\np,q,r,s\n27\n16\n```",
   "tags": [
    "backtracking",
-   "phone-letters",
-   "combinations"
+   "cartesian-product",
+   "phone-keypad",
+   "trie",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must the empty input return an empty list rather than a list with one empty string?",
+    "a": "Because mathematically there is exactly one function from an empty set, so the product is arguably a single empty combination, but the problem statement specifies an empty result and callers expect that. It matters more than it sounds: the recursion naturally produces the single empty string, so you have to guard against it explicitly. That mismatch between the mathematically natural answer and the specified one is worth confirming rather than assuming, and it is the single most common way this easy problem is failed."
+   },
+   {
+    "q": "Would you write this iteratively instead?",
+    "a": "You can, and it is clean: start with a list containing one empty string, then for each digit replace the list with every existing prefix extended by every letter for that digit. It is a breadth-first construction rather than depth-first, needs no recursion, and is easy to read. The trade-off is memory: it materialises every intermediate level, so at the last digit it holds the full result plus the previous level, whereas backtracking holds only one path at a time."
+   },
+   {
+    "q": "Suppose this fed a real autocomplete over a dictionary, not just raw combinations.",
+    "a": "Then generating all combinations first is wasteful, since almost all of them are not words. Instead walk a trie of the dictionary in lockstep with the digits: at each digit, extend only those trie nodes that have a child for one of that digit's letters, pruning dead branches immediately. That is how T9 predictive text worked, and it turns an exponential enumeration into a search bounded by the number of real words sharing that prefix."
+   }
   ]
  },
  {
@@ -3175,11 +3577,27 @@
   "subcategory": "Backtracking",
   "difficulty": "Medium",
   "question": "Generate valid parentheses combinations of n pairs.",
-  "answer": "Backtracking tracking open and close counts: add '(' if open < n, add ')' if close < open; record when the string reaches length 2n. The constraints ensure only valid strings are built. Catalan-number many results. O(4^n / sqrt(n)).",
+  "answer": "**Logic**\n\nBuild the string one character at a time, tracking how many open and close brackets have been placed. Two rules keep every partial string valid, so no invalid candidate is ever generated: you may add an open bracket while fewer than n have been used, and a close bracket only while it would not exceed the open count.\n\nThat pruning is the point. Generating all 2^(2n) strings and filtering the valid ones works but explores vastly more; the constrained version visits only the Catalan number of results, which for n = 3 is 5 rather than 64.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    public static IList<string> GenerateParenthesis(int n)\n    {\n        var result = new List<string>();\n        if (n <= 0) return result;\n\n        Backtrack(n, 0, 0, new StringBuilder(), result);\n        return result;\n    }\n\n    private static void Backtrack(int n, int open, int close, StringBuilder current, IList<string> result)\n    {\n        if (current.Length == n * 2)\n        {\n            result.Add(current.ToString());\n            return;\n        }\n\n        // Open a bracket while any remain.\n        if (open < n)\n        {\n            current.Append('(');\n            Backtrack(n, open + 1, close, current, result);\n            current.Length--;\n        }\n\n        // Close one only if it would not outnumber the opens: that is what keeps\n        // every prefix valid and prunes the invalid half of the tree.\n        if (close < open)\n        {\n            current.Append(')');\n            Backtrack(n, open, close + 1, current, result);\n            current.Length--;\n        }\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\" \", GenerateParenthesis(3)));\n        Console.WriteLine(string.Join(\" \", GenerateParenthesis(1)));\n        Console.WriteLine(string.Join(\" \", GenerateParenthesis(2)));\n        Console.WriteLine(GenerateParenthesis(0).Count);\n        Console.WriteLine(GenerateParenthesis(4).Count);    // Catalan(4)\n        Console.WriteLine(GenerateParenthesis(5).Count);    // Catalan(5)\n    }\n}\n```\n\n**Output**\n\n```\n((())) (()()) (())() ()(()) ()()()\n()\n(()) ()()\n0\n14\n42\n```",
   "tags": [
    "backtracking",
+   "pruning",
+   "catalan",
    "parentheses",
-   "catalan"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "How many results are there, and why does that number appear so often?",
+    "a": "The nth Catalan number: 1, 2, 5, 14, 42 for n = 1 to 5. It counts balanced bracket sequences, and also the number of distinct binary search trees on n nodes, the triangulations of a polygon, and the ways to parenthesise a product. They are all the same counting problem in disguise, which is why 'count unique BSTs' and this question have identical answers. Recognising the sequence is a good signal that you have seen the structure before."
+   },
+   {
+    "q": "Why is this considered better than generate-and-filter?",
+    "a": "Because the constraints are applied during construction rather than afterwards, so invalid branches are never explored. For n = 3, filtering would examine 64 strings to keep 5; the constrained search touches only the nodes leading to valid results. The saving grows exponentially with n. It is the defining characteristic of backtracking as opposed to brute-force enumeration: prune as early as the constraint can be evaluated, not at the leaves."
+   },
+   {
+    "q": "Suppose there were multiple bracket types, as in a real expression.",
+    "a": "The single open-count no longer suffices, because closing must match the most recent unclosed opener, so you carry a stack of open types instead. You may open any type at any time while budget remains, and may close only the type on top of the stack. The count grows much faster since each opening choice multiplies the branching. That variant is closer to generating syntactically valid expressions, and it is a natural escalation for a candidate who solves the single-type version quickly."
+   }
   ]
  },
  {
@@ -3187,12 +3605,27 @@
   "subcategory": "Backtracking",
   "difficulty": "Medium",
   "question": "Word search in a grid (single word).",
-  "answer": "DFS from each cell matching the first character; explore 4 neighbors following the word, marking cells visited (temporarily) to avoid reuse, and backtrack. Return true when the whole word is matched. O(cells * 4^L) worst case where L is the word length.",
+  "answer": "**Logic**\n\nDepth-first search from every cell whose letter matches the word's first character. At each step try the four neighbours for the next character, marking the current cell as in-use so a single path cannot reuse it, then unmarking on the way out.\n\nThat mark-and-restore is the difference between this and a flood fill: the restriction is per path, not global, because a cell excluded from one path must still be available to another. Worst case O(rows · cols · 4^L) for a word of length L.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool Exist(char[][] board, string word)\n    {\n        if (board == null || board.Length == 0 || string.IsNullOrEmpty(word)) return false;\n\n        for (int r = 0; r < board.Length; r++)\n            for (int c = 0; c < board[0].Length; c++)\n                if (Search(board, word, r, c, 0)) return true;\n\n        return false;\n    }\n\n    private static bool Search(char[][] board, string word, int r, int c, int index)\n    {\n        if (index == word.Length) return true;\n\n        if (r < 0 || r >= board.Length || c < 0 || c >= board[0].Length) return false;\n        if (board[r][c] != word[index]) return false;\n\n        char original = board[r][c];\n        board[r][c] = '\\0';        // in use on THIS path only\n\n        bool found = Search(board, word, r - 1, c, index + 1)\n                  || Search(board, word, r + 1, c, index + 1)\n                  || Search(board, word, r, c - 1, index + 1)\n                  || Search(board, word, r, c + 1, index + 1);\n\n        board[r][c] = original;    // restore, so other paths may still use it\n\n        return found;\n    }\n\n    private static char[][] Parse(params string[] rows)\n    {\n        var g = new char[rows.Length][];\n        for (int i = 0; i < rows.Length; i++) g[i] = rows[i].ToCharArray();\n        return g;\n    }\n\n    public static void Main()\n    {\n        var board = Parse(\"ABCE\", \"SFCS\", \"ADEE\");\n\n        Console.WriteLine(Exist(board, \"ABCCED\"));\n        Console.WriteLine(Exist(board, \"SEE\"));\n        Console.WriteLine(Exist(board, \"ABCB\"));    // would need to reuse the B\n        Console.WriteLine(Exist(board, \"A\"));\n        Console.WriteLine(Exist(board, \"Z\"));\n        Console.WriteLine(Exist(Parse(\"AB\"), \"BA\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\n```\n\n`ABCB` is the case that matters: the letters are all present, but reaching the final B would mean visiting the same cell twice.",
   "tags": [
    "backtracking",
-   "word-search",
+   "grid",
    "dfs",
-   "grid"
+   "trie",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why restore the cell rather than keep a visited set for the whole search?",
+    "a": "Because the exclusion is per path, not global. A cell used by one candidate path must remain available to a different path starting elsewhere, so a permanent visited marker would wrongly reject valid words. This is the defining difference between backtracking and flood fill: flood fill marks permanently because it is partitioning the grid, whereas here the grid is a search space each path traverses independently."
+   },
+   {
+    "q": "Suppose you must find many words in the same grid, not one.",
+    "a": "Running this per word is O(words x rc x 4^L), which is far too slow. The right answer is Word Search II: build a trie of all the words, then do a single DFS from each cell walking the trie in lockstep with the grid, so a path is abandoned the moment no word continues with that prefix. One traversal finds every word, and pruning completed words from the trie keeps it shrinking. That is a standard escalation once a candidate solves the single-word version."
+   },
+   {
+    "q": "Using '\\0' as the marker mutates the caller's board. Is that acceptable?",
+    "a": "It is restored before returning, so the board is unchanged on exit, and it avoids allocating a visited grid. But it is not exception-safe: if anything threw mid-search the board would be left corrupted, and it is not thread-safe, since two concurrent searches would see each other's markers. For an interview it is the expected answer; for shared or concurrent code I would use a separate visited array and say so. The marker also assumes '\\0' never appears as real data, which is the usual in-band sentinel caveat."
+   }
   ]
  },
  {
@@ -3237,11 +3670,27 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Jump game: can you reach the last index?",
-  "answer": "Greedy: track the farthest index reachable; iterate, and if the current index exceeds the farthest reachable, return false; otherwise update farthest = max(farthest, i + nums[i]). Reachable if farthest >= last index. O(n) time, O(1) space.",
+  "answer": "**Logic**\n\nGreedy, not DP. Sweep left to right keeping the furthest index reachable so far. At each position, if it lies beyond that reach, it is unreachable and so is everything after it, so return false. Otherwise extend the reach to include what this position can reach.\n\nO(n) time, O(1) space. The DP version marking reachability per index is O(n²) and unnecessary, because the reach is monotonic: once you can get somewhere, you can get anywhere before it.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool CanJump(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return false;\n\n        int reach = 0;\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            if (i > reach) return false;                 // a gap nothing can cross\n\n            reach = Math.Max(reach, i + nums[i]);\n\n            if (reach >= nums.Length - 1) return true;    // the end is already covered\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CanJump(new[] { 2, 3, 1, 1, 4 }));\n        Console.WriteLine(CanJump(new[] { 3, 2, 1, 0, 4 }));   // stuck at the 0\n        Console.WriteLine(CanJump(new[] { 0 }));               // already at the end\n        Console.WriteLine(CanJump(new[] { 0, 1 }));            // cannot leave index 0\n        Console.WriteLine(CanJump(new[] { 2, 0, 0 }));         // jumps over the zeros\n        Console.WriteLine(CanJump(new[] { 1, 0, 1, 0 }));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\n```\n\nA single `[0]` is True because you start at the last index already, while `[0,1]` is False because you can never leave index 0.",
   "tags": [
-   "dp",
    "greedy",
-   "jump-game"
+   "arrays",
+   "reachability",
+   "monotonic",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is greedy provably correct here, when it fails for so many other problems?",
+    "a": "Because reachability is monotonic and downward closed: if index j is reachable then every index before it is too, since jumps of any length up to nums[i] are allowed. So the set of reachable positions is always a prefix, and a single number, its furthest extent, describes it completely. There is no choice to regret, which is exactly the condition greedy needs. Contrast house robber, where taking a house forbids its neighbour, so the reachable set is not a simple prefix and greedy breaks."
+   },
+   {
+    "q": "Suppose you also needed the minimum number of jumps.",
+    "a": "That is Jump Game II, still greedy but with more bookkeeping. Track the end of the current jump's range and the furthest reachable within it; when the scan reaches the end of the current range, a jump has been spent and the range extends to the furthest. It is O(n), essentially a BFS by levels where each level is one jump. The neat framing is that the greedy is really a breadth-first search that never needs a queue because the frontier is always a contiguous range."
+   },
+   {
+    "q": "Suppose jumps could go backwards as well as forwards.",
+    "a": "The prefix property is destroyed, so greedy no longer applies and it becomes a genuine graph reachability problem, solved with BFS or DFS over positions in O(n) with a visited set. That is the 'jump game III' variant. It is a good illustration of how a small relaxation of the rules moves a problem from a two-line greedy to a standard traversal, and recognising which structural property the greedy depended on is what lets you spot that quickly."
+   }
   ]
  },
  {
@@ -3249,12 +3698,27 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Jump game II: minimum jumps to reach the end.",
-  "answer": "Greedy BFS-like: track the current jump's farthest reach and the next reach; when you pass the current reach, increment jumps and extend the reach. O(n) time, O(1) space. Each 'level' represents one jump.",
+  "answer": "**Logic**\n\nA breadth-first search that needs no queue. Every index reachable in k jumps forms a contiguous range, so track the end of the current range and the furthest index reachable from anywhere within it. When the scan arrives at the end of the current range, one jump has been consumed and the range extends to the furthest seen.\n\nO(n) time, O(1) space. The loop stops one short of the end, because arriving at the last index means the jump has already been counted.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Jump(int[] nums)\n    {\n        if (nums == null || nums.Length <= 1) return 0;\n\n        int jumps = 0;\n        int currentEnd = 0;    // last index reachable with the jumps taken so far\n        int furthest = 0;      // furthest reachable from anywhere in the current range\n\n        // Stop before the last index: reaching it means the jump is already counted.\n        for (int i = 0; i < nums.Length - 1; i++)\n        {\n            furthest = Math.Max(furthest, i + nums[i]);\n\n            if (i == currentEnd)       // the current range is exhausted\n            {\n                jumps++;\n                currentEnd = furthest;\n\n                if (currentEnd >= nums.Length - 1) break;\n            }\n        }\n\n        return jumps;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Jump(new[] { 2, 3, 1, 1, 4 }));    // 2 -> 3 -> end\n        Console.WriteLine(Jump(new[] { 2, 3, 0, 1, 4 }));\n        Console.WriteLine(Jump(new[] { 0 }));                 // already there\n        Console.WriteLine(Jump(new[] { 1, 2 }));\n        Console.WriteLine(Jump(new[] { 1, 1, 1, 1 }));\n        Console.WriteLine(Jump(new[] { 5, 1, 1, 1, 1 }));     // one big jump\n    }\n}\n```\n\n**Output**\n\n```\n2\n2\n0\n1\n3\n1\n```",
   "tags": [
-   "dp",
    "greedy",
-   "jump-game",
-   "bfs"
+   "bfs",
+   "arrays",
+   "ranges",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the loop stop before the last index?",
+    "a": "Because the jump that lands on the last index is counted when the range containing its predecessor is exhausted, not when you arrive. Including the final index would trigger one extra range exhaustion and return one jump too many for inputs where the last index happens to be a range boundary. It is the classic off-by-one in this problem, and the `[1,2]` test case exposes it: the answer is 1, and a loop running to the end returns 2."
+   },
+   {
+    "q": "In what sense is this really a BFS?",
+    "a": "Each 'level' of the BFS is the set of indices reachable in exactly k jumps, and because jumps can be any length up to the value at a position, that set is always a contiguous range. A normal BFS would hold those indices in a queue; here the range is fully described by its two endpoints, so the queue collapses to two integers. Seeing that a BFS frontier is an interval, and therefore compressible, is the insight that turns an O(n) space algorithm into an O(1) one."
+   },
+   {
+    "q": "Suppose some positions were unreachable, so the end could not be reached at all.",
+    "a": "This version assumes reachability, which the problem statement usually guarantees, and would return a wrong count rather than reporting failure. The fix is to check whether `furthest` ever fails to advance past the current index, exactly as Jump Game I does, and return -1 in that case. It is the same pattern as Boyer-Moore needing a verification pass: an algorithm that assumes a precondition should either check it or document that it does not."
+   }
   ]
  },
  {
@@ -3329,11 +3793,27 @@
   "subcategory": "Searching",
   "difficulty": "Medium",
   "question": "Search a 2D matrix (rows and columns sorted).",
-  "answer": "If each row is sorted and the first element of each row exceeds the last of the previous, treat it as a flat sorted array and binary-search over m*n indices (O(log(mn))). For a matrix sorted rows and columns independently, start at the top-right and move left/down. ",
+  "answer": "**Logic**\n\nTwo quite different problems share this name, and the right answer depends on which.\n\nIf each row is sorted and every row starts after the previous row ends, the matrix is really one sorted array folded into a grid, so a single binary search over the virtual index works, with row and column recovered by division and remainder. That is O(log(rows·cols)).\n\nIf only rows and columns are individually sorted, with no relationship between them, start at the top-right corner: moving left decreases the value, moving down increases it, so each comparison eliminates a whole row or column. That is O(rows + cols).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Fully sorted when flattened: one binary search over the virtual index.\n    public static bool SearchFlattened(int[][] matrix, int target)\n    {\n        if (matrix == null || matrix.Length == 0) return false;\n\n        int rows = matrix.Length, cols = matrix[0].Length;\n        int low = 0, high = rows * cols - 1;\n\n        while (low <= high)\n        {\n            int mid = low + (high - low) / 2;\n            int value = matrix[mid / cols][mid % cols];   // unfold the index\n\n            if (value == target) return true;\n            if (value < target) low = mid + 1;\n            else high = mid - 1;\n        }\n\n        return false;\n    }\n\n    // Rows and columns sorted independently: staircase from the top-right.\n    public static bool SearchStaircase(int[][] matrix, int target)\n    {\n        if (matrix == null || matrix.Length == 0) return false;\n\n        int row = 0, col = matrix[0].Length - 1;\n\n        while (row < matrix.Length && col >= 0)\n        {\n            int value = matrix[row][col];\n\n            if (value == target) return true;\n            if (value > target) col--;    // everything below in this column is larger\n            else row++;                   // everything left in this row is smaller\n        }\n\n        return false;\n    }\n\n    public static void Main()\n    {\n        var sorted = new[] {\n            new[] { 1, 3, 5, 7 },\n            new[] { 10, 11, 16, 20 },\n            new[] { 23, 30, 34, 60 } };\n\n        Console.WriteLine(SearchFlattened(sorted, 3));\n        Console.WriteLine(SearchFlattened(sorted, 13));\n        Console.WriteLine(SearchStaircase(sorted, 60));\n\n        var staircase = new[] {\n            new[] { 1, 4, 7, 11 },\n            new[] { 2, 5, 8, 12 },\n            new[] { 3, 6, 9, 16 } };\n\n        Console.WriteLine(SearchStaircase(staircase, 5));\n        Console.WriteLine(SearchStaircase(staircase, 10));\n        Console.WriteLine(SearchStaircase(new[] { new[] { 1 } }, 1));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n```",
   "tags": [
    "searching",
    "binary-search",
-   "matrix"
+   "matrix",
+   "staircase",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why start at the top-right rather than the top-left?",
+    "a": "Because the top-right is the only corner where the two directions disagree: moving left strictly decreases and moving down strictly increases, so every comparison eliminates an entire row or column. From the top-left both directions increase, so a value smaller than the target gives no information about which way to go, and you would have to explore both. The bottom-left works equally well by symmetry. Recognising that the corner choice is what makes the elimination unambiguous is the substance of this question."
+   },
+   {
+    "q": "Could you binary search the staircase version to beat O(rows + cols)?",
+    "a": "Not in general. You can binary search each row for O(rows log cols), which is worse than O(rows + cols) for square matrices and better for very wide ones, so it depends on the shape. There is a divide-and-conquer approach achieving roughly O(n^1.58) for an n by n matrix, but the staircase is linear in the perimeter and far simpler. For a square matrix O(rows + cols) is optimal, since an adversary can arrange the target to require examining one element per diagonal."
+   },
+   {
+    "q": "Suppose the matrix were enormous and stored across pages or disk blocks.",
+    "a": "Then the access pattern matters more than the comparison count. The staircase walks one row and one column, which is poor locality for a row-major layout, since each column step jumps a full row stride. The flattened binary search is also scattered but touches far fewer elements. In practice you would either store a per-row min and max to skip whole rows cheaply, or use a structure designed for the access pattern such as a space-filling-curve layout, which is the kind of consideration that separates the interview answer from the production one."
+   }
   ]
  },
  {
@@ -3341,12 +3821,27 @@
   "subcategory": "Searching",
   "difficulty": "Medium",
   "question": "Find minimum in a rotated sorted array.",
-  "answer": "Binary search: if nums[mid] > nums[high], the minimum is to the right (low=mid+1); else it's at mid or to the left (high=mid). Converge to the minimum. O(log n) time. Handle duplicates by shrinking high when equal.",
+  "answer": "**Logic**\n\nBinary search comparing the midpoint against the *right* end rather than the left. If the middle element is greater than the rightmost, the rotation point lies to the right, so the minimum is after the midpoint. Otherwise the midpoint could itself be the minimum, so the right bound moves to the midpoint without excluding it.\n\nComparing against the left end instead does not work cleanly, because an unrotated array would then look identical to one rotated fully. O(log n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int FindMin(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) throw new ArgumentException(\"empty\");\n\n        int low = 0, high = nums.Length - 1;\n\n        while (low < high)\n        {\n            int mid = low + (high - low) / 2;\n\n            // Compare with the RIGHT end: an unrotated array behaves correctly.\n            if (nums[mid] > nums[high]) low = mid + 1;   // minimum is strictly right\n            else high = mid;                             // mid might BE the minimum\n        }\n\n        return nums[low];\n    }\n\n    // With duplicates the worst case degrades to O(n) and cannot be improved.\n    public static int FindMinWithDuplicates(int[] nums)\n    {\n        int low = 0, high = nums.Length - 1;\n\n        while (low < high)\n        {\n            int mid = low + (high - low) / 2;\n\n            if (nums[mid] > nums[high]) low = mid + 1;\n            else if (nums[mid] < nums[high]) high = mid;\n            else high--;        // cannot tell which side: shrink by one\n        }\n\n        return nums[low];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindMin(new[] { 3, 4, 5, 1, 2 }));\n        Console.WriteLine(FindMin(new[] { 4, 5, 6, 7, 0, 1, 2 }));\n        Console.WriteLine(FindMin(new[] { 11, 13, 15, 17 }));      // not rotated\n        Console.WriteLine(FindMin(new[] { 2, 1 }));\n        Console.WriteLine(FindMin(new[] { 5 }));\n        Console.WriteLine(FindMinWithDuplicates(new[] { 2, 2, 2, 0, 1 }));\n    }\n}\n```\n\n**Output**\n\n```\n1\n0\n11\n1\n5\n0\n```",
   "tags": [
    "searching",
    "binary-search",
-   "rotated",
-   "minimum"
+   "rotated-array",
+   "duplicates",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why compare against the right end rather than the left?",
+    "a": "Because the right comparison distinguishes the two halves unambiguously. In a rotated array every element in the left segment is greater than every element in the right segment, so if the midpoint exceeds the rightmost value the rotation point must be to its right. Comparing against the left fails on an unrotated array, where the midpoint is greater than the leftmost yet the minimum is at index 0, so you would need an extra check for that case. Choosing the right end removes the special case entirely."
+   },
+   {
+    "q": "Why high = mid rather than mid - 1?",
+    "a": "Because when the midpoint is not greater than the rightmost value, the midpoint itself may be the minimum, so excluding it could discard the answer. That is the same asymmetry as in a lower-bound search: one side advances past the midpoint, the other converges onto it. Writing `mid - 1` on that branch produces a function that is correct on most inputs and wrong when the minimum lands exactly on a midpoint, which is a miserable bug to reproduce."
+   },
+   {
+    "q": "Why can duplicates not be handled in logarithmic time?",
+    "a": "Because when the midpoint, the left and the right values are all equal, no information distinguishes the halves: the array could be [2,2,2,0,2] or [2,0,2,2,2] and both look identical at those three positions. The only safe move is to shrink the range by one, which in the worst case of an all-equal array gives O(n). No algorithm can do better, since an adversary can hide the minimum behind indistinguishable values, so the degradation is inherent rather than an implementation weakness."
+   }
   ]
  },
  {
@@ -3354,12 +3849,31 @@
   "subcategory": "Searching",
   "difficulty": "Hard",
   "question": "Koko eating bananas / capacity to ship in D days (binary search on the answer).",
-  "answer": "Binary search over the possible answer (eating speed / capacity): for a candidate value, compute feasibility (hours/days needed) in O(n); narrow the range toward the minimum feasible value. O(n log(range)) time. This 'binary search on the answer' pattern solves many optimization problems.",
+  "answer": "**Logic**\n\nThe search space is the answer itself, not an array. The feasibility predicate is monotonic: if a speed of 10 finishes in time, so does 11. That monotonicity is exactly what binary search needs.\n\nSo binary search the candidate answers between the smallest plausible value and the largest, testing feasibility with a linear scan each time. The lower bound must be at least the largest single item, since one pile or package cannot be split. O(n log(range)).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Smallest eating speed that clears every pile within h hours.\n    public static int MinEatingSpeed(int[] piles, int h)\n    {\n        int low = 1, high = 0;\n        foreach (int p in piles) high = Math.Max(high, p);   // never need to exceed the biggest\n\n        while (low < high)\n        {\n            int speed = low + (high - low) / 2;\n\n            long hours = 0;\n            foreach (int p in piles) hours += (p + speed - 1) / speed;   // ceiling division\n\n            if (hours <= h) high = speed;     // feasible: try slower\n            else low = speed + 1;             // too slow\n        }\n\n        return low;\n    }\n\n    // Smallest ship capacity that ships every package, in order, within days.\n    public static int ShipWithinDays(int[] weights, int days)\n    {\n        int low = 0, high = 0;\n        foreach (int w in weights) { low = Math.Max(low, w); high += w; }\n\n        while (low < high)\n        {\n            int capacity = low + (high - low) / 2;\n\n            int needed = 1, load = 0;\n            foreach (int w in weights)\n            {\n                if (load + w > capacity) { needed++; load = 0; }\n                load += w;\n            }\n\n            if (needed <= days) high = capacity;\n            else low = capacity + 1;\n        }\n\n        return low;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinEatingSpeed(new[] { 3, 6, 7, 11 }, 8));\n        Console.WriteLine(MinEatingSpeed(new[] { 30, 11, 23, 4, 20 }, 5));    // one pile per hour\n        Console.WriteLine(MinEatingSpeed(new[] { 30, 11, 23, 4, 20 }, 6));\n        Console.WriteLine(MinEatingSpeed(new[] { 1 }, 1));\n\n        Console.WriteLine(ShipWithinDays(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, 5));\n        Console.WriteLine(ShipWithinDays(new[] { 3, 2, 2, 4, 1, 4 }, 3));\n    }\n}\n```\n\n**Output**\n\n```\n4\n30\n23\n1\n15\n6\n```",
   "tags": [
    "searching",
-   "binary-search-answer",
-   "optimization",
-   "hard"
+   "binary-search-on-answer",
+   "monotonic",
+   "feasibility",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "How do you recognise a 'binary search on the answer' problem?",
+    "a": "Three signals together. The question asks for a minimum or maximum value rather than a position; checking whether a specific candidate works is straightforward, usually a linear pass; and feasibility is monotonic, so if a candidate works then every larger one does too, or every smaller one for a maximisation. When those hold, you binary search the answer range and use the check as the comparison. Splitting an array to minimise the largest subarray sum, and the minimum ship capacity above, are the same shape wearing different words."
+   },
+   {
+    "q": "Why must the lower bound be the largest single element rather than one?",
+    "a": "For the shipping problem, because a package cannot be split across ships, so any capacity below the heaviest package is infeasible no matter how many days are available, and the feasibility check would loop forever or report an impossible result. Starting at the maximum makes every candidate in the range at least potentially valid, which is what keeps the monotonic predicate well defined. Koko differs because a pile can be eaten over several hours, so a speed of one is always feasible given enough time."
+   },
+   {
+    "q": "Why the (p + speed - 1) / speed idiom?",
+    "a": "It is integer ceiling division: eating a pile of 7 at speed 3 takes three hours, not two, because the final hour is partly idle. Writing `p / speed` truncates and understates the time, which makes an infeasible speed look feasible and produces an answer that is too small. The alternative is `Math.Ceiling` with floating point, which I would avoid here since it introduces precision concerns into what is exact integer arithmetic."
+   },
+   {
+    "q": "Suppose the feasibility check itself were expensive, say a database query.",
+    "a": "Then the O(log range) factor matters a great deal, and you would want to narrow the range first with cheap bounds or a coarse estimate before binary searching, and cache results since the same candidate may be revisited across runs. If the check were also noisy or non-deterministic, monotonicity could fail and binary search would become unsafe, at which point you need a different strategy entirely. Naming that dependency on a reliable, monotonic predicate is the mature version of this answer."
+   }
   ]
  },
  {
@@ -3367,12 +3881,27 @@
   "subcategory": "Searching",
   "difficulty": "Medium",
   "question": "Find the square root of an integer (without built-in).",
-  "answer": "Binary search between 1 and x for the largest m with m*m <= x. Or Newton's method: repeatedly x = (x + n/x)/2 until convergence. Binary search is O(log n); Newton converges quadratically. Return the integer floor of the root.",
+  "answer": "**Logic**\n\nBinary search the answer between 1 and n/2, testing whether a candidate squared exceeds the target. It is the simplest instance of binary search on the answer: feasibility is monotonic, since if k² ≤ n then every smaller value also satisfies it.\n\nThe trap is overflow. Computing `mid * mid` in an int overflows for mid above about 46,341, wrapping negative and breaking the comparison. Either accumulate in a long or, better, compare `mid` against `n / mid` to avoid multiplication entirely.\n\nO(log n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MySqrt(int n)\n    {\n        if (n < 0) throw new ArgumentOutOfRangeException(nameof(n));\n        if (n < 2) return n;                 // 0 and 1 are their own roots\n\n        int low = 1, high = n / 2;           // the root of n >= 2 never exceeds n/2\n\n        while (low <= high)\n        {\n            int mid = low + (high - low) / 2;\n\n            // Division rather than mid * mid: no overflow, no long needed.\n            int quotient = n / mid;\n\n            if (quotient == mid) return mid;          // exact root\n            if (quotient > mid) low = mid + 1;        // mid is too small\n            else high = mid - 1;\n        }\n\n        return high;    // the floor of the true root\n    }\n\n    // Newton's method: converges quadratically, far fewer iterations for large n.\n    public static int MySqrtNewton(int n)\n    {\n        if (n < 2) return n;\n\n        long guess = n;\n        while (guess * guess > n) guess = (guess + n / guess) / 2;\n\n        return (int)guess;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MySqrt(4));\n        Console.WriteLine(MySqrt(8));            // floor of 2.828\n        Console.WriteLine(MySqrt(0));\n        Console.WriteLine(MySqrt(1));\n        Console.WriteLine(MySqrt(2147395599));   // large: would overflow mid * mid\n        Console.WriteLine(MySqrtNewton(2147395599));\n    }\n}\n```\n\n**Output**\n\n```\n2\n2\n0\n1\n46339\n46339\n```",
   "tags": [
    "searching",
    "binary-search",
+   "overflow",
    "newton",
-   "math"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why compare with division instead of computing mid * mid?",
+    "a": "Because the product overflows. For n near int.MaxValue the candidate root approaches 46,341, and squaring that exceeds int range, wrapping to a negative number so the comparison takes the wrong branch and the search diverges. Widening to long fixes it, but the division form avoids the problem entirely without a wider type, which matters in languages or contexts where the wider type is unavailable. The 2147395599 test exists precisely to catch the naive version."
+   },
+   {
+    "q": "When would Newton's method be the better choice?",
+    "a": "When the input is large or the root must be computed to many digits, because Newton's converges quadratically, roughly doubling the correct digits each iteration, against one bit per iteration for binary search. For 32-bit integers it takes a handful of steps against about 16, which is a real but modest saving. Its downsides are needing a sensible starting guess and behaving badly at zero, and for integer arithmetic the termination condition needs care to avoid oscillating between two adjacent values."
+   },
+   {
+    "q": "Why return high rather than low at the end?",
+    "a": "Because when the loop exits without an exact match, `high` is the largest candidate whose square does not exceed n and `low` has moved one past it, so `high` is the floor of the true root. The pointers cross by exactly one, which is the invariant to state. Returning `low` gives the ceiling, and mixing them up produces an answer that is right for perfect squares and off by one for everything else, which the `MySqrt(8)` test catches immediately."
+   }
   ]
  },
  {
@@ -3380,12 +3909,27 @@
   "subcategory": "Sorting",
   "difficulty": "Medium",
   "question": "Explain and implement quicksort.",
-  "answer": "Pick a pivot, partition the array so smaller elements go left and larger go right (Lomuto or Hoare partition), then recursively sort both partitions. Average O(n log n), worst O(n^2) (mitigated by random/median-of-three pivots). In-place, not stable.",
+  "answer": "**Logic**\n\nPick a pivot, partition the array so that smaller elements sit left of it and larger ones right, then recurse on both sides. The pivot lands in its final position after each partition, so no merge step is needed.\n\nAverage O(n log n), but O(n²) when partitions are badly unbalanced, which a deterministic pivot on sorted input guarantees. Randomising the pivot makes that case vanishingly unlikely. Recursing into the smaller side first and looping on the larger bounds the stack at O(log n).\n\nQuicksort is not stable, which is why .NET's `Array.Sort` uses introsort and `OrderBy` uses a stable merge sort.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private static readonly Random Rng = new(42);   // fixed seed: reproducible output\n\n    public static void QuickSort(int[] nums) => Sort(nums, 0, nums.Length - 1);\n\n    private static void Sort(int[] nums, int low, int high)\n    {\n        // Loop rather than recurse on the larger side: stack stays O(log n).\n        while (low < high)\n        {\n            int p = Partition(nums, low, high);\n\n            if (p - low < high - p)\n            {\n                Sort(nums, low, p - 1);\n                low = p + 1;\n            }\n            else\n            {\n                Sort(nums, p + 1, high);\n                high = p - 1;\n            }\n        }\n    }\n\n    private static int Partition(int[] nums, int low, int high)\n    {\n        // Random pivot: defends against the sorted-input worst case.\n        int pivotIndex = low + Rng.Next(high - low + 1);\n        (nums[pivotIndex], nums[high]) = (nums[high], nums[pivotIndex]);\n\n        int pivot = nums[high];\n        int store = low;\n\n        for (int i = low; i < high; i++)\n            if (nums[i] < pivot)\n                (nums[store], nums[i]) = (nums[i], nums[store++]);\n\n        (nums[high], nums[store]) = (nums[store], nums[high]);\n        return store;\n    }\n\n    private static string Sorted(int[] a)\n    {\n        var copy = (int[])a.Clone();\n        QuickSort(copy);\n        return string.Join(\",\", copy);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Sorted(new[] { 5, 2, 9, 1, 5, 6 }));\n        Console.WriteLine(Sorted(new[] { 1, 2, 3, 4, 5 }));      // already sorted\n        Console.WriteLine(Sorted(new[] { 5, 4, 3, 2, 1 }));      // reversed\n        Console.WriteLine(Sorted(new[] { 7, 7, 7, 7 }));         // all equal\n        Console.WriteLine(Sorted(new[] { 42 }));\n        Console.WriteLine(Sorted(new int[0]));\n    }\n}\n```\n\n**Output**\n\n```\n1,2,5,5,6,9\n1,2,3,4,5\n1,2,3,4,5\n7,7,7,7\n42\n\n```",
   "tags": [
    "sorting",
    "quicksort",
-   "partition",
-   "divide-and-conquer"
+   "partitioning",
+   "stability",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Quicksort is O(n log n) on average but O(n^2) worst case, while merge sort is always O(n log n). Why is quicksort still used?",
+    "a": "Constants and memory. Quicksort sorts in place with excellent cache locality, since partitioning is a sequential scan, whereas merge sort needs O(n) auxiliary space and copies between buffers. In practice quicksort is typically two to three times faster on arrays despite the worse bound. The worst case is also avoidable: randomised pivots make it improbable, and introsort, which is what most standard libraries ship, monitors recursion depth and switches to heapsort if it degrades, giving a hard O(n log n) guarantee with quicksort's speed."
+   },
+   {
+    "q": "What happens on an array with many duplicate values?",
+    "a": "This two-way partition degrades badly: with all elements equal, every partition puts everything on one side and the recursion is quadratic. The fix is three-way partitioning, the Dutch national flag scheme, which groups elements less than, equal to and greater than the pivot, so all the duplicates are placed in one step and never recursed into. That turns the all-equal case from the worst input into the best one, which is why the sort-colors problem is really teaching a quicksort component."
+   },
+   {
+    "q": "Why is quicksort not stable, and when does that matter?",
+    "a": "Because partitioning swaps elements across long distances, so two equal elements can have their relative order reversed. It matters when sorting by successive keys, for instance ordering by department and then expecting ties to remain in the original order, which is exactly what LINQ's `OrderBy` then `ThenBy` relies on. That is why `OrderBy` uses a stable merge sort while `Array.Sort` uses unstable introsort, and choosing the wrong one produces bugs that are invisible until the data happens to contain ties."
+   }
   ]
  },
  {
@@ -3393,12 +3937,27 @@
   "subcategory": "Sorting",
   "difficulty": "Medium",
   "question": "Explain and implement merge sort.",
-  "answer": "Divide the array in half, recursively sort each half, then merge the two sorted halves. O(n log n) time always, O(n) extra space, stable. Good for linked lists and external sorting; the merge step compares fronts of the two halves.",
+  "answer": "**Logic**\n\nSplit the array in half, sort each half recursively, then merge the two sorted halves by repeatedly taking the smaller front element. Always O(n log n), regardless of the input, because the split is always even.\n\nIt needs O(n) auxiliary space for the merge, which is its main cost against quicksort. In exchange it is stable, provided the merge takes from the left half when the two fronts are equal, and its predictable access pattern makes it the basis of external sorting for data larger than memory.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void MergeSort(int[] nums)\n    {\n        if (nums == null || nums.Length < 2) return;\n\n        // One scratch buffer reused throughout, rather than allocating per merge.\n        var buffer = new int[nums.Length];\n        Sort(nums, buffer, 0, nums.Length - 1);\n    }\n\n    private static void Sort(int[] nums, int[] buffer, int low, int high)\n    {\n        if (low >= high) return;\n\n        int mid = low + (high - low) / 2;\n        Sort(nums, buffer, low, mid);\n        Sort(nums, buffer, mid + 1, high);\n\n        // Already in order: skip the merge entirely. Makes sorted input O(n).\n        if (nums[mid] <= nums[mid + 1]) return;\n\n        Merge(nums, buffer, low, mid, high);\n    }\n\n    private static void Merge(int[] nums, int[] buffer, int low, int mid, int high)\n    {\n        Array.Copy(nums, low, buffer, low, high - low + 1);\n\n        int i = low, j = mid + 1;\n\n        for (int k = low; k <= high; k++)\n        {\n            if (i > mid) nums[k] = buffer[j++];\n            else if (j > high) nums[k] = buffer[i++];\n            else if (buffer[j] < buffer[i]) nums[k] = buffer[j++];\n            else nums[k] = buffer[i++];    // <= takes from the LEFT: this is stability\n        }\n    }\n\n    private static string Sorted(int[] a)\n    {\n        var copy = (int[])a.Clone();\n        MergeSort(copy);\n        return string.Join(\",\", copy);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Sorted(new[] { 5, 2, 9, 1, 5, 6 }));\n        Console.WriteLine(Sorted(new[] { 1, 2, 3, 4, 5 }));\n        Console.WriteLine(Sorted(new[] { 5, 4, 3, 2, 1 }));\n        Console.WriteLine(Sorted(new[] { 2, 2, 1, 1 }));\n        Console.WriteLine(Sorted(new[] { 42 }));\n        Console.WriteLine(Sorted(new int[0]));\n    }\n}\n```\n\n**Output**\n\n```\n1,2,5,5,6,9\n1,2,3,4,5\n1,2,3,4,5\n1,1,2,2\n42\n\n```",
   "tags": [
    "sorting",
    "merge-sort",
-   "divide-and-conquer",
-   "stable"
+   "stability",
+   "external-sort",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Exactly which line makes it stable, and why?",
+    "a": "The final `else`, which takes from the left half when the two front elements are equal. The left half holds elements that came earlier in the original array, so preferring it preserves their relative order. Changing that comparison from strictly-less to less-or-equal on the right side would silently make the sort unstable while still producing correctly ordered output, which is a bug that only manifests when sorting by a secondary key. It is one character, and it is the whole stability guarantee."
+   },
+   {
+    "q": "Why sort data larger than memory with merge sort rather than quicksort?",
+    "a": "Because merging is purely sequential: it reads two runs front to back and writes one output stream, which is ideal for disk or network where sequential throughput vastly exceeds random access. Quicksort's partitioning jumps around the array, which is fine in RAM and disastrous on disk. External merge sort splits the data into memory-sized runs, sorts each, then merges them in passes, which is exactly how databases perform large ORDER BY operations and how the merge-k-sorted-lists problem generalises."
+   },
+   {
+    "q": "What does the nums[mid] <= nums[mid + 1] check buy you?",
+    "a": "It skips the merge when the two halves are already in order, which makes an already-sorted array O(n) instead of O(n log n) and helps substantially on partially sorted real-world data. It costs one comparison per merge. That idea taken further is the basis of TimSort, which detects existing sorted runs and merges them, and is why sorting nearly-sorted data in Python or Java is dramatically faster than the theoretical bound suggests."
+   }
   ]
  },
  {
@@ -3406,13 +3965,31 @@
   "subcategory": "Sorting",
   "difficulty": "Hard",
   "question": "Quickselect: find the kth smallest/largest in average O(n).",
-  "answer": "Like quicksort but only recurse into the partition containing the kth element. Partition around a pivot; if the pivot's final index equals k, return it; else recurse into the relevant side. Average O(n), worst O(n^2) (median-of-medians gives worst-case O(n)).",
+  "answer": "**Logic**\n\nQuicksort that recurses into only one side. After partitioning, the pivot sits at its final index; if that index is the target rank you are done, otherwise the answer lies entirely on one side and the other can be discarded.\n\nDiscarding half the work each time gives the average recurrence T(n) = T(n/2) + O(n), which sums to O(n) rather than O(n log n). The worst case is still O(n²) with a bad pivot, which randomisation makes negligible.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private static readonly Random Rng = new(7);\n\n    // k is 1-based: k = 1 returns the smallest element.\n    public static int KthSmallest(int[] nums, int k)\n    {\n        if (nums == null || k < 1 || k > nums.Length)\n            throw new ArgumentOutOfRangeException(nameof(k));\n\n        var a = (int[])nums.Clone();     // do not reorder the caller's array\n        int target = k - 1;\n        int low = 0, high = a.Length - 1;\n\n        while (true)\n        {\n            if (low == high) return a[low];\n\n            int p = Partition(a, low, high);\n\n            if (p == target) return a[p];\n            if (p < target) low = p + 1;   // answer is to the right\n            else high = p - 1;             // answer is to the left\n        }\n    }\n\n    private static int Partition(int[] a, int low, int high)\n    {\n        int pivotIndex = low + Rng.Next(high - low + 1);\n        (a[pivotIndex], a[high]) = (a[high], a[pivotIndex]);\n\n        int pivot = a[high], store = low;\n\n        for (int i = low; i < high; i++)\n            if (a[i] < pivot)\n                (a[store], a[i]) = (a[i], a[store++]);\n\n        (a[high], a[store]) = (a[store], a[high]);\n        return store;\n    }\n\n    public static void Main()\n    {\n        int[] a = { 7, 10, 4, 3, 20, 15 };\n\n        Console.WriteLine(KthSmallest(a, 1));\n        Console.WriteLine(KthSmallest(a, 3));\n        Console.WriteLine(KthSmallest(a, 6));\n        Console.WriteLine(string.Join(\",\", a));       // the input is untouched\n        Console.WriteLine(KthSmallest(new[] { 5 }, 1));\n        Console.WriteLine(KthSmallest(new[] { 2, 2, 2 }, 2));\n    }\n}\n```\n\n**Output**\n\n```\n3\n7\n20\n7,10,4,3,20,15\n5\n2\n```",
   "tags": [
    "sorting",
    "quickselect",
+   "partitioning",
    "selection",
-   "partition",
-   "hard"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the average O(n) rather than O(n log n)?",
+    "a": "Because only one side is recursed into. Quicksort solves both halves, giving T(n) = 2T(n/2) + O(n), which is O(n log n). Quickselect gives T(n) = T(n/2) + O(n), and that geometric series n + n/2 + n/4 + ... sums to 2n, so it is linear. The intuition is that the partitioning work halves each round rather than staying constant per level, which is a satisfying thing to be able to derive rather than recall."
+   },
+   {
+    "q": "Is there a way to guarantee O(n) in the worst case?",
+    "a": "Yes, the median-of-medians algorithm, which chooses a pivot guaranteed to be reasonably central by recursively finding the median of groups of five. It achieves worst-case linear time, and it is a genuine theoretical result worth naming. In practice it is rarely used because its constant factor is large enough that randomised quickselect beats it on real data, so the usual engineering answer is randomisation plus a fallback if the recursion depth degrades, mirroring introsort."
+   },
+   {
+    "q": "Why clone the array, and when would you not?",
+    "a": "Because quickselect reorders the array as a side effect, and a method named KthSmallest that scrambles its input is a nasty surprise, exactly as with ContainsDuplicate and sorting. The clone costs O(n) time and space, which does not change the asymptotic bound but is real. If the caller does not care, or is passing a temporary, an overload that operates in place is worth offering, documented clearly. The important part is that the mutation is a deliberate, stated choice rather than an accident."
+   },
+   {
+    "q": "When would you use a heap instead?",
+    "a": "When the data arrives as a stream, since quickselect needs the whole array materialised and revisits it repeatedly. A bounded min-heap of size k handles unbounded input in O(k) memory and gives the answer at any moment, at O(n log k) time. So quickselect wins on a static array in memory, and the heap wins for streams, for very small k relative to n, or when the input must not be touched at all."
+   }
   ]
  },
  {
@@ -3865,11 +4442,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Longest repeating character replacement: longest substring of one repeated letter after at most k replacements.",
-  "answer": "Sliding window tracking counts of each character and the highest single-character count in the window. The window is valid while windowLength minus maxCount is at most k; otherwise advance the left pointer. Never shrink maxCount - the answer only grows. Time O(n), space O(26).",
+  "answer": "**Logic**\n\nA window is valid when its length minus the count of its most frequent character is at most k, because everything else must be replaced. Expand the right edge; when the window becomes invalid, move the left edge forward.\n\nThe elegant part is that the maximum frequency never needs to be recomputed downwards. Since we only care about the longest window ever seen, letting a stale maximum persist can never produce an answer larger than the true one, so the window simply stops growing until a genuinely better frequency appears. That keeps it O(n) with no inner scan.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int CharacterReplacement(string s, int k)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        var counts = new int[26];\n        int left = 0, maxCount = 0, best = 0;\n\n        for (int right = 0; right < s.Length; right++)\n        {\n            counts[s[right] - 'A']++;\n            maxCount = Math.Max(maxCount, counts[s[right] - 'A']);\n\n            // Everything that is not the dominant character must be replaced.\n            while (right - left + 1 - maxCount > k)\n            {\n                counts[s[left] - 'A']--;\n                left++;\n                // maxCount is deliberately NOT recomputed: see the follow-up.\n            }\n\n            best = Math.Max(best, right - left + 1);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CharacterReplacement(\"ABAB\", 2));\n        Console.WriteLine(CharacterReplacement(\"AABABBA\", 1));\n        Console.WriteLine(CharacterReplacement(\"AAAA\", 0));     // nothing to replace\n        Console.WriteLine(CharacterReplacement(\"ABCDE\", 0));\n        Console.WriteLine(CharacterReplacement(\"A\", 5));        // k larger than the string\n        Console.WriteLine(CharacterReplacement(\"ABBB\", 2));\n    }\n}\n```\n\n**Output**\n\n```\n4\n4\n4\n1\n1\n4\n```",
   "tags": [
    "strings",
    "sliding-window",
-   "two-pointers"
+   "frequency",
+   "invariant",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is it safe to never decrease maxCount?",
+    "a": "Because the answer only ever asks for the longest window, not for the window at each position to be exactly valid. If maxCount is stale and too high, the validity test is too permissive and the window is allowed to stay wider than it should, but it cannot grow, since growth requires the test to pass with the current length. So the recorded best can never exceed a genuinely achievable length. The window effectively slides at fixed width until a real improvement appears. It is correct but genuinely subtle, and it is worth saying you would add a comment in production because the next reader will assume it is a bug."
+   },
+   {
+    "q": "What would recomputing maxCount properly cost?",
+    "a": "Scanning the 26 counts on every shrink, so O(26n) instead of O(n). That is still linear in practice and arguably clearer. If the alphabet were large or unbounded, recomputation would become genuinely expensive and you would need a max-heap or a count-of-counts structure. So the stale-maximum trick buys a constant factor and costs readability, which is a reasonable trade to decline if the team values obviousness."
+   },
+   {
+    "q": "Suppose the window had to contain at most two distinct characters instead.",
+    "a": "That is a different sliding window: shrink while the count of distinct characters in the window exceeds two, maintained with a dictionary and a distinct counter. Both are elastic windows, but the invariant differs, which changes the shrink condition entirely. Recognising that most of these problems share one skeleton and differ only in the invariant and how cheaply it can be maintained is the transferable insight across the whole family."
+   }
   ]
  },
  {
@@ -3877,11 +4470,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Permutation in string: does s2 contain a permutation of s1?",
-  "answer": "Fixed-size sliding window of length s1 over s2, maintaining a frequency count. Compare counts to the target count as the window slides, updating in O(1) per step by adding the entering character and removing the leaving one. Time O(n), space O(26).",
+  "answer": "**Logic**\n\nA permutation is an exact rearrangement, so this is a fixed-size window of length equal to the pattern, sliding one character at a time. Maintain the window's character counts and compare against the pattern's.\n\nAs with anagram search, tracking how many letters currently have the correct count turns the comparison into a single integer test, giving O(n) rather than O(n × alphabet). The answer is true as soon as any window matches, so it can return early.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool CheckInclusion(string pattern, string text)\n    {\n        if (string.IsNullOrEmpty(pattern)) return true;\n        if (string.IsNullOrEmpty(text) || text.Length < pattern.Length) return false;\n\n        var need = new int[26];\n        var window = new int[26];\n        foreach (char c in pattern) need[c - 'a']++;\n\n        int matches = 0;\n        for (int i = 0; i < 26; i++) if (need[i] == 0) matches++;\n\n        for (int i = 0; i < text.Length; i++)\n        {\n            int entering = text[i] - 'a';\n            window[entering]++;\n            if (window[entering] == need[entering]) matches++;\n            else if (window[entering] == need[entering] + 1) matches--;\n\n            if (i >= pattern.Length)\n            {\n                int leaving = text[i - pattern.Length] - 'a';\n                window[leaving]--;\n                if (window[leaving] == need[leaving]) matches++;\n                else if (window[leaving] == need[leaving] - 1) matches--;\n            }\n\n            if (matches == 26) return true;   // an exact multiset match\n        }\n\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CheckInclusion(\"ab\", \"eidbaooo\"));    // \"ba\"\n        Console.WriteLine(CheckInclusion(\"ab\", \"eidboaoo\"));    // not adjacent\n        Console.WriteLine(CheckInclusion(\"a\", \"a\"));\n        Console.WriteLine(CheckInclusion(\"abc\", \"ab\"));         // pattern longer\n        Console.WriteLine(CheckInclusion(\"adc\", \"dcda\"));\n        Console.WriteLine(CheckInclusion(\"hello\", \"ooolleoooleh\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\n```\n\nThe last case is the useful trap: every letter of `hello` appears in the text, but never as a contiguous block with the right counts.",
   "tags": [
    "strings",
    "sliding-window",
-   "hashmap"
+   "fixed-window",
+   "permutation",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the last test case return false when all the letters are present?",
+    "a": "Because a permutation must be contiguous and must match the multiset exactly. \"hello\" needs two l's and one o adjacent to an h and an e, and no window of length five in that text satisfies it. Candidates who solve this with a set of characters rather than counts, or who forget contiguity, pass the first few cases and fail this one. It is the reason the test is worth including rather than stopping at the obvious examples."
+   },
+   {
+    "q": "How does this differ from finding all anagrams of a pattern?",
+    "a": "Only in the output: this returns a boolean and can stop at the first match, while the anagram problem collects every starting index and must scan the whole text. The window machinery is identical. That is worth saying explicitly in an interview, because recognising that two differently worded problems share an implementation is exactly what lets you write the second one quickly after the first."
+   },
+   {
+    "q": "Suppose the pattern could be very long relative to the text.",
+    "a": "The early length check handles the impossible case, and beyond that the algorithm is already optimal at O(n) regardless of the pattern length, since the window comparison is O(1). The cost that does scale with the pattern is the initial count, which is O(m), so the total is O(n + m) and there is nothing to improve. If instead there were many patterns to test against one text, you would group them by length and by count signature so a single pass could check all patterns of the same length at once."
+   }
   ]
  },
  {

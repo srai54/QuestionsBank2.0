@@ -101,5 +101,5 @@ if (dry) {
 } else {
   writeSource(merged);
   for (const file of incomingFiles()) fs.unlinkSync(file);
-  console.log(`\nwrote questions.json (${merged.length} rows), cleared _incoming/`);
+  console.log(`\nwrote data/*.json (${merged.length} rows), cleared _incoming/`);
 }

@@ -75,5 +75,5 @@ if (dry) {
 } else {
   writeSource(rows.map((r, i) => ({ ...r, id: i + 1 })));
   for (const file of files) fs.unlinkSync(file);
-  console.log('\nwrote questions.json, cleared _enrich/');
+  console.log('\nwrote data/*.json, cleared _enrich/');
 }

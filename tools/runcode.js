@@ -13,6 +13,8 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { SOURCE, load } = require('./lib');
 
+// Each run gets its own Program.cs path guard: two concurrent runs sharing one
+// scratch project overwrite each other's source and produce nonsense diffs.
 const proj = process.argv[2];
 if (!proj) { console.error('usage: node tools/runcode.js <project-dir> [--only text]'); process.exit(2); }
 const onlyIdx = process.argv.indexOf('--only');
