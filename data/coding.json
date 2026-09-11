@@ -842,12 +842,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Encode and decode strings (serialize a list of strings).",
-  "answer": "Length-prefix encoding: for each string, write its length, a delimiter, then the string (e.g., '5#hello'). To decode, read the length up to the delimiter, then read exactly that many characters. This handles any characters including the delimiter. O(n) time.",
+  "answer": "**Logic**\n\nThe hard part is that any delimiter you pick might appear inside the data. Escaping works but is fiddly and slows decoding. Length-prefixing avoids the problem entirely: write each string's length, a marker, then the string itself.\n\nDecoding reads digits up to the marker, takes exactly that many characters, and repeats. Because the length is known before the content is read, the content is never scanned for anything, so no character is special and no escaping is needed.\n\nO(total length) in both directions.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Codec\n{\n    // length + '#' + content. No character inside the content is ever special.\n    public string Encode(IList<string> strings)\n    {\n        var sb = new StringBuilder();\n\n        foreach (string s in strings)\n            sb.Append(s.Length).Append('#').Append(s);\n\n        return sb.ToString();\n    }\n\n    public IList<string> Decode(string encoded)\n    {\n        var result = new List<string>();\n        int i = 0;\n\n        while (i < encoded.Length)\n        {\n            int marker = encoded.IndexOf('#', i);\n            if (marker < 0) throw new FormatException(\"missing length marker\");\n\n            int length = int.Parse(encoded[i..marker]);\n            int start = marker + 1;\n\n            if (start + length > encoded.Length) throw new FormatException(\"truncated payload\");\n\n            result.Add(encoded.Substring(start, length));\n            i = start + length;      // jump past the content, never scan it\n        }\n\n        return result;\n    }\n}\n\npublic class Solution\n{\n    private static string RoundTrip(params string[] input)\n    {\n        var codec = new Codec();\n        var decoded = codec.Decode(codec.Encode(input));\n\n        bool same = decoded.Count == input.Length;\n        for (int i = 0; same && i < input.Length; i++) same = decoded[i] == input[i];\n\n        return same ? \"ok: \" + codec.Encode(input) : \"MISMATCH\";\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(RoundTrip(\"hello\", \"world\"));\n        Console.WriteLine(RoundTrip(\"a#b\", \"c\"));         // the delimiter inside the data\n        Console.WriteLine(RoundTrip(\"\", \"\"));            // empty strings survive\n        Console.WriteLine(RoundTrip());                   // empty list\n        Console.WriteLine(RoundTrip(\"12#34\"));            // looks like a header\n        Console.WriteLine(RoundTrip(\"line1\\nline2\"));     // newlines are not special\n    }\n}\n```\n\n**Output**\n\n```\nok: 5#hello5#world\nok: 3#a#b1#c\nok: 0#0#\nok: \nok: 5#12#34\nok: 11#line1\nline2\n```",
   "tags": [
    "strings",
-   "encoding",
    "serialization",
-   "design"
+   "length-prefix",
+   "protocols",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is length-prefixing better than escaping a delimiter?",
+    "a": "Because the decoder never inspects the content. Once the length is known it copies exactly that many characters, so a '#' or a newline inside the data is just data, as the second and fifth test cases show. Escaping requires the decoder to scan every character looking for escape sequences, which is slower, and it requires the encoder and decoder to agree on an escaping scheme, which is a place bugs live. Length prefixing is what real protocols use for exactly this reason."
+   },
+   {
+    "q": "Where does this appear in real systems?",
+    "a": "Almost every binary protocol. HTTP uses Content-Length, and chunked transfer encoding is length-prefixing per chunk. Protocol Buffers, Thrift and most RPC framings prefix each field or message with its length. Redis's RESP protocol does the same. The alternative, delimiter-scanning, is what makes text protocols such as CSV so error-prone once the data can contain the delimiter, which is why CSV needs quoting rules and still trips people up."
+   },
+   {
+    "q": "What would you add for untrusted input?",
+    "a": "A bound on the declared length before allocating, because a header claiming two billion characters would attempt a huge allocation from a few bytes of input, which is a denial-of-service vector. The truncation check here catches a length exceeding the actual payload, but a real decoder should reject an implausible length outright rather than discovering the problem by running out of memory. That is the same decompression-bomb concern as in the decode-string problem."
+   }
   ]
  },
  {
@@ -883,12 +898,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Count and Say / run-length encoding of a string.",
-  "answer": "Iterate counting consecutive equal characters; append count + character to the result and reset when the character changes. O(n) time. Run-length encoding compresses runs; useful for strings with many repeats (poor for high-entropy data).",
+  "answer": "**Logic**\n\nEach term describes the previous one by reading off runs: \"1211\" is read as one 1, one 2, two 1s, giving \"111221\". So generating term n means applying a run-length encoding n-1 times starting from \"1\".\n\nThe encoding itself is a single pass: count consecutive equal characters, then append the count followed by the character.\n\nThe terms grow roughly geometrically, by a factor of about 1.3 each time, so this is only practical for small n. That growth rate is a known constant, and it is a good thing to mention.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    public static string CountAndSay(int n)\n    {\n        if (n <= 0) throw new ArgumentOutOfRangeException(nameof(n));\n\n        string current = \"1\";\n        for (int i = 1; i < n; i++) current = Encode(current);\n        return current;\n    }\n\n    // Run-length encode: count then character, for each run.\n    private static string Encode(string s)\n    {\n        var sb = new StringBuilder();\n        int i = 0;\n\n        while (i < s.Length)\n        {\n            char c = s[i];\n            int count = 0;\n\n            while (i < s.Length && s[i] == c) { i++; count++; }\n\n            sb.Append(count).Append(c);\n        }\n\n        return sb.ToString();\n    }\n\n    public static void Main()\n    {\n        for (int n = 1; n <= 6; n++) Console.WriteLine(CountAndSay(n));\n\n        Console.WriteLine(Encode(\"aaabbc\"));\n        Console.WriteLine(CountAndSay(10).Length);   // growth is geometric\n    }\n}\n```\n\n**Output**\n\n```\n1\n11\n21\n1211\n111221\n312211\n3a2b1c\n20\n```",
   "tags": [
    "strings",
    "run-length",
-   "encoding",
-   "counting"
+   "sequences",
+   "iteration",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the sequence never contain a digit above 3?",
+    "a": "Because a run of four or more identical digits cannot arise. If it did, the term before it would have described a run in a way that produced four equal digits, which the encoding's alternating count-then-character structure makes impossible. So the sequence uses only 1, 2 and 3. It is a small observation but a genuine invariant, and it is the kind of detail that shows you looked at the output rather than only the algorithm."
+   },
+   {
+    "q": "Why append count as a number rather than as a character?",
+    "a": "Because a count can reach double digits for general run-length encoding, and `(char)('0' + count)` would silently produce a wrong character beyond nine. For the count-and-say sequence specifically the counts never exceed three, so it would happen to work, but the Encode helper is also used on arbitrary input where it would not. Writing the general form costs nothing and removes a latent bug, which is the same issue as in the string compression problem."
+   },
+   {
+    "q": "Where is run-length encoding actually used?",
+    "a": "Anywhere data has long runs of identical values: fax transmission, bitmap and TIFF formats, and as a preprocessing stage inside other compressors. It is also why it is a poor general-purpose compressor, since data without runs expands rather than shrinks, with each single character becoming two. Real formats therefore pair it with an escape mechanism or fall back to raw blocks, which is the same trade-off noted in the string compression question."
+   }
   ]
  },
  {
@@ -896,11 +926,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Check if one string is a rotation of another.",
-  "answer": "s2 is a rotation of s1 iff they have the same length and s2 is a substring of s1+s1 (concatenate s1 with itself, then check contains(s2)). O(n) with an efficient substring search. Elegant single-check solution.",
+  "answer": "**Logic**\n\nA one-line insight: `s2` is a rotation of `s1` exactly when `s2` is a substring of `s1 + s1`. Concatenating a string with itself contains every rotation of it as a contiguous block, so a single substring search answers the question.\n\nThe length check first is not optional: without it, a short string would be found inside the doubled longer one and wrongly reported as a rotation.\n\nO(n) with a linear substring search such as KMP; .NET's `Contains` is typically vectorised and fast in practice.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsRotation(string s1, string s2)\n    {\n        if (s1 == null || s2 == null) return false;\n        if (s1.Length != s2.Length) return false;      // essential, not an optimisation\n        if (s1.Length == 0) return true;\n\n        // s1 + s1 contains every rotation of s1 as a contiguous substring.\n        return (s1 + s1).Contains(s2, StringComparison.Ordinal);\n    }\n\n    // Without the doubling trick: compare at every offset. O(n^2) but no allocation.\n    public static bool IsRotationManual(string s1, string s2)\n    {\n        if (s1 == null || s2 == null || s1.Length != s2.Length) return false;\n        if (s1.Length == 0) return true;\n\n        int n = s1.Length;\n        for (int offset = 0; offset < n; offset++)\n        {\n            bool match = true;\n            for (int i = 0; i < n && match; i++)\n                if (s1[(offset + i) % n] != s2[i]) match = false;\n\n            if (match) return true;\n        }\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsRotation(\"waterbottle\", \"erbottlewat\"));\n        Console.WriteLine(IsRotation(\"abcde\", \"cdeab\"));\n        Console.WriteLine(IsRotation(\"abcde\", \"abced\"));     // not a rotation\n        Console.WriteLine(IsRotation(\"abc\", \"abc\"));         // zero rotation\n        Console.WriteLine(IsRotation(\"ab\", \"abab\"));         // length differs\n        Console.WriteLine(IsRotationManual(\"aa\", \"aa\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\n```",
   "tags": [
    "strings",
    "rotation",
-   "substring"
+   "substring",
+   "ordinal",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does doubling the string contain every rotation?",
+    "a": "Because a rotation by k takes the suffix starting at k followed by the prefix ending at k, and in `s + s` those two pieces sit adjacent starting at index k. So every rotation appears as a window of length n somewhere in the doubled string, and no other length-n window is anything but a rotation. That last part is why the length check matters: restricted to equal lengths, being a substring and being a rotation are the same statement."
+   },
+   {
+    "q": "What exactly goes wrong without the length check?",
+    "a": "A shorter string can be a substring of the doubled longer one without being a rotation. 'ab' is contained in 'ababab' but is not a rotation of 'abab', since rotations preserve length. The test case with 'ab' and 'abab' catches it. It is a good illustration that a clever equivalence usually holds only under a precondition, and dropping the precondition silently breaks the equivalence rather than the code."
+   },
+   {
+    "q": "Why StringComparison.Ordinal?",
+    "a": "Because the default `Contains(string)` overload is ordinal in .NET, but the parallel `IndexOf(string)` is culture-sensitive, which is an inconsistency in the API that catches people out. Being explicit removes the ambiguity and guarantees a byte-wise comparison, which is what structural string matching needs. Culture-aware comparison can treat certain sequences as equal or ignore zero-width characters entirely, which would make a rotation check give different answers on different machines."
+   }
   ]
  },
  {
@@ -1493,12 +1539,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Check if a string has all unique characters without extra data structures.",
-  "answer": "If limited to ASCII/lowercase, use a bit vector (an int as a bitmask): for each char, check/set its bit; a repeated bit means a duplicate. O(n) time, O(1) space. With a boolean array of 128/256 it's also O(1) space. Sorting in place is O(n log n) if no extra structure allowed.",
+  "answer": "**Logic**\n\nWith a bounded alphabet, a bitmask replaces the hash set: one bit per character, tested and set as you scan. A repeat is detected when its bit is already set. That is O(n) time and a single integer of space.\n\nFor 26 lowercase letters an `int` suffices; for extended ASCII you would need a `long` pair or four. If the string is longer than the alphabet, the pigeonhole principle guarantees a duplicate, so it can be rejected without looking at the characters at all.\n\nThe truly no-extra-space option is sorting and comparing neighbours, at O(n log n), which mutates the input.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Assumes lowercase a-z. One bit per letter.\n    public static bool AllUnique(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return true;\n\n        // More characters than the alphabet means a repeat must exist.\n        if (s.Length > 26) return false;\n\n        int seen = 0;\n\n        foreach (char c in s)\n        {\n            int bit = 1 << (c - 'a');\n\n            if ((seen & bit) != 0) return false;   // already set: duplicate\n            seen |= bit;\n        }\n\n        return true;\n    }\n\n    // No assumption about the alphabet, but it reorders the caller's data.\n    public static bool AllUniqueBySorting(char[] chars)\n    {\n        Array.Sort(chars);\n        for (int i = 1; i < chars.Length; i++)\n            if (chars[i] == chars[i - 1]) return false;\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(AllUnique(\"abcdef\"));\n        Console.WriteLine(AllUnique(\"hello\"));\n        Console.WriteLine(AllUnique(\"\"));\n        Console.WriteLine(AllUnique(\"a\"));\n        Console.WriteLine(AllUnique(new string('a', 27)));    // rejected on length alone\n        Console.WriteLine(AllUniqueBySorting(\"Hello World\".ToCharArray()));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nFalse\nFalse\n```",
   "tags": [
    "strings",
    "bitmask",
-   "unique",
-   "hashset"
+   "pigeonhole",
+   "alphabet",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the length shortcut valid?",
+    "a": "The pigeonhole principle: with only 26 possible characters, any string of 27 or more must repeat one. So the answer is known without inspecting the contents, turning a linear scan into a constant-time rejection for long inputs. It is the same reasoning that guarantees a duplicate exists in the n+1 integers problem. The shortcut is only as valid as the alphabet assumption, which is why stating that assumption matters."
+   },
+   {
+    "q": "Is a bitmask really 'no extra data structure'?",
+    "a": "That depends on how strictly the question is read, and it is worth asking. A single int is O(1) space and not a data structure in any meaningful sense, so most interviewers accept it and many are looking for exactly that answer. If the intent is genuinely no auxiliary storage at all, sorting in place and comparing neighbours is the honest response, at O(n log n) and with the side effect of reordering the input. Offering both and naming the trade-off is better than guessing which was meant."
+   },
+   {
+    "q": "How would you extend this beyond 26 letters?",
+    "a": "For extended ASCII, four `long` values or a `Span<ulong>` of four elements covers 256 bits, with the character selecting both the word and the bit. Beyond that, for Unicode, a bitmask stops being practical since the code-point space is over a million, and a HashSet is the right structure. You would also have to decide whether to compare by code point or by grapheme, since a combining accent is several code points that render as one character."
+   }
   ]
  },
  {
@@ -4678,11 +4739,27 @@
   "subcategory": "Bits",
   "difficulty": "Easy",
   "question": "Count the number of set bits (Hamming weight).",
-  "answer": "Brian Kernighan's trick: repeatedly do n = n & (n-1) which clears the lowest set bit, counting iterations until n is 0. O(number of set bits). Alternatively shift and mask each bit (O(32)). Built-in popcount is fastest.",
+  "answer": "**Logic**\n\nThree approaches worth knowing. The naive one shifts and tests each of the 32 bits. Brian Kernighan's trick, `n &= n - 1`, clears the lowest set bit each iteration, so it loops only as many times as there are set bits. And in .NET 6 or later, `BitOperations.PopCount` compiles to a single CPU instruction where available.\n\nSubtracting one flips the lowest set bit to zero and sets everything below it, so ANDing with the original clears exactly that bit. That identity underpins several bit tricks.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Numerics;\n\npublic class Solution\n{\n    // Kernighan: loops once per SET bit, not once per bit.\n    public static int CountBits(uint n)\n    {\n        int count = 0;\n\n        while (n != 0)\n        {\n            n &= n - 1;    // clears the lowest set bit\n            count++;\n        }\n\n        return count;\n    }\n\n    // Naive: always 32 iterations.\n    public static int CountBitsNaive(uint n)\n    {\n        int count = 0;\n        for (int i = 0; i < 32; i++) if ((n & (1u << i)) != 0) count++;\n        return count;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CountBits(11));            // 1011\n        Console.WriteLine(CountBits(128));           // a single bit\n        Console.WriteLine(CountBits(0));\n        Console.WriteLine(CountBits(uint.MaxValue)); // all 32 set\n        Console.WriteLine(CountBitsNaive(11));\n        Console.WriteLine(BitOperations.PopCount(11u));   // hardware instruction\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n0\n32\n3\n3\n```",
   "tags": [
    "bits",
-   "hamming-weight",
-   "kernighan"
+   "kernighan",
+   "popcount",
+   "bit-tricks",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does n &= n - 1 clear the lowest set bit?",
+    "a": "Subtracting one from a binary number turns its lowest set bit into a zero and turns every bit below it into a one. ANDing that with the original keeps only the bits above the lowest set bit, since the lowest one is now zero on one side and everything below it is zero on the other. For 1100, subtracting one gives 1011, and the AND gives 1000. The same identity gives the power-of-two test, since a number with exactly one set bit becomes zero after one clearing."
+   },
+   {
+    "q": "Why use uint rather than int here?",
+    "a": "Because right-shifting a negative int in C# performs an arithmetic shift, filling with ones, so a loop shifting until the value reaches zero would never terminate for a negative input. Using uint makes the shift logical and the loop safe. The Kernighan version above happens to work for int too, since subtraction and AND are bit patterns rather than arithmetic in this context, but declaring the parameter unsigned states the intent that the value is a bit pattern rather than a number."
+   },
+   {
+    "q": "When does the difference between these actually matter?",
+    "a": "Rarely in application code, and a great deal in hot loops. PopCount is a single instruction on modern hardware and is what you should use in .NET 6 or later. Kernighan's is the right hand-rolled fallback and is dramatically faster on sparse values, since a number with two set bits loops twice rather than 32 times. The naive version is worth writing only to explain the problem. Population count matters in practice for bitset operations, Bloom filters, chess engines and similarity measures such as Hamming distance."
+   }
   ]
  },
  {
@@ -4690,11 +4767,27 @@
   "subcategory": "Bits",
   "difficulty": "Easy",
   "question": "Single number: find the element that appears once (others twice).",
-  "answer": "XOR all elements; pairs cancel (x^x=0) leaving the unique number. O(n) time, O(1) space. For 'appears once, others thrice', use bit counting mod 3 or two accumulators (ones/twos).",
+  "answer": "**Logic**\n\nXOR everything together. Because `a ^ a == 0` and `a ^ 0 == a`, every paired value cancels itself and only the unpaired one survives. XOR is commutative and associative, so the order of the array does not matter.\n\nO(n) time, O(1) space, which beats both the hash-set approach at O(n) space and the sort-and-scan at O(n log n) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int SingleNumber(int[] nums)\n    {\n        int result = 0;\n        foreach (int n in nums) result ^= n;   // pairs cancel, the lone value remains\n        return result;\n    }\n\n    // Two values appear once, the rest twice. Partition by a differing bit.\n    public static int[] TwoSingleNumbers(int[] nums)\n    {\n        int xorOfBoth = 0;\n        foreach (int n in nums) xorOfBoth ^= n;\n\n        // Any set bit here is a bit where the two answers differ.\n        int differingBit = xorOfBoth & -xorOfBoth;   // isolates the lowest set bit\n\n        int a = 0, b = 0;\n        foreach (int n in nums)\n        {\n            if ((n & differingBit) != 0) a ^= n;\n            else b ^= n;\n        }\n\n        return new[] { Math.Min(a, b), Math.Max(a, b) };\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(SingleNumber(new[] { 2, 2, 1 }));\n        Console.WriteLine(SingleNumber(new[] { 4, 1, 2, 1, 2 }));\n        Console.WriteLine(SingleNumber(new[] { 1 }));\n        Console.WriteLine(SingleNumber(new[] { -3, -3, 7 }));       // negatives are fine\n        Console.WriteLine(string.Join(\",\", TwoSingleNumbers(new[] { 1, 2, 1, 3, 2, 5 })));\n        Console.WriteLine(string.Join(\",\", TwoSingleNumbers(new[] { -1, 0 })));\n    }\n}\n```\n\n**Output**\n\n```\n1\n4\n1\n7\n3,5\n-1,0\n```",
   "tags": [
    "bits",
    "xor",
-   "single-number"
+   "cancellation",
+   "two-singles",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Explain the n & -n trick for isolating the lowest set bit.",
+    "a": "Negation in two's complement is bitwise inversion plus one, which leaves the lowest set bit unchanged while inverting everything above it. ANDing the original with its negation therefore keeps exactly that one bit. For 1100, the negation is 0100, and the AND gives 0100. It is the standard idiom for extracting the lowest set bit and is also the basis of how Fenwick trees compute their index ranges."
+   },
+   {
+    "q": "What if every other element appears three times rather than twice?",
+    "a": "XOR no longer cancels, since three copies leave one behind. The usual solutions are to count set bits per position across all numbers and take each count modulo three, which leaves the bits of the lone value, or to use two accumulators tracking bits seen once and twice with a small state machine. The first is easier to explain and O(32n), the second is O(n) with a few operations. Recognising that the cancellation property is specific to pairs is the key insight."
+   },
+   {
+    "q": "Why does this work for negative numbers?",
+    "a": "Because XOR operates on the bit pattern, not on the numeric interpretation, so two's complement representation is irrelevant to the cancellation. Any value XORed with itself is zero regardless of sign. That is a genuine advantage over sum-based approaches, which can overflow, and over approaches that assume a value range. It also means the technique extends unchanged to any fixed-width type."
+   }
   ]
  },
  {
@@ -4702,11 +4795,27 @@
   "subcategory": "Bits",
   "difficulty": "Medium",
   "question": "Reverse the bits of a 32-bit integer.",
-  "answer": "Iterate 32 times: shift the result left, OR in the lowest bit of n, then shift n right. O(32) time, O(1) space. Or use divide-and-conquer bit swaps (swap halves, quarters, ...) for O(log bits).",
+  "answer": "**Logic**\n\nThe straightforward version shifts the result left, takes the input's lowest bit, and shifts the input right, 32 times. That is O(1) since the width is fixed.\n\nThe divide-and-conquer version is far faster: swap adjacent bits, then adjacent pairs, then nibbles, then bytes, then halves, using masks. Five steps instead of thirty-two, and it is how real implementations do it.\n\nUse `uint` throughout. Right-shifting a negative `int` in C# is arithmetic, filling with ones, so the loop would never clear and the result would be wrong.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // 32 iterations, one bit at a time.\n    public static uint ReverseBits(uint n)\n    {\n        uint result = 0;\n\n        for (int i = 0; i < 32; i++)\n        {\n            result = (result << 1) | (n & 1);   // take the lowest bit of n\n            n >>= 1;\n        }\n\n        return result;\n    }\n\n    // Divide and conquer: swap bits, pairs, nibbles, bytes, halves. Five steps.\n    public static uint ReverseBitsFast(uint n)\n    {\n        n = ((n & 0xAAAAAAAA) >> 1) | ((n & 0x55555555) << 1);   // adjacent bits\n        n = ((n & 0xCCCCCCCC) >> 2) | ((n & 0x33333333) << 2);   // pairs\n        n = ((n & 0xF0F0F0F0) >> 4) | ((n & 0x0F0F0F0F) << 4);   // nibbles\n        n = ((n & 0xFF00FF00) >> 8) | ((n & 0x00FF00FF) << 8);   // bytes\n        n = (n >> 16) | (n << 16);                               // halves\n        return n;\n    }\n\n    private static string Bin(uint n) => System.Convert.ToString(n, 2).PadLeft(32, '0');\n\n    public static void Main()\n    {\n        Console.WriteLine(ReverseBits(43261596));\n        Console.WriteLine(ReverseBitsFast(43261596));\n        Console.WriteLine(ReverseBits(0));\n        Console.WriteLine(ReverseBits(uint.MaxValue));\n        Console.WriteLine(ReverseBits(1));              // becomes the top bit\n        Console.WriteLine(Bin(ReverseBitsFast(1)));\n    }\n}\n```\n\n**Output**\n\n```\n964176192\n964176192\n0\n4294967295\n2147483648\n10000000000000000000000000000000\n```",
   "tags": [
    "bits",
-   "reverse",
-   "integer"
+   "divide-and-conquer",
+   "masks",
+   "unsigned",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does using int rather than uint break this?",
+    "a": "Because `>>` on a signed int in C# is an arithmetic shift, propagating the sign bit, so a negative value never becomes zero by shifting and the high bits fill with ones rather than zeros. The loop would produce a corrupted result. C# does have `>>>` for an unsigned right shift since version 11, but declaring the parameter as uint is clearer: it says the value is a bit pattern, not a number, which is exactly what a bit-reversal operates on."
+   },
+   {
+    "q": "How does the mask version work?",
+    "a": "Each step swaps groups of a given size. The 0xAAAAAAAA mask selects the odd-positioned bits and 0x55555555 the even ones, so shifting each toward the other and ORing swaps every adjacent pair. Doubling the group size each step swaps pairs, then nibbles, then bytes, then the two halves, and after five steps every bit has travelled to its mirrored position. It is the same divide-and-conquer shape as a butterfly network, and the identical structure computes a population count."
+   },
+   {
+    "q": "Where does bit reversal actually matter?",
+    "a": "In fast Fourier transforms, where the output arrives in bit-reversed index order and must be permuted back. It also appears in some hashing and interleaving schemes, and in hardware contexts where a bus or protocol transmits bits in the opposite order to the host's convention. Outside those it is rare, which is worth saying: the question tests bit manipulation fluency more than it tests a routinely needed operation."
+   }
   ]
  },
  {
@@ -4740,11 +4849,27 @@
   "subcategory": "Bits",
   "difficulty": "Medium",
   "question": "Counting bits: number of set bits for every number 0..n.",
-  "answer": "DP with the relation bits[i] = bits[i >> 1] + (i & 1) (the count for i is the count for i/2 plus the last bit). O(n) time, O(n) space. Elegant use of the fact that i's bits equal i/2's bits plus its lowest bit.",
+  "answer": "**Logic**\n\nCalling a popcount routine n times is O(n log n). Dynamic programming makes it O(n), by observing that every number relates to a smaller one whose answer is already known.\n\nThe cleanest recurrence uses `i & (i - 1)`, which clears the lowest set bit and therefore yields a strictly smaller number with exactly one fewer set bit. So `bits[i] = bits[i & (i - 1)] + 1`.\n\nAn equivalent formulation uses `i >> 1` plus the lowest bit, since shifting right drops one bit whose value is `i & 1`.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int[] CountBits(int n)\n    {\n        if (n < 0) throw new ArgumentOutOfRangeException(nameof(n));\n\n        var bits = new int[n + 1];\n\n        // i & (i-1) clears the lowest set bit, giving a smaller, already-solved number.\n        for (int i = 1; i <= n; i++)\n            bits[i] = bits[i & (i - 1)] + 1;\n\n        return bits;\n    }\n\n    // Equivalent: drop the lowest bit by shifting, then add it back.\n    public static int[] CountBitsShift(int n)\n    {\n        var bits = new int[n + 1];\n        for (int i = 1; i <= n; i++)\n            bits[i] = bits[i >> 1] + (i & 1);\n        return bits;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", CountBits(5)));\n        Console.WriteLine(string.Join(\",\", CountBitsShift(5)));\n        Console.WriteLine(string.Join(\",\", CountBits(0)));\n        Console.WriteLine(string.Join(\",\", CountBits(1)));\n        Console.WriteLine(string.Join(\",\", CountBits(8)));\n        Console.WriteLine(CountBits(1000)[1000]);\n    }\n}\n```\n\n**Output**\n\n```\n0,1,1,2,1,2\n0,1,1,2,1,2\n0\n0,1\n0,1,1,2,1,2,2,3,1\n6\n```",
   "tags": [
    "bits",
    "dp",
-   "counting-bits"
+   "popcount",
+   "recurrence",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is i & (i - 1) guaranteed to be a smaller, already-computed index?",
+    "a": "Because clearing the lowest set bit strictly decreases the value, so the index is always below i and was filled on an earlier iteration. That ordering is what makes a single forward loop valid with no recursion or memo checks. It is also why the recurrence is exactly 'one fewer set bit': the operation removes precisely one bit, so the count is one more than that of the result."
+   },
+   {
+    "q": "Which of the two formulations do you prefer?",
+    "a": "The shift version is usually easier for a reader to verify, since 'drop the last bit and add it back' is immediately intuitive, whereas the AND version requires knowing the clearing identity. They are the same complexity and performance. I would write the shift version with a brief comment, and mention the AND version as the variant that generalises to problems where you want to iterate over set bits rather than over all bits."
+   },
+   {
+    "q": "Could you just call PopCount in a loop?",
+    "a": "Yes, and with hardware popcount it is a single instruction per number, so in practice it is competitive and arguably simpler. The DP is O(n) against O(n) with a larger constant for a software popcount, or O(n) either way with hardware support. The DP's real advantage is that it needs no intrinsic and is portable, and that it demonstrates the recurrence, which is what the question is testing. For production on .NET 6 or later I would use BitOperations.PopCount."
+   }
   ]
  },
  {
@@ -5130,11 +5255,27 @@
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "Word pattern: does a string of words follow a pattern like 'abba'?",
-  "answer": "Split into words and check a bijection between pattern characters and words using two maps, exactly as with isomorphic strings, plus an equal-length check up front. Time O(n), space O(n).",
+  "answer": "**Logic**\n\nA bijection between pattern characters and words, so two maps are needed, one in each direction. A single forward map accepts `abba` against `dog dog dog dog`, because every character maps consistently to `dog`; only the reverse map catches that `dog` is already claimed.\n\nCompare the counts before looping: a four-character pattern against three words must be rejected immediately, and doing it first avoids an index error.\n\nO(n) time, O(distinct) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool WordPattern(string pattern, string text)\n    {\n        if (pattern == null || text == null) return false;\n\n        string[] words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);\n        if (words.Length != pattern.Length) return false;   // check before indexing\n\n        var charToWord = new Dictionary<char, string>();\n        var wordToChar = new Dictionary<string, char>();\n\n        for (int i = 0; i < pattern.Length; i++)\n        {\n            char c = pattern[i];\n            string w = words[i];\n\n            bool hasChar = charToWord.TryGetValue(c, out string mappedWord);\n            bool hasWord = wordToChar.TryGetValue(w, out char mappedChar);\n\n            if (hasChar != hasWord) return false;            // mapped one way only\n            if (hasChar && (mappedWord != w || mappedChar != c)) return false;\n\n            charToWord[c] = w;\n            wordToChar[w] = c;\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(WordPattern(\"abba\", \"dog cat cat dog\"));\n        Console.WriteLine(WordPattern(\"abba\", \"dog cat cat fish\"));\n        Console.WriteLine(WordPattern(\"aaaa\", \"dog cat cat dog\"));\n        Console.WriteLine(WordPattern(\"abba\", \"dog dog dog dog\"));   // not one-to-one\n        Console.WriteLine(WordPattern(\"ab\", \"dog cat cat\"));         // length mismatch\n        Console.WriteLine(WordPattern(\"\", \"\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nFalse\nFalse\nFalse\nTrue\n```",
   "tags": [
    "strings",
    "hashmap",
-   "mapping"
+   "bijection",
+   "tokenisation",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the length check before the loop rather than inside it?",
+    "a": "Because indexing `words[i]` with a pattern longer than the word list throws, and a pattern shorter than the list would silently ignore the trailing words and return true for a non-match. Checking first makes both cases a clean rejection. It is the same discipline as comparing string lengths before an anagram check: cheap up front, and it removes a whole class of index errors from the main loop."
+   },
+   {
+    "q": "How does RemoveEmptyEntries change the behaviour?",
+    "a": "It collapses runs of spaces, so \"dog  cat\" with two spaces parses as two words rather than three with an empty one in the middle. That is usually what you want, but it means the function silently accepts sloppy input rather than rejecting it. If the contract required exactly single-space separation, you would split without the option and validate, because quietly normalising input is sometimes hiding a caller's bug."
+   },
+   {
+    "q": "This is the same shape as isomorphic strings. What is actually different?",
+    "a": "Only the tokenisation: characters map to words instead of to characters. The bijection requirement, the two maps and the failure mode are identical. A shared generic helper taking two sequences would serve both, which is worth saying because interviewers often ask them consecutively to see whether you recognise the repeat or start from scratch."
+   }
   ]
  },
  {
@@ -5142,11 +5283,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "String compression: compress a character array in place as counts of repeated characters.",
-  "answer": "Two pointers - read and write. Count each run, write the character, then write its count digit by digit if greater than one. Because the count consumes at most as many slots as the run, writing never overtakes reading. Time O(n), space O(1).",
+  "answer": "**Logic**\n\nTwo pointers: a read pointer scanning runs and a write pointer laying down the compressed form. For each run, write the character, then write its count as digits only when the count exceeds one.\n\nThe write pointer can never overtake the read pointer, because a run of length one writes one character and consumes one, and longer runs always write fewer characters than they consume. That invariant is what makes it safe in place.\n\nCounts of ten or more take several characters, so the digits must be written individually rather than as a single char. O(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Compress(char[] chars)\n    {\n        if (chars == null || chars.Length == 0) return 0;\n\n        int write = 0, read = 0;\n\n        while (read < chars.Length)\n        {\n            char current = chars[read];\n            int runLength = 0;\n\n            while (read < chars.Length && chars[read] == current) { read++; runLength++; }\n\n            chars[write++] = current;\n\n            if (runLength > 1)\n            {\n                // A count of 12 is two characters, not one: write the digits.\n                foreach (char digit in runLength.ToString())\n                    chars[write++] = digit;\n            }\n        }\n\n        return write;   // the compressed length\n    }\n\n    private static string Show(string input)\n    {\n        var chars = input.ToCharArray();\n        int length = Compress(chars);\n        return new string(chars, 0, length) + \" (\" + length + \")\";\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(\"aabbccc\"));\n        Console.WriteLine(Show(\"a\"));                    // no count for a single\n        Console.WriteLine(Show(\"abc\"));                  // longer than the input\n        Console.WriteLine(Show(new string('a', 12)));    // two-digit count\n        Console.WriteLine(Show(\"aabbbbbbbbbbbb\"));\n        Console.WriteLine(Show(\"\"));\n    }\n}\n```\n\n**Output**\n\n```\na2b2c3 (6)\na (1)\nabc (3)\na12 (3)\na2b12 (5)\n (0)\n```",
   "tags": [
    "strings",
    "two-pointers",
-   "in-place"
+   "in-place",
+   "run-length",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why can the write pointer never overtake the read pointer?",
+    "a": "Because a run of length one writes exactly one character and consumes one, and any longer run writes the character plus at most as many digits as would fit, which is always fewer than the run consumed. A run of 12 consumes 12 cells and writes 3. So the write index is always at most the read index, and no unread data can be clobbered. Stating that invariant is the substance of the question, since it is what makes the in-place requirement achievable at all."
+   },
+   {
+    "q": "Why write the count digit by digit rather than as a single character?",
+    "a": "Because a count of 12 is two characters. Writing `(char)(count + '0')` works only for counts up to nine and silently produces a wrong character beyond that, so a run of twelve would compress to something unreadable rather than 'a12'. The twelve-character test exists precisely to catch that, and it is the single most common bug in this problem."
+   },
+   {
+    "q": "The output can be longer than the input, as with 'abc'. Is that a problem?",
+    "a": "For this problem no, because single characters are written without a count, so the output is never longer than the input; 'abc' compresses to itself at the same length. Real run-length encoding without that rule can expand data, which is why practical compressors use a marker byte or fall back to storing a raw block when encoding would grow it. It is worth mentioning, since 'compression that sometimes makes things bigger' is a genuine property of RLE that the special case here quietly avoids."
+   }
   ]
  },
  {
@@ -5154,11 +5311,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Zigzag conversion: write a string in a zigzag on n rows and read it row by row.",
-  "answer": "Simulate with one string builder per row, walking the input while bouncing the row index between 0 and n-1 with a direction flag. Concatenate the rows at the end. Time O(n), space O(n). The closed-form index arithmetic is faster but far easier to get wrong.",
+  "answer": "**Logic**\n\nSimulate the walk rather than computing positions with a formula. Keep one buffer per row, a current row index and a direction. Append each character to its row, then move the row index by the direction, flipping the direction at the top and bottom rows.\n\nConcatenating the rows at the end gives the answer. O(n) time and space.\n\nThe single-row case must be handled, otherwise the direction never flips and the walk runs off the end. That is the case most implementations forget.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    public static string Convert(string s, int numRows)\n    {\n        if (string.IsNullOrEmpty(s) || numRows <= 1) return s;   // one row: no zigzag\n        if (numRows >= s.Length) return s;                        // never turns around\n\n        var rows = new StringBuilder[numRows];\n        for (int i = 0; i < numRows; i++) rows[i] = new StringBuilder();\n\n        int row = 0, direction = 1;   // +1 going down, -1 going up\n\n        foreach (char c in s)\n        {\n            rows[row].Append(c);\n\n            // Flip at the top and bottom edges.\n            if (row == 0) direction = 1;\n            else if (row == numRows - 1) direction = -1;\n\n            row += direction;\n        }\n\n        var sb = new StringBuilder(s.Length);\n        foreach (var r in rows) sb.Append(r);\n        return sb.ToString();\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Convert(\"PAYPALISHIRING\", 3));\n        Console.WriteLine(Convert(\"PAYPALISHIRING\", 4));\n        Console.WriteLine(Convert(\"AB\", 1));          // one row: unchanged\n        Console.WriteLine(Convert(\"ABC\", 5));         // more rows than characters\n        Console.WriteLine(Convert(\"\", 3));\n        Console.WriteLine(Convert(\"ABCDE\", 2));\n    }\n}\n```\n\n**Output**\n\n```\nPAHNAPLSIIGYIR\nPINALSIGYAHRPI\nAB\nABC\n\nACEBD\n```",
   "tags": [
    "strings",
    "simulation",
-   "implementation"
+   "zigzag",
+   "edge-cases",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must numRows of one be special-cased?",
+    "a": "Because with a single row there is no bottom edge distinct from the top, so the direction never flips and the row index walks off the end of the array on the second character. The zigzag also degenerates to the original string, so returning it directly is both the correct answer and the safe one. It is the classic forgotten edge case here, and it fails with an index exception rather than a wrong answer, which at least makes it obvious once tested."
+   },
+   {
+    "q": "There is a closed-form way to compute each character's row. Would you use it?",
+    "a": "You can: the pattern repeats every 2 * (numRows - 1) characters, so a character's row is derivable from its index modulo that cycle, with a reflection for the second half. It avoids the per-row buffers and allows reading directly in output order. It is genuinely harder to get right, especially the reflection, and saves memory rather than time. I would write the simulation first for clarity and only switch if the buffers mattered."
+   },
+   {
+    "q": "Why check numRows >= s.Length separately?",
+    "a": "It is an optimisation rather than a correctness fix: with more rows than characters the walk never reaches the bottom, so each character lands on its own row and concatenating them returns the original string. The simulation would produce the same answer, just with wasted allocation of empty buffers. Returning early makes the intent explicit and avoids allocating potentially many unused StringBuilders when numRows is large."
+   }
   ]
  },
  {
@@ -5166,11 +5339,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Multiply two non-negative numbers given as strings without converting to integers.",
-  "answer": "Use an array of length m+n for digit products. For each pair of digits, add the product at position i+j+1 and carry into i+j. Afterwards normalise carries and strip leading zeros. Time O(mn), space O(m+n).",
+  "answer": "**Logic**\n\nLong multiplication, digit by digit. The key placement fact is that multiplying the digit at index i of one number by the digit at index j of the other contributes to positions i+j and i+j+1 of the result, counting from the left.\n\nSo allocate `m + n` slots, accumulate every product into its low position, and carry into the high one. Because the carry is folded in as you go, no value ever exceeds what a single int can hold.\n\nFinally strip leading zeros, and handle an all-zero result as \"0\". O(m × n) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    public static string Multiply(string a, string b)\n    {\n        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return \"0\";\n        if (a == \"0\" || b == \"0\") return \"0\";       // avoids a string of zeros\n\n        int m = a.Length, n = b.Length;\n        var digits = new int[m + n];                 // the product never needs more\n\n        for (int i = m - 1; i >= 0; i--)\n            for (int j = n - 1; j >= 0; j--)\n            {\n                int product = (a[i] - '0') * (b[j] - '0');\n\n                int low = i + j + 1;                 // units position of this product\n                int high = i + j;                    // carry position\n\n                int sum = product + digits[low];\n                digits[low] = sum % 10;\n                digits[high] += sum / 10;            // carry folded in immediately\n            }\n\n        var sb = new StringBuilder();\n        foreach (int d in digits)\n        {\n            if (sb.Length == 0 && d == 0) continue;  // skip leading zeros\n            sb.Append(d);\n        }\n\n        return sb.Length == 0 ? \"0\" : sb.ToString();\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Multiply(\"2\", \"3\"));\n        Console.WriteLine(Multiply(\"123\", \"456\"));\n        Console.WriteLine(Multiply(\"0\", \"52\"));\n        Console.WriteLine(Multiply(\"999\", \"999\"));\n        Console.WriteLine(Multiply(\"123456789\", \"987654321\"));   // exceeds int range\n        Console.WriteLine(Multiply(\"9\", \"99\"));\n    }\n}\n```\n\n**Output**\n\n```\n6\n56088\n0\n998001\n121932631112635269\n891\n```",
   "tags": [
    "strings",
-   "math",
-   "simulation"
+   "arithmetic",
+   "bignum",
+   "carry",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why do the digits at i and j land at positions i+j and i+j+1?",
+    "a": "Because with left-to-right indexing, the digit at index i of an m-digit number has place value 10^(m-1-i). Multiplying two such digits gives place value 10^(m+n-2-i-j), which in an array of length m+n is index i+j+1 for the units and i+j for the carry. Deriving it rather than recalling it is worth doing, because getting the offset wrong by one shifts the entire answer by a factor of ten and the bug looks like a carry error."
+   },
+   {
+    "q": "Why does the carry never overflow an int?",
+    "a": "Because the product of two digits is at most 81, and adding the existing slot value keeps the sum under about 100, so the carry is at most 9 or so and the accumulated value in any slot stays small. Folding the carry in immediately rather than deferring it is what keeps the bound tight; a version that summed all partial products first before carrying would accumulate much larger values and could overflow for long inputs."
+   },
+   {
+    "q": "Is there a faster algorithm?",
+    "a": "Yes. Karatsuba multiplication splits each number in half and uses three recursive multiplications instead of four, giving roughly O(n^1.585), and it beats long multiplication once numbers reach a few hundred digits. Beyond that, FFT-based methods reach O(n log n) and are what real big-number libraries use for very large values. For interview-sized inputs the quadratic version is correct and expected, but naming Karatsuba shows you know where the ceiling is."
+   }
   ]
  },
  {
@@ -5178,11 +5367,27 @@
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "Add binary: add two binary strings and return the sum as a string.",
-  "answer": "Walk both strings from the end with a carry, summing digit by digit and appending the result modulo two. Continue while either string has digits or the carry is non-zero, then reverse. Time O(max(m,n)), space O(max(m,n)).",
+  "answer": "**Logic**\n\nSchool addition in base two. Walk both strings from the right, adding the digits plus a carry; the output bit is the sum modulo two and the new carry is the sum divided by two. Continue while either string has digits left or a carry remains, so a final carry produces one more bit.\n\nBuilding the result in reverse and reversing once at the end avoids repeatedly inserting at the front, which would be quadratic.\n\nO(max(m, n)) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    public static string AddBinary(string a, string b)\n    {\n        if (string.IsNullOrEmpty(a)) return b ?? \"0\";\n        if (string.IsNullOrEmpty(b)) return a;\n\n        var sb = new StringBuilder();\n        int i = a.Length - 1, j = b.Length - 1, carry = 0;\n\n        // The carry is part of the condition, so a final carry emits a bit.\n        while (i >= 0 || j >= 0 || carry != 0)\n        {\n            int sum = carry;\n            if (i >= 0) sum += a[i--] - '0';\n            if (j >= 0) sum += b[j--] - '0';\n\n            sb.Append((char)('0' + (sum % 2)));\n            carry = sum / 2;\n        }\n\n        // Built backwards, so one reverse rather than n front-insertions.\n        var chars = sb.ToString().ToCharArray();\n        Array.Reverse(chars);\n        return new string(chars);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(AddBinary(\"11\", \"1\"));\n        Console.WriteLine(AddBinary(\"1010\", \"1011\"));\n        Console.WriteLine(AddBinary(\"0\", \"0\"));\n        Console.WriteLine(AddBinary(\"1\", \"1\"));          // carry creates a new bit\n        Console.WriteLine(AddBinary(\"1111\", \"1\"));       // cascading carry\n        Console.WriteLine(AddBinary(\"100\", \"110010\"));   // different lengths\n    }\n}\n```\n\n**Output**\n\n```\n100\n10101\n0\n10\n10000\n110110\n```",
   "tags": [
    "strings",
-   "math",
-   "bit-manipulation"
+   "binary",
+   "carry",
+   "stringbuilder",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why build the string backwards and reverse, rather than inserting at the front?",
+    "a": "Because `StringBuilder.Insert(0, ...)` shifts the entire buffer on every call, making the whole loop quadratic. Appending is amortised O(1) and a single reverse at the end is O(n), so the total stays linear. It is the same reasoning as using a StringBuilder rather than string concatenation in a loop, and it is one of the most common accidental quadratic patterns in real code."
+   },
+   {
+    "q": "Why not parse to integers, add, and convert back?",
+    "a": "Because the inputs can exceed any built-in type. A 64-bit long caps out around 19 decimal digits or 63 binary ones, and these problems deliberately allow longer strings. `Convert.ToInt64(s, 2)` would throw or silently overflow. This is the same reason the add-two-numbers linked list and the string multiplication problems exist: they are miniature big-number arithmetic, and the string representation is the point rather than an obstacle."
+   },
+   {
+    "q": "How would this change for an arbitrary base?",
+    "a": "Replace the modulo and division by two with the base, and map digits to characters via a lookup for bases above ten. The loop structure is unchanged. The one new concern is validating that every input character is a legal digit for the base, since an out-of-range character would silently produce a wrong result through the arithmetic rather than failing. Generalising it that way is a natural follow-up and shows the algorithm was understood rather than pattern-matched."
+   }
   ]
  },
  {
@@ -5190,11 +5395,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Convert an integer to a Roman numeral and a Roman numeral to an integer.",
-  "answer": "For integer to Roman, greedily subtract from a descending list of value-symbol pairs that includes the subtractive forms such as 900 and 400. For Roman to integer, scan left to right adding each value but subtracting when a smaller symbol precedes a larger. Both O(1) for bounded input.",
+  "answer": "**Logic**\n\nFor integer to Roman, list the values in descending order *including* the six subtractive forms (900, 400, 90, 40, 9, 4) as if they were ordinary symbols. Then a plain greedy loop, repeatedly subtracting the largest value that fits, produces the canonical numeral with no special cases at all.\n\nFor Roman to integer, scan left to right: if a symbol's value is less than the next one's, it is subtractive, so subtract it; otherwise add it. That single rule covers every valid numeral.\n\nBoth are O(1) in practice, since numerals are bounded.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    // Subtractive forms are listed as values, so the greedy needs no exceptions.\n    private static readonly (int Value, string Symbol)[] Table =\n    {\n        (1000, \"M\"), (900, \"CM\"), (500, \"D\"), (400, \"CD\"),\n        (100, \"C\"),  (90, \"XC\"),  (50, \"L\"),  (40, \"XL\"),\n        (10, \"X\"),   (9, \"IX\"),   (5, \"V\"),   (4, \"IV\"), (1, \"I\"),\n    };\n\n    public static string ToRoman(int number)\n    {\n        if (number <= 0 || number > 3999)\n            throw new ArgumentOutOfRangeException(nameof(number), \"Roman numerals cover 1..3999\");\n\n        var sb = new StringBuilder();\n\n        foreach (var (value, symbol) in Table)\n            while (number >= value)\n            {\n                sb.Append(symbol);\n                number -= value;\n            }\n\n        return sb.ToString();\n    }\n\n    private static readonly Dictionary<char, int> Values = new()\n    {\n        ['I'] = 1, ['V'] = 5, ['X'] = 10, ['L'] = 50,\n        ['C'] = 100, ['D'] = 500, ['M'] = 1000,\n    };\n\n    public static int FromRoman(string roman)\n    {\n        if (string.IsNullOrEmpty(roman)) return 0;\n\n        int total = 0;\n\n        for (int i = 0; i < roman.Length; i++)\n        {\n            int current = Values[roman[i]];\n\n            // Smaller before larger means subtractive: IV is 4, VI is 6.\n            bool subtractive = i + 1 < roman.Length && current < Values[roman[i + 1]];\n\n            total += subtractive ? -current : current;\n        }\n\n        return total;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ToRoman(3));\n        Console.WriteLine(ToRoman(58));\n        Console.WriteLine(ToRoman(1994));\n        Console.WriteLine(FromRoman(\"MCMXCIV\"));\n        Console.WriteLine(FromRoman(\"LVIII\"));\n        Console.WriteLine(ToRoman(3999) + \" -> \" + FromRoman(ToRoman(3999)));\n    }\n}\n```\n\n**Output**\n\n```\nIII\nLVIII\nMCMXCIV\n1994\n58\nMMMCMXCIX -> 3999\n```",
   "tags": [
    "strings",
    "greedy",
-   "math"
+   "roman-numerals",
+   "validation",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why include 900, 400, 90, 40, 9 and 4 in the table rather than handling subtraction separately?",
+    "a": "Because it turns a rule-laden conversion into a plain greedy loop. Without them, 900 would render as DCCCC and you would need post-processing rules to rewrite it as CM. Treating the subtractive pairs as first-class values means the greedy is provably correct: at each step the largest fitting value is always part of the canonical form. It is a good example of choosing a representation that makes the algorithm trivial rather than writing a clever algorithm for an awkward representation."
+   },
+   {
+    "q": "Why is 3999 the upper limit?",
+    "a": "Because the standard symbol set stops at M for 1000, and canonical notation allows at most three consecutive identical symbols, so MMM for 3000 plus CMXCIX for 999 is the maximum. Larger numbers historically used overbars to multiply by a thousand, which has no place in the ASCII representation. Throwing rather than silently producing a long run of Ms is the honest behaviour, and defining the valid domain is part of getting the problem right."
+   },
+   {
+    "q": "Should FromRoman validate its input?",
+    "a": "For untrusted input, yes. As written it accepts malformed numerals such as IIII or IC and returns a number for them, and it throws a KeyNotFoundException rather than a meaningful error on an unknown character. Proper validation means checking the canonical form, which is most easily done by converting the parsed number back to Roman and comparing against the input. That round-trip check is both simple and complete, and the final test case demonstrates the round trip works."
+   }
   ]
  },
  {
@@ -6523,12 +6744,27 @@
   "subcategory": "Strings",
   "difficulty": "Hard",
   "question": "Implement the KMP algorithm for substring search.",
-  "answer": "Precompute the longest proper prefix that is also a suffix for each position of the pattern, then scan the text without backtracking, using the table to shift on mismatch. Time O(n+m), space O(m). It beats the naive O(nm) scan on inputs with many partial matches.",
+  "answer": "**Logic**\n\nKMP never moves backwards in the text. It precomputes, for each prefix of the pattern, the length of the longest proper prefix that is also a suffix — the LPS table. On a mismatch, that table says how far the pattern can shift while keeping the characters already matched, so the text pointer stays put.\n\nBuilding the table is itself a self-match of the pattern against itself, which is why the construction loop looks like the search loop.\n\nO(n + m) time, O(m) space, with no backtracking in the input.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    // lps[i] = length of the longest proper prefix of pattern[0..i] that is also its suffix.\n    public static int[] BuildLps(string pattern)\n    {\n        var lps = new int[pattern.Length];\n        int length = 0;\n\n        for (int i = 1; i < pattern.Length; )\n        {\n            if (pattern[i] == pattern[length]) lps[i++] = ++length;\n            else if (length > 0) length = lps[length - 1];   // fall back, do not restart\n            else lps[i++] = 0;\n        }\n\n        return lps;\n    }\n\n    public static IList<int> FindAll(string text, string pattern)\n    {\n        var matches = new List<int>();\n        if (string.IsNullOrEmpty(pattern) || string.IsNullOrEmpty(text)) return matches;\n        if (pattern.Length > text.Length) return matches;\n\n        int[] lps = BuildLps(pattern);\n        int i = 0, j = 0;\n\n        while (i < text.Length)\n        {\n            if (text[i] == pattern[j])\n            {\n                i++; j++;\n\n                if (j == pattern.Length)\n                {\n                    matches.Add(i - j);\n                    j = lps[j - 1];       // continue, allowing overlapping matches\n                }\n            }\n            else if (j > 0) j = lps[j - 1];   // shift the pattern, i never moves back\n            else i++;\n        }\n\n        return matches;\n    }\n\n    private static string Show(IList<int> r) => r.Count == 0 ? \"(none)\" : string.Join(\",\", r);\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", BuildLps(\"aabaaac\")));\n        Console.WriteLine(string.Join(\",\", BuildLps(\"abcabcd\")));\n\n        Console.WriteLine(Show(FindAll(\"ababcababcabc\", \"abc\")));\n        Console.WriteLine(Show(FindAll(\"aaaa\", \"aa\")));        // overlapping matches\n        Console.WriteLine(Show(FindAll(\"abcdef\", \"xyz\")));\n        Console.WriteLine(Show(FindAll(\"aaaaab\", \"aab\")));\n    }\n}\n```\n\n**Output**\n\n```\n0,1,0,1,2,2,0\n0,0,0,1,2,3,0\n2,7,10\n0,1,2\n(none)\n3\n```",
   "tags": [
    "strings",
    "kmp",
    "pattern-matching",
-   "algorithms"
+   "lps",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Walk through what the LPS table means for 'aabaaac'.",
+    "a": "At index 4 the prefix is 'aabaa', whose longest border is 'aa', so the entry is 2. That means if a mismatch occurs after matching five characters, two of them are already re-matched by shifting the pattern, so comparison resumes at pattern index 2 without moving back in the text. The table encodes what the pattern knows about its own self-similarity, and that is precisely the information that makes re-examination unnecessary."
+   },
+   {
+    "q": "Why does a full match set j = lps[j-1] rather than 0?",
+    "a": "Because matches can overlap, and resetting to zero would skip them. Searching 'aaaa' for 'aa' should report positions 0, 1 and 2; resetting would report only 0 and 2. Falling back through the LPS table keeps the partial match that the end of the found occurrence shares with the pattern's own prefix. If the problem wanted non-overlapping matches you would reset to zero deliberately, and that is a decision worth confirming rather than assuming."
+   },
+   {
+    "q": "Does anything real use KMP?",
+    "a": "Less than you would expect. Most standard libraries, including .NET's IndexOf, use vectorised scanning or a Boyer-Moore variant, because Boyer-Moore can skip ahead by nearly the pattern length on a mismatch and is sub-linear on typical text, beating KMP's guaranteed linearity in the average case. KMP's real value is its worst-case bound and the fact that it never backs up in the input, which makes it the right choice for streaming data you cannot rewind, and the LPS table itself is useful for periodicity questions."
+   }
   ]
  },
  {
@@ -7693,11 +7929,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Implement a function to check whether one string is a subsequence of another.",
-  "answer": "Two pointers advancing through both, moving the needle pointer only on a match, returning whether it reached the end. Time O(n), space O(1). For many queries against one long string, precompute next-occurrence tables so each query is proportional to the needle length.",
+  "answer": "**Logic**\n\nTwo pointers walking forward. Advance through the longer string always; advance through the candidate only when the characters match. If the candidate pointer reaches its end, every character was found in order.\n\nGreedy matching at the earliest opportunity is optimal: taking the first available match never rules out a later one, because any match found by skipping could also be found after taking the earlier one. O(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsSubsequence(string candidate, string text)\n    {\n        if (string.IsNullOrEmpty(candidate)) return true;   // empty is always a subsequence\n        if (string.IsNullOrEmpty(text)) return false;\n\n        int i = 0;   // index into candidate\n\n        foreach (char c in text)\n        {\n            // Take the earliest match: greedy is safe here.\n            if (c == candidate[i] && ++i == candidate.Length) return true;\n        }\n\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsSubsequence(\"abc\", \"ahbgdc\"));\n        Console.WriteLine(IsSubsequence(\"axc\", \"ahbgdc\"));\n        Console.WriteLine(IsSubsequence(\"\", \"anything\"));\n        Console.WriteLine(IsSubsequence(\"abc\", \"\"));\n        Console.WriteLine(IsSubsequence(\"abc\", \"abc\"));\n        Console.WriteLine(IsSubsequence(\"aaa\", \"aa\"));       // not enough copies\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\n```",
   "tags": [
    "strings",
    "two-pointers",
-   "subsequence"
+   "greedy",
+   "subsequence",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is greedy matching correct here?",
+    "a": "Because taking the earliest occurrence of a character leaves the largest possible remainder of the text for the rest of the candidate. Formally, any successful match that skips an earlier occurrence can be transformed into one that takes it, without breaking the order, so the greedy choice is always part of some solution. That exchange argument is what distinguishes this from problems like word break, where an early choice genuinely can strand the remainder and backtracking is required."
+   },
+   {
+    "q": "Suppose you had to check millions of candidates against the same text.",
+    "a": "Preprocess the text once: for each position and each character, record the next index at which that character occurs, giving a table of size text length times alphabet. Each query then jumps directly rather than scanning, costing O(candidate length) regardless of how long the text is. That turns a million linear scans over a long text into a million short walks. It is the standard follow-up, and it is the same precompute-then-query trade as building a trie for repeated prefix lookups."
+   },
+   {
+    "q": "How does a subsequence differ from a substring, and why does that change the algorithm?",
+    "a": "A substring must be contiguous, a subsequence need not be. That is why this is a two-pointer scan while substring search needs KMP or a sliding window: contiguity makes a mismatch fatal to the current alignment, requiring a restart, whereas a subsequence simply keeps looking. It also explains why the longest common subsequence is a quadratic DP while the longest common substring resets its DP cell to zero on mismatch."
+   }
   ]
  },
  {
