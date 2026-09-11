@@ -3751,12 +3751,27 @@
   "subcategory": "DP",
   "difficulty": "Hard",
   "question": "Best time to buy/sell stock with cooldown (or with transaction fee).",
-  "answer": "State machine DP with states: hold, sold (cooldown), rest. Transitions: hold = max(hold, rest - price); sold = hold + price; rest = max(rest, sold). Iterate over prices tracking these. O(n) time, O(1) space. With a fee, subtract it on sell.",
+  "answer": "**Logic**\n\nA three-state machine per day: holding a share, just sold today and therefore in cooldown, or free to act. Transitions are the whole solution.\n\nHolding is either continuing to hold or buying from the free state. Sold is holding plus today's price. Free is the better of staying free or yesterday's sold state, which is what enforces the one-day cooldown: a buy can only draw from `free`, and `free` only receives `sold` after a day's delay.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxProfitWithCooldown(int[] prices)\n    {\n        if (prices == null || prices.Length < 2) return 0;\n\n        int holding = -prices[0];   // owns a share\n        int sold = 0;               // sold today: cannot buy tomorrow\n        int free = 0;               // idle and free to buy\n\n        for (int i = 1; i < prices.Length; i++)\n        {\n            int prevHolding = holding, prevSold = sold, prevFree = free;\n\n            holding = Math.Max(prevHolding, prevFree - prices[i]);  // buy only from free\n            sold = prevHolding + prices[i];                          // sell today\n            free = Math.Max(prevFree, prevSold);                     // cooldown expires here\n        }\n\n        return Math.Max(sold, free);   // never finish holding\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxProfitWithCooldown(new[] { 1, 2, 3, 0, 2 }));\n        Console.WriteLine(MaxProfitWithCooldown(new[] { 1 }));\n        Console.WriteLine(MaxProfitWithCooldown(new[] { 1, 2 }));\n        Console.WriteLine(MaxProfitWithCooldown(new[] { 2, 1 }));\n        Console.WriteLine(MaxProfitWithCooldown(new[] { 1, 4, 2, 7 }));\n        Console.WriteLine(MaxProfitWithCooldown(new[] { 6, 1, 3, 2, 4, 7 }));\n    }\n}\n```\n\n**Output**\n\n```\n3\n0\n1\n0\n6\n6\n```",
   "tags": [
    "dp",
-   "stock",
    "state-machine",
-   "hard"
+   "cooldown",
+   "stock",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why capture the previous values into temporaries here, when the fee version updated in place?",
+    "a": "Because the cooldown transitions genuinely need yesterday's values: `free` must read yesterday's `sold`, and if `sold` were already updated to today's value the cooldown would be skipped entirely. In the fee version, using today's value corresponded to a same-day sell and rebuy, which was harmless. Here it would be wrong. That difference is worth stating precisely, because 'update in place' is a habit that silently breaks the moment a transition depends on a delayed state."
+   },
+   {
+    "q": "Why is the answer the maximum of sold and free rather than just free?",
+    "a": "Because the final day might be a selling day, in which case the profit sits in `sold` and has not yet propagated into `free`, which only receives it on the following day. Returning `free` alone would miss a sale on the last day. Holding is excluded because ending the period still owning a share is never optimal: selling at any point cannot reduce the balance since prices are non-negative."
+   },
+   {
+    "q": "Suppose the cooldown were k days rather than one.",
+    "a": "The single `free` variable becomes a window: the buy state must draw from the sell state of k+1 days earlier, so you keep a small ring buffer or an array of the last k sell values. It stays O(n) time and becomes O(k) space. The three-state machine generalises to a chain of k cooldown states, which is the same shape as extending the reorganize-string cooldown from one to k. Both problems are really 'delay a transition by k steps'."
+   }
   ]
  },
  {
@@ -4622,11 +4637,27 @@
   "subcategory": "Hashing",
   "difficulty": "Medium",
   "question": "Longest substring with at most k distinct characters.",
-  "answer": "Sliding window with a hash map of character counts. Expand right; when the map has more than k distinct chars, shrink from the left (decrement/remove) until at most k remain. Track the max window. O(n) time, O(k) space.",
+  "answer": "**Logic**\n\nAn elastic window with a count per character. Expand right; while the number of distinct characters exceeds k, shrink from the left, decrementing counts and removing entries that reach zero. Track the widest window seen.\n\nRemoving the entry when its count hits zero is essential: leaving a zero-count key in the dictionary makes `Count` overstate the distinct total and the window shrinks further than it should.\n\nO(n) time, O(k) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int LongestSubstringKDistinct(string s, int k)\n    {\n        if (string.IsNullOrEmpty(s) || k <= 0) return 0;\n\n        var counts = new Dictionary<char, int>();\n        int left = 0, best = 0;\n\n        for (int right = 0; right < s.Length; right++)\n        {\n            char entering = s[right];\n            counts[entering] = counts.TryGetValue(entering, out int c) ? c + 1 : 1;\n\n            while (counts.Count > k)\n            {\n                char leaving = s[left++];\n\n                // Remove at zero, or Count keeps counting characters no longer present.\n                if (--counts[leaving] == 0) counts.Remove(leaving);\n            }\n\n            best = Math.Max(best, right - left + 1);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestSubstringKDistinct(\"eceba\", 2));    // \"ece\"\n        Console.WriteLine(LongestSubstringKDistinct(\"aa\", 1));\n        Console.WriteLine(LongestSubstringKDistinct(\"abcdef\", 3));\n        Console.WriteLine(LongestSubstringKDistinct(\"a\", 0));        // k of zero\n        Console.WriteLine(LongestSubstringKDistinct(\"aabbcc\", 10));  // k exceeds distinct\n        Console.WriteLine(LongestSubstringKDistinct(\"\", 2));\n    }\n}\n```\n\n**Output**\n\n```\n3\n2\n3\n0\n6\n0\n```",
   "tags": [
-   "hashing",
+   "strings",
    "sliding-window",
-   "distinct"
+   "hashmap",
+   "distinct",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What breaks if you leave zero-count entries in the dictionary?",
+    "a": "`counts.Count` would include characters no longer in the window, so the shrink loop would believe there are more distinct characters than there really are and keep contracting past the correct boundary. The answer comes out too small, and only on inputs where a character fully leaves and the window later grows again. It is a quiet failure that survives simple test cases, which is why removing at zero rather than merely decrementing is worth calling out explicitly."
+   },
+   {
+    "q": "How does this relate to the longest substring without repeating characters?",
+    "a": "That problem is this one with k equal to the alphabet size in effect, or more precisely it is the same window with a different invariant: no character may repeat, rather than at most k distinct. Both are elastic windows differing only in the shrink condition and in what state is maintained. Seeing the whole family as one skeleton with a pluggable invariant is what makes the next variant quick to write rather than a fresh puzzle."
+   },
+   {
+    "q": "Suppose k were fixed at 2 and performance mattered.",
+    "a": "You could replace the dictionary with two character variables and their last-seen indices, removing all hashing and allocation. That is the classic 'fruit into baskets' problem, and the specialised version is noticeably faster for a hot path. The trade-off is that it no longer generalises, so I would only specialise after measuring, and would keep the general version alongside it for clarity."
+   }
   ]
  },
  {
@@ -5043,11 +5074,27 @@
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "Valid palindrome II: can the string be a palindrome after deleting at most one character?",
-  "answer": "Two pointers from both ends. On the first mismatch, try skipping the left character or the right one and check whether either remaining substring is a plain palindrome. Time O(n), space O(1) - the helper check is linear and runs at most twice.",
+  "answer": "**Logic**\n\nTwo pointers inward. While the characters match, keep going. On the first mismatch, exactly one deletion is available, and it must remove either the left or the right character, so check whether either resulting substring is a palindrome.\n\nBecause only one deletion is allowed, the helper needs no further budget and is a plain palindrome check. That keeps it O(n): one scan to the mismatch, then at most two linear checks.\n\nTrying to be clever and pick a side by lookahead is unsound; both branches must be tested.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool ValidPalindrome(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return true;\n\n        int left = 0, right = s.Length - 1;\n\n        while (left < right)\n        {\n            if (s[left] != s[right])\n            {\n                // One deletion left: it removes either side. Both must be tried.\n                return IsPalindrome(s, left + 1, right)\n                    || IsPalindrome(s, left, right - 1);\n            }\n\n            left++;\n            right--;\n        }\n\n        return true;\n    }\n\n    private static bool IsPalindrome(string s, int left, int right)\n    {\n        while (left < right)\n        {\n            if (s[left] != s[right]) return false;\n            left++;\n            right--;\n        }\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ValidPalindrome(\"aba\"));      // already one\n        Console.WriteLine(ValidPalindrome(\"abca\"));     // delete b or c\n        Console.WriteLine(ValidPalindrome(\"abc\"));      // needs two deletions\n        Console.WriteLine(ValidPalindrome(\"a\"));\n        Console.WriteLine(ValidPalindrome(\"deeee\"));    // delete the leading d\n        Console.WriteLine(ValidPalindrome(\"cbbcc\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nTrue\nTrue\nTrue\n```",
   "tags": [
    "strings",
    "two-pointers",
-   "palindrome"
+   "palindrome",
+   "branching",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must both deletion branches be tried?",
+    "a": "Because at a mismatch there is no local information telling you which side is the culprit. In \"deeee\" the mismatch is d against e, and deleting the left character works while deleting the right does not; a symmetric example exists where the opposite holds. Any heuristic that inspects only the next character can be defeated by a longer string. Testing both is O(n) in total anyway, so there is no cost to correctness here."
+   },
+   {
+    "q": "How would you generalise to at most k deletions?",
+    "a": "The two-branch recursion becomes exponential in k, so you switch to dynamic programming: the minimum deletions to make a string a palindrome is its length minus the longest palindromic subsequence, which is O(n^2). Then compare that against k. The jump from k = 1 to general k is a jump from a linear scan to a quadratic DP, which is worth stating because it explains why the problem is posed with exactly one deletion."
+   },
+   {
+    "q": "Why is the helper a plain palindrome check with no deletion budget?",
+    "a": "Because the single allowed deletion has already been spent at the point the helper is called, so anything further must match exactly. Passing a remaining budget would be the general-k formulation and is unnecessary here. Keeping the helper simple also makes the complexity obvious: the outer scan and the two helper calls each touch each character at most once, so the whole thing is linear rather than quadratic."
+   }
   ]
  },
  {
@@ -5055,11 +5102,27 @@
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "Isomorphic strings: can characters of s be mapped one-to-one to characters of t preserving order?",
-  "answer": "Maintain two maps, s to t and t to s, and walk both strings together. Any character already mapped to something different fails. Both directions are needed - one map alone accepts two source characters mapping to the same target. Time O(n), space O(1) for a fixed alphabet.",
+  "answer": "**Logic**\n\nA one-to-one correspondence needs mapping in both directions. Walk the strings together maintaining two maps: one from s to t and one from t to s. At each position, either both mappings are absent, in which case record them, or both must already agree with the current pair.\n\nOne map alone is not enough. Mapping a to x and b to x satisfies a forward check but is not a bijection, so \"ab\" and \"xx\" would wrongly pass. The reverse map is what rejects that.\n\nO(n) time, O(alphabet) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool IsIsomorphic(string s, string t)\n    {\n        if (s == null || t == null) return s == t;\n        if (s.Length != t.Length) return false;\n\n        var forward = new Dictionary<char, char>();\n        var backward = new Dictionary<char, char>();\n\n        for (int i = 0; i < s.Length; i++)\n        {\n            char a = s[i], b = t[i];\n\n            bool hasForward = forward.TryGetValue(a, out char mappedTo);\n            bool hasBackward = backward.TryGetValue(b, out char mappedFrom);\n\n            if (hasForward != hasBackward) return false;       // one-sided mapping\n            if (hasForward && (mappedTo != b || mappedFrom != a)) return false;\n\n            forward[a] = b;\n            backward[b] = a;\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsIsomorphic(\"egg\", \"add\"));\n        Console.WriteLine(IsIsomorphic(\"foo\", \"bar\"));\n        Console.WriteLine(IsIsomorphic(\"paper\", \"title\"));\n        Console.WriteLine(IsIsomorphic(\"ab\", \"xx\"));     // not one-to-one\n        Console.WriteLine(IsIsomorphic(\"\", \"\"));\n        Console.WriteLine(IsIsomorphic(\"ab\", \"abc\"));    // different lengths\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\n```",
   "tags": [
    "strings",
    "hashmap",
-   "mapping"
+   "bijection",
+   "mapping",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is one map insufficient?",
+    "a": "Because it only enforces that each source character maps consistently, not that distinct sources map to distinct targets. With \"ab\" and \"xx\", a maps to x and then b maps to x, which the forward map accepts since b had no prior mapping. That is a function but not a bijection, and isomorphism requires a bijection. The reverse map catches it because x is already claimed by a. It is the test case that separates a correct solution from a plausible one."
+   },
+   {
+    "q": "Could you solve it without maps at all?",
+    "a": "Yes, by comparing the pattern of first occurrences: transform each string into the sequence of indices where each character first appeared, and check the two sequences are identical. \"egg\" becomes 0,1,1 and \"add\" becomes 0,1,1. That uses two arrays of last-seen positions rather than dictionaries and is a neat reformulation. It also makes the relationship to the word-pattern problem explicit, since that is the same check with words instead of characters."
+   },
+   {
+    "q": "How does the word pattern problem differ?",
+    "a": "It maps characters of a pattern to whole words rather than to characters, so the tokenisation changes but the bijection requirement is identical: you still need both directions, and the classic failure is 'abba' against 'dog dog dog dog', which one-directional checking accepts. The other trap there is comparing lengths after splitting rather than before, since a pattern of length four and three words must be rejected before the loop starts."
+   }
   ]
  },
  {
@@ -5244,11 +5307,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Subarray sums divisible by k: count subarrays whose sum is divisible by k.",
-  "answer": "Prefix sums with a hash map of remainder frequencies. Two prefixes with the same remainder bound a divisible subarray, so add the running count for the current remainder before incrementing it. Normalise negative remainders. Time O(n), space O(k).",
+  "answer": "**Logic**\n\nTwo prefix sums with the same remainder modulo k bound a subarray whose sum is a multiple of k, since the difference of the two prefixes has remainder zero. So count how many times each remainder has been seen and add that count as each new prefix arrives.\n\nThe trap is negative remainders. In C# `-3 % 5` is -2, not 3, so the two representations of the same residue class would never match. Normalising with `((r % k) + k) % k` fixes it.\n\nSeed the count for remainder 0 with one, representing the empty prefix. O(n) time, O(k) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int SubarraysDivByK(int[] nums, int k)\n    {\n        if (nums == null || nums.Length == 0 || k == 0) return 0;\n\n        var seen = new int[Math.Abs(k)];\n        seen[0] = 1;                 // the empty prefix has remainder 0\n\n        int sum = 0, count = 0;\n\n        foreach (int n in nums)\n        {\n            sum += n;\n\n            // C# % follows the dividend's sign, so normalise into 0..k-1.\n            int remainder = ((sum % k) + k) % k;\n\n            count += seen[remainder];   // every earlier prefix with this remainder\n            seen[remainder]++;\n        }\n\n        return count;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(SubarraysDivByK(new[] { 4, 5, 0, -2, -3, 1 }, 5));\n        Console.WriteLine(SubarraysDivByK(new[] { 5 }, 9));\n        Console.WriteLine(SubarraysDivByK(new[] { -1, 2, 9 }, 2));\n        Console.WriteLine(SubarraysDivByK(new[] { 0, 0, 0 }, 1));    // every subarray\n        Console.WriteLine(SubarraysDivByK(new[] { 2, -2, 2, -4 }, 6));\n        Console.WriteLine(SubarraysDivByK(new[] { -5, 5 }, 5));\n    }\n}\n```\n\n**Output**\n\n```\n7\n0\n2\n6\n2\n3\n```",
   "tags": [
    "arrays",
    "prefix-sum",
-   "hashmap"
+   "modulo",
+   "negatives",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the negative-remainder normalisation matter in practice?",
+    "a": "Because without it a prefix sum of -3 with k = 5 records remainder -2 while a prefix sum of 2 records 3, and although both represent the same residue class they would never be matched, so valid subarrays are missed and the count comes out too low. It also indexes the array out of bounds with a negative index. Any input containing negative numbers exposes it, which is why the test cases deliberately include them. The same idiom appears in array rotation for the same reason."
+   },
+   {
+    "q": "Why seed the count for remainder zero with one?",
+    "a": "Because a subarray starting at index 0 whose sum is divisible by k has no earlier prefix to pair with, other than the conceptual empty prefix before the array began, which has sum 0 and therefore remainder 0. Without the seed those subarrays are never counted. It is the identical role played by the `{0: 1}` seed in subarray-sum-equals-k, and forgetting it is the single most common error in both."
+   },
+   {
+    "q": "How does this differ from subarray sum equals k?",
+    "a": "Structurally they are the same prefix-sum-and-map algorithm; only the key differs. Counting exact sums keys on the prefix value itself and looks up `sum - k`, whereas counting divisible sums keys on the remainder and looks up the same remainder. The remainder version also has bounded space, O(k) rather than O(n), because there are only k possible keys. Recognising that both are instances of 'pair up prefixes satisfying a relation' makes the next variant straightforward."
+   }
   ]
  },
  {
@@ -5268,11 +5347,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Partition labels: split a string into as many parts as possible so each letter appears in at most one part.",
-  "answer": "Record the last index of each character, then sweep keeping the maximum last index of characters seen; when the current index equals that maximum, cut a partition. Time O(n), space O(26). It is a greedy interval-merging problem in disguise.",
+  "answer": "**Logic**\n\nFor each character, record the last index at which it occurs. Then sweep, extending the current part's boundary to the furthest last-occurrence seen so far. When the scan position reaches that boundary, every character inside the part has all its occurrences contained, so the part can close.\n\nGreedy and correct because closing at the earliest possible boundary maximises the number of parts. O(n) time, O(1) space for a fixed alphabet.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static IList<int> PartitionLabels(string s)\n    {\n        var result = new List<int>();\n        if (string.IsNullOrEmpty(s)) return result;\n\n        // Last index of every character.\n        var lastIndex = new int[26];\n        for (int i = 0; i < s.Length; i++) lastIndex[s[i] - 'a'] = i;\n\n        int partStart = 0, partEnd = 0;\n\n        for (int i = 0; i < s.Length; i++)\n        {\n            // The part cannot close before the last occurrence of anything inside it.\n            partEnd = Math.Max(partEnd, lastIndex[s[i] - 'a']);\n\n            if (i == partEnd)\n            {\n                result.Add(partEnd - partStart + 1);\n                partStart = i + 1;\n            }\n        }\n\n        return result;\n    }\n\n    private static string Show(string s) =>\n        PartitionLabels(s) is var r && r.Count == 0 ? \"(none)\" : string.Join(\",\", r);\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(\"ababcbacadefegdehijhklij\"));\n        Console.WriteLine(Show(\"eccbbbbdec\"));      // one part: e wraps everything\n        Console.WriteLine(Show(\"abc\"));             // all distinct\n        Console.WriteLine(Show(\"aaaa\"));\n        Console.WriteLine(Show(\"a\"));\n        Console.WriteLine(Show(\"\"));\n    }\n}\n```\n\n**Output**\n\n```\n9,7,8\n10\n1,1,1\n4\n1\n(none)\n```",
   "tags": [
-   "arrays",
    "greedy",
-   "strings"
+   "strings",
+   "partitioning",
+   "last-occurrence",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does closing at the earliest valid boundary maximise the number of parts?",
+    "a": "Because any valid partition must place a boundary at or after the current furthest last-occurrence, so closing exactly there is never worse than closing later, and it leaves the maximum remaining string for further splitting. Formally, the greedy choice can be exchanged into any optimal solution without reducing the part count. That exchange argument is what makes the greedy provable rather than merely plausible, and it is the same shape as the argument in activity selection."
+   },
+   {
+    "q": "Suppose you needed the actual substrings, not just their lengths.",
+    "a": "You already have the boundaries: `partStart` and `partEnd` delimit each part, so a single `s[partStart..(partEnd + 1)]` at the close gives the substring. The problem asks for lengths purely to keep the output compact. It is worth noting that returning substrings allocates memory proportional to the input, whereas returning lengths does not, which matters if the caller only needs to know where to cut."
+   },
+   {
+    "q": "How would you handle a large or unbounded alphabet?",
+    "a": "Replace the 26-element array with a dictionary from character to last index, which keeps the algorithm identical at the cost of hashing. The complexity stays O(n) time and becomes O(distinct characters) space. For Unicode you would also need to decide whether to work in code points rather than UTF-16 code units, since a surrogate pair split across a boundary would be corrupt, which is the same caveat as in the palindrome and anagram problems."
+   }
   ]
  },
  {
@@ -5292,11 +5387,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Minimum number of arrows to burst balloons.",
-  "answer": "Sort intervals by end coordinate, shoot at the end of the first, and skip every balloon that starts before that point, repeating. Time O(n log n), space O(1). Sorting by start instead needs extra bookkeeping to achieve the same result.",
+  "answer": "**Logic**\n\nSort by end coordinate and sweep. Fire an arrow at the end of the first balloon, which bursts every balloon that starts at or before that point. Skip all of those, then fire again at the end of the next unburst balloon.\n\nShooting at the earliest end is optimal because that point is inside every balloon overlapping the first one, so no better position exists. It is the same exchange argument as activity selection, with the count inverted: there you maximise non-overlapping intervals, here you count overlapping groups.\n\nO(n log n) for the sort, then one pass.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int FindMinArrows(int[][] points)\n    {\n        if (points == null || points.Length == 0) return 0;\n\n        // Sort by END: the earliest finisher fixes the best arrow position.\n        var sorted = points.OrderBy(p => p[1]).ToArray();\n\n        int arrows = 1;\n        long arrowAt = sorted[0][1];\n\n        foreach (var balloon in sorted)\n        {\n            // Already burst if it starts at or before the current arrow.\n            if (balloon[0] <= arrowAt) continue;\n\n            arrows++;\n            arrowAt = balloon[1];\n        }\n\n        return arrows;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindMinArrows(new[] {\n            new[] { 10, 16 }, new[] { 2, 8 }, new[] { 1, 6 }, new[] { 7, 12 } }));\n\n        Console.WriteLine(FindMinArrows(new[] {\n            new[] { 1, 2 }, new[] { 3, 4 }, new[] { 5, 6 }, new[] { 7, 8 } }));   // disjoint\n\n        Console.WriteLine(FindMinArrows(new[] {\n            new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 4 }, new[] { 4, 5 } }));   // touching\n\n        Console.WriteLine(FindMinArrows(new[] { new[] { 1, 10 } }));\n        Console.WriteLine(FindMinArrows(new[] {\n            new[] { 1, 10 }, new[] { 2, 3 }, new[] { 4, 5 } }));                  // nested\n        Console.WriteLine(FindMinArrows(Array.Empty<int[]>()));\n    }\n}\n```\n\n**Output**\n\n```\n2\n4\n2\n1\n2\n0\n```",
   "tags": [
-   "arrays",
+   "intervals",
    "greedy",
-   "intervals"
+   "sorting",
+   "sweep",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why sort by end rather than by start?",
+    "a": "Because the arrow must be placed somewhere inside the balloon that finishes earliest, and its end is the rightmost such point, so it bursts the most other balloons. Sorting by start would leave you choosing an arrow position without knowing which balloon constrains you most tightly, and a single wide balloon appearing first would mislead the greedy. It is the same reason activity selection sorts by end: the earliest finisher is the least constraining commitment."
+   },
+   {
+    "q": "Why is arrowAt a long rather than an int?",
+    "a": "Because the coordinates in this problem can span the full int range, and while this particular code only assigns existing coordinates, a version computing midpoints or comparing sums would overflow. It is cheap insurance and signals awareness of the input bounds. The related trap some implementations hit is sorting with a comparator that subtracts two coordinates, which overflows for widely separated values and produces a corrupted sort order; using `OrderBy` with a key avoids that entirely."
+   },
+   {
+    "q": "How does this differ from non-overlapping intervals?",
+    "a": "They are complementary views of the same sweep. Non-overlapping intervals counts how many intervals can be kept without overlap and removes the rest; this counts how many groups of overlapping intervals exist. One skips overlapping intervals and counts the survivors, the other skips them and counts the groups. Both sort by end and sweep once, and recognising that a whole family of interval problems reduces to that shape is more valuable than either solution alone."
+   }
   ]
  },
  {
@@ -5328,11 +5439,27 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Candy: distribute sweets so higher-rated children get more than their neighbours, minimising the total.",
-  "answer": "Two passes: left to right giving one more than the left neighbour when the rating increases, then right to left taking the maximum with one more than the right neighbour. Sum the result. Time O(n), space O(n). A single greedy pass misses descending runs.",
+  "answer": "**Logic**\n\nTwo passes. Give everyone one sweet. Sweep left to right: whenever a child outranks the one on their left, give them one more than that neighbour. Then sweep right to left applying the mirror rule, taking the maximum of the existing count and the neighbour's plus one.\n\nOne pass cannot work, because each child is constrained from both sides and a single direction only satisfies one of them. Taking the maximum in the second pass is what preserves the first pass's work rather than overwriting it.\n\nO(n) time, O(n) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Candy(int[] ratings)\n    {\n        if (ratings == null || ratings.Length == 0) return 0;\n\n        int n = ratings.Length;\n        var sweets = new int[n];\n        Array.Fill(sweets, 1);            // everyone gets at least one\n\n        // Left to right: satisfy the left-neighbour constraint.\n        for (int i = 1; i < n; i++)\n            if (ratings[i] > ratings[i - 1]) sweets[i] = sweets[i - 1] + 1;\n\n        // Right to left: satisfy the right-neighbour constraint without\n        // undoing the first pass, hence the Max.\n        for (int i = n - 2; i >= 0; i--)\n            if (ratings[i] > ratings[i + 1])\n                sweets[i] = Math.Max(sweets[i], sweets[i + 1] + 1);\n\n        long total = 0;\n        foreach (int s in sweets) total += s;\n        return (int)total;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Candy(new[] { 1, 0, 2 }));      // 2,1,2\n        Console.WriteLine(Candy(new[] { 1, 2, 2 }));      // 1,2,1 - equal needs no more\n        Console.WriteLine(Candy(new[] { 1, 2, 3, 4 }));\n        Console.WriteLine(Candy(new[] { 4, 3, 2, 1 }));\n        Console.WriteLine(Candy(new[] { 1, 3, 2, 2, 1 }));\n        Console.WriteLine(Candy(new[] { 5 }));\n    }\n}\n```\n\n**Output**\n\n```\n5\n4\n10\n10\n7\n1\n```",
   "tags": [
-   "arrays",
    "greedy",
-   "two-pass"
+   "two-pass",
+   "arrays",
+   "constraints",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the second pass take a maximum rather than assigning directly?",
+    "a": "Because a child may already hold a larger count from the left-to-right pass, and overwriting would break the left-neighbour constraint that pass established. Consider a peak: it must exceed both neighbours, so it needs the larger of the two requirements. Assigning directly satisfies the right side and violates the left, producing a total that is too small and a distribution that is invalid. The `1,3,2,2,1` case exercises exactly that."
+   },
+   {
+    "q": "Why can't a single pass work?",
+    "a": "Because each child's requirement depends on both neighbours, and a left-to-right sweep has not yet seen the right neighbour. Any single-direction rule therefore satisfies one constraint and ignores the other. Splitting into two directional passes and combining with a maximum is the standard technique for constraints that look both ways, and it is the same structure as the longest bitonic subsequence and the two-sided version of trapping rain water."
+   },
+   {
+    "q": "Suppose equal ratings had to receive equal sweets.",
+    "a": "The current rules deliberately allow a lower count for an equal rating, which is why [1,2,2] gives 1,2,1 for a total of 4. Requiring equality would make the constraint graph contain equality edges as well as inequality ones, which the two-pass sweep cannot express, since a chain of equal ratings must be reconciled with whatever the ends demand. You would model it as a graph and propagate, or segment the array into equal-rating runs and solve between them. It is a good example of a small wording change that breaks a neat algorithm."
+   }
   ]
  },
  {
@@ -5352,11 +5479,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Remove k digits to make the smallest possible number.",
-  "answer": "Monotonic increasing stack: pop while the top is greater than the current digit and removals remain, then push. Trim any leftover removals from the end and strip leading zeros. Time O(n), space O(n).",
+  "answer": "**Logic**\n\nA monotonic increasing stack. Scanning left to right, whenever the incoming digit is smaller than the stack top and removals remain, pop: removing a larger digit from a more significant position always lowers the value more than removing anything later.\n\nThree details finish it. If removals remain after the scan, drop them from the end, since the remainder is non-decreasing and the last digits are the least significant. Strip leading zeros. And an empty result means zero.\n\nO(n) time, O(n) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    public static string RemoveKDigits(string num, int k)\n    {\n        if (string.IsNullOrEmpty(num)) return \"0\";\n        if (k >= num.Length) return \"0\";      // everything removed\n\n        var stack = new List<char>(num.Length);   // used as a stack, kept in order\n\n        foreach (char digit in num)\n        {\n            // A bigger digit in a more significant place is always worth removing.\n            while (k > 0 && stack.Count > 0 && stack[^1] > digit)\n            {\n                stack.RemoveAt(stack.Count - 1);\n                k--;\n            }\n\n            stack.Add(digit);\n        }\n\n        // Still removals left: the remainder is non-decreasing, so drop from the end.\n        while (k > 0) { stack.RemoveAt(stack.Count - 1); k--; }\n\n        // Strip leading zeros.\n        int start = 0;\n        while (start < stack.Count - 1 && stack[start] == '0') start++;\n\n        var sb = new StringBuilder();\n        for (int i = start; i < stack.Count; i++) sb.Append(stack[i]);\n\n        return sb.Length == 0 ? \"0\" : sb.ToString();\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(RemoveKDigits(\"1432219\", 3));\n        Console.WriteLine(RemoveKDigits(\"10200\", 1));     // leading zero appears\n        Console.WriteLine(RemoveKDigits(\"10\", 2));        // everything goes\n        Console.WriteLine(RemoveKDigits(\"112\", 1));       // already increasing\n        Console.WriteLine(RemoveKDigits(\"9\", 1));\n        Console.WriteLine(RemoveKDigits(\"100\", 1));\n    }\n}\n```\n\n**Output**\n\n```\n1219\n200\n0\n11\n0\n0\n```",
   "tags": [
-   "arrays",
+   "stack",
    "greedy",
-   "monotonic-stack"
+   "monotonic-stack",
+   "strings",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why remove a larger digit from an earlier position rather than a larger digit anywhere?",
+    "a": "Because positional value dominates. Removing a digit shifts everything after it one place left, so eliminating a larger digit from a more significant position reduces the number far more than removing a larger digit later. That is why the stack pops as soon as a smaller digit arrives rather than waiting to find the globally largest digit. The greedy is provable by an exchange argument: any solution not making this removal can be improved by making it."
+   },
+   {
+    "q": "Why can leftover removals be taken from the end?",
+    "a": "Because if removals remain after the scan, no digit was ever followed by a smaller one, so the sequence is non-decreasing. In a non-decreasing number the largest digits are at the end and also in the least significant positions, so removing from the end is optimal. The `112` with k=1 case shows it: nothing pops during the scan and the trailing 2 is dropped, leaving 11."
+   },
+   {
+    "q": "Why keep leading-zero stripping and the empty case as separate concerns?",
+    "a": "Because they are different failures. Stripping handles a valid number that happens to begin with zeros, such as 0200 becoming 200, and the loop deliberately stops at the last character so that a genuine single zero survives. The empty case handles removing every digit, which must render as 0 rather than an empty string. Conflating them produces either a stray empty result or a number that loses its final zero, and the `10200` and `10` tests pin both down."
+   }
   ]
  },
  {
@@ -6181,12 +6324,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Count the number of subarrays with exactly k distinct integers.",
-  "answer": "Exactly k equals at most k minus at most k-1, and at most k is a straightforward sliding window counting windows ending at each index. Running the window helper twice gives the answer in O(n) rather than attempting an exact-k window, which is not monotone.",
+  "answer": "**Logic**\n\n\"Exactly k\" is awkward for a sliding window, because the window cannot decide when to shrink: having fewer than k distinct values is not invalid, it is merely incomplete. \"At most k\" is easy, since the shrink condition is unambiguous.\n\nSo compute `atMost(k) - atMost(k - 1)`, which is exactly k by subtraction. Each helper is a standard elastic window in O(n), giving O(n) overall.\n\nThat reformulation is the entire trick, and it recurs across counting problems.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int SubarraysWithKDistinct(int[] nums, int k)\n    {\n        if (nums == null || k <= 0) return 0;\n\n        // exactly(k) = atMost(k) - atMost(k-1)\n        return AtMost(nums, k) - AtMost(nums, k - 1);\n    }\n\n    // Number of subarrays containing at most k distinct values.\n    private static int AtMost(int[] nums, int k)\n    {\n        if (k <= 0) return 0;\n\n        var counts = new Dictionary<int, int>();\n        int left = 0, total = 0;\n\n        for (int right = 0; right < nums.Length; right++)\n        {\n            counts[nums[right]] = counts.TryGetValue(nums[right], out int c) ? c + 1 : 1;\n\n            while (counts.Count > k)\n            {\n                int leaving = nums[left++];\n                if (--counts[leaving] == 0) counts.Remove(leaving);\n            }\n\n            // Every subarray ending at right and starting anywhere in [left..right].\n            total += right - left + 1;\n        }\n\n        return total;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(SubarraysWithKDistinct(new[] { 1, 2, 1, 2, 3 }, 2));\n        Console.WriteLine(SubarraysWithKDistinct(new[] { 1, 2, 1, 3, 4 }, 3));\n        Console.WriteLine(SubarraysWithKDistinct(new[] { 1, 1, 1 }, 1));\n        Console.WriteLine(SubarraysWithKDistinct(new[] { 1, 2, 3 }, 1));\n        Console.WriteLine(SubarraysWithKDistinct(new[] { 1 }, 2));      // impossible\n        Console.WriteLine(SubarraysWithKDistinct(new[] { 1, 2 }, 2));\n    }\n}\n```\n\n**Output**\n\n```\n7\n3\n6\n3\n0\n1\n```",
   "tags": [
    "arrays",
    "sliding-window",
    "counting",
-   "technique"
+   "at-most-trick",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is 'exactly k' harder for a window than 'at most k'?",
+    "a": "Because a sliding window needs an unambiguous shrink rule, and 'too few distinct values' is not a violation that shrinking can fix, it is a state the window has to grow out of. With 'at most k' the rule is clear: shrink while the count exceeds k. So the window is well defined in one formulation and not in the other. Reframing an exact requirement as the difference of two bounded ones is a general technique, and it also solves 'exactly k odd numbers' and similar counting problems."
+   },
+   {
+    "q": "Why does total += right - left + 1 count subarrays correctly?",
+    "a": "Because at each step the window [left..right] is the largest valid one ending at right, and every subarray ending at right whose start lies within that range is also valid, since removing elements from the front cannot increase the distinct count. There are exactly right - left + 1 such starts. Counting per right-endpoint like this avoids enumerating subarrays and is what keeps the helper linear."
+   },
+   {
+    "q": "Where else does the at-most-minus-at-most trick apply?",
+    "a": "Anywhere an exact count is wanted and the bounded version is monotonic. Counting subarrays with exactly k odd numbers, with a sum in a given range, or with exactly k distinct characters all reduce the same way. The requirement is that 'at most k' is computable and that increasing k never decreases the count, so the subtraction isolates the boundary. When that monotonicity fails, the trick does not apply and you usually fall back on prefix sums with a map."
+   }
   ]
  },
  {
@@ -6206,11 +6364,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Given an array, find the length of the shortest subarray that must be sorted to make the whole array sorted.",
-  "answer": "Scan from the left for the last index where the value drops below the running maximum, and from the right for the first index where it exceeds the running minimum. The span between them is the answer, or zero if none is found. Time O(n), space O(1).",
+  "answer": "**Logic**\n\nTwo sweeps. Going left to right, track the running maximum; any element smaller than it is out of place, and the last such position is the right boundary. Going right to left, track the running minimum; any element larger than it is out of place, and the last such position is the left boundary.\n\nIf no element is ever out of place, the array is already sorted and the answer is zero. O(n) time, O(1) space, against O(n log n) for the obvious sort-and-compare approach.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int FindUnsortedSubarray(int[] nums)\n    {\n        if (nums == null || nums.Length < 2) return 0;\n\n        int n = nums.Length;\n        int right = -1, left = -1;\n\n        // Left to right: anything below the running maximum is misplaced.\n        int runningMax = nums[0];\n        for (int i = 1; i < n; i++)\n        {\n            if (nums[i] < runningMax) right = i;\n            else runningMax = nums[i];\n        }\n\n        if (right == -1) return 0;      // already sorted\n\n        // Right to left: anything above the running minimum is misplaced.\n        int runningMin = nums[n - 1];\n        for (int i = n - 2; i >= 0; i--)\n        {\n            if (nums[i] > runningMin) left = i;\n            else runningMin = nums[i];\n        }\n\n        return right - left + 1;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindUnsortedSubarray(new[] { 2, 6, 4, 8, 10, 9, 15 }));\n        Console.WriteLine(FindUnsortedSubarray(new[] { 1, 2, 3, 4 }));      // sorted\n        Console.WriteLine(FindUnsortedSubarray(new[] { 1 }));\n        Console.WriteLine(FindUnsortedSubarray(new[] { 2, 1 }));\n        Console.WriteLine(FindUnsortedSubarray(new[] { 1, 3, 2, 2, 2 }));\n        Console.WriteLine(FindUnsortedSubarray(new[] { 5, 4, 3, 2, 1 }));   // entirely unsorted\n    }\n}\n```\n\n**Output**\n\n```\n5\n0\n0\n2\n4\n5\n```",
   "tags": [
    "arrays",
    "two-pass",
-   "sorting"
+   "monotonic",
+   "boundaries",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the running maximum identify the right boundary rather than the left?",
+    "a": "Because an element smaller than something before it must be moved, and the furthest such position to the right is where the unsorted region must end. Everything after it is larger than everything before, so it is already correctly placed. The mirror argument with the running minimum from the right gives the left boundary. Using one sweep only would find one boundary and you would have to guess the other, which is where the naive attempts at this problem go wrong."
+   },
+   {
+    "q": "What is the obvious solution, and why is this better?",
+    "a": "Sorting a copy and comparing element by element, taking the first and last positions that differ. That is correct and O(n log n) with O(n) space, and it is a perfectly reasonable first answer to give. The two-sweep version is O(n) and O(1) because it never needs the sorted order, only the fact that an element violates monotonicity. Offering the simple version first and then improving it is usually the better interview strategy than jumping straight to the clever one."
+   },
+   {
+    "q": "Why does [1,3,2,2,2] give 4 rather than 3?",
+    "a": "Because the running minimum from the right is 2, and the 3 at index 1 exceeds it, so the left boundary is 1; the last element below the running maximum is the final 2 at index 4, so the right boundary is 4. The span 1..4 has length 4. It is easy to assume only the 3 and the first 2 need sorting, but the trailing 2s are part of the region that must be reordered relative to the 3. Duplicates are what make this case worth including."
+   }
   ]
  },
  {
@@ -6218,12 +6392,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find all elements that appear more than n/3 times.",
-  "answer": "Boyer-Moore majority vote generalised to two candidates, since at most two values can exceed a third of the length. Maintain two candidate-count pairs in one pass, then verify both with a second pass. Time O(n), space O(1).",
+  "answer": "**Logic**\n\nBoyer-Moore generalised. At most two values can each exceed n/3, so track two candidates and two counters. Each element either matches a candidate and increments it, takes an empty slot, or decrements both.\n\nThe verification pass is mandatory here, not merely prudent: with two candidates it is entirely possible that only one qualifies, or neither. O(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static IList<int> MajorityElement(int[] nums)\n    {\n        var result = new List<int>();\n        if (nums == null || nums.Length == 0) return result;\n\n        // At most two values can exceed n/3, so two slots suffice.\n        int first = 0, second = 0, countFirst = 0, countSecond = 0;\n\n        foreach (int n in nums)\n        {\n            if (countFirst > 0 && n == first) countFirst++;\n            else if (countSecond > 0 && n == second) countSecond++;\n            else if (countFirst == 0) { first = n; countFirst = 1; }\n            else if (countSecond == 0) { second = n; countSecond = 1; }\n            else { countFirst--; countSecond--; }     // cancel against both\n        }\n\n        // Verify: the voting pass only narrows the field, it proves nothing.\n        countFirst = countSecond = 0;\n        foreach (int n in nums)\n        {\n            if (n == first) countFirst++;\n            else if (n == second) countSecond++;\n        }\n\n        if (countFirst > nums.Length / 3) result.Add(first);\n        if (countSecond > nums.Length / 3) result.Add(second);\n\n        return result;\n    }\n\n    private static string Show(int[] nums)\n    {\n        var r = new List<int>(MajorityElement(nums));\n        r.Sort();\n        return r.Count == 0 ? \"(none)\" : string.Join(\",\", r);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(new[] { 3, 2, 3 }));\n        Console.WriteLine(Show(new[] { 1 }));\n        Console.WriteLine(Show(new[] { 1, 2 }));\n        Console.WriteLine(Show(new[] { 1, 2, 3, 4, 5, 6 }));     // none qualifies\n        Console.WriteLine(Show(new[] { 2, 2, 1, 1, 1, 2, 2 }));\n        Console.WriteLine(Show(new[] { 1, 1, 1, 2, 2, 2, 3 }));  // two qualify\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n1,2\n(none)\n1,2\n1,2\n```",
   "tags": [
    "arrays",
    "boyer-moore",
+   "misra-gries",
    "voting",
-   "counting"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why exactly two candidates?",
+    "a": "Because three values each exceeding n/3 would together account for more than n elements, which is impossible. In general, at most k-1 values can exceed n/k, so the n/2 case needs one counter and this one needs two. That is the Misra-Gries summary, and stating the bound rather than treating two as arbitrary is what shows you understand the generalisation rather than having memorised this instance."
+   },
+   {
+    "q": "Why does the ordering of the conditions matter?",
+    "a": "Because checking the empty slots before the value matches would assign a new candidate to a slot that is holding a value equal to the incoming one, splitting its count across both slots and losing the majority. Matching an existing candidate must always take precedence. It is a subtle ordering bug that passes on inputs where the candidates happen to appear early and fails on interleaved ones, which is exactly the sort of failure that survives casual testing."
+   },
+   {
+    "q": "Why is verification mandatory here when it was arguably optional for the n/2 version?",
+    "a": "Because the n/2 problem usually guarantees a majority exists, so the single candidate is known to be the answer. Here nothing is guaranteed: the array may contain two qualifying values, one, or none, and the voting pass always produces two candidates regardless. Without verification, [1,2,3,4,5,6] would return two arbitrary values. The counting pass is what turns candidates into answers."
+   }
   ]
  },
  {
@@ -6231,12 +6420,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Given prices and a fee, find the maximum profit with unlimited transactions.",
-  "answer": "Two states - holding and not holding - updated each day: holding is the better of staying held or buying today, not holding is the better of staying out or selling today minus the fee. Time O(n), space O(1). The fee is applied once per completed transaction.",
+  "answer": "**Logic**\n\nTwo states: holding a share, or not. Each day, the best balance while holding is either yesterday's holding balance or yesterday's cash minus today's price. The best cash balance is either yesterday's cash or yesterday's holding balance plus today's price, minus the fee.\n\nCharging the fee on the sale rather than the purchase is a convention; either works as long as it is applied exactly once per round trip. The fee is what stops the naive every-upward-step strategy from working, because many small gains no longer cover the cost.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxProfitWithFee(int[] prices, int fee)\n    {\n        if (prices == null || prices.Length < 2) return 0;\n\n        int cash = 0;                  // best balance while holding nothing\n        int holding = -prices[0];      // best balance while holding a share\n\n        for (int i = 1; i < prices.Length; i++)\n        {\n            // Sell today: pay the fee once, on the sale.\n            cash = Math.Max(cash, holding + prices[i] - fee);\n\n            // Buy today, funded from the best cash position.\n            holding = Math.Max(holding, cash - prices[i]);\n        }\n\n        return cash;   // never end holding a share\n    }\n\n    // No fee: every positive daily step is worth taking.\n    public static int MaxProfitNoFee(int[] prices)\n    {\n        int total = 0;\n        for (int i = 1; i < prices.Length; i++)\n            total += Math.Max(0, prices[i] - prices[i - 1]);\n        return total;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxProfitWithFee(new[] { 1, 3, 2, 8, 4, 9 }, 2));\n        Console.WriteLine(MaxProfitNoFee(new[] { 1, 3, 2, 8, 4, 9 }));      // same data, no fee\n        Console.WriteLine(MaxProfitWithFee(new[] { 1, 3, 7, 5, 10, 3 }, 3));\n        Console.WriteLine(MaxProfitWithFee(new[] { 1, 2 }, 5));            // fee exceeds the gain\n        Console.WriteLine(MaxProfitWithFee(new[] { 5, 4, 3 }, 1));\n        Console.WriteLine(MaxProfitWithFee(new[] { 7 }, 1));\n    }\n}\n```\n\n**Output**\n\n```\n8\n13\n6\n0\n0\n0\n```\n\nThe first two lines are the same prices with and without a fee: 13 becomes 8, because the fee makes several of the small gains not worth taking.",
   "tags": [
-   "arrays",
-   "dynamic-programming",
+   "dp",
    "state-machine",
-   "stocks"
+   "stock",
+   "transaction-fee",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the cash update come before the holding update?",
+    "a": "Because the holding update should be able to use today's improved cash position, which corresponds to selling and rebuying on the same day. That is a no-op economically, costing a fee for nothing, so it can never improve the answer and is therefore harmless. Reversing the order also works and gives the same result for the same reason. What would be wrong is using a stale cash value in one place and a fresh one in another, which is the usual way these state-machine DPs go subtly wrong."
+   },
+   {
+    "q": "Why can't you just take every upward step and subtract a fee each time?",
+    "a": "Because that overcounts the fees. A sustained rise over several days is one transaction with one fee, not one fee per day, so charging per step would understate the profit badly. Conversely, some individual rises are smaller than the fee and should be skipped entirely, which a greedy per-step rule cannot decide without knowing whether it is in the middle of a longer hold. The two-state DP resolves both by tracking whether a position is currently open."
+   },
+   {
+    "q": "How does this relate to the cooldown variant?",
+    "a": "They are the same two-state machine with a different edge. The fee subtracts a constant on the sell transition; the cooldown delays the buy transition by one day, so it reads the sell state from two days back rather than one. Both stay O(n) and O(1). Recognising that the whole stock-problem family is one state machine with varying transitions is far more useful than memorising six separate solutions, and it is usually what an interviewer is probing by asking two of them in sequence."
+   }
   ]
  },
  {
@@ -7328,12 +7532,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Given an array of stock prices, find the maximum profit with at most two transactions.",
-  "answer": "Track four running states - after the first buy, first sell, second buy and second sell - updating each in one pass so every state uses the best previous state. Time O(n), space O(1). It generalises to k transactions with a two-dimensional state.",
+  "answer": "**Logic**\n\nFour state variables tracked in one pass: the best balance after the first buy, after the first sell, after the second buy and after the second sell. Each is derived from the previous state, so the whole thing is a chain.\n\nThe buy states hold a negative balance, being money spent, which lets each sell state simply add the current price. Updating them in order within a single loop is valid because each state's new value legitimately uses the same day's earlier state, which corresponds to buying and selling on the same day for zero profit.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxProfitTwoTransactions(int[] prices)\n    {\n        if (prices == null || prices.Length < 2) return 0;\n\n        // Balances, not profits: a buy state is negative.\n        int firstBuy = int.MinValue, firstSell = 0;\n        int secondBuy = int.MinValue, secondSell = 0;\n\n        foreach (int price in prices)\n        {\n            firstBuy = Math.Max(firstBuy, -price);                 // spend\n            firstSell = Math.Max(firstSell, firstBuy + price);     // recover\n            secondBuy = Math.Max(secondBuy, firstSell - price);    // spend again\n            secondSell = Math.Max(secondSell, secondBuy + price);\n        }\n\n        return secondSell;\n    }\n\n    // The general k-transaction version, for comparison.\n    public static int MaxProfitK(int[] prices, int k)\n    {\n        if (prices == null || prices.Length < 2 || k <= 0) return 0;\n\n        // With k large enough, it degenerates to unlimited transactions.\n        if (k >= prices.Length / 2)\n        {\n            int total = 0;\n            for (int i = 1; i < prices.Length; i++)\n                total += Math.Max(0, prices[i] - prices[i - 1]);\n            return total;\n        }\n\n        var buy = new int[k + 1];\n        var sell = new int[k + 1];\n        Array.Fill(buy, int.MinValue);\n\n        foreach (int price in prices)\n            for (int t = 1; t <= k; t++)\n            {\n                buy[t] = Math.Max(buy[t], sell[t - 1] - price);\n                sell[t] = Math.Max(sell[t], buy[t] + price);\n            }\n\n        return sell[k];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxProfitTwoTransactions(new[] { 3, 3, 5, 0, 0, 3, 1, 4 }));\n        Console.WriteLine(MaxProfitTwoTransactions(new[] { 1, 2, 3, 4, 5 }));   // one run\n        Console.WriteLine(MaxProfitTwoTransactions(new[] { 7, 6, 4, 3, 1 }));   // only falls\n        Console.WriteLine(MaxProfitTwoTransactions(new[] { 1 }));\n        Console.WriteLine(MaxProfitK(new[] { 3, 2, 6, 5, 0, 3 }, 2));\n        Console.WriteLine(MaxProfitK(new[] { 2, 4, 1 }, 100));                  // unlimited\n    }\n}\n```\n\n**Output**\n\n```\n6\n4\n0\n0\n7\n2\n```",
   "tags": [
-   "arrays",
-   "dynamic-programming",
+   "dp",
    "state-machine",
-   "stocks"
+   "stock",
+   "transactions",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is it safe to update all four states within the same iteration?",
+    "a": "Because each state uses the same day's value of the state before it, which corresponds to buying and selling on the same day for zero net profit. That is always allowed and never improves the answer, so it cannot produce an invalid result. Writing it with temporaries from the previous day also works and is arguably clearer, but the in-place chain is correct for this specific reason, and being able to justify it rather than asserting it is what the interviewer is checking."
+   },
+   {
+    "q": "Why does a large k degenerate to the unlimited case?",
+    "a": "Because a profitable transaction needs at least two days, so at most n/2 non-overlapping transactions can exist. Once k reaches that, the constraint stops binding and the answer is simply the sum of every positive daily difference. Without that shortcut the DP would allocate and loop over k arrays for nothing, which for a large k against a short price series is a real waste and in some problem statements is what causes a timeout."
+   },
+   {
+    "q": "Suppose a cooldown were required after each sale.",
+    "a": "The sell state can no longer feed directly into the next buy; the buy must draw from the sell state of two days earlier. So you keep an extra variable holding the previous day's sell value and use that instead. It stays O(n) and O(1). That is the cooldown variant, and it is a good example of how one added rule changes exactly one term in the recurrence while the structure survives intact."
+   }
   ]
  },
  {
@@ -7341,12 +7560,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find the length of the longest subarray with equal numbers of zeros and ones.",
-  "answer": "Treat zero as minus one and find the longest subarray with sum zero using a prefix sum map storing the first index of each sum. The distance between two equal prefix sums is a balanced subarray. Time O(n), space O(n).",
+  "answer": "**Logic**\n\nTreat every zero as -1. A subarray with equal counts then sums to zero, so the question becomes the longest subarray with sum zero, which prefix sums answer.\n\nKeep a map from running sum to the earliest index at which it occurred. If the same sum appears again later, everything between the two positions sums to zero. Seed the map with sum 0 at index -1 so a qualifying subarray starting at index 0 is measured correctly.\n\nRecording only the first occurrence is what makes the span maximal. O(n) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int FindMaxLength(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        // sum -> FIRST index where it occurred. Seeded so a run from index 0 works.\n        var firstSeen = new Dictionary<int, int> { [0] = -1 };\n\n        int sum = 0, best = 0;\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            sum += nums[i] == 0 ? -1 : 1;    // zero counts as -1\n\n            if (firstSeen.TryGetValue(sum, out int earlier))\n                best = Math.Max(best, i - earlier);\n            else\n                firstSeen[sum] = i;           // only the first occurrence is recorded\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindMaxLength(new[] { 0, 1 }));\n        Console.WriteLine(FindMaxLength(new[] { 0, 1, 0 }));\n        Console.WriteLine(FindMaxLength(new[] { 0, 0, 1, 0, 0, 0, 1, 1 }));\n        Console.WriteLine(FindMaxLength(new[] { 1, 1, 1 }));      // never balances\n        Console.WriteLine(FindMaxLength(new[] { 0, 1, 1, 0, 1, 1, 1, 0 }));\n        Console.WriteLine(FindMaxLength(new[] { 0 }));\n    }\n}\n```\n\n**Output**\n\n```\n2\n2\n6\n0\n4\n0\n```",
   "tags": [
    "arrays",
    "prefix-sum",
    "hashmap",
-   "transformation"
+   "transformation",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why record only the first occurrence of each sum?",
+    "a": "Because the span between two equal prefix sums is the subarray that sums to zero, and to make that span as long as possible you want the earliest possible left endpoint. Overwriting the map with later indices would shorten every span and yield a smaller answer. It is the mirror of problems where you want the shortest span, where you would update to the latest index instead. Deciding which based on what is being maximised is the reusable part."
+   },
+   {
+    "q": "Why seed the map with sum zero at index -1?",
+    "a": "So that a balanced subarray starting at index 0 is measured correctly. If the running sum returns to zero at index 3, the subarray is the whole range 0..3 of length 4, which is `3 - (-1)`. Without the seed the lookup would fail and that case would be missed entirely. It is the same role as the `{0: 1}` seed in subarray-sum-equals-k and the -1 sentinel in longest valid parentheses: an artificial entry representing the empty prefix."
+   },
+   {
+    "q": "How does mapping zero to -1 generalise?",
+    "a": "It is the standard trick for turning a balance condition into a sum condition, and it extends well. For 'equal numbers of a and b in a string', map a to +1 and b to -1 and ignore everything else. For three symbols needing equal counts you would need a two-dimensional key, pairing two independent running differences, which still works with a map but grows in complexity. Recognising 'equal counts' as 'sum zero' is what unlocks the prefix-sum toolbox for a whole class of problems."
+   }
   ]
  },
  {
@@ -7405,12 +7639,27 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Check whether a string can be rearranged into a palindrome.",
-  "answer": "Count character frequencies and verify that at most one has an odd count. A bitmask toggling a bit per character does the same in constant space, with the answer being whether the mask has at most one bit set. Time O(n).",
+  "answer": "**Logic**\n\nA palindrome mirrors around its centre, so every character must appear an even number of times, except that a single character may appear an odd number of times and sit exactly in the middle. So the test is simply that at most one character has an odd count.\n\nCounting is O(n). The neat variant toggles a bit per character in a bitmask and checks that the result has at most one bit set, which uses a single integer instead of a counting structure.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool CanFormPalindrome(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return true;\n\n        var counts = new Dictionary<char, int>();\n        foreach (char c in s) counts[c] = counts.TryGetValue(c, out int n) ? n + 1 : 1;\n\n        int odd = 0;\n        foreach (var (_, count) in counts)\n            if (count % 2 == 1 && ++odd > 1) return false;\n\n        return true;\n    }\n\n    // Bitmask: toggle a bit per character, then check at most one bit survives.\n    // Assumes lowercase ASCII.\n    public static bool CanFormPalindromeBitmask(string s)\n    {\n        int mask = 0;\n        foreach (char c in s) mask ^= 1 << (c - 'a');\n\n        // n & (n-1) clears the lowest set bit; zero afterwards means 0 or 1 bits set.\n        return (mask & (mask - 1)) == 0;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CanFormPalindrome(\"civic\"));        // already one\n        Console.WriteLine(CanFormPalindrome(\"ivicc\"));        // rearranges to civic\n        Console.WriteLine(CanFormPalindrome(\"hello\"));\n        Console.WriteLine(CanFormPalindrome(\"aab\"));\n        Console.WriteLine(CanFormPalindrome(\"\"));\n        Console.WriteLine(CanFormPalindromeBitmask(\"carerac\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nTrue\nTrue\nTrue\n```",
   "tags": [
    "strings",
    "counting",
-   "bit-manipulation",
-   "palindrome"
+   "bitmask",
+   "palindrome",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Explain the (mask & (mask - 1)) == 0 test.",
+    "a": "Subtracting one from a number flips its lowest set bit to zero and sets every bit below it, so ANDing with the original clears exactly that lowest set bit. If the result is zero, the original had at most one bit set. It is the standard power-of-two test, and here it answers 'at most one character has an odd count' in two operations. It is also the basis of Brian Kernighan's algorithm for counting set bits, which loops that clearing operation."
+   },
+   {
+    "q": "Why does at most one odd count suffice, rather than exactly zero?",
+    "a": "Because a palindrome of odd length has one character with no partner, sitting at the centre. Even-length palindromes require every count to be even, odd-length ones allow exactly one odd. Since the question asks whether some rearrangement exists rather than fixing the length, 'at most one' covers both cases. Requiring zero would wrongly reject 'aab', which rearranges to 'aba'."
+   },
+   {
+    "q": "Suppose you had to produce the palindrome, not just test for it.",
+    "a": "Take half of each character's count to build the first half, place the single odd character in the middle if one exists, then mirror. That is O(n) and gives one valid arrangement among many. The related harder problem is generating all distinct palindromic permutations, which is backtracking over the half-multiset with duplicate pruning, since permuting the half determines the whole. Noting that you only permute half is the insight that keeps it tractable."
+   }
   ]
  },
  {
@@ -9080,12 +9329,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find the maximum sum of any k consecutive elements.",
-  "answer": "A fixed sliding window maintaining the running sum - add the entering element and subtract the leaving one - tracking the maximum. Time O(n), space O(1). Recomputing each window's sum is O(nk) and is the version this question exists to rule out.",
+  "answer": "**Logic**\n\nA fixed-size sliding window. Sum the first k elements, then slide: add the entering element and subtract the leaving one, keeping a running maximum. Each step is O(1), so the whole scan is O(n).\n\nRecomputing the sum for every window would be O(n·k), which is the naive version this replaces. This is the simplest sliding-window problem and the template for every fixed-window variant.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static long MaxSumOfK(int[] nums, int k)\n    {\n        if (nums == null || k <= 0 || k > nums.Length)\n            throw new ArgumentException(\"k must be between 1 and the array length\");\n\n        long sum = 0;\n        for (int i = 0; i < k; i++) sum += nums[i];\n\n        long best = sum;\n\n        for (int i = k; i < nums.Length; i++)\n        {\n            sum += nums[i] - nums[i - k];    // one in, one out: O(1) per step\n            best = Math.Max(best, sum);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxSumOfK(new[] { 2, 1, 5, 1, 3, 2 }, 3));\n        Console.WriteLine(MaxSumOfK(new[] { 2, 3, 4, 1, 5 }, 2));\n        Console.WriteLine(MaxSumOfK(new[] { -1, -2, -3 }, 2));     // all negative\n        Console.WriteLine(MaxSumOfK(new[] { 5 }, 1));\n        Console.WriteLine(MaxSumOfK(new[] { 1, 2, 3, 4 }, 4));     // the whole array\n\n        try { MaxSumOfK(new[] { 1, 2 }, 5); }\n        catch (ArgumentException) { Console.WriteLine(\"k too large\"); }\n    }\n}\n```\n\n**Output**\n\n```\n9\n7\n-3\n5\n10\nk too large\n```",
   "tags": [
    "arrays",
    "sliding-window",
-   "prefix-sum",
-   "fundamentals"
+   "fixed-window",
+   "overflow",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why throw for an out-of-range k rather than returning 0?",
+    "a": "Because there is no valid answer to return: with an all-negative array the maximum sum is itself negative, so 0 would be indistinguishable from a real result and would silently mislead the caller. The all-negative test makes that concrete. When a sentinel cannot be separated from legitimate output, throwing or a TryGet pattern is the honest choice, which is the same argument as for MinStack.GetMin on an empty stack."
+   },
+   {
+    "q": "How does this differ from the maximum subarray problem?",
+    "a": "Kadane's finds the best subarray of any length, so it must decide at each step whether to extend or restart. Here the length is fixed, which removes that decision entirely and makes the window purely mechanical. The distinction matters because candidates sometimes reach for Kadane's when the length is fixed, which gives the wrong answer, or slide a window when the length is free, which cannot express restarting. Reading the constraint first settles which applies."
+   },
+   {
+    "q": "Why accumulate into a long?",
+    "a": "Because k elements near int.MaxValue overflow an int sum long before the array is large, and an overflowed sum wraps to a negative number that could win the maximum comparison, producing a badly wrong answer with no error. Widening the accumulator costs nothing here. It is the same reasoning as in subarray-sum-equals-k, and the general habit is to consider the maximum the accumulator can reach rather than the size of the individual elements."
+   }
   ]
  },
  {
@@ -9093,12 +9357,27 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Given an array and a value, find the minimum length subarray with sum at least that value.",
-  "answer": "A variable sliding window expanding to reach the target and contracting while it still holds, tracking the minimum length. It relies on all values being non-negative; with negatives, prefix sums with a monotonic deque are required instead.",
+  "answer": "**Logic**\n\nAn elastic sliding window, valid because all values are positive, which makes the running sum monotonic: extending always increases it and shrinking always decreases it.\n\nExpand the right edge adding to the sum. While the sum meets the target, record the width and shrink from the left, since a shorter qualifying window may still exist. Each index moves forward only, so O(n) despite the nested loop.\n\nWith negative values allowed, the monotonicity is lost and this approach breaks entirely.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MinSubArrayLen(int target, int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        int left = 0, best = int.MaxValue;\n        long sum = 0;\n\n        for (int right = 0; right < nums.Length; right++)\n        {\n            sum += nums[right];\n\n            // Shrink while still valid: a shorter window may also qualify.\n            while (sum >= target)\n            {\n                best = Math.Min(best, right - left + 1);\n                sum -= nums[left++];\n            }\n        }\n\n        return best == int.MaxValue ? 0 : best;   // 0 means no qualifying subarray\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinSubArrayLen(7, new[] { 2, 3, 1, 2, 4, 3 }));   // [4,3]\n        Console.WriteLine(MinSubArrayLen(4, new[] { 1, 4, 4 }));\n        Console.WriteLine(MinSubArrayLen(11, new[] { 1, 1, 1, 1, 1, 1, 1, 1 }));  // impossible\n        Console.WriteLine(MinSubArrayLen(11, new[] { 1, 2, 3, 4, 5 }));\n        Console.WriteLine(MinSubArrayLen(1, new[] { 1 }));\n        Console.WriteLine(MinSubArrayLen(100, new[] { 100 }));\n    }\n}\n```\n\n**Output**\n\n```\n2\n1\n0\n3\n1\n1\n```",
   "tags": [
    "arrays",
    "sliding-window",
+   "monotonic",
    "two-pointers",
-   "constraints"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does this require all values to be positive?",
+    "a": "Because the sliding window relies on the sum moving monotonically: adding an element must increase it and removing one must decrease it, so shrinking is a valid way to correct an overshoot. With a negative value present, removing it would increase the sum, so the shrink rule is unsound and the window could skip valid answers. That is the same monotonicity requirement that decides whether a window or a prefix-sum map is the right tool for any subarray problem."
+   },
+   {
+    "q": "What would you use if negatives were allowed?",
+    "a": "Prefix sums with a monotonic deque. Compute the running prefix sums, then for each position find the earliest earlier prefix that is at least `current - target`, maintaining the deque so that prefixes stay increasing. That gives O(n) and handles negatives, and it is the 'shortest subarray with sum at least k' problem. The jump in difficulty between the two versions is large, which is why the positivity constraint in the easier one is worth noticing immediately."
+   },
+   {
+    "q": "Why return 0 rather than -1 when no subarray qualifies?",
+    "a": "Because that is what this problem specifies, and 0 is unambiguous here since a valid answer is always at least 1. It is the same in-band question as returning -1 for a missing binary search result: the sentinel is safe only if it cannot collide with a legitimate value. Where a caller might reasonably want to distinguish 'none' from a real answer, a nullable or a TryGet pattern is better, but for a length that is always positive, 0 is a defensible choice."
+   }
   ]
  },
  {
