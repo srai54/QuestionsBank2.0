@@ -1568,12 +1568,27 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Reorder a linked list (L0→Ln→L1→Ln-1→...).",
-  "answer": "Find the middle (slow/fast), reverse the second half, then merge the two halves alternately. O(n) time, O(1) space. Combines three classic sub-operations: find middle, reverse, merge.",
+  "answer": "**Logic**\n\nThree steps, each a technique worth knowing on its own. Find the middle with slow and fast pointers. Reverse the second half in place. Then merge the two halves alternately, taking one node from each.\n\nSplitting at the first middle matters: it keeps the second half no longer than the first, so the interleaving terminates cleanly with the first half's node last. O(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static void ReorderList(ListNode head)\n    {\n        if (head?.Next == null) return;\n\n        // 1. First middle, so the second half is never the longer one.\n        ListNode slow = head, fast = head.Next;\n        while (fast?.Next != null) { slow = slow.Next; fast = fast.Next.Next; }\n\n        // 2. Detach and reverse the second half.\n        ListNode second = Reverse(slow.Next);\n        slow.Next = null;\n\n        // 3. Interleave.\n        ListNode first = head;\n        while (second != null)\n        {\n            ListNode nextFirst = first.Next;\n            ListNode nextSecond = second.Next;\n\n            first.Next = second;\n            second.Next = nextFirst;\n\n            first = nextFirst;\n            second = nextSecond;\n        }\n    }\n\n    private static ListNode Reverse(ListNode head)\n    {\n        ListNode prev = null, current = head;\n        while (current != null)\n        {\n            ListNode next = current.Next;\n            current.Next = prev;\n            prev = current;\n            current = next;\n        }\n        return prev;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        for (; n != null; n = n.Next) parts.Add(n.Val.ToString());\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    private static string Reordered(params int[] values)\n    {\n        var list = Build(values);\n        ReorderList(list);\n        return Render(list);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Reordered(1, 2, 3, 4));\n        Console.WriteLine(Reordered(1, 2, 3, 4, 5));\n        Console.WriteLine(Reordered(1, 2));\n        Console.WriteLine(Reordered(1));\n        Console.WriteLine(Reordered(1, 2, 3));\n        Console.WriteLine(Render(null));\n    }\n}\n```\n\n**Output**\n\n```\n1->4->2->3\n1->5->2->4->3\n1->2\n1\n1->3->2\n(empty)\n```",
   "tags": [
    "linkedlist",
+   "two-pointers",
    "reverse",
    "merge",
-   "reorder"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why split at the first middle rather than the second?",
+    "a": "Because it guarantees the second half is no longer than the first, which makes the interleaving loop terminate naturally when the reversed half runs out, leaving the first half's final node at the end. Splitting at the second middle would make the second half longer on even-length lists, and the loop would need an extra guard to avoid attaching a stray node twice. It is the same distinction that matters when splitting for merge sort, where the wrong middle causes infinite recursion."
+   },
+   {
+    "q": "Why detach the halves with slow.Next = null?",
+    "a": "Because without it the first half still points into the second, which is now reversed, creating a cycle: following the list would loop forever. The detachment is one line and its absence produces a hang rather than a wrong answer, which is much harder to diagnose. It is the same class of omission as forgetting to null the tail when merging k sorted lists, and both are worth checking explicitly whenever you rewire list pointers."
+   },
+   {
+    "q": "Could you do it with an array instead?",
+    "a": "Yes, and it is far simpler: copy the nodes into a list, then walk two pointers from both ends rewiring as you go. That is O(n) time and O(n) space. The pointer version exists to meet the O(1) space constraint, and it is worth saying that if the constraint were absent, the array version is the one I would ship for readability. Naming the trade-off rather than assuming the clever version is always wanted is usually the better answer."
+   }
   ]
  },
  {
@@ -1609,11 +1624,27 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Find the intersection node of two singly linked lists.",
-  "answer": "Two pointers: traverse list A then continue onto B, and traverse B then onto A. They meet at the intersection after at most m+n steps (both traverse equal total length). If no intersection, both reach null. O(m+n) time, O(1) space.",
+  "answer": "**Logic**\n\nThe elegant solution: walk both lists at once, and when a pointer reaches the end, redirect it to the other list's head. Each pointer then travels exactly `lengthA + lengthB` nodes, so they arrive at the intersection simultaneously regardless of the different prefix lengths. If there is no intersection, both reach null together and the loop ends.\n\nThat switch is what cancels out the length difference without measuring it. O(m + n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0) { Val = val; }\n}\n\npublic class Solution\n{\n    public static ListNode GetIntersection(ListNode a, ListNode b)\n    {\n        if (a == null || b == null) return null;\n\n        ListNode p = a, q = b;\n\n        // Each pointer walks lengthA + lengthB, so the offsets cancel out.\n        while (!ReferenceEquals(p, q))\n        {\n            p = p == null ? b : p.Next;\n            q = q == null ? a : q.Next;\n        }\n\n        return p;   // the shared node, or null if they never meet\n    }\n\n    public static void Main()\n    {\n        // a: 4 -> 1 -\\\n        //             8 -> 4 -> 5\n        // b: 5 -> 6 -> 1 -/\n        var shared = new ListNode(8);\n        shared.Next = new ListNode(4) { Next = new ListNode(5) };\n\n        var a = new ListNode(4) { Next = new ListNode(1) { Next = shared } };\n        var b = new ListNode(5) { Next = new ListNode(6) { Next = new ListNode(1) { Next = shared } } };\n\n        Console.WriteLine(GetIntersection(a, b).Val);\n        Console.WriteLine(ReferenceEquals(GetIntersection(a, b), shared));\n\n        // No intersection: equal values but distinct nodes.\n        var x = new ListNode(1) { Next = new ListNode(2) };\n        var y = new ListNode(1) { Next = new ListNode(2) };\n        Console.WriteLine(GetIntersection(x, y) == null);\n\n        Console.WriteLine(GetIntersection(a, null) == null);\n\n        // The whole of one list is shared.\n        Console.WriteLine(GetIntersection(shared, a).Val);\n    }\n}\n```\n\n**Output**\n\n```\n8\nTrue\nTrue\nTrue\n8\n```",
   "tags": [
    "linkedlist",
-   "two-pointer",
-   "intersection"
+   "two-pointers",
+   "intersection",
+   "identity",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does switching heads make the pointers meet?",
+    "a": "Let the unique prefixes be lengths m and n and the shared tail be length c. The first pointer travels m + c to the end of list A, then n to reach the intersection from list B's head, for m + c + n in total. The second travels n + c + m. Those are equal, so both arrive at the intersection after the same number of steps. When there is no shared tail, both traverse m + n and hit null simultaneously, which is why the null case needs no special handling."
+   },
+   {
+    "q": "Why compare node identity rather than values?",
+    "a": "Because intersection means the lists share the same physical node from some point on, not that they happen to contain equal values. The third test case has two lists with identical values 1 and 2 that never intersect, and a value-based comparison would wrongly report a meeting at the first node. `ReferenceEquals` states that identity is what matters and is immune to any `==` overload the node type might acquire later."
+   },
+   {
+    "q": "What are the alternatives, and why is this preferred?",
+    "a": "You can measure both lengths, advance the longer list by the difference, then walk together, which is also O(m + n) and O(1) but needs two extra passes and explicit arithmetic. Or store one list's nodes in a hash set and scan the other, which is O(m + n) time but O(m) space. The two-pointer switch is preferred because it needs no length computation, no extra memory and no special cases. The same technique solves finding the lowest common ancestor when nodes have parent pointers, which is the same problem in a tree."
+   }
   ]
  },
  {
@@ -1712,12 +1743,27 @@
   "subcategory": "Stack",
   "difficulty": "Easy",
   "question": "Implement a stack using two queues (or a queue using two stacks).",
-  "answer": "Queue via two stacks: push onto stack 'in'; for pop/peek, if 'out' is empty, move all from 'in' to 'out' (reversing order), then pop from 'out'. Amortized O(1) per operation. Stack via two queues: make push O(n) by rotating, or pop O(n).",
+  "answer": "**Logic**\n\nA queue is first-in-first-out, a stack is last-in-first-out, so one must be reversed to emulate the other. The cost lands on either push or pop, and you choose which.\n\nFor a queue from two stacks, the amortised solution is elegant: push onto an inbox stack, and pop from an outbox stack, refilling the outbox from the inbox only when it is empty. Each element moves between stacks at most once, so despite an occasional O(n) transfer, the amortised cost per operation is O(1).\n\nFor a stack from one queue, push then rotate the queue so the new element is at the front, making push O(n) and pop O(1).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\n// Queue from two stacks: amortised O(1) per operation.\npublic class QueueFromStacks\n{\n    private readonly Stack<int> _inbox = new();\n    private readonly Stack<int> _outbox = new();\n\n    public void Enqueue(int value) => _inbox.Push(value);\n\n    public int Dequeue()\n    {\n        ShiftIfNeeded();\n        if (_outbox.Count == 0) throw new InvalidOperationException(\"queue is empty\");\n        return _outbox.Pop();\n    }\n\n    public int Peek()\n    {\n        ShiftIfNeeded();\n        if (_outbox.Count == 0) throw new InvalidOperationException(\"queue is empty\");\n        return _outbox.Peek();\n    }\n\n    public int Count => _inbox.Count + _outbox.Count;\n\n    // Only refill when the outbox is empty: that is what makes it amortised O(1).\n    private void ShiftIfNeeded()\n    {\n        if (_outbox.Count > 0) return;\n        while (_inbox.Count > 0) _outbox.Push(_inbox.Pop());\n    }\n}\n\n// Stack from a single queue: push rotates, so push is O(n) and pop is O(1).\npublic class StackFromQueue\n{\n    private readonly Queue<int> _queue = new();\n\n    public void Push(int value)\n    {\n        _queue.Enqueue(value);\n        for (int i = 0; i < _queue.Count - 1; i++)\n            _queue.Enqueue(_queue.Dequeue());   // bring the new element to the front\n    }\n\n    public int Pop() => _queue.Count > 0\n        ? _queue.Dequeue()\n        : throw new InvalidOperationException(\"stack is empty\");\n\n    public int Count => _queue.Count;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var q = new QueueFromStacks();\n        q.Enqueue(1); q.Enqueue(2); q.Enqueue(3);\n        Console.WriteLine(q.Dequeue());\n        q.Enqueue(4);                      // arrives while the outbox still has items\n        Console.WriteLine(q.Dequeue());\n        Console.WriteLine(q.Peek());\n        Console.WriteLine(q.Count);\n\n        var s = new StackFromQueue();\n        s.Push(1); s.Push(2); s.Push(3);\n        Console.WriteLine(s.Pop());\n        Console.WriteLine(s.Pop());\n\n        try { new QueueFromStacks().Dequeue(); }\n        catch (InvalidOperationException e) { Console.WriteLine(e.Message); }\n    }\n}\n```\n\n**Output**\n\n```\n1\n2\n3\n2\n3\n2\nqueue is empty\n```",
   "tags": [
    "stack",
    "queue",
-   "design",
-   "amortized"
+   "amortised",
+   "data-structures",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the two-stack queue amortised O(1) when a single dequeue can cost O(n)?",
+    "a": "Because each element is moved from the inbox to the outbox exactly once in its lifetime. A transfer that moves n elements has effectively paid for the next n dequeues, which are then O(1) each. Summing over any sequence of operations, the total work is linear in the number of elements, so the average per operation is constant. It is the same accounting argument as for a dynamic array's doubling growth, and it is why amortised analysis matters rather than looking only at the worst single call."
+   },
+   {
+    "q": "Why refill only when the outbox is empty, rather than after each dequeue?",
+    "a": "Because refilling eagerly would move elements back and forth repeatedly and destroy the amortised bound, turning it into O(n) per operation. The empty check is the entire optimisation. It also preserves correctness: elements already in the outbox are older than anything in the inbox, so pushing new arrivals on top of them would break the FIFO order. The test case that enqueues 4 while the outbox still holds items is there to catch exactly that mistake."
+   },
+   {
+    "q": "Why would anyone do this in practice?",
+    "a": "Rarely for the data structures themselves, since both are built in. The pattern is genuinely useful though: the inbox-outbox split is how you batch expensive operations, for instance accumulating writes and flushing them in one transaction, or buffering log lines and shipping them in blocks. Persistent functional queues use exactly this two-list structure because it gives amortised O(1) with immutable lists. So the value is the amortisation technique rather than the queue."
+   }
   ]
  },
  {
@@ -1753,12 +1799,27 @@
   "subcategory": "Stack",
   "difficulty": "Medium",
   "question": "Evaluate Reverse Polish Notation (postfix expression).",
-  "answer": "Use a stack: push numbers; on an operator, pop two operands, apply the operator, and push the result. The final stack value is the answer. O(n) time. Mind operand order for subtraction/division (second popped is the left operand).",
+  "answer": "**Logic**\n\nA stack. Push numbers; on an operator, pop two operands, apply, push the result. Postfix needs no parentheses and no precedence rules, because the order is already unambiguous, which is exactly why compilers convert to it.\n\nThe detail that catches people is operand order: the *second* pop is the left operand. It makes no difference for addition and multiplication, and gives the wrong sign or quotient for subtraction and division.\n\nO(n) time, O(n) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int EvalRpn(string[] tokens)\n    {\n        if (tokens == null || tokens.Length == 0) throw new ArgumentException(\"empty expression\");\n\n        var stack = new Stack<int>();\n\n        foreach (string token in tokens)\n        {\n            if (token.Length > 1 || !\"+-*/\".Contains(token))\n            {\n                stack.Push(int.Parse(token));    // negative numbers are longer than one char\n                continue;\n            }\n\n            if (stack.Count < 2) throw new ArgumentException(\"malformed expression\");\n\n            int right = stack.Pop();\n            int left = stack.Pop();              // SECOND pop is the LEFT operand\n\n            stack.Push(token switch\n            {\n                \"+\" => left + right,\n                \"-\" => left - right,\n                \"*\" => left * right,\n                \"/\" => right == 0\n                    ? throw new DivideByZeroException()\n                    : left / right,              // C# truncates toward zero, as required\n                _ => throw new ArgumentException($\"unknown operator {token}\"),\n            });\n        }\n\n        if (stack.Count != 1) throw new ArgumentException(\"malformed expression\");\n        return stack.Pop();\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(EvalRpn(new[] { \"2\", \"1\", \"+\", \"3\", \"*\" }));      // (2+1)*3\n        Console.WriteLine(EvalRpn(new[] { \"4\", \"13\", \"5\", \"/\", \"+\" }));     // 4 + 13/5\n        Console.WriteLine(EvalRpn(new[] { \"5\", \"3\", \"-\" }));                // order matters\n        Console.WriteLine(EvalRpn(new[] { \"-7\", \"2\", \"/\" }));               // truncates to -3\n        Console.WriteLine(EvalRpn(new[] { \"42\" }));\n\n        try { EvalRpn(new[] { \"1\", \"0\", \"/\" }); }\n        catch (DivideByZeroException) { Console.WriteLine(\"divide by zero\"); }\n    }\n}\n```\n\n**Output**\n\n```\n9\n6\n2\n-3\n42\ndivide by zero\n```",
   "tags": [
    "stack",
    "rpn",
-   "expression",
-   "evaluation"
+   "parsing",
+   "integer-division",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does -7 / 2 give -3 rather than -4?",
+    "a": "Because C# integer division truncates toward zero rather than flooring, so -3.5 becomes -3. The RPN problem specifies exactly this behaviour, so the language happens to match. It is worth knowing that Python floors instead and would give -4, which is a genuine source of bugs when porting numeric code between the two. If the requirement were flooring, you would need an explicit adjustment when the operands have opposite signs and the division is not exact."
+   },
+   {
+    "q": "How would you convert infix to postfix in the first place?",
+    "a": "The shunting-yard algorithm. Scan the infix tokens, output operands immediately, and push operators onto a stack, popping any operator of greater or equal precedence before pushing. Parentheses push and pop as a group. It is O(n) and produces postfix that this evaluator then consumes. Together the two are a complete expression evaluator, and that pairing is the usual follow-up once the postfix half is working."
+   },
+   {
+    "q": "Suppose the expression came from user input and could be malformed or hostile.",
+    "a": "Then the validation matters more than the evaluation. The checks here cover too few operands, leftover operands and unknown operators, which are the three structural failures. Beyond that you would bound the input length to prevent a stack of unbounded depth, use checked arithmetic or a wider type so that overflow throws rather than wrapping silently, and return a structured error identifying the offending token rather than a generic exception. An evaluator that silently returns a wrong number on bad input is worse than one that refuses it."
+   }
   ]
  },
  {
@@ -1766,11 +1827,27 @@
   "subcategory": "Stack",
   "difficulty": "Medium",
   "question": "Daily temperatures: days until a warmer temperature.",
-  "answer": "Monotonic decreasing stack of indices. For each day, pop indices with a lower temperature and record the distance (current index - popped index) as their answer, then push the current index. O(n) time, O(n) space.",
+  "answer": "**Logic**\n\nA monotonic decreasing stack of indices. For each day, pop every index whose temperature is lower than today's: today is that day's answer, and the wait is the difference in indices. Then push today.\n\nEach index is pushed and popped at most once, so O(n) despite the inner loop. Anything still on the stack at the end never found a warmer day and keeps its default of zero.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[] DailyTemperatures(int[] temperatures)\n    {\n        var answer = new int[temperatures.Length];   // defaults to 0: never warmer\n        var stack = new Stack<int>();                // indices, temperatures decreasing\n\n        for (int day = 0; day < temperatures.Length; day++)\n        {\n            // Today resolves every colder day still waiting.\n            while (stack.Count > 0 && temperatures[stack.Peek()] < temperatures[day])\n            {\n                int earlier = stack.Pop();\n                answer[earlier] = day - earlier;\n            }\n\n            stack.Push(day);\n        }\n\n        return answer;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", DailyTemperatures(\n            new[] { 73, 74, 75, 71, 69, 72, 76, 73 })));\n\n        Console.WriteLine(string.Join(\",\", DailyTemperatures(new[] { 30, 40, 50, 60 })));\n        Console.WriteLine(string.Join(\",\", DailyTemperatures(new[] { 30, 60, 90 })));\n        Console.WriteLine(string.Join(\",\", DailyTemperatures(new[] { 90, 80, 70 })));\n        Console.WriteLine(string.Join(\",\", DailyTemperatures(new[] { 50, 50, 50 })));\n        Console.WriteLine(string.Join(\",\", DailyTemperatures(new[] { 42 })));\n    }\n}\n```\n\n**Output**\n\n```\n1,1,4,2,1,1,0,0\n1,1,1,0\n1,1,0\n0,0,0\n0,0,0\n0\n```\n\nThe all-equal case gives zeros because the problem asks for a strictly *warmer* day, which the `<` comparison enforces.",
   "tags": [
    "stack",
-   "monotonic",
-   "temperatures"
+   "monotonic-stack",
+   "amortised",
+   "arrays",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is this O(n) when there is a while loop inside a for loop?",
+    "a": "Because each index is pushed exactly once and popped at most once across the whole run, so the total number of pop operations is bounded by n regardless of how they cluster. A single iteration might pop many entries, but that work was paid for when those entries were pushed. This amortised argument is the standard justification for every monotonic-stack algorithm, and stating it is what separates recognising the pattern from merely reproducing it."
+   },
+   {
+    "q": "Why store indices rather than temperatures on the stack?",
+    "a": "Because the answer is a distance, which needs positions, not values. With temperatures alone you could tell that today is warmer but not how many days had passed. Storing indices also gives free access to the temperature via a lookup, so nothing is lost. It is the same reasoning as in sliding window maximum, where indices are needed to detect that an element has left the window."
+   },
+   {
+    "q": "Suppose the temperatures arrived as a stream and answers were needed as soon as they were known.",
+    "a": "The algorithm already works that way: each day resolves some earlier days immediately, so you can emit those answers as they are determined rather than waiting for the end. The catch is that unresolved days accumulate on the stack indefinitely, so on a monotonically decreasing stream the memory grows without bound. If that mattered you would cap the wait at some horizon and flush anything older, which changes the semantics to 'warmer within k days' but bounds the memory."
+   }
   ]
  },
  {
@@ -1778,12 +1855,31 @@
   "subcategory": "Stack",
   "difficulty": "Hard",
   "question": "Largest rectangle in a histogram.",
-  "answer": "Monotonic increasing stack of indices. When a shorter bar is encountered, pop bars and compute the area with the popped bar as the smallest height, width bounded by the current index and the new stack top. Push a sentinel 0 at the end to flush. O(n) time.",
+  "answer": "**Logic**\n\nEvery maximal rectangle is limited by some bar's height, extending left and right until it meets a strictly shorter bar. So for each bar, find the nearest shorter bar on each side; the width between them times that height is the best rectangle capped by it.\n\nA monotonic increasing stack finds both boundaries in one pass. When a bar shorter than the stack top arrives, the top is popped and resolved: the new bar is its right boundary and the element now beneath it is its left. Appending a sentinel height of zero flushes the stack at the end.\n\nO(n) time, O(n) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static long LargestRectangleArea(int[] heights)\n    {\n        if (heights == null || heights.Length == 0) return 0;\n\n        var stack = new Stack<int>();    // indices, heights increasing\n        long best = 0;\n\n        // One extra step with a height of 0 flushes everything still on the stack.\n        for (int i = 0; i <= heights.Length; i++)\n        {\n            int current = i == heights.Length ? 0 : heights[i];\n\n            while (stack.Count > 0 && heights[stack.Peek()] >= current)\n            {\n                int height = heights[stack.Pop()];\n\n                // Left boundary is whatever is now on top; if empty, the array start.\n                int left = stack.Count == 0 ? -1 : stack.Peek();\n                long width = i - left - 1;\n\n                best = Math.Max(best, height * width);\n            }\n\n            stack.Push(i);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LargestRectangleArea(new[] { 2, 1, 5, 6, 2, 3 }));   // 5 and 6 -> 10\n        Console.WriteLine(LargestRectangleArea(new[] { 2, 4 }));\n        Console.WriteLine(LargestRectangleArea(new[] { 1, 1, 1, 1 }));         // flat\n        Console.WriteLine(LargestRectangleArea(new[] { 5 }));\n        Console.WriteLine(LargestRectangleArea(new[] { 1, 2, 3, 4, 5 }));      // increasing\n        Console.WriteLine(LargestRectangleArea(new[] { 5, 4, 3, 2, 1 }));      // decreasing\n    }\n}\n```\n\n**Output**\n\n```\n10\n4\n4\n5\n9\n9\n```",
   "tags": [
    "stack",
-   "monotonic",
+   "monotonic-stack",
    "histogram",
-   "hard"
+   "matrix",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the width use i - left - 1 rather than the popped index?",
+    "a": "Because the rectangle extends from just after the left boundary to just before the current bar, and the popped bar's own index is somewhere inside that span rather than at its edge. Once popped, the element beneath it on the stack is by construction the nearest bar strictly shorter on the left, and the current index is the nearest shorter on the right, so the span between them exclusive is the full width at that height. Using the popped index instead gives a width that is too small whenever several equal-height bars were popped in sequence."
+   },
+   {
+    "q": "What is the sentinel zero for?",
+    "a": "It guarantees the stack empties. Without it, an increasing histogram such as [1,2,3,4,5] would leave every bar on the stack unresolved, since nothing shorter ever arrives, and the answer would be 0. Appending a virtual bar of height zero is shorter than everything, so it pops and resolves all of them. The alternative is a separate drain loop after the main loop, which duplicates the body; the sentinel keeps it to one code path."
+   },
+   {
+    "q": "How does this solve the maximal rectangle in a binary matrix?",
+    "a": "Treat each row as the base of a histogram whose bar heights are the counts of consecutive 1s directly above, resetting to zero at a 0. Run this algorithm on each row's histogram and take the maximum, which gives O(rows x cols) overall. That is the standard solution to a problem that looks far harder than this one, and it is the reason the histogram version is worth knowing rather than being a curiosity."
+   },
+   {
+    "q": "Why >= rather than > in the pop condition?",
+    "a": "With equal heights, popping on equality resolves the earlier bar using the later one as its right boundary, which yields a width that is too small for that particular bar. It is still correct overall, because the later equal bar is itself resolved with the full width and produces the true maximum. Using strict greater-than avoids the redundant pops and is marginally faster. Either passes, but being able to explain why the seemingly wrong one still gives the right answer is a good sign of understanding rather than memorisation."
+   }
   ]
  },
  {
@@ -1791,11 +1887,27 @@
   "subcategory": "Stack",
   "difficulty": "Medium",
   "question": "Next greater element for each element in an array.",
-  "answer": "Monotonic decreasing stack of indices/values. Iterate; while the current element is greater than the stack top, pop and set the current as its next-greater. Push the current. Elements left in the stack have no next-greater (-1). O(n) time.",
+  "answer": "**Logic**\n\nThe same monotonic decreasing stack as daily temperatures, but recording the value rather than the distance. Pop every index whose value is smaller than the current one, assigning the current value as its answer, then push the current index. Anything left has no greater element to its right.\n\nFor the circular variant, iterate twice over the array using modulo indexing, pushing only during the first pass, so elements can find a greater value that wraps around.\n\nO(n) time, O(n) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[] NextGreater(int[] nums)\n    {\n        var answer = new int[nums.Length];\n        Array.Fill(answer, -1);            // -1 means \"none to the right\"\n\n        var stack = new Stack<int>();      // indices, values decreasing\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            while (stack.Count > 0 && nums[stack.Peek()] < nums[i])\n                answer[stack.Pop()] = nums[i];\n\n            stack.Push(i);\n        }\n\n        return answer;\n    }\n\n    // Circular: walk twice, but only push during the first pass.\n    public static int[] NextGreaterCircular(int[] nums)\n    {\n        int n = nums.Length;\n        var answer = new int[n];\n        Array.Fill(answer, -1);\n\n        var stack = new Stack<int>();\n\n        for (int i = 0; i < n * 2; i++)\n        {\n            int index = i % n;\n\n            while (stack.Count > 0 && nums[stack.Peek()] < nums[index])\n                answer[stack.Pop()] = nums[index];\n\n            if (i < n) stack.Push(index);   // second pass only resolves, never adds\n        }\n\n        return answer;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", NextGreater(new[] { 2, 1, 2, 4, 3 })));\n        Console.WriteLine(string.Join(\",\", NextGreater(new[] { 1, 2, 3, 4 })));\n        Console.WriteLine(string.Join(\",\", NextGreater(new[] { 4, 3, 2, 1 })));\n        Console.WriteLine(string.Join(\",\", NextGreater(new[] { 5, 5, 5 })));\n        Console.WriteLine(string.Join(\",\", NextGreaterCircular(new[] { 1, 2, 1 })));\n        Console.WriteLine(string.Join(\",\", NextGreaterCircular(new[] { 5, 4, 3, 2, 1 })));\n    }\n}\n```\n\n**Output**\n\n```\n4,2,4,-1,-1\n2,3,4,-1\n-1,-1,-1,-1\n-1,-1,-1\n2,-1,2\n-1,5,5,5,5\n```",
   "tags": [
    "stack",
-   "monotonic",
-   "next-greater"
+   "monotonic-stack",
+   "circular",
+   "arrays",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the circular version only push during the first pass?",
+    "a": "Because every element already has a stack entry from the first pass; pushing again would create duplicates, and each element would be assigned an answer twice, the second one potentially wrong. The second pass exists purely to let elements that found nothing in the first pass see the values that wrap around. Once an index is popped it is resolved for good, so the second pass simply drains whatever remains. Pushing twice is the usual bug and produces answers that look plausible on small inputs."
+   },
+   {
+    "q": "Suppose the query were next greater element from a second array, as in the 'next greater element I' problem.",
+    "a": "Compute the next greater for every element of the larger array once, store the results in a dictionary keyed by value, then look up each query element. That is O(n + m) rather than the O(n x m) of searching per query. It relies on values being distinct, which that problem guarantees; with duplicates you would key by index instead and need the positions of the query elements. Precomputing into a lookup is the general move whenever the same structure is queried repeatedly."
+   },
+   {
+    "q": "What other problems use this same stack?",
+    "a": "Largest rectangle in a histogram, where you need the nearest smaller element on each side; trapping rain water, solved in layers; the stock span problem; and removing k digits to form the smallest number, which keeps an increasing stack instead. They differ only in the comparison direction and in what is recorded on pop. Recognising that a problem is asking for 'the nearest element on one side satisfying a comparison' is the trigger for reaching for a monotonic stack."
+   }
   ]
  },
  {
@@ -1803,12 +1915,27 @@
   "subcategory": "Stack",
   "difficulty": "Medium",
   "question": "Decode a string like '3[a2[c]]' → 'accaccacc'.",
-  "answer": "Use two stacks (or one with tuples): a count stack and a string stack. On a digit build the number; on '[' push the current string and count, reset; on ']' pop and repeat the current string count times, appending to the popped string. O(output length) time.",
+  "answer": "**Logic**\n\nNested repetition, so a stack. Two stacks in fact, or one of pairs: when an opening bracket is met, push the repeat count and the text built so far, then start a fresh buffer. On a closing bracket, pop both and append the new buffer repeated that many times.\n\nDigits must be accumulated across characters, since a count may be multi-digit. The saved-prefix technique is what handles nesting correctly without recursion.\n\nO(length of output) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    public static string DecodeString(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return \"\";\n\n        var counts = new Stack<int>();\n        var prefixes = new Stack<string>();\n        var current = new StringBuilder();\n        int number = 0;\n\n        foreach (char c in s)\n        {\n            if (char.IsAsciiDigit(c))\n            {\n                number = number * 10 + (c - '0');    // multi-digit counts\n            }\n            else if (c == '[')\n            {\n                counts.Push(number);\n                prefixes.Push(current.ToString());    // park what came before\n                number = 0;\n                current.Clear();\n            }\n            else if (c == ']')\n            {\n                string inner = current.ToString();\n                current.Clear();\n                current.Append(prefixes.Pop());\n\n                int repeat = counts.Pop();\n                for (int i = 0; i < repeat; i++) current.Append(inner);\n            }\n            else\n            {\n                current.Append(c);\n            }\n        }\n\n        return current.ToString();\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(DecodeString(\"3[a]2[bc]\"));\n        Console.WriteLine(DecodeString(\"3[a2[c]]\"));      // nested\n        Console.WriteLine(DecodeString(\"2[abc]3[cd]ef\"));\n        Console.WriteLine(DecodeString(\"abc\"));           // no brackets\n        Console.WriteLine(DecodeString(\"10[a]\"));         // multi-digit count\n        Console.WriteLine(DecodeString(\"2[]\"));           // empty body\n    }\n}\n```\n\n**Output**\n\n```\naaabcbc\naccaccacc\nabcabccdcdcdef\nabc\naaaaaaaaaa\n\n```",
   "tags": [
    "stack",
-   "decode",
-   "string",
-   "nested"
+   "parsing",
+   "nesting",
+   "security",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why push the prefix rather than just the count?",
+    "a": "Because text already built before the bracket must survive while the inner group is assembled. In \"2[abc]3[cd]ef\", when the second bracket opens, \"abcabc\" is already in the buffer and would be lost if the buffer were simply cleared. Parking it on a stack and restoring it on the closing bracket is what makes concatenation and nesting compose correctly. Forgetting it produces output containing only the last group, which is a very visible failure."
+   },
+   {
+    "q": "Why accumulate the number digit by digit?",
+    "a": "Because counts can exceed nine, and reading a single character would turn 10 into two separate repetitions of 1 and 0. The `number * 10 + digit` idiom builds the value as the digits arrive. It is the same pattern as in the atoi problem, and the same place overflow would need considering if counts could be arbitrarily large, though here the expanded output would exhaust memory long before the counter overflowed."
+   },
+   {
+    "q": "Suppose the input were adversarial, like 100000[100000[a]].",
+    "a": "The output would be ten billion characters and exhaust memory long before completing, so the algorithm is a denial-of-service vector if the input is untrusted. The defence is to compute the expanded length as you parse, using the nested counts, and reject the input once it exceeds a budget, rather than discovering the problem by running out of memory. This is a real class of bug, sometimes called a decompression bomb, and it also affects zip handling and XML entity expansion."
+   }
   ]
  },
  {
@@ -1816,13 +1943,27 @@
   "subcategory": "Stack",
   "difficulty": "Hard",
   "question": "Basic calculator (with +, -, parentheses).",
-  "answer": "Iterate the expression maintaining a running result, current number, and a sign. On '(' push the current result and sign onto a stack and reset; on ')' pop and combine. Handle multi-digit numbers and spaces. O(n) time. For */ add operator precedence handling.",
+  "answer": "**Logic**\n\nWith only addition, subtraction and parentheses, no operator precedence is involved, so a single running total works. Keep a sign multiplier of plus or minus one, and on an opening bracket push both the total so far and the sign, then reset.\n\nOn a closing bracket, multiply the bracketed result by the saved sign and add it to the saved total. That handles the awkward case of a minus in front of a parenthesis, which flips the sign of everything inside.\n\nO(n) time, O(depth) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int Calculate(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        var stack = new Stack<int>();    // alternating: saved total, saved sign\n        int total = 0, sign = 1, number = 0;\n\n        foreach (char c in s)\n        {\n            if (char.IsAsciiDigit(c))\n            {\n                number = number * 10 + (c - '0');\n            }\n            else if (c == '+' || c == '-')\n            {\n                total += sign * number;      // settle the pending number\n                number = 0;\n                sign = c == '+' ? 1 : -1;\n            }\n            else if (c == '(')\n            {\n                stack.Push(total);           // park the context\n                stack.Push(sign);\n                total = 0;\n                sign = 1;\n            }\n            else if (c == ')')\n            {\n                total += sign * number;\n                number = 0;\n\n                total *= stack.Pop();        // the sign in front of the bracket\n                total += stack.Pop();        // the total before the bracket\n                sign = 1;\n            }\n            // whitespace and anything else is ignored\n        }\n\n        return total + sign * number;        // settle the final number\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Calculate(\"1 + 1\"));\n        Console.WriteLine(Calculate(\" 2-1 + 2 \"));\n        Console.WriteLine(Calculate(\"(1+(4+5+2)-3)+(6+8)\"));\n        Console.WriteLine(Calculate(\"2-(5-6)\"));          // minus before a bracket\n        Console.WriteLine(Calculate(\"-(3+4)\"));           // leading unary minus\n        Console.WriteLine(Calculate(\"100\"));\n    }\n}\n```\n\n**Output**\n\n```\n2\n3\n23\n3\n-7\n100\n```",
   "tags": [
    "stack",
-   "calculator",
-   "expression",
    "parsing",
-   "hard"
+   "calculator",
+   "precedence",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the sign need to be pushed as well as the total?",
+    "a": "Because a minus sign in front of a parenthesis negates the whole bracketed expression, not just its first term. In \"2-(5-6)\" the bracket evaluates to -1 and the saved sign of -1 turns it into +1, giving 3. Without saving the sign you would compute the bracket correctly and then add it with the wrong sign. It is the case that separates a working calculator from one that passes only the examples without a leading minus."
+   },
+   {
+    "q": "How would you add multiplication and division?",
+    "a": "Precedence then matters, so the single running total breaks. The usual fix is to keep a stack of terms: when you meet a plus or minus, push the pending number with its sign; when you meet a times or divide, pop the last value, apply the operation immediately and push the result. Summing the stack at the end gives the answer, because higher-precedence operations have already been folded in. That is the 'basic calculator II' problem, and adding parentheses on top of it gives the full shunting-yard algorithm."
+   },
+   {
+    "q": "Suppose you needed to evaluate the same expression many times with different variable values.",
+    "a": "Parsing on every evaluation is wasteful, so you parse once into an abstract syntax tree and then evaluate the tree repeatedly, or compile it to a delegate with expression trees in .NET, which gets you close to native speed. That is what spreadsheet engines and rules engines do. The transition from 'evaluate a string' to 'parse once, evaluate many' is the main architectural point once expressions become a hot path."
+   }
   ]
  },
  {
@@ -1830,12 +1971,31 @@
   "subcategory": "Queue",
   "difficulty": "Medium",
   "question": "Implement a circular queue (ring buffer).",
-  "answer": "Fixed-size array with head and tail indices and a size/count. Enqueue at tail = (tail+1) % capacity, dequeue at head; track count to distinguish full vs empty. All operations O(1). Useful for bounded buffers and streaming with fixed memory.",
+  "answer": "**Logic**\n\nA fixed array with head and tail indices that wrap using modulo. Enqueue writes at the tail and advances it; dequeue reads at the head and advances that. Both are O(1), and no elements are ever shifted, which is the point: a naive array queue that shifts on dequeue is O(n) per removal.\n\nFull and empty both make head equal tail, so they need distinguishing. The cleanest way is to keep an explicit count; the alternative is to waste one slot so that full and empty are never the same configuration.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class CircularQueue\n{\n    private readonly int[] _items;\n    private int _head;\n    private int _count;      // explicit count: full and empty are otherwise identical\n\n    public CircularQueue(int capacity)\n    {\n        if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity));\n        _items = new int[capacity];\n    }\n\n    public int Count => _count;\n    public bool IsFull => _count == _items.Length;\n    public bool IsEmpty => _count == 0;\n\n    public bool Enqueue(int value)\n    {\n        if (IsFull) return false;\n\n        _items[(_head + _count) % _items.Length] = value;   // tail derived from head + count\n        _count++;\n        return true;\n    }\n\n    public bool Dequeue(out int value)\n    {\n        if (IsEmpty) { value = default; return false; }\n\n        value = _items[_head];\n        _head = (_head + 1) % _items.Length;\n        _count--;\n        return true;\n    }\n\n    public bool Peek(out int value)\n    {\n        if (IsEmpty) { value = default; return false; }\n        value = _items[_head];\n        return true;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var q = new CircularQueue(3);\n\n        Console.WriteLine(q.Enqueue(1));\n        Console.WriteLine(q.Enqueue(2));\n        Console.WriteLine(q.Enqueue(3));\n        Console.WriteLine(q.Enqueue(4));      // full\n\n        q.Dequeue(out int first);\n        Console.WriteLine(first);\n\n        Console.WriteLine(q.Enqueue(4));      // space freed, wraps around\n        q.Peek(out int head);\n        Console.WriteLine(head);\n        Console.WriteLine(q.Count);\n\n        var empty = new CircularQueue(1);\n        Console.WriteLine(empty.Dequeue(out _));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nTrue\nFalse\n1\nTrue\n2\n3\nFalse\n```",
   "tags": [
    "queue",
    "ring-buffer",
-   "design",
-   "circular"
+   "circular",
+   "concurrency",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is a count needed, and what is the alternative?",
+    "a": "Because with only head and tail indices, a full buffer and an empty one both have head equal to tail, so the two states are indistinguishable. The count removes the ambiguity directly. The classic alternative is to leave one slot permanently unused, so full means the tail is one behind the head; that saves a field at the cost of a slot and slightly trickier arithmetic. A third option used in lock-free ring buffers is to let the indices grow monotonically and take the modulo only when addressing, which also makes the two states distinct."
+   },
+   {
+    "q": "Why derive the tail from head plus count rather than storing it?",
+    "a": "Because two independent indices can drift out of sync if a code path updates one and not the other, and the invariant linking them is then only implicit. Deriving the tail makes it impossible to be inconsistent, at the cost of one addition and a modulo per enqueue. It is a small example of preferring a single source of truth over redundant state, which matters far more in structures that are modified from several places."
+   },
+   {
+    "q": "Where do ring buffers appear in real systems?",
+    "a": "Everywhere throughput matters and allocation does not. Audio and video pipelines use them to hand samples between threads without allocating, network stacks use them for packet queues, and high-performance logging uses them so the hot path never allocates. Kafka's partition log is conceptually the same idea at disk scale. The reason is always the same: fixed memory, no allocation, no shifting, and predictable cache behaviour, which together give latency you can reason about."
+   },
+   {
+    "q": "How would you make this safe for one producer and one consumer on different threads?",
+    "a": "With a single producer and single consumer, you can avoid locks entirely: the producer only writes the tail and the consumer only writes the head, so each index has one writer. What you do need is a memory barrier, `Volatile.Write` and `Volatile.Read`, so that a write to the slot is visible before the index advance that publishes it. The derived-tail design here would need reworking, since a shared count is written by both sides and would require an interlocked update, which is exactly why real SPSC ring buffers keep separate head and tail indices."
+   }
   ]
  },
  {
@@ -1868,12 +2028,27 @@
   "subcategory": "Stack",
   "difficulty": "Hard",
   "question": "Longest valid parentheses substring.",
-  "answer": "Stack of indices seeded with -1 as a base. Push index of '('; on ')' pop, and if the stack becomes empty push the current index as a new base, else the valid length is current index minus the new stack top. O(n) time. DP is an alternative.",
+  "answer": "**Logic**\n\nA stack of indices, seeded with -1 as a base marker. On an open bracket, push its index. On a close, pop: if the stack is then empty, this close is unmatched and its index becomes the new base; otherwise the current length is the distance from the current index back to the new stack top.\n\nThe sentinel is what makes the arithmetic uniform, so no special case is needed for a valid substring starting at index 0. O(n) time, O(n) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int LongestValidParentheses(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        var stack = new Stack<int>();\n        stack.Push(-1);              // base marker: the position before any match\n        int best = 0;\n\n        for (int i = 0; i < s.Length; i++)\n        {\n            if (s[i] == '(')\n            {\n                stack.Push(i);\n            }\n            else\n            {\n                stack.Pop();\n\n                if (stack.Count == 0)\n                    stack.Push(i);    // unmatched close: it becomes the new base\n                else\n                    best = Math.Max(best, i - stack.Peek());\n            }\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestValidParentheses(\"(()\"));\n        Console.WriteLine(LongestValidParentheses(\")()())\"));\n        Console.WriteLine(LongestValidParentheses(\"\"));\n        Console.WriteLine(LongestValidParentheses(\"()(()\"));\n        Console.WriteLine(LongestValidParentheses(\"()()\"));      // adjacent groups join\n        Console.WriteLine(LongestValidParentheses(\"((((\"));\n    }\n}\n```\n\n**Output**\n\n```\n2\n4\n0\n2\n4\n0\n```",
   "tags": [
    "stack",
+   "sentinel",
    "parentheses",
-   "longest-valid",
-   "hard"
+   "two-pass",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What does the -1 sentinel actually do?",
+    "a": "It represents the position immediately before the string, so that a valid substring starting at index 0 measures correctly. With \"()\", the close at index 1 pops the open, leaving -1 on top, and 1 minus -1 gives 2. Without the sentinel the stack would be empty at that moment and you would need a special case to know the match began at the very start. It is the same technique as the dummy head node in linked-list problems: an artificial element that removes a boundary case."
+   },
+   {
+    "q": "Why does the stack hold indices of unmatched positions rather than bracket characters?",
+    "a": "Because the answer is a length, so positions are what matter. The stack top after a pop is always the index just before the current valid run began, which is precisely what the length calculation needs. Storing characters would tell you whether the string is balanced but not how long the longest balanced stretch is. The `()()` case shows why: the two groups merge into one run of 4 only because the base index remains -1 throughout."
+   },
+   {
+    "q": "Is there an O(1) space solution?",
+    "a": "Yes, a two-pass scan. Sweep left to right counting opens and closes, recording the length whenever they are equal and resetting when closes exceed opens; then sweep right to left with the roles reversed. The two passes are needed because a single left-to-right scan cannot detect a run that is invalid only due to excess opens, such as \"(()\", and the reverse pass catches exactly those. It is the same forwards-and-backwards trick as in the candy distribution problem."
+   }
   ]
  },
  {
@@ -1881,11 +2056,27 @@
   "subcategory": "Stack",
   "difficulty": "Medium",
   "question": "Asteroid collision simulation.",
-  "answer": "Use a stack: for each asteroid, while it's moving left and the top is moving right, resolve collisions (smaller explodes; equal both explode). Push survivors. The stack holds the final state. O(n) time, O(n) space.",
+  "answer": "**Logic**\n\nA stack of surviving asteroids. A collision is possible only when a right-moving asteroid is already on the stack and a left-moving one arrives, since that is the only configuration where their paths cross.\n\nOn such a meeting, compare sizes: the smaller is destroyed, and equal sizes destroy both. The incoming asteroid may survive several collisions in a row, so the comparison loops until it is destroyed or nothing on the stack opposes it.\n\nEach asteroid is pushed and popped at most once, so O(n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[] AsteroidCollision(int[] asteroids)\n    {\n        var stack = new Stack<int>();\n\n        foreach (int incoming in asteroids)\n        {\n            int current = incoming;\n            bool destroyed = false;\n\n            // A collision needs a right-mover on the stack and a left-mover arriving.\n            while (!destroyed && current < 0 && stack.Count > 0 && stack.Peek() > 0)\n            {\n                int top = stack.Peek();\n\n                if (top < -current) stack.Pop();            // the one on the stack loses\n                else if (top == -current) { stack.Pop(); destroyed = true; }   // both go\n                else destroyed = true;                       // the incoming one loses\n            }\n\n            if (!destroyed) stack.Push(current);\n        }\n\n        return stack.Reverse().ToArray();   // stack pops newest-first\n    }\n\n    private static string Show(int[] a) => a.Length == 0 ? \"(none)\" : string.Join(\",\", a);\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(AsteroidCollision(new[] { 5, 10, -5 })));\n        Console.WriteLine(Show(AsteroidCollision(new[] { 8, -8 })));        // equal: both die\n        Console.WriteLine(Show(AsteroidCollision(new[] { 10, 2, -5 })));\n        Console.WriteLine(Show(AsteroidCollision(new[] { -2, -1, 1, 2 })));  // never meet\n        Console.WriteLine(Show(AsteroidCollision(new[] { 1, -2, -2, -2 })));\n        Console.WriteLine(Show(AsteroidCollision(new[] { -5 })));\n    }\n}\n```\n\n**Output**\n\n```\n5,10\n(none)\n10\n-2,-1,1,2\n-2,-2,-2\n-5\n```",
   "tags": [
    "stack",
    "simulation",
-   "asteroids"
+   "collision",
+   "arrays",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why do -2,-1,1,2 never collide?",
+    "a": "Because the left-movers are already to the left of the right-movers and they are moving apart, so their paths diverge. A collision requires a right-mover positioned before a left-mover in the array, which is exactly the condition the loop guard checks: something positive on the stack and something negative arriving. Recognising that the direction pair, not the values, determines whether a collision is even possible is what makes the algorithm a single pass rather than a pairwise simulation."
+   },
+   {
+    "q": "Why is the collision check a while loop rather than a single comparison?",
+    "a": "Because one large left-moving asteroid can destroy several smaller right-movers in succession, as in [10, 2, -5] where -5 destroys the 2 and then meets the 10 and is itself destroyed. A single comparison would leave the survivor in an inconsistent state. The loop terminates because each iteration either pops an element or sets the destroyed flag, so it cannot spin, and the amortised cost stays linear since every asteroid is popped at most once overall."
+   },
+   {
+    "q": "Suppose asteroids had different speeds.",
+    "a": "The stack model breaks, because collisions would no longer occur strictly in array order: a fast left-mover could overtake and reach a right-mover before a nearer, slower one does. You would need to compute collision times for adjacent pairs and process them in chronological order with a priority queue, recomputing neighbours after each collision. That is a genuine discrete-event simulation, which is a considerable step up and a good way for an interviewer to probe whether you understand why the simple version works."
+   }
   ]
  },
  {
@@ -1944,12 +2135,27 @@
   "subcategory": "Stack",
   "difficulty": "Medium",
   "question": "Simplify a Unix-style absolute path.",
-  "answer": "Split by '/', use a stack: ignore '' and '.', pop on '..' (if non-empty), else push the directory name. Join the stack with '/' prefixed by a leading slash. O(n) time. Handles multiple slashes and parent references correctly.",
+  "answer": "**Logic**\n\nSplit on slashes and process each component with a stack. A normal name is pushed; `..` pops one level, if there is one; `.` and empty components, which come from repeated or trailing slashes, are skipped. Joining the stack with slashes gives the canonical path.\n\nThe edge cases are what the question is really about: `..` at the root must be ignored rather than escaping above it, the result always begins with a slash, and it never ends with one except for the root itself.\n\nO(n) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static string SimplifyPath(string path)\n    {\n        if (string.IsNullOrEmpty(path)) return \"/\";\n\n        var stack = new List<string>();   // a list so it can be joined in order\n\n        foreach (string part in path.Split('/'))\n        {\n            if (part.Length == 0 || part == \".\") continue;      // \"//\" and \"/./\"\n\n            if (part == \"..\")\n            {\n                // Going up from the root stays at the root.\n                if (stack.Count > 0) stack.RemoveAt(stack.Count - 1);\n                continue;\n            }\n\n            stack.Add(part);\n        }\n\n        return \"/\" + string.Join(\"/\", stack);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(SimplifyPath(\"/home/\"));\n        Console.WriteLine(SimplifyPath(\"/../\"));                  // cannot go above root\n        Console.WriteLine(SimplifyPath(\"/home//foo/\"));           // double slash\n        Console.WriteLine(SimplifyPath(\"/a/./b/../../c/\"));\n        Console.WriteLine(SimplifyPath(\"/\"));\n        Console.WriteLine(SimplifyPath(\"/a/../../b/../c//.//\"));\n    }\n}\n```\n\n**Output**\n\n```\n/home\n/\n/home/foo\n/c\n/\n/c\n```",
   "tags": [
    "stack",
-   "path",
-   "simplify",
-   "string"
+   "strings",
+   "paths",
+   "security",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must .. at the root be ignored rather than erroring?",
+    "a": "Because that is how Unix behaves: the root is its own parent, so `cd /..` leaves you at the root. Erroring would diverge from the semantics being modelled. It also matters for security: code that resolves paths and allows `..` to escape above a base directory is the classic path-traversal vulnerability, where a request for `../../etc/passwd` reaches outside the intended folder. Clamping at the root is both correct and the safe behaviour."
+   },
+   {
+    "q": "Why a List rather than a Stack here?",
+    "a": "Because the result needs the components in original order, and `Stack<T>` enumerates newest-first, so it would have to be reversed before joining. A `List<T>` used as a stack, pushing with Add and popping from the end, gives O(1) for both operations and enumerates in the right order. It is a small reminder that the abstract data type and the concrete collection are separate choices, and the traversal order can decide the second one."
+   },
+   {
+    "q": "Would you use this for real path handling?",
+    "a": "No. Real paths bring symbolic links, which `..` does not traverse the way lexical simplification assumes, plus case sensitivity rules, Windows drive letters and UNC prefixes, and Unicode normalisation. `Path.GetFullPath` and the platform APIs handle those, and security-sensitive code should resolve the real path and then verify it sits under the permitted root, rather than trusting lexical cleanup. The exercise is about the stack; the production answer is to use the library."
+   }
   ]
  },
  {
@@ -3997,12 +4203,27 @@
   "subcategory": "Sorting",
   "difficulty": "Hard",
   "question": "Count inversions in an array.",
-  "answer": "Modified merge sort: while merging, when an element from the right half is placed before remaining left-half elements, add the count of those remaining left elements as inversions. O(n log n) time. An inversion is a pair (i<j) with nums[i]>nums[j].",
+  "answer": "**Logic**\n\nAn inversion is a pair where a larger value appears before a smaller one. Counting them naively is O(n²); merge sort counts them in O(n log n) as a side effect of merging.\n\nDuring a merge, when an element from the right half is taken before elements remain in the left half, that element is smaller than every one of those remaining left elements, so all of those pairs are inversions and can be counted in one go rather than individually. Summing that across every merge gives the total.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static long CountInversions(int[] nums)\n    {\n        if (nums == null || nums.Length < 2) return 0;\n\n        var work = (int[])nums.Clone();      // do not disturb the caller's array\n        var buffer = new int[work.Length];\n        return Sort(work, buffer, 0, work.Length - 1);\n    }\n\n    private static long Sort(int[] a, int[] buffer, int low, int high)\n    {\n        if (low >= high) return 0;\n\n        int mid = low + (high - low) / 2;\n        long count = Sort(a, buffer, low, mid) + Sort(a, buffer, mid + 1, high);\n\n        return count + Merge(a, buffer, low, mid, high);\n    }\n\n    private static long Merge(int[] a, int[] buffer, int low, int mid, int high)\n    {\n        Array.Copy(a, low, buffer, low, high - low + 1);\n\n        long inversions = 0;\n        int i = low, j = mid + 1;\n\n        for (int k = low; k <= high; k++)\n        {\n            if (i > mid) a[k] = buffer[j++];\n            else if (j > high) a[k] = buffer[i++];\n            else if (buffer[j] < buffer[i])\n            {\n                // buffer[j] is smaller than every remaining element of the left\n                // half, so that whole block forms inversions with it at once.\n                inversions += mid - i + 1;\n                a[k] = buffer[j++];\n            }\n            else a[k] = buffer[i++];\n        }\n\n        return inversions;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CountInversions(new[] { 2, 4, 1, 3, 5 }));   // (2,1) (4,1) (4,3)\n        Console.WriteLine(CountInversions(new[] { 1, 2, 3, 4, 5 }));   // sorted: none\n        Console.WriteLine(CountInversions(new[] { 5, 4, 3, 2, 1 }));   // reversed: n(n-1)/2\n        Console.WriteLine(CountInversions(new[] { 1, 1, 1 }));         // equal: not inversions\n        Console.WriteLine(CountInversions(new[] { 7 }));\n\n        var original = new[] { 3, 1, 2 };\n        CountInversions(original);\n        Console.WriteLine(string.Join(\",\", original));                 // untouched\n    }\n}\n```\n\n**Output**\n\n```\n3\n0\n10\n0\n0\n3,1,2\n```",
   "tags": [
    "sorting",
    "merge-sort",
    "inversions",
-   "hard"
+   "divide-and-conquer",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does taking one element from the right half count a whole block of inversions?",
+    "a": "Because both halves are already sorted at that point. If `buffer[j]` is smaller than `buffer[i]`, it is also smaller than everything after `buffer[i]` in the left half, and all of those sit at earlier positions in the original array. So every one of the `mid - i + 1` remaining left elements forms an inversion with it. Counting them individually would be the quadratic algorithm again; counting them as a block is exactly what makes it O(n log n)."
+   },
+   {
+    "q": "Why should the return type be long rather than int?",
+    "a": "Because the maximum is n(n-1)/2, which for an array of 100,000 elements is about five billion and overflows a signed 32-bit int. A reversed array of that size is not exotic. The test with [5,4,3,2,1] giving 10 is the shape of that formula at small scale. This is the same overflow reasoning as in climbing stairs and the missing-number sum: work out the maximum the answer can reach before choosing the type."
+   },
+   {
+    "q": "Suppose you needed inversions within a sliding window, or after updates.",
+    "a": "Merge sort computes it once over a static array and cannot be updated incrementally. For dynamic data you use a Fenwick tree or an order-statistic tree: process elements left to right, and for each one query how many already-inserted values exceed it, then insert. That is O(n log n) too, but supports insertions and deletions, so it handles updates and windows. It also needs coordinate compression when values are large or sparse, which is the usual practical wrinkle."
+   }
   ]
  },
  {
@@ -4010,12 +4231,27 @@
   "subcategory": "Heap",
   "difficulty": "Medium",
   "question": "Find the k closest points to the origin.",
-  "answer": "Max-heap of size k keyed by squared distance: push points, evict the farthest when size exceeds k; the heap holds the k closest. O(n log k). Quickselect on distance gives average O(n). Return the heap contents.",
+  "answer": "**Logic**\n\nA bounded max-heap of size k keyed on squared distance. Push each point; once the heap exceeds k, evict the furthest. What remains is the k closest. O(n log k) time, O(k) space, and it works on a stream.\n\nTwo details. Compare squared distances rather than actual distances: the square root is monotonic so it cannot change the ordering, and skipping it avoids floating-point arithmetic entirely. And use a *max*-heap, because the element you need to evict is the worst of the current best set.\n\nQuickselect gives O(n) average if the whole array is available and may be reordered.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[][] KClosest(int[][] points, int k)\n    {\n        if (points == null || k <= 0) return Array.Empty<int[]>();\n        if (k >= points.Length) return points;\n\n        // Max-heap by negated priority: the root is the furthest kept so far.\n        var heap = new PriorityQueue<int[], long>();\n\n        foreach (var p in points)\n        {\n            // Squared distance: no Math.Sqrt, no floating point, no precision loss.\n            long distance = (long)p[0] * p[0] + (long)p[1] * p[1];\n\n            heap.Enqueue(p, -distance);\n            if (heap.Count > k) heap.Dequeue();   // drop the furthest\n        }\n\n        var result = new List<int[]>();\n        while (heap.Count > 0) result.Add(heap.Dequeue());\n        return result.ToArray();\n    }\n\n    private static string Render(int[][] pts) =>\n        string.Join(\" \", pts.Select(p => $\"[{p[0]},{p[1]}]\")\n                            .OrderBy(s => s, StringComparer.Ordinal));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(KClosest(new[] {\n            new[] { 1, 3 }, new[] { -2, 2 } }, 1)));\n\n        Console.WriteLine(Render(KClosest(new[] {\n            new[] { 3, 3 }, new[] { 5, -1 }, new[] { -2, 4 } }, 2)));\n\n        Console.WriteLine(Render(KClosest(new[] { new[] { 0, 0 } }, 1)));\n        Console.WriteLine(Render(KClosest(new[] { new[] { 1, 1 }, new[] { 2, 2 } }, 5)));\n        Console.WriteLine(KClosest(new[] { new[] { 1, 1 } }, 0).Length);\n    }\n}\n```\n\n**Output**\n\n```\n[-2,2]\n[-2,4] [3,3]\n[0,0]\n[1,1] [2,2]\n0\n```",
   "tags": [
    "heap",
-   "quickselect",
-   "k-closest",
-   "geometry"
+   "top-k",
+   "geometry",
+   "streaming",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why compare squared distances rather than real distances?",
+    "a": "Because the square root is strictly increasing, so it preserves order and comparing squares gives identical rankings. Skipping it removes n square-root operations and, more importantly, keeps the arithmetic in integers, avoiding any floating-point rounding that could make two genuinely different distances compare equal. The `long` cast matters too: coordinates near int.MaxValue would overflow when squared in int. Only take the root if the caller actually needs the distance value."
+   },
+   {
+    "q": "Why a max-heap for the k CLOSEST, which sounds backwards?",
+    "a": "Because you need cheap access to the worst member of the set you are keeping, so it can be evicted when something better arrives. The heap holds the k closest seen so far, and its root is the furthest of those. A min-heap would put the closest at the root, which you never want to remove, and you would have to hold all n points. The general rule is that a bounded top-k needs a heap ordered opposite to the direction you are selecting, which is the same reasoning as the kth-largest problem."
+   },
+   {
+    "q": "Suppose the points arrive as a stream of millions, or are spread across machines.",
+    "a": "The heap already handles a stream in O(k) memory, which is its main advantage over quickselect. Across machines, compute the local top k on each shard and merge the results, since the global top k must be a subset of the union of the local ones. That is a genuinely useful property and makes the problem embarrassingly parallel. If instead the query were 'all points within radius r', a spatial index such as a k-d tree or an R-tree would be the right structure rather than a heap."
+   }
   ]
  },
  {
@@ -4023,13 +4259,31 @@
   "subcategory": "Heap",
   "difficulty": "Hard",
   "question": "Find the median from a data stream.",
-  "answer": "Two heaps: a max-heap for the lower half and a min-heap for the upper half, kept balanced in size. Insert into the appropriate heap and rebalance; the median is the top of the larger heap (odd count) or the average of both tops (even). Insert O(log n), median O(1).",
+  "answer": "**Logic**\n\nTwo heaps. A max-heap holds the smaller half, a min-heap the larger half. Their roots are the two elements adjacent to the median, so the median is either the max-heap's root, when the counts differ, or the average of both roots when they are equal.\n\nThe invariants are that every element in the low heap is at most every element in the high heap, and the sizes differ by at most one. Insert into one heap, push its root across to the other, then rebalance, which enforces both invariants without any comparison logic.\n\nAdd is O(log n), median is O(1).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class MedianFinder\n{\n    // .NET's PriorityQueue is a min-heap, so the low half negates its priority.\n    private readonly PriorityQueue<int, int> _low = new();    // max-heap by negation\n    private readonly PriorityQueue<int, int> _high = new();   // min-heap\n\n    public void Add(int value)\n    {\n        // Always enter through the low heap, then pass its largest to the high\n        // heap: that enforces \"every low <= every high\" with no comparisons.\n        _low.Enqueue(value, -value);\n\n        int movedUp = _low.Dequeue();\n        _high.Enqueue(movedUp, movedUp);\n\n        // Rebalance so low is never smaller than high.\n        if (_high.Count > _low.Count)\n        {\n            int movedDown = _high.Dequeue();\n            _low.Enqueue(movedDown, -movedDown);\n        }\n    }\n\n    public double Median()\n    {\n        if (_low.Count == 0) throw new InvalidOperationException(\"no values yet\");\n\n        return _low.Count > _high.Count\n            ? _low.Peek()\n            : (_low.Peek() + _high.Peek()) / 2.0;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var m = new MedianFinder();\n\n        m.Add(1); Console.WriteLine(m.Median());\n        m.Add(2); Console.WriteLine(m.Median());\n        m.Add(3); Console.WriteLine(m.Median());\n        m.Add(4); Console.WriteLine(m.Median());\n\n        var d = new MedianFinder();\n        d.Add(5); d.Add(5); d.Add(5);\n        Console.WriteLine(d.Median());\n\n        var neg = new MedianFinder();\n        neg.Add(-1); neg.Add(-2); neg.Add(-3);\n        Console.WriteLine(neg.Median());\n\n        try { new MedianFinder().Median(); }\n        catch (InvalidOperationException e) { Console.WriteLine(e.Message); }\n    }\n}\n```\n\n**Output**\n\n```\n1\n1.5\n2\n2.5\n5\n-2\nno values yet\n```",
   "tags": [
    "heap",
+   "streaming",
    "median",
-   "stream",
    "two-heaps",
-   "hard"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why push every value through the low heap first instead of comparing against the roots?",
+    "a": "Because comparing requires handling the empty-heap case and getting the boundary right when the value equals a root, which is where hand-written versions usually break. Entering through the low heap and immediately promoting its maximum to the high heap guarantees the ordering invariant unconditionally, and the single rebalance restores the size invariant. It costs one extra heap operation per insert, a constant factor, in exchange for code with no special cases."
+   },
+   {
+    "q": "Suppose you needed the median of a sliding window rather than the whole stream.",
+    "a": "The two-heap idea still applies but removal becomes the problem, since a heap cannot delete an arbitrary element efficiently. The standard fix is lazy deletion: keep a dictionary of values pending removal and discard them when they surface at a root, tracking the effective sizes separately. That keeps O(log n) amortised. The cleaner alternative is an order-statistic tree or an indexed skip list, which supports both arbitrary deletion and rank queries directly."
+   },
+   {
+    "q": "Suppose the stream is far too large to hold in memory.",
+    "a": "Then an exact median is impossible without storing everything, so you move to approximation. A t-digest or the Greenwald-Khanna algorithm gives quantiles with a bounded error in a small, fixed amount of memory, and t-digest is deliberately more accurate at the tails, which is why monitoring systems use it for p99 latency. Reservoir sampling is the simpler option when a rough answer suffices. Naming the point where exactness has to be traded away is the substance of this follow-up."
+   },
+   {
+    "q": "Why negate the priority rather than supply a custom comparer?",
+    "a": "Either works. Negation is shorter and avoids an interface dispatch per comparison, so it is marginally faster. Its flaw is int.MinValue, which has no positive counterpart and negates to itself, so a stream containing it would order incorrectly. A comparer using `Comparer<int>.Create((a, b) => b.CompareTo(a))` has no such edge case and states the intent more clearly. For production I would use the comparer and note why."
+   }
   ]
  },
  {
@@ -4037,12 +4291,31 @@
   "subcategory": "Heap",
   "difficulty": "Medium",
   "question": "Reorganize a string so no two adjacent characters are the same.",
-  "answer": "Count frequencies; use a max-heap by frequency. Repeatedly append the most frequent char that isn't the previous one, decrement, and re-add. If the max frequency exceeds (n+1)/2, it's impossible. O(n log k) time.",
+  "answer": "**Logic**\n\nGreedily place the most frequent remaining character, but never the one just used. A max-heap by count gives the candidate; hold the previously placed character aside for exactly one step, then return it to the heap.\n\nIt is impossible when some character occurs more than `(n + 1) / 2` times, because there are not enough gaps to separate its occurrences. Checking that first turns an impossible case into an immediate answer rather than a failed construction.\n\nO(n log k) time for an alphabet of size k.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    public static string Reorganize(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return \"\";\n\n        var counts = new Dictionary<char, int>();\n        foreach (char c in s) counts[c] = counts.TryGetValue(c, out int n) ? n + 1 : 1;\n\n        // More than half (rounded up) of the slots means no arrangement exists.\n        foreach (var (_, count) in counts)\n            if (count > (s.Length + 1) / 2) return \"\";\n\n        var heap = new PriorityQueue<char, int>();\n        foreach (var (c, count) in counts) heap.Enqueue(c, -count);   // max-heap\n\n        var sb = new StringBuilder(s.Length);\n        char heldChar = '\\0';\n        int heldCount = 0;\n\n        while (heap.Count > 0)\n        {\n            heap.TryDequeue(out char c, out int negCount);\n            sb.Append(c);\n\n            // Return the previous character now that one slot separates them.\n            if (heldCount > 0) heap.Enqueue(heldChar, -heldCount);\n\n            heldChar = c;\n            heldCount = -negCount - 1;   // one copy has just been used\n        }\n\n        return sb.ToString();\n    }\n\n    // Verify rather than assert an exact string: several arrangements are valid.\n    private static string Check(string input)\n    {\n        string r = Reorganize(input);\n        if (r.Length == 0) return \"(impossible)\";\n\n        for (int i = 1; i < r.Length; i++)\n            if (r[i] == r[i - 1]) return \"INVALID: \" + r;\n\n        return r.Length == input.Length ? \"valid, length \" + r.Length : \"WRONG LENGTH\";\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Check(\"aab\"));\n        Console.WriteLine(Check(\"aaab\"));        // 3 a's in 4 slots: impossible\n        Console.WriteLine(Check(\"vvvlo\"));\n        Console.WriteLine(Check(\"a\"));\n        Console.WriteLine(Check(\"aabbcc\"));\n        Console.WriteLine(Check(\"aaabbb\"));\n    }\n}\n```\n\n**Output**\n\n```\nvalid, length 3\n(impossible)\nvalid, length 5\nvalid, length 1\nvalid, length 6\nvalid, length 6\n```",
   "tags": [
    "heap",
    "greedy",
-   "string",
-   "reorganize"
+   "strings",
+   "property-testing",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is (n + 1) / 2 the exact impossibility threshold?",
+    "a": "Because separating k copies of a character requires k - 1 gaps between them, so the string needs at least 2k - 1 positions. Rearranging, k must be at most (n + 1) / 2 with integer division. At exactly that bound the character occupies every alternate slot starting at the first, which is achievable; one more and two copies must touch. Checking it up front is worth doing because it converts a construction that would fail partway into a clean early return."
+   },
+   {
+    "q": "Why hold the previous character aside rather than just excluding it in the comparison?",
+    "a": "Because the heap has no way to skip its root conditionally; peeking past it would mean removing and restoring, which is the same operation with more steps. Holding it outside the heap for exactly one iteration expresses the cooldown directly: it is ineligible now and eligible next time. It is the same pattern as the cooldown queue in task scheduler, and it generalises: for a cooldown of n you hold a queue of n pending items rather than a single variable."
+   },
+   {
+    "q": "Suppose the required distance were k rather than 1.",
+    "a": "Replace the single held character with a queue of the last k used, releasing the front back into the heap once k slots have passed. If the heap empties while the queue is non-empty, the arrangement is impossible and you either pad with idle slots, as in task scheduler, or report failure, depending on the problem. That generalisation is why these two questions are often asked together: they are the same greedy with a different cooldown length and a different failure policy."
+   },
+   {
+    "q": "Why does the test verify a property rather than compare against an expected string?",
+    "a": "Because several arrangements are valid: \"aba\" and, for larger inputs, many permutations all satisfy the constraint. Asserting one exact output would make the test depend on heap tie-breaking, which is unspecified and can change between runtime versions. Checking the real requirements, that no two adjacent characters match and the length is preserved, is both stronger and stable. The same argument applies to find-peak-element and to any problem with multiple correct answers."
+   }
   ]
  },
  {
@@ -4050,13 +4323,27 @@
   "subcategory": "Heap",
   "difficulty": "Hard",
   "question": "Task scheduler: minimum intervals with cooldown n between same tasks.",
-  "answer": "Count task frequencies; the answer is max(total tasks, (maxFreq-1)*(n+1) + numberOfTasksWithMaxFreq). Fill idle slots with other tasks. Greedy formula based on the most frequent task determining the schedule length. O(total) time.",
+  "answer": "**Logic**\n\nThe answer is driven entirely by the most frequent task. If it occurs `maxCount` times, it creates `maxCount - 1` gaps, each needing `n + 1` slots including the task itself. Other tasks fill those gaps; only if they cannot fill them is idling required.\n\nSo the formula is `(maxCount - 1) × (n + 1) + (number of tasks tied at maxCount)`. If there are enough distinct tasks to fill every gap, no idling occurs at all and the answer is simply the task count, so take the larger of the two.\n\nO(n) time, O(1) space over a fixed alphabet.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int LeastInterval(char[] tasks, int n)\n    {\n        if (tasks == null || tasks.Length == 0) return 0;\n\n        var counts = new int[26];\n        foreach (char t in tasks) counts[t - 'A']++;\n\n        int maxCount = 0, tiedAtMax = 0;\n        foreach (int c in counts)\n        {\n            if (c > maxCount) { maxCount = c; tiedAtMax = 1; }\n            else if (c == maxCount && c > 0) tiedAtMax++;\n        }\n\n        // Frame built by the most frequent task, plus the tasks sharing its count.\n        int framed = (maxCount - 1) * (n + 1) + tiedAtMax;\n\n        // If there are enough distinct tasks, the gaps fill and nothing idles.\n        return Math.Max(framed, tasks.Length);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LeastInterval(new[] { 'A', 'A', 'A', 'B', 'B', 'B' }, 2));\n        Console.WriteLine(LeastInterval(new[] { 'A', 'A', 'A', 'B', 'B', 'B' }, 0));\n        Console.WriteLine(LeastInterval(new[] { 'A', 'A', 'A', 'A', 'A', 'A',\n                                               'B', 'C', 'D', 'E', 'F', 'G' }, 2));\n        Console.WriteLine(LeastInterval(new[] { 'A' }, 5));\n        Console.WriteLine(LeastInterval(new[] { 'A', 'B', 'C' }, 1));\n        Console.WriteLine(LeastInterval(new[] { 'A', 'A', 'B' }, 2));\n    }\n}\n```\n\n**Output**\n\n```\n8\n6\n16\n1\n3\n4\n```",
   "tags": [
-   "heap",
    "greedy",
    "scheduling",
-   "cooldown",
-   "hard"
+   "counting",
+   "formula",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why take the maximum against tasks.Length?",
+    "a": "Because the formula only counts the frame built by the most frequent task and assumes everything else fits inside its gaps. When there are many distinct tasks, the gaps overflow and the schedule is simply back-to-back with no idling, so the answer is the total number of tasks. Without that guard the formula would under-report. The [A,A,A,B,B,B] with n=0 case is the smallest example: the frame gives 4 but the true answer is 6."
+   },
+   {
+    "q": "Why does the number of tasks tied at the maximum matter?",
+    "a": "Because every task occurring maxCount times must appear in the final block alongside the most frequent one, extending the schedule by one slot each. With A and B both appearing three times and n = 2, the pattern is A B idle A B idle A B, so the last block holds both, giving 8 rather than 7. Forgetting the tie count is the most common error, and it only shows up when two tasks share the top frequency."
+   },
+   {
+    "q": "Suppose you had to output the actual schedule, not just its length.",
+    "a": "The formula gives no schedule, so you switch to simulation: a max-heap of remaining counts, popping the most frequent available task each interval and holding cooled-down tasks in a queue until they become eligible again. That is O(total log 26) and produces a concrete ordering. It is a good illustration that a closed-form count and a constructive algorithm are different things, and that being asked for the arrangement rather than the number can change the approach entirely."
+   }
   ]
  },
  {
