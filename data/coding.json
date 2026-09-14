@@ -8574,17 +8574,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Open the lock: minimum turns to reach a target combination avoiding deadends.",
-  "answer": "BFS over the state space of four-digit combinations, generating eight neighbours per state, skipping deadends and visited states. Time O(10^4 times 8), space O(10^4). Bidirectional BFS roughly halves the explored frontier.",
+  "answer": "**Approach**\n\nBFS over combinations. Each state is a four-digit string; each move turns one wheel one notch, giving eight neighbours. Deadends are simply pre-marked as visited so they are never entered.\n\n**Logic**\n\nEvery turn costs the same, so BFS gives the minimum number of turns. The state space is only 10,000 combinations, so exhaustive search is cheap.\n\nTwo cases must be checked before the search: the start itself may be a deadend, in which case there is no solution, and the target may equal the start, which costs zero turns.\n\nWheels wrap, so 0 turns down to 9 and 9 turns up to 0. That wraparound uses the non-negative modulo idiom.\n\nO(10000 × 8) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int OpenLock(string[] deadends, string target)\n    {\n        var blocked = new HashSet<string>(deadends);\n\n        if (blocked.Contains(\"0000\")) return -1;   // cannot even start\n        if (target == \"0000\") return 0;\n\n        var visited = new HashSet<string>(blocked) { \"0000\" };\n        var queue = new Queue<string>();\n        queue.Enqueue(\"0000\");\n\n        int turns = 0;\n\n        while (queue.Count > 0)\n        {\n            turns++;\n            int levelSize = queue.Count;\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                string state = queue.Dequeue();\n\n                foreach (string next in Neighbours(state))\n                {\n                    if (!visited.Add(next)) continue;   // blocked or already seen\n\n                    if (next == target) return turns;\n                    queue.Enqueue(next);\n                }\n            }\n        }\n\n        return -1;\n    }\n\n    private static IEnumerable<string> Neighbours(string state)\n    {\n        var wheels = state.ToCharArray();\n\n        for (int i = 0; i < 4; i++)\n        {\n            char original = wheels[i];\n            int digit = original - '0';\n\n            // Wheels wrap: 9 up is 0, 0 down is 9.\n            wheels[i] = (char)('0' + (digit + 1) % 10);\n            yield return new string(wheels);\n\n            wheels[i] = (char)('0' + (digit + 9) % 10);\n            yield return new string(wheels);\n\n            wheels[i] = original;\n        }\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(OpenLock(new[] { \"0201\", \"0101\", \"0102\", \"1212\", \"2002\" }, \"0202\"));\n        Console.WriteLine(OpenLock(new[] { \"8888\" }, \"0009\"));          // one turn down\n        Console.WriteLine(OpenLock(new[] { \"8887\", \"8889\", \"8878\", \"8898\",\n                                           \"8788\", \"8988\", \"7888\", \"9888\" }, \"8888\"));\n        Console.WriteLine(OpenLock(new[] { \"0000\" }, \"8888\"));          // start blocked\n        Console.WriteLine(OpenLock(Array.Empty<string>(), \"0000\"));     // already there\n        Console.WriteLine(OpenLock(Array.Empty<string>(), \"1111\"));\n    }\n}\n```\n\n**Output**\n\n```\n6\n1\n-1\n-1\n0\n4\n```",
   "tags": [
    "graphs",
    "bfs",
    "state-space",
-   "shortest-path"
+   "wraparound",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why seed the visited set with the deadends?",
+    "a": "Because a deadend is a state you may never occupy, which is operationally identical to having already visited it - both mean 'do not enqueue this'. Merging them into one set removes a second membership check from the inner loop, which runs eighty thousand times. It also makes the start check natural: if 0000 is a deadend the search cannot begin at all, which is why that case is tested before the loop rather than discovered inside it."
+   },
+   {
+    "q": "Why check the target before starting rather than inside the loop?",
+    "a": "Because the loop increments the turn counter before examining a level, so a target equal to the start would be reported as taking turns when it takes none. Checking up front returns 0 correctly. It is the same class of off-by-one as in jump game II, where the loop must stop before the last index, and it only shows up on the degenerate input that people forget to test."
+   },
+   {
+    "q": "Could this be made faster?",
+    "a": "Bidirectional BFS, searching from both the start and the target and stopping when the frontiers meet, roughly square-roots the number of states explored. With only 10,000 states the plain version is already instantaneous, so it is not worth it here, but the technique is the standard answer when the state space is large - it is what makes word ladder tractable on a big dictionary. Naming it shows you know the ceiling without spending effort you do not need."
+   }
   ]
  },
  {
@@ -8592,17 +8607,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Number of provinces: count connected components given an adjacency matrix.",
-  "answer": "DFS or Union-Find over the matrix, counting how many times a new traversal starts. Time O(n^2) since the matrix must be read, space O(n). The adjacency-matrix input is what forces the quadratic bound rather than the algorithm.",
+  "answer": "**Approach**\n\nOne traversal per unvisited city; each traversal consumes exactly one province. Either DFS or union-find works, and the adjacency matrix makes neighbours a row scan.\n\n**Logic**\n\nStart at city 0; mark everything reachable. That is one province. Move to the next unmarked city and repeat. The number of traversals started is the number of provinces.\n\nThe matrix is symmetric and the diagonal is always 1, since a city is connected to itself, so the self-edge needs no special handling — it simply revisits an already-marked city.\n\nO(n²) because the matrix itself is that size.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int FindCircleNum(int[][] connected)\n    {\n        if (connected == null || connected.Length == 0) return 0;\n\n        int n = connected.Length;\n        var visited = new bool[n];\n        int provinces = 0;\n\n        for (int start = 0; start < n; start++)\n        {\n            if (visited[start]) continue;\n\n            provinces++;   // each new traversal consumes exactly one province\n\n            var stack = new Stack<int>();\n            stack.Push(start);\n            visited[start] = true;\n\n            while (stack.Count > 0)\n            {\n                int city = stack.Pop();\n\n                for (int next = 0; next < n; next++)\n                {\n                    if (connected[city][next] != 1 || visited[next]) continue;\n\n                    visited[next] = true;\n                    stack.Push(next);\n                }\n            }\n        }\n\n        return provinces;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindCircleNum(new[] {\n            new[] { 1, 1, 0 }, new[] { 1, 1, 0 }, new[] { 0, 0, 1 } }));   // {0,1} and {2}\n\n        Console.WriteLine(FindCircleNum(new[] {\n            new[] { 1, 0, 0 }, new[] { 0, 1, 0 }, new[] { 0, 0, 1 } }));   // all isolated\n\n        Console.WriteLine(FindCircleNum(new[] {\n            new[] { 1, 1, 1 }, new[] { 1, 1, 1 }, new[] { 1, 1, 1 } }));   // all one\n\n        Console.WriteLine(FindCircleNum(new[] { new[] { 1 } }));\n        Console.WriteLine(FindCircleNum(Array.Empty<int[]>()));\n\n        Console.WriteLine(FindCircleNum(new[] {\n            new[] { 1, 1, 0, 0 }, new[] { 1, 1, 0, 0 },\n            new[] { 0, 0, 1, 1 }, new[] { 0, 0, 1, 1 } }));                // two pairs\n    }\n}\n```\n\n**Output**\n\n```\n2\n3\n1\n1\n0\n2\n```",
   "tags": [
    "graphs",
    "dfs",
-   "union-find",
-   "components"
+   "connected-components",
+   "adjacency-matrix",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why is this O(n squared) rather than O(V + E)?",
+    "a": "Because the input is an adjacency matrix, so finding a city's neighbours means scanning a whole row of n entries regardless of how many are actually connected. Every city is scanned once, giving n squared. With an adjacency list the same algorithm would be O(V + E), which for a sparse graph is far better. The representation, not the algorithm, sets the bound here - which is why the choice of representation is itself a design decision."
+   },
+   {
+    "q": "Would union-find be better?",
+    "a": "It is equally valid and equally O(n squared) here, since you still have to read every matrix entry to know which pairs to union. Union-find wins when edges arrive incrementally and the count must stay current, because it absorbs a new edge in near-constant time while a traversal would have to restart. For a single static query over a matrix, the traversal is simpler and has no extra structure to maintain."
+   },
+   {
+    "q": "Why does the diagonal need no special handling?",
+    "a": "Because connected[i][i] is always 1, so the scan sees the city as its own neighbour, finds it already visited, and skips it. The visited check absorbs it naturally. Writing an explicit skip for the diagonal would be harmless but redundant. It is a small example of an invariant in the input making a special case unnecessary, which is worth noticing rather than defending against."
+   }
   ]
  },
  {
@@ -8610,16 +8640,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Satisfiability of equality equations such as a==b and b!=c.",
-  "answer": "Process all equality equations first with Union-Find to build the components, then check every inequality - if both sides share a root the system is unsatisfiable. Order matters: processing inequalities first gives wrong answers. Time near O(n).",
+  "answer": "**Approach**\n\nTwo passes with union-find. Process every equality first, merging variables into components, then check every inequality against the resulting components.\n\n**Logic**\n\nThe order is what makes it work. Equalities are constraints that must all hold simultaneously, so applying them all first produces the complete partition of variables into groups that must be equal. Only then can an inequality be evaluated: it is violated exactly when both sides ended up in the same component.\n\nProcessing them interleaved would evaluate an inequality before a later equality merges the two sides, missing the contradiction.\n\nO(n α(n)) for 26 variables.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool EquationsPossible(string[] equations)\n    {\n        var parent = new int[26];\n        for (int i = 0; i < 26; i++) parent[i] = i;\n\n        int Find(int x)\n        {\n            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n            return x;\n        }\n\n        // Pass 1: every equality, so the partition is complete before checking.\n        foreach (string e in equations)\n            if (e[1] == '=')\n                parent[Find(e[0] - 'a')] = Find(e[3] - 'a');\n\n        // Pass 2: an inequality is violated if both sides are in one component.\n        foreach (string e in equations)\n            if (e[1] == '!' && Find(e[0] - 'a') == Find(e[3] - 'a'))\n                return false;\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(EquationsPossible(new[] { \"a==b\", \"b!=a\" }));\n        Console.WriteLine(EquationsPossible(new[] { \"a==b\", \"b==c\", \"a==c\" }));\n        Console.WriteLine(EquationsPossible(new[] { \"a==b\", \"b==c\", \"a!=c\" }));   // transitive\n        Console.WriteLine(EquationsPossible(new[] { \"a!=a\" }));                    // self\n        Console.WriteLine(EquationsPossible(new[] { \"c==c\", \"b==d\", \"x!=z\" }));\n\n        // The inequality appears BEFORE the equality that contradicts it.\n        Console.WriteLine(EquationsPossible(new[] { \"a!=c\", \"b==c\", \"a==b\" }));\n    }\n}\n```\n\n**Output**\n\n```\nFalse\nTrue\nFalse\nFalse\nTrue\nFalse\n```",
   "tags": [
    "graphs",
    "union-find",
-   "constraints"
+   "constraints",
+   "two-pass",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why must all equalities be processed before any inequality?",
+    "a": "Because equality is transitive and the full set of merges determines which variables are forced equal. Checking an inequality early evaluates it against an incomplete partition, so a later equality that creates the contradiction is missed. The last test is built for this: 'a!=c' appears first and only becomes contradictory once 'b==c' and 'a==b' have been applied. Interleaved processing returns true, which is wrong."
+   },
+   {
+    "q": "Why does a!=a fail without any equality at all?",
+    "a": "Because a variable is trivially in its own component, so Find returns the same root for both sides and the inequality is violated immediately. It is a nice property of the formulation: the self-contradiction needs no special case, since the union-find already encodes that everything equals itself. A solution that only compared distinct variables would miss it, which is why it is worth testing."
+   },
+   {
+    "q": "How does this generalise beyond equality and inequality?",
+    "a": "Adding ordering constraints such as a < b turns it into a different problem: union-find handles equivalence relations, which are symmetric, but ordering is antisymmetric and needs a directed graph with cycle detection instead - a cycle in the less-than graph is the contradiction. Mixing both, which is what a real constraint solver faces, requires combining union-find for the equalities with a topological check over the merged components. That layering is the standard structure of a congruence-closure solver."
+   }
   ]
  },
  {
@@ -8627,16 +8673,31 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Path with maximum probability between two nodes.",
-  "answer": "Dijkstra with a max-heap, relaxing on the product of probabilities rather than the sum of weights, since probabilities multiply and we maximise. Time O(E log V). Taking logarithms and negating turns it into a standard shortest-path problem.",
+  "answer": "**Approach**\n\nDijkstra with the comparison inverted. Probabilities multiply along a path and we want the maximum, so the priority queue must pop the highest probability rather than the lowest cost.\n\n**Logic**\n\nThe key property that makes Dijkstra valid is that extending a path cannot improve it. With additive non-negative weights, adding an edge increases the cost. With probabilities in [0,1], multiplying by another edge decreases the product. Both are monotonic in the required direction, so settling a node is safe.\n\n.NET's PriorityQueue is a min-heap, so negate the probability to get max-heap behaviour.\n\nO((V + E) log V).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static double MaxProbability(int n, int[][] edges, double[] probabilities,\n                                        int start, int end)\n    {\n        var graph = new List<(int To, double P)>[n];\n        for (int i = 0; i < n; i++) graph[i] = new List<(int, double)>();\n\n        for (int i = 0; i < edges.Length; i++)\n        {\n            graph[edges[i][0]].Add((edges[i][1], probabilities[i]));\n            graph[edges[i][1]].Add((edges[i][0], probabilities[i]));\n        }\n\n        var best = new double[n];\n        best[start] = 1.0;\n\n        var settled = new bool[n];\n\n        // Min-heap, so negate to pop the HIGHEST probability first.\n        var heap = new PriorityQueue<int, double>();\n        heap.Enqueue(start, -1.0);\n\n        while (heap.Count > 0)\n        {\n            int node = heap.Dequeue();\n            if (settled[node]) continue;\n            settled[node] = true;\n\n            if (node == end) return best[node];\n\n            foreach (var (next, p) in graph[node])\n            {\n                double candidate = best[node] * p;\n\n                if (candidate > best[next])\n                {\n                    best[next] = candidate;\n                    heap.Enqueue(next, -candidate);\n                }\n            }\n        }\n\n        return 0.0;   // unreachable\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Math.Round(MaxProbability(3,\n            new[] { new[] { 0, 1 }, new[] { 1, 2 }, new[] { 0, 2 } },\n            new[] { 0.5, 0.5, 0.2 }, 0, 2), 5));\n\n        Console.WriteLine(Math.Round(MaxProbability(3,\n            new[] { new[] { 0, 1 }, new[] { 1, 2 }, new[] { 0, 2 } },\n            new[] { 0.5, 0.5, 0.3 }, 0, 2), 5));\n\n        Console.WriteLine(MaxProbability(3,\n            new[] { new[] { 0, 1 } }, new[] { 0.5 }, 0, 2));       // unreachable\n\n        Console.WriteLine(MaxProbability(2, Array.Empty<int[]>(), Array.Empty<double>(), 0, 0));\n        Console.WriteLine(Math.Round(MaxProbability(2,\n            new[] { new[] { 0, 1 } }, new[] { 0.7 }, 0, 1), 5));\n    }\n}\n```\n\n**Output**\n\n```\n0.25\n0.3\n0\n1\n0.7\n```",
   "tags": [
    "graphs",
    "dijkstra",
-   "shortest-path",
-   "heap"
+   "probability",
+   "max-heap",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is Dijkstra valid for probabilities when it fails for negative weights?",
+    "a": "Because what Dijkstra actually requires is that extending a path never improves it, so a settled node can never be beaten later. With additive non-negative weights, adding an edge increases cost. With probabilities in [0,1], multiplying by another factor decreases the product. Both satisfy the monotonicity. A probability above 1 would break it exactly as a negative weight does, which is why the closed interval matters rather than merely the sign."
+   },
+   {
+    "q": "Could you take logarithms instead?",
+    "a": "Yes, and it is a common trick: taking the negative logarithm turns products into sums and maximisation into minimisation, so you can use a standard Dijkstra unchanged. The catch is a probability of zero, whose logarithm is negative infinity, and the accumulation of floating-point error across many logarithms and one final exponentiation. For this problem the direct multiplication is simpler and more accurate, but the log transform is worth knowing because it is how many multiplicative optimisations are made additive."
+   },
+   {
+    "q": "Why the settled array rather than decrease-key?",
+    "a": "Because .NET's PriorityQueue cannot update an element's priority in place, so the standard workaround is to push a new entry at the improved probability and skip any pop for an already-settled node. The heap can then hold up to E entries rather than V, which costs memory but performs well. It is the same lazy-deletion pattern as in the shortest-path and network-delay problems, and it is worth naming as a deliberate choice rather than leaving it unexplained."
+   }
   ]
  },
  {
@@ -8644,16 +8705,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Easy",
   "question": "Minimum cost climbing stairs.",
-  "answer": "dp[i] is the minimum cost to reach step i, equal to the smaller of dp[i-1] plus cost[i-1] and dp[i-2] plus cost[i-2]. Only two previous values are needed, so it runs in O(n) time and O(1) space.",
+  "answer": "**Approach**\n\nA one-dimensional DP with two rolling variables. The cost to stand on a step is that step's cost plus the cheaper of the two ways to arrive.\n\n**Logic**\n\nYou may start from index 0 or index 1, so both have a starting cost of zero to arrive at. For every later step, arriving costs the minimum of the two previous totals plus that step's own cost.\n\nThe top is *past* the last step, so the answer is the cheaper of the final two totals rather than the last one. That is the detail that trips people: the array holds costs to step *on* a stair, and the goal is beyond the array.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MinCostClimbingStairs(int[] cost)\n    {\n        if (cost == null || cost.Length < 2) return 0;\n\n        // Cost to have arrived at the two previous steps.\n        int twoBack = 0, oneBack = 0;\n\n        for (int i = 2; i <= cost.Length; i++)\n        {\n            int current = Math.Min(oneBack + cost[i - 1], twoBack + cost[i - 2]);\n            twoBack = oneBack;\n            oneBack = current;\n        }\n\n        return oneBack;   // the top is PAST the last step\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinCostClimbingStairs(new[] { 10, 15, 20 }));\n        Console.WriteLine(MinCostClimbingStairs(new[] { 1, 100, 1, 1, 1, 100, 1, 1, 100, 1 }));\n        Console.WriteLine(MinCostClimbingStairs(new[] { 0, 0, 0 }));\n        Console.WriteLine(MinCostClimbingStairs(new[] { 5, 5 }));      // step over both\n        Console.WriteLine(MinCostClimbingStairs(new[] { 1 }));\n        Console.WriteLine(MinCostClimbingStairs(new[] { 1, 2, 3, 4 }));\n    }\n}\n```\n\n**Output**\n\n```\n15\n6\n0\n5\n0\n4\n```",
   "tags": [
-   "dynamic-programming",
-   "arrays",
-   "optimisation"
+   "dp",
+   "rolling-variables",
+   "stairs",
+   "off-by-one",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does the loop run to cost.Length inclusive?",
+    "a": "Because the destination is the floor above the last step, which is index cost.Length in the conceptual array of positions. Stopping at cost.Length - 1 would compute the cost of standing on the last step rather than of finishing the climb, and would give the wrong answer whenever stepping over the last stair is cheaper. The [5,5] case shows it: the answer is 5, reached by starting at index 1 and stepping past the top, not 10."
+   },
+   {
+    "q": "Why do both starting positions cost zero?",
+    "a": "Because the problem says you may begin on either step 0 or step 1 without paying to arrive there - you pay only when you leave a step. So the two seed values are both 0, and the first real cost is incurred at index 2. Seeding with the step costs instead would double-charge the starting step, which gives an answer that is too large by exactly cost[0] or cost[1] and is easy to miss on symmetric test data."
+   },
+   {
+    "q": "How is this different from the plain climbing-stairs problem?",
+    "a": "That one counts the number of ways and this one minimises a cost, so the operator changes from addition to minimum-plus-weight while the recurrence shape is identical. Recognising that a whole family - climbing stairs, min cost climbing stairs, house robber, and the coin-change variants - is one recurrence with a different combining operator is worth far more than memorising four solutions, and interviewers often ask two of them in sequence to see whether you notice."
+   }
   ]
  },
  {
@@ -8661,15 +8738,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Delete and earn: earning a number deletes all copies of its neighbours.",
-  "answer": "Bucket values into a sum-per-value array, which reduces the problem exactly to house robber over consecutive integers - take the value's total and skip the adjacent ones, or skip it. Time O(n + maxValue), space O(maxValue).",
+  "answer": "**Approach**\n\nReduce it to house robber. Taking a value earns its total contribution and forbids the adjacent values, which is exactly the no-two-adjacent constraint over the value axis rather than the array axis.\n\n**Logic**\n\nFirst aggregate: the points for value v are v times how many times it appears, because taking v takes all copies at once. Then walk the value range in order, and at each value choose between taking it plus the best from two values back, or skipping it.\n\nThe reduction is the whole insight. Working on the original array directly is much harder, because the constraint is about values rather than positions.\n\nO(n + maxValue) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int DeleteAndEarn(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        int max = 0;\n        foreach (int n in nums) max = Math.Max(max, n);\n\n        // points[v] = total earned by taking value v, which takes every copy.\n        var points = new int[max + 1];\n        foreach (int n in nums) points[n] += n;\n\n        // Now it is house robber over the value axis.\n        int twoBack = 0, oneBack = 0;\n\n        for (int value = 1; value <= max; value++)\n        {\n            int current = Math.Max(oneBack, twoBack + points[value]);\n            twoBack = oneBack;\n            oneBack = current;\n        }\n\n        return oneBack;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(DeleteAndEarn(new[] { 3, 4, 2 }));\n        Console.WriteLine(DeleteAndEarn(new[] { 2, 2, 3, 3, 3, 4 }));\n        Console.WriteLine(DeleteAndEarn(new[] { 1 }));\n        Console.WriteLine(DeleteAndEarn(new[] { 1, 1, 1, 1 }));        // all the same value\n        Console.WriteLine(DeleteAndEarn(new[] { 2, 2, 3, 3, 3, 4, 9 })); // a gap frees 9\n        Console.WriteLine(DeleteAndEarn(Array.Empty<int>()));\n    }\n}\n```\n\n**Output**\n\n```\n6\n9\n1\n4\n18\n0\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
+   "house-robber",
    "reduction",
-   "arrays"
+   "aggregation",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why aggregate by value before applying the DP?",
+    "a": "Because taking a value takes every copy of it in one action, so the decision is per distinct value rather than per element. Aggregating turns 'three 3s' into a single choice worth 9, which is what the recurrence needs. Without it you would be deciding about individual elements that are not independent, and the no-two-adjacent rule would not apply cleanly. The aggregation is the step that makes the reduction valid."
+   },
+   {
+    "q": "Why iterate the value range rather than the distinct values present?",
+    "a": "Because the adjacency constraint is about numeric neighbours, so a missing value must still occupy a position in the walk - it contributes zero but it breaks the adjacency between the values either side. The [2,2,3,3,3,4,9] case shows why: 9 is far from the rest, so taking it costs nothing elsewhere. Iterating only the present values would wrongly treat 4 and 9 as adjacent. The trade is memory proportional to the maximum value, which a sorted-distinct-values version with an explicit gap check avoids."
+   },
+   {
+    "q": "What if the values were very large or sparse?",
+    "a": "The points array becomes impractical - a single value of a billion would allocate a billion entries. The fix is to sort the distinct values and run the same recurrence over that list, checking explicitly whether each value is exactly one more than the previous: if so apply the adjacency rule, otherwise both options are free. That is O(n log n) and uses memory proportional to the distinct count, which is the right version whenever the value range is not small."
+   }
   ]
  },
  {
@@ -8677,17 +8770,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Longest string chain: longest sequence where each word is a predecessor of the next.",
-  "answer": "Sort words by length, then for each word try deleting each character and look up the resulting predecessor's chain length in a map, taking the best plus one. Time O(n times L^2), space O(n).",
+  "answer": "**Approach**\n\nSort by length, then for each word try removing each character and look up the result. The best chain ending at a word is one more than the best ending at any of its predecessors.\n\n**Logic**\n\nSorting by length guarantees that when a word is processed, every possible predecessor — which must be exactly one character shorter — has already been solved.\n\nGenerating the predecessors by deletion is the efficient direction: a word of length L has L predecessors, which is far fewer than comparing against every other word. That turns an O(n²·L) comparison into O(n·L²) with dictionary lookups.\n\nO(n log n + n·L²).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int LongestStrChain(string[] words)\n    {\n        if (words == null || words.Length == 0) return 0;\n\n        // Shortest first, so every predecessor is solved before its successors.\n        var sorted = words.OrderBy(w => w.Length).ToArray();\n\n        var best = new Dictionary<string, int>();\n        int longest = 1;\n\n        foreach (string word in sorted)\n        {\n            int chain = 1;\n\n            // A predecessor is this word with exactly one character removed.\n            for (int i = 0; i < word.Length; i++)\n            {\n                string predecessor = word.Remove(i, 1);\n\n                if (best.TryGetValue(predecessor, out int previous))\n                    chain = Math.Max(chain, previous + 1);\n            }\n\n            best[word] = Math.Max(best.GetValueOrDefault(word), chain);\n            longest = Math.Max(longest, best[word]);\n        }\n\n        return longest;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestStrChain(new[] { \"a\", \"b\", \"ba\", \"bca\", \"bda\", \"bdca\" }));\n        Console.WriteLine(LongestStrChain(new[] { \"xbc\", \"pcxbcf\", \"xb\", \"cxbc\", \"pcxbc\" }));\n        Console.WriteLine(LongestStrChain(new[] { \"abcd\", \"dbqca\" }));   // not a chain\n        Console.WriteLine(LongestStrChain(new[] { \"a\" }));\n        Console.WriteLine(LongestStrChain(new[] { \"a\", \"ab\", \"abc\", \"abcd\" }));\n        Console.WriteLine(LongestStrChain(Array.Empty<string>()));\n    }\n}\n```\n\n**Output**\n\n```\n4\n5\n1\n1\n4\n0\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
    "strings",
-   "hashmap",
-   "sorting"
+   "sorting",
+   "predecessor-generation",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why generate predecessors by deletion rather than comparing every pair?",
+    "a": "Because a word of length L has exactly L possible predecessors, which you can enumerate and look up in constant time each. Comparing against every other word is O(n) per word and each comparison costs O(L) to verify the one-deletion relationship, giving O(n squared L). Generating is O(L squared) per word including the string construction, which for realistic word lengths is dramatically smaller. It is the same generate-versus-compare choice as in word ladder."
+   },
+   {
+    "q": "Why does sorting by length suffice, without sorting alphabetically?",
+    "a": "Because a predecessor is always exactly one character shorter, so length order alone guarantees it has been processed. Alphabetical order is irrelevant to the dependency. Contrast the longest-buildable-word problem, where the alphabetical tie-break matters because the answer must be lexicographically smallest - here only the chain length is wanted, so no tie-break is needed at all."
+   },
+   {
+    "q": "What if a chain could skip more than one character?",
+    "a": "The predecessor generation would explode: allowing two deletions gives L choose 2 candidates per word, and allowing any number gives all subsequences, which is exponential. At that point the problem becomes a longest-path search over a subsequence relation, and you would compare pairs with a subsequence check instead, at O(n squared L). The one-character restriction is what keeps the generate-and-lookup approach viable, which is worth stating rather than assuming."
+   }
   ]
  },
  {
@@ -8695,15 +8803,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Count square submatrices with all ones.",
-  "answer": "dp[i][j] is the size of the largest square with its bottom-right corner at that cell - one plus the minimum of the three neighbours above, left and diagonal, when the cell is one. The answer is the sum of all dp values. Time O(mn), space O(n) with row reuse.",
+  "answer": "**Approach**\n\nThe same recurrence as maximal square, but summing rather than maximising. Each cell's value becomes the side length of the largest square ending there, and that number is also the count of squares ending at that cell.\n\n**Logic**\n\nA cell holding 1 can end squares of side 1, 2, up to its computed value — and exactly that many. So summing every cell's value counts every square in the matrix, each exactly once, because a square is identified uniquely by its bottom-right corner and its side.\n\nThe recurrence is one plus the minimum of the three neighbours, since all three must support the square.\n\nO(rows × cols) time, O(1) extra space when modifying in place.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int CountSquares(int[][] matrix)\n    {\n        if (matrix == null || matrix.Length == 0) return 0;\n\n        int rows = matrix.Length, cols = matrix[0].Length, total = 0;\n\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n            {\n                if (matrix[r][c] == 0) continue;\n\n                // Interior cells extend the smallest supporting neighbour.\n                if (r > 0 && c > 0)\n                    matrix[r][c] = 1 + Math.Min(matrix[r - 1][c],\n                                      Math.Min(matrix[r][c - 1], matrix[r - 1][c - 1]));\n\n                // The value IS the number of squares ending at this cell.\n                total += matrix[r][c];\n            }\n\n        return total;\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(CountSquares(Grid(\n            new[] { 0, 1, 1, 1 }, new[] { 1, 1, 1, 1 }, new[] { 0, 1, 1, 1 })));\n\n        Console.WriteLine(CountSquares(Grid(\n            new[] { 1, 0, 1 }, new[] { 1, 1, 0 }, new[] { 1, 1, 0 })));\n\n        Console.WriteLine(CountSquares(Grid(new[] { 1, 1 }, new[] { 1, 1 })));   // 4 + 1\n        Console.WriteLine(CountSquares(Grid(new[] { 0, 0 }, new[] { 0, 0 })));\n        Console.WriteLine(CountSquares(Grid(new[] { 1 })));\n        Console.WriteLine(CountSquares(Grid(new[] { 1, 1, 1 })));                // single row\n    }\n}\n```\n\n**Output**\n\n```\n15\n7\n5\n0\n1\n3\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
    "matrix",
-   "counting"
+   "counting",
+   "maximal-square",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the cell's value equal the number of squares ending there?",
+    "a": "Because if the largest square with that bottom-right corner has side k, then squares of side 1 through k all also end at that cell, and no larger one does - that is exactly k squares. Every square in the matrix has exactly one bottom-right corner, so summing over all cells counts each square once with no double counting. That bijection between squares and (corner, side) pairs is the whole argument."
+   },
+   {
+    "q": "Why the minimum of three neighbours rather than two?",
+    "a": "Because a square of side k needs squares of side k-1 to exist above, to the left, and diagonally. Using only two would let an L-shaped region count as a square: a full row and column meeting at a corner with a hole between them. The diagonal neighbour certifies the interior is solid. Dropping it is the standard error and it passes every test whose ones form solid rectangles, which is most casual test data."
+   },
+   {
+    "q": "The code modifies the caller's matrix. Would you ship that?",
+    "a": "It saves allocating a second grid, which for a large matrix is real, but it destroys the input - a caller reusing the matrix afterwards sees side lengths where it expected zeros and ones. For an interview it is worth naming as a deliberate trade. In production I would either allocate a DP array, or reduce to a single rolling row since each cell only needs the previous row, which is O(cols) rather than O(rows x cols) and leaves the input alone."
+   }
   ]
  },
  {
@@ -8711,15 +8835,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Minimum falling path sum through a matrix.",
-  "answer": "Row by row, each cell's best is its value plus the minimum of the three cells above it, clamped at the edges. Answer is the minimum of the last row. Time O(mn), space O(n) reusing one row.",
+  "answer": "**Approach**\n\nRow-by-row DP. The cheapest way to reach a cell is its own value plus the cheapest of the three cells above it — directly above, above-left, and above-right.\n\n**Logic**\n\nProcessing top to bottom means the previous row is always complete when the current one is computed. Edge columns have only two predecessors rather than three, which the bounds checks handle.\n\nThe answer is the minimum across the final row, not the last cell, because the path may end anywhere along the bottom.\n\nO(n²) time, O(n) space with a rolling row.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int MinFallingPathSum(int[][] matrix)\n    {\n        if (matrix == null || matrix.Length == 0) return 0;\n\n        int n = matrix.Length, m = matrix[0].Length;\n        var previous = (int[])matrix[0].Clone();\n\n        for (int r = 1; r < n; r++)\n        {\n            var current = new int[m];\n\n            for (int c = 0; c < m; c++)\n            {\n                int best = previous[c];\n                if (c > 0) best = Math.Min(best, previous[c - 1]);\n                if (c < m - 1) best = Math.Min(best, previous[c + 1]);\n\n                current[c] = matrix[r][c] + best;\n            }\n\n            previous = current;\n        }\n\n        // The path may end anywhere along the bottom row.\n        return previous.Min();\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(MinFallingPathSum(Grid(\n            new[] { 2, 1, 3 }, new[] { 6, 5, 4 }, new[] { 7, 8, 9 })));\n\n        Console.WriteLine(MinFallingPathSum(Grid(\n            new[] { -19, 57 }, new[] { -40, -5 })));\n\n        Console.WriteLine(MinFallingPathSum(Grid(new[] { -48 })));\n        Console.WriteLine(MinFallingPathSum(Grid(\n            new[] { 1, 2, 3 }, new[] { 4, 5, 6 }, new[] { 7, 8, 9 })));\n        Console.WriteLine(MinFallingPathSum(Grid(\n            new[] { 100, 1 }, new[] { 1, 100 })));       // must move diagonally\n    }\n}\n```\n\n**Output**\n\n```\n13\n-59\n-48\n12\n2\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
    "matrix",
-   "paths"
+   "rolling-row",
+   "falling-path",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why take the minimum of the whole final row rather than the last cell?",
+    "a": "Because the path starts anywhere in the top row and ends anywhere in the bottom row - it is not required to finish in a particular column. Returning the last cell would answer a different question, namely the cheapest path ending at the bottom-right, and would give a larger answer whenever a better path exits elsewhere. The [100,1] / [1,100] case makes it visible: the answer 2 comes from starting at column 1 and moving diagonally, ending at column 0."
+   },
+   {
+    "q": "Why clone the first row rather than using it directly?",
+    "a": "Because writing into it would modify the caller's matrix, and the algorithm reads matrix[r][c] for the current row's own values while building the new totals. Cloning costs one row of memory and keeps the input intact. The alternative of computing in place is possible if mutation is acceptable and saves the allocation, which is the same trade as in count-square-submatrices - worth making explicitly rather than by accident."
+   },
+   {
+    "q": "How does this differ from minimum path sum in a grid?",
+    "a": "That problem allows only right and down moves, so a cell has two predecessors and the path must run corner to corner. Here the movement is downward with a diagonal drift, so there are three predecessors and both endpoints are free. The recurrence shape is the same but the neighbour set and the answer extraction differ, which is a good illustration that grid DPs are distinguished by their move set rather than by being 'grid problems'."
+   }
   ]
  },
  {
@@ -8727,16 +8867,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Triangle: minimum path sum from top to bottom moving to adjacent numbers.",
-  "answer": "Work bottom-up, replacing each cell with its value plus the smaller of the two cells below, so the apex ends holding the answer. Time O(n^2), space O(n) using a single array. Top-down needs the same work plus a final scan.",
+  "answer": "**Approach**\n\nBottom-up DP. Working from the penultimate row upward, each cell becomes its own value plus the cheaper of the two cells below it. The apex then holds the answer.\n\n**Logic**\n\nGoing bottom-up avoids the edge cases that plague the top-down direction. From the top, a cell's predecessors may be one or two depending on position and require bounds checks; from the bottom, every cell has exactly two children because the row below is always one longer.\n\nThe answer ends up in a single cell rather than needing a scan, which is the other advantage.\n\nO(n²) time, O(n) space using one rolling row.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int MinimumTotal(IList<IList<int>> triangle)\n    {\n        if (triangle == null || triangle.Count == 0) return 0;\n\n        // Seed with the bottom row.\n        var best = new int[triangle.Count + 1];\n\n        for (int row = triangle.Count - 1; row >= 0; row--)\n            for (int col = 0; col <= row; col++)\n                // Every cell has exactly two children going upward: no bounds checks.\n                best[col] = triangle[row][col] + Math.Min(best[col], best[col + 1]);\n\n        return best[0];\n    }\n\n    private static IList<IList<int>> Triangle(params int[][] rows)\n    {\n        var t = new List<IList<int>>();\n        foreach (var r in rows) t.Add(new List<int>(r));\n        return t;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinimumTotal(Triangle(\n            new[] { 2 }, new[] { 3, 4 }, new[] { 6, 5, 7 }, new[] { 4, 1, 8, 3 })));\n\n        Console.WriteLine(MinimumTotal(Triangle(new[] { -10 })));\n\n        Console.WriteLine(MinimumTotal(Triangle(\n            new[] { 1 }, new[] { 2, 3 })));\n\n        Console.WriteLine(MinimumTotal(Triangle(\n            new[] { -1 }, new[] { 2, 3 }, new[] { 1, -1, -3 })));\n\n        Console.WriteLine(MinimumTotal(Triangle()));\n    }\n}\n```\n\n**Output**\n\n```\n11\n-10\n3\n-1\n0\n```",
   "tags": [
-   "dynamic-programming",
-   "matrix",
-   "paths"
+   "dp",
+   "triangle",
+   "bottom-up",
+   "rolling-row",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Bloomberg",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is bottom-up simpler than top-down here?",
+    "a": "Because going upward every cell has exactly two children - the row below is always one element longer - so no bounds checks are needed. Going downward, a cell's parents are one or two depending on whether it is at an edge, which needs conditionals at both ends of every row. The answer also lands in a single cell rather than requiring a minimum over the last row. It is a case where the direction of the DP changes the amount of code substantially."
+   },
+   {
+    "q": "Why is the array one longer than the triangle's height?",
+    "a": "So that best[col + 1] is always a valid index on the first iteration, when col can reach the last row's final position. The extra entry stays zero and acts as a sentinel that never wins a minimum against real values, provided the bottom row is written first - which it is, since the loop starts there. It is the same padding trick as in maximal-square, adding an element so the general rule covers the boundary."
+   },
+   {
+    "q": "Can it be done in O(1) extra space?",
+    "a": "Yes, by writing the sums back into the triangle itself, which the problem sometimes permits. That mutates the caller's data, which is the usual objection. The O(n) rolling row is a good compromise: it is proportional to the triangle's height rather than its area, so for a triangle of a thousand rows it is a thousand integers against half a million cells, and the input is left alone."
+   }
   ]
  },
  {
@@ -8744,16 +8900,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Hard",
   "question": "Dungeon game: minimum initial health to reach the bottom-right alive.",
-  "answer": "Work backwards from the destination, where dp[i][j] is the minimum health needed on entering that cell - the smaller of the two next cells' requirements minus the current room value, floored at one. Forward dynamic programming fails because the constraint is on the running minimum, not the total.",
+  "answer": "**Approach**\n\nBottom-up DP computing the *minimum health required on entering* each cell. Working forwards does not work, and understanding why is the point of the problem.\n\n**Logic**\n\nA forward DP tracking accumulated health fails because the best path so far is not necessarily the best overall: a route that collects more health may pass through a cell that kills you, and the maximum-health path is not the same as the survivable path. The two objectives conflict.\n\nWorking backwards fixes it. The requirement on entering a cell is whatever the next cell needs, minus this cell's value, floored at 1 — since health must never drop to zero.\n\nO(rows × cols) time and space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int CalculateMinimumHp(int[][] dungeon)\n    {\n        if (dungeon == null || dungeon.Length == 0) return 1;\n\n        int rows = dungeon.Length, cols = dungeon[0].Length;\n\n        // need[r][c] = health required ON ENTERING that cell.\n        var need = new int[rows + 1, cols + 1];\n\n        for (int r = 0; r <= rows; r++)\n            for (int c = 0; c <= cols; c++)\n                need[r, c] = int.MaxValue;\n\n        // Past the exit, 1 point of health suffices.\n        need[rows, cols - 1] = need[rows - 1, cols] = 1;\n\n        for (int r = rows - 1; r >= 0; r--)\n            for (int c = cols - 1; c >= 0; c--)\n            {\n                int onward = Math.Min(need[r + 1, c], need[r, c + 1]);\n\n                // Never allow the requirement to fall below 1.\n                need[r, c] = Math.Max(1, onward - dungeon[r][c]);\n            }\n\n        return need[0, 0];\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(CalculateMinimumHp(Grid(\n            new[] { -2, -3, 3 }, new[] { -5, -10, 1 }, new[] { 10, 30, -5 })));\n\n        Console.WriteLine(CalculateMinimumHp(Grid(new[] { 0 })));\n        Console.WriteLine(CalculateMinimumHp(Grid(new[] { -5 })));\n        Console.WriteLine(CalculateMinimumHp(Grid(new[] { 100 })));      // still needs 1\n        Console.WriteLine(CalculateMinimumHp(Grid(new[] { 1, -3, 3 }, new[] { 0, -2, 0 },\n                                                 new[] { -3, -3, -3 })));\n    }\n}\n```\n\n**Output**\n\n```\n7\n1\n6\n1\n3\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
+   "backwards",
    "matrix",
-   "reverse-dp"
+   "constraint",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does a forward DP fail?",
+    "a": "Because two objectives conflict and neither dominates. Tracking maximum accumulated health picks a route that may dip below zero somewhere along the way; tracking minimum requirement forward needs to know what lies ahead, which a forward pass does not have. A cell's value cannot be evaluated without knowing the rest of the path, so the subproblems are not independent in that direction. Reversing makes them independent, because the requirement at a cell depends only on cells already solved."
+   },
+   {
+    "q": "Why floor the requirement at 1?",
+    "a": "Because health must stay strictly positive at all times, so even after a large potion the requirement on entering the next cell cannot drop to zero or below. Without the floor, a cell containing 100 would propagate a negative requirement backwards and the final answer could come out as zero or negative, which is not a valid starting health. The single-cell test with 100 confirms the answer is 1 rather than a negative number."
+   },
+   {
+    "q": "Why is the padding initialised to int.MaxValue rather than zero?",
+    "a": "So that out-of-bounds directions never win the minimum against a real neighbour. Zero would make every edge cell believe it can exit freely in the wrong direction, producing requirements that are far too low. The two genuine exits just past the bottom-right are set to 1 explicitly, which is the only place the padding should be permissive. It is an in-band sentinel and it works because a real requirement can never reach int.MaxValue."
+   }
   ]
  },
  {
@@ -8761,17 +8933,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Count palindromic substrings in a string.",
-  "answer": "Expand around each of the 2n-1 centres, counting matches while the characters agree. Time O(n^2), space O(1). Manacher's algorithm gives O(n) but is rarely required and much harder to write correctly under pressure.",
+  "answer": "**Approach**\n\nExpand around every centre. There are 2n-1 centres — n characters for odd-length palindromes and n-1 gaps for even-length ones — and each expansion counts every palindrome it finds.\n\n**Logic**\n\nFrom each centre, expand outward while the characters match, incrementing the count on every successful step. Each distinct substring is counted exactly once because a palindrome has exactly one centre.\n\nThe common failure is checking only odd centres, which misses every even-length palindrome and would report 3 rather than 4 for \"aaa\".\n\nO(n²) time, O(1) space. Manacher's gives O(n) but is rarely expected.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int CountSubstrings(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        int count = 0;\n\n        for (int centre = 0; centre < s.Length; centre++)\n        {\n            count += ExpandFrom(s, centre, centre);       // odd length\n            count += ExpandFrom(s, centre, centre + 1);   // even length\n        }\n\n        return count;\n    }\n\n    private static int ExpandFrom(string s, int left, int right)\n    {\n        int found = 0;\n\n        while (left >= 0 && right < s.Length && s[left] == s[right])\n        {\n            found++;        // every successful expansion IS a palindrome\n            left--;\n            right++;\n        }\n\n        return found;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CountSubstrings(\"abc\"));     // three single characters\n        Console.WriteLine(CountSubstrings(\"aaa\"));     // a,a,a,aa,aa,aaa\n        Console.WriteLine(CountSubstrings(\"\"));\n        Console.WriteLine(CountSubstrings(\"a\"));\n        Console.WriteLine(CountSubstrings(\"abba\"));\n        Console.WriteLine(CountSubstrings(\"aaaa\"));\n    }\n}\n```\n\n**Output**\n\n```\n3\n6\n0\n1\n6\n10\n```",
   "tags": [
-   "dynamic-programming",
    "strings",
+   "expand-around-centre",
    "palindrome",
-   "two-pointers"
+   "counting",
+   "csharp"
   ],
   "companies": [
    "Facebook",
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why are there 2n-1 centres rather than n?",
+    "a": "Because an even-length palindrome has its centre between two characters rather than on one. With n characters there are n single-character centres and n-1 gaps, giving 2n-1 in total. Checking only the n character centres misses every even-length palindrome, so 'aa' would not be counted and 'aaa' would report 3 instead of 6. It is the same omission that breaks the longest-palindromic-substring problem, and the two questions are usually asked together."
+   },
+   {
+    "q": "Why does every successful expansion count as one palindrome?",
+    "a": "Because expanding from a centre produces a strictly longer palindrome at each step, and each is a distinct substring. So the number of successful steps is the number of palindromes with that centre. Since every palindrome has exactly one centre, summing across all centres counts each substring once with no duplicates. That bijection is what makes the counting correct without any deduplication."
+   },
+   {
+    "q": "Why does aaaa give 10?",
+    "a": "Because every substring of a string of identical characters is a palindrome, and a string of length n has n(n+1)/2 substrings, which is 10 for n of 4. That is the worst case for this algorithm, since every expansion runs to the full width, giving the O(n squared) bound. It is a useful test precisely because it exercises the maximum work and confirms the count formula rather than a coincidence."
+   }
   ]
  },
  {
