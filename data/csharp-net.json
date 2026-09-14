@@ -9937,5 +9937,285 @@
    "aggregate",
    "error-handling"
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Output Prediction",
+  "difficulty": "Medium",
+  "question": "What does this print, and why? A loop variable captured in a lambda inside a for loop versus a foreach loop.",
+  "answer": "**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var fromFor = new List<Action>();\n        for (int i = 0; i < 3; i++) fromFor.Add(() => Console.Write(i + \" \"));\n\n        var fromForeach = new List<Action>();\n        foreach (int i in new[] { 0, 1, 2 }) fromForeach.Add(() => Console.Write(i + \" \"));\n\n        foreach (var a in fromFor) a();\n        Console.WriteLine();\n\n        foreach (var a in fromForeach) a();\n        Console.WriteLine();\n    }\n}\n```\n\n**Output**\n\n```\n3 3 3 \n0 1 2 \n```\n\n**Why**\n\nA `for` loop has one variable `i` for the whole loop, so all three lambdas close over the *same* variable. By the time they run, the loop has finished and `i` holds 3.\n\nA `foreach` loop declares a fresh variable per iteration, so each lambda captures a different one. This was changed in C# 5: before that, `foreach` behaved like `for` and printed `2 2 2`, which was one of the most reported bugs in the language.\n\nThe fix for the `for` case is to copy into a local inside the body: `int copy = i;` and capture `copy`.",
+  "tags": [
+   "csharp",
+   "closures",
+   "capture",
+   "output-prediction",
+   "lambda"
+  ],
+  "followups": [
+   {
+    "q": "Why was foreach changed in C# 5 but for left alone?",
+    "a": "Because the foreach behaviour was almost always a bug, whereas the for behaviour is sometimes deliberate. Nobody writing `foreach (var x in items)` intends every lambda to see the last item, so the old semantics produced silent defects with no upside. In a `for` loop the variable is genuinely one counter that the body may mutate, so changing it would break code that relies on sharing. The team accepted a breaking change for foreach precisely because the old behaviour had no legitimate use."
+   },
+   {
+    "q": "Where does this bite in real code?",
+    "a": "Registering event handlers or callbacks in a loop is the classic case: all of them end up referring to the final item. It also appears when starting tasks in a loop with `Task.Run(() => Process(i))`, where every task may process the same value, and the race makes it intermittent rather than reliably wrong. That intermittency is what makes it expensive to diagnose, which is why the rule is to capture a per-iteration local whenever a lambda outlives the iteration."
+   },
+   {
+    "q": "What does the compiler actually generate?",
+    "a": "It creates a hidden closure class holding the captured variables, and the lambda becomes a method on that class. For a `for` loop one instance is created outside the loop and shared; for `foreach` a new instance is created per iteration. That is why the behaviour differs, and it is also why capturing in a hot loop allocates: each closure instance is a heap object, which is worth knowing when profiling shows unexpected garbage collection pressure."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Output Prediction",
+  "difficulty": "Medium",
+  "question": "What does this print? Mutating a struct stored in a List versus an array.",
+  "answer": "**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic struct Counter\n{\n    public int Value;\n    public void Increment() => Value++;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var array = new Counter[1];\n        array[0].Increment();\n        Console.WriteLine(array[0].Value);\n\n        var list = new List<Counter> { new Counter() };\n        list[0].Increment();          // operates on a COPY\n        Console.WriteLine(list[0].Value);\n\n        // The working pattern for a list: read, mutate, write back.\n        var item = list[0];\n        item.Increment();\n        list[0] = item;\n        Console.WriteLine(list[0].Value);\n\n        Counter a = new Counter();\n        Counter b = a;                 // value copy, not a reference\n        b.Increment();\n        Console.WriteLine($\"{a.Value} {b.Value}\");\n    }\n}\n```\n\n**Output**\n\n```\n1\n0\n1\n0 1\n```\n\n**Why**\n\nAn array indexer returns a *reference* to the element, so `array[0].Increment()` mutates the stored struct. A `List<T>` indexer is a property returning a *copy*, so the increment happens on a temporary that is immediately discarded.\n\nThis is the main argument against mutable structs: the same syntax means different things depending on the container. `a` and `b` differ for the same reason — assignment copies the value.",
+  "tags": [
+   "csharp",
+   "structs",
+   "value-types",
+   "output-prediction",
+   "mutability"
+  ],
+  "followups": [
+   {
+    "q": "Why does the compiler not warn about the list case?",
+    "a": "Because `list[0].Increment()` is a perfectly legal call on the returned value; the compiler has no way to know the method mutates state rather than merely reading it. Older C# versions did error when you tried to *assign* to a field of a property-returned struct, which caught some cases, but a mutating method call slips through. That asymmetry is exactly why the guidance is to make structs immutable, and why `readonly struct` exists to let the compiler enforce it."
+   },
+   {
+    "q": "When are mutable structs legitimate?",
+    "a": "In performance-critical code where the copy cost matters and the struct never leaves a tightly controlled scope, such as an enumerator. `List<T>.Enumerator` is a mutable struct precisely so that foreach avoids an allocation, and it is why copying an enumerator mid-iteration behaves oddly. Outside such deliberate cases, the rule is a readonly struct or a class. If you write a mutable struct, document why, because the next reader will assume it is a bug."
+   },
+   {
+    "q": "How would you get the array behaviour from a list?",
+    "a": "In .NET 5 or later, `CollectionsMarshal.AsSpan(list)` returns a Span over the list's backing array, and indexing a Span gives a reference, so mutation works. It is deliberately in a Marshal class because it bypasses the list's safety: adding to the list while holding the span invalidates it. The safer pattern remains read, mutate, write back, or simply using a class."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Output Prediction",
+  "difficulty": "Hard",
+  "question": "What does this print? Exception handling with finally, and a return inside try.",
+  "answer": "**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private static int ReturnFromTry()\n    {\n        int value = 1;\n        try { return value; }         // the return VALUE is captured here\n        finally { value = 2; }        // too late to change what was returned\n    }\n\n    private static int Order()\n    {\n        try\n        {\n            Console.Write(\"try \");\n            throw new InvalidOperationException();\n        }\n        catch (InvalidOperationException)\n        {\n            Console.Write(\"catch \");\n            return 1;\n        }\n        finally\n        {\n            Console.Write(\"finally \");   // runs BEFORE the method actually returns\n        }\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ReturnFromTry());\n\n        int result = Order();\n        Console.WriteLine(result);\n\n        try\n        {\n            try { throw new ArgumentException(\"inner\"); }\n            finally { Console.Write(\"cleanup \"); }\n        }\n        catch (ArgumentException e) { Console.WriteLine(e.Message); }\n    }\n}\n```\n\n**Output**\n\n```\n1\ntry catch finally 1\ncleanup inner\n```\n\n**Why**\n\n`return value` evaluates the expression and stores the result *before* `finally` runs, so reassigning the local afterwards changes nothing. The returned 1 was already captured.\n\nIn `Order`, the `finally` block runs after the `catch` completes but before control leaves the method, which is why `finally` prints before the caller sees the value.\n\nA `finally` with no matching `catch` still runs as the exception propagates outward, which is what makes it reliable for cleanup.",
+  "tags": [
+   "csharp",
+   "exceptions",
+   "finally",
+   "output-prediction",
+   "control-flow"
+  ],
+  "followups": [
+   {
+    "q": "Can a finally block change the returned value?",
+    "a": "Not for a value type or by reassigning the local, as shown. It can if the return value is a reference type and finally mutates the object rather than the variable, since the reference was captured but the object is shared. A `return` inside `finally` would override the value, but C# forbids that outright for exactly this reason: it would silently swallow an in-flight exception. That prohibition is a good language design decision worth noting."
+   },
+   {
+    "q": "Is finally guaranteed to run?",
+    "a": "Almost always, but not absolutely. It does not run on `Environment.FailFast`, on a StackOverflowException, on process termination, or if the process is killed. It also does not run for an unhandled exception on a background thread that tears down the process. That is why critical cleanup such as releasing a cross-process lock should not rely solely on finally, and why `using` is not sufficient for resources that must survive a crash."
+   },
+   {
+    "q": "How does this interact with async?",
+    "a": "In an async method, finally runs when the awaited continuation resumes, not synchronously at the point of the await, so cleanup can be delayed arbitrarily. Worse, if the task is never awaited the finally may never run at all, which is a real leak source for fire-and-forget tasks. `await using` and `IAsyncDisposable` exist to make asynchronous cleanup explicit, and the rule is to always await a task whose finally block matters."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Output Prediction",
+  "difficulty": "Medium",
+  "question": "What does this print? String interning and reference equality for strings.",
+  "answer": "**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    public static void Main()\n    {\n        string a = \"hello\";\n        string b = \"hello\";\n        Console.WriteLine(ReferenceEquals(a, b));      // both point at the intern pool\n\n        string c = new StringBuilder().Append(\"hel\").Append(\"lo\").ToString();\n        Console.WriteLine(ReferenceEquals(a, c));      // built at run time\n        Console.WriteLine(a == c);                      // == compares VALUE for strings\n        Console.WriteLine(a.Equals(c));\n\n        string d = string.Intern(c);\n        Console.WriteLine(ReferenceEquals(a, d));       // now it is the pooled instance\n\n        // Compile-time constant folding: this IS interned.\n        string e = \"hel\" + \"lo\";\n        Console.WriteLine(ReferenceEquals(a, e));\n\n        object boxedA = a;\n        object boxedC = c;\n        Console.WriteLine(boxedA == boxedC);            // object == is REFERENCE equality\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nTrue\nTrue\nFalse\n```\n\n**Why**\n\nIdentical string literals are interned by the runtime, so `a` and `b` are the same object. A string built at run time is a new instance, so `ReferenceEquals` is false even though the contents match.\n\n`==` on `string` is overloaded to compare values, which is why `a == c` is true. But once both are typed as `object`, the overload no longer applies and `==` falls back to reference equality, giving false. That last line is the trap.",
+  "tags": [
+   "csharp",
+   "strings",
+   "interning",
+   "output-prediction",
+   "equality"
+  ],
+  "followups": [
+   {
+    "q": "Why does typing the variables as object change the result of ==?",
+    "a": "Because operator overloading in C# is resolved at compile time from the static types, not at run time from the actual objects. With both operands typed as `object`, the compiler picks `object.operator ==`, which is reference equality. With both typed as `string`, it picks the string overload, which compares contents. This is the single most important difference between `==` and `Equals`: the latter is virtual and dispatches on the runtime type, so `boxedA.Equals(boxedC)` would be true."
+   },
+   {
+    "q": "Should you ever call string.Intern?",
+    "a": "Rarely. It can save memory when an application holds many duplicate strings, such as parsed column names from a large file, but interned strings live for the life of the process and are never collected, so interning user-supplied data is a memory leak and a denial-of-service vector. The modern alternative is a private `ConcurrentDictionary<string,string>` used as a deduplication pool, which you control and can clear."
+   },
+   {
+    "q": "What is the practical rule for comparing strings?",
+    "a": "Use `==` or `Equals` with an explicit `StringComparison` for anything structural: `string.Equals(a, b, StringComparison.Ordinal)`. The default culture-sensitive comparison is slower and can treat different code points as equal, which produces machine-dependent behaviour. For case-insensitive matching use OrdinalIgnoreCase rather than lowercasing both sides, which allocates and is subtly wrong for Turkish."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Output Prediction",
+  "difficulty": "Hard",
+  "question": "What does this print? Deferred execution in LINQ when the source changes.",
+  "answer": "**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var numbers = new List<int> { 1, 2, 3 };\n\n        var query = numbers.Where(n => n > 1);     // nothing executes yet\n        var snapshot = numbers.Where(n => n > 1).ToList();   // executes now\n\n        numbers.Add(4);\n\n        Console.WriteLine(string.Join(\",\", query));      // sees the new item\n        Console.WriteLine(string.Join(\",\", snapshot));   // frozen at creation\n\n        int threshold = 2;\n        var captured = numbers.Where(n => n > threshold);\n        threshold = 3;\n        Console.WriteLine(string.Join(\",\", captured));   // the lambda reads it at run time\n\n        // Multiple enumeration re-runs the whole query.\n        int calls = 0;\n        var counted = numbers.Where(n => { calls++; return true; });\n        counted.Count();\n        counted.Count();\n        Console.WriteLine(calls);\n    }\n}\n```\n\n**Output**\n\n```\n2,3,4\n2,3\n4\n8\n```\n\n**Why**\n\n`Where` builds a query object; it does not run until enumerated. So `query` observes the list as it is at enumeration time and includes the 4, while `ToList` materialised immediately and is frozen.\n\nThe captured `threshold` is read when the lambda executes, which is after it was changed to 3, so only 4 qualifies.\n\nEnumerating twice runs the predicate twice over four items, hence eight calls. That is the multiple-enumeration trap, and it is why an expensive or side-effecting source should be materialised once.",
+  "tags": [
+   "csharp",
+   "linq",
+   "deferred-execution",
+   "output-prediction",
+   "closures"
+  ],
+  "followups": [
+   {
+    "q": "Why is multiple enumeration dangerous beyond wasted work?",
+    "a": "Because the source may not be repeatable. Enumerating a database query twice issues two round trips, which is a performance bug; enumerating a network stream or a `yield return` method with side effects twice may produce different results or throw. Worse, it can silently double-count. Static analysers flag 'possible multiple enumeration of IEnumerable' for exactly this reason, and the fix is either to materialise with ToList once or to change the parameter type to IReadOnlyCollection to signal that it is already materialised."
+   },
+   {
+    "q": "How does this differ between LINQ to Objects and LINQ to a database?",
+    "a": "LINQ to Objects composes delegates and runs them in memory. `IQueryable` builds an expression tree that the provider translates into SQL, so the filtering happens in the database. The trap is accidentally switching between them: calling `.AsEnumerable()` or an unsupported method mid-query pulls the whole table into memory and filters client-side, which works correctly and performs catastrophically. Watching for that transition is one of the more valuable EF Core skills."
+   },
+   {
+    "q": "When is deferred execution actually a benefit?",
+    "a": "When composing queries conditionally without executing intermediate steps, which is how you build a filtered search: start with a base query, conditionally add Where clauses, then execute once. It also allows short-circuiting, so `.First()` on a large source stops at the first match rather than processing everything. And it enables infinite sequences, since `Enumerable.Range` composed with `Take` never materialises more than needed."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Output Prediction",
+  "difficulty": "Hard",
+  "question": "What does this print? async void versus async Task and where exceptions surface.",
+  "answer": "**Program**\n\n```csharp\nusing System;\nusing System.Threading.Tasks;\n\npublic class Solution\n{\n    private static async Task<int> Compute()\n    {\n        await Task.Yield();\n        return 42;\n    }\n\n    private static async Task Throws()\n    {\n        await Task.Yield();\n        throw new InvalidOperationException(\"from async Task\");\n    }\n\n    public static async Task Main()\n    {\n        Console.WriteLine(await Compute());\n\n        // An un-awaited task's exception stays dormant inside it.\n        Task faulted = Throws();\n        Console.WriteLine(\"not thrown yet\");\n\n        try { await faulted; }\n        catch (InvalidOperationException e) { Console.WriteLine(e.Message); }\n\n        Console.WriteLine(faulted.IsFaulted);\n\n        // .Result wraps the exception in an AggregateException.\n        var second = Throws();\n        try { second.Wait(); }\n        catch (AggregateException e)\n        {\n            Console.WriteLine($\"{e.GetType().Name} -> {e.InnerException.GetType().Name}\");\n        }\n    }\n}\n```\n\n**Output**\n\n```\n42\nnot thrown yet\nfrom async Task\nTrue\nAggregateException -> InvalidOperationException\n```\n\n**Why**\n\nAn `async Task` method captures its exception inside the returned Task rather than throwing at the call site, so nothing surfaces until the task is awaited. Awaiting rethrows the original exception with its stack trace preserved.\n\n`Wait()` and `.Result` instead wrap everything in an `AggregateException`, which is why the same failure looks different depending on how you consume the task — and why `await` is preferred.\n\nAn `async void` method, by contrast, has nowhere to put the exception: it is raised on the synchronization context and usually crashes the process. That is why `async void` is reserved for event handlers.",
+  "tags": [
+   "csharp",
+   "async",
+   "exceptions",
+   "output-prediction",
+   "tasks"
+  ],
+  "followups": [
+   {
+    "q": "Why is async void so dangerous?",
+    "a": "Because there is no Task to carry the exception, so it is thrown on the captured synchronization context and becomes an unhandled exception, typically terminating the process. The caller also cannot await it, so it cannot know when the work finished or whether it succeeded. The only legitimate use is a top-level event handler, where the signature is forced, and even then the body should wrap everything in a try/catch. Any other async void is a bug waiting to happen."
+   },
+   {
+    "q": "What happens to an exception in a task that is never awaited at all?",
+    "a": "In .NET Framework it was raised on the finaliser thread and crashed the process; since .NET Core the default is to swallow it silently, which is arguably worse because the failure disappears. You can observe them by subscribing to `TaskScheduler.UnobservedTaskException`. The practical rule is that every task should be awaited or explicitly observed, and fire-and-forget work should go through a helper that logs faults rather than being discarded."
+   },
+   {
+    "q": "Why does await unwrap the AggregateException but Wait does not?",
+    "a": "Because Wait and Result predate async/await and come from the TPL, where a task could represent several child operations and therefore several exceptions, so aggregating was the general case. Await was designed for the common case of one exception and rethrows the first inner exception with its original stack trace preserved via ExceptionDispatchInfo. That difference is one more reason to avoid blocking on tasks, alongside the deadlock risk in contexts with a synchronization context."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Output Prediction",
+  "difficulty": "Medium",
+  "question": "What does this print? Integer division, operator precedence and compound assignment.",
+  "answer": "**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void Main()\n    {\n        Console.WriteLine(5 / 2);            // integer division truncates\n        Console.WriteLine(5 / 2.0);          // one double promotes the whole expression\n        Console.WriteLine(-5 / 2);           // truncates TOWARD ZERO\n        Console.WriteLine(-5 % 2);           // sign follows the dividend\n\n        int i = 10;\n        Console.WriteLine(i++ + ++i);        // 10 + 12\n\n        byte b = 200;\n        b += 100;                            // compound assignment casts implicitly\n        Console.WriteLine(b);                // wraps: 300 - 256\n\n        Console.WriteLine(0.1 + 0.2 == 0.3);         // binary floating point\n        Console.WriteLine(0.1m + 0.2m == 0.3m);      // decimal is base 10\n\n        Console.WriteLine(1 / 3 * 3);        // left to right: 0 * 3\n        Console.WriteLine(1 * 3 / 3);\n    }\n}\n```\n\n**Output**\n\n```\n2\n2.5\n-2\n-1\n22\n44\nFalse\nTrue\n0\n1\n```\n\n**Why**\n\nInteger division truncates toward zero, so `-5 / 2` is -2 rather than -3, and `%` keeps the dividend's sign.\n\n`i++ + ++i` evaluates the post-increment first, yielding 10 and leaving i at 11, then the pre-increment makes it 12 and yields 12, summing to 22.\n\n`b += 100` compiles as `b = (byte)(b + 100)`, an implicit narrowing cast that compound assignment permits but plain assignment does not, so it wraps silently.\n\n`0.1 + 0.2` is not exactly 0.3 in binary floating point; `decimal` is base 10 and represents these values exactly.",
+  "tags": [
+   "csharp",
+   "arithmetic",
+   "floating-point",
+   "output-prediction",
+   "precedence"
+  ],
+  "followups": [
+   {
+    "q": "Why does compound assignment allow a narrowing conversion that plain assignment forbids?",
+    "a": "Because the language specifies `x op= y` as `x = (T)(x op y)` with an implicit cast back to x's type, which was a convenience so that `b += 1` on a byte compiles. The consequence is that overflow is silent, whereas `b = b + 100` is a compile error telling you the arithmetic promoted to int. It is a small trap that shows up in tight numeric code, and wrapping the arithmetic in a `checked` block makes it throw instead."
+   },
+   {
+    "q": "When should you use decimal rather than double?",
+    "a": "For money and any value where the decimal representation is part of the contract. Double cannot represent 0.1 exactly, so accumulated arithmetic drifts and comparisons fail, which is unacceptable for currency. Decimal has 28 significant digits and exact base-10 fractions, at roughly ten times the arithmetic cost and a smaller exponent range. Use double for physical quantities and measurements where relative precision matters and the inputs were approximate anyway."
+   },
+   {
+    "q": "How should floating point values be compared?",
+    "a": "Never with `==`. Compare the absolute difference against a tolerance appropriate to the magnitude involved, or use a relative epsilon for large values since a fixed tolerance is meaningless at scale. .NET has no general-purpose helper for this because the right tolerance depends on the domain. The deeper point is that if exact comparison matters, floating point is the wrong type, which is the same argument that leads to decimal for money."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Output Prediction",
+  "difficulty": "Hard",
+  "question": "What does this print? Virtual method dispatch from a base class constructor.",
+  "answer": "**Program**\n\n```csharp\nusing System;\n\npublic class Base\n{\n    public Base()\n    {\n        Console.WriteLine(\"Base ctor\");\n        Describe();                       // calls the OVERRIDE, on a half-built object\n    }\n\n    public virtual void Describe() => Console.WriteLine(\"Base.Describe\");\n}\n\npublic class Derived : Base\n{\n    private readonly string _fromInitialiser = \"set by field initialiser\";\n    private readonly string _fromBody;                 // assigned in the ctor body\n\n    public Derived()\n    {\n        _fromBody = \"set by constructor body\";\n        Console.WriteLine(\"Derived ctor\");\n    }\n\n    public override void Describe() =>\n        Console.WriteLine($\"Describe: initialiser={_fromInitialiser ?? \"null\"}, \" +\n                          $\"body={_fromBody ?? \"null\"}\");\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var d = new Derived();\n        Console.WriteLine(\"---\");\n        d.Describe();\n    }\n}\n```\n\n**Output**\n\n```\nBase ctor\nDescribe: initialiser=set by field initialiser, body=null\nDerived ctor\n---\nDescribe: initialiser=set by field initialiser, body=set by constructor body\n```\n\n**Why**\n\nVirtual dispatch uses the runtime type from the moment the object exists, so the base constructor calls the *derived* override before the derived constructor has run.\n\nThe two fields show the ordering precisely. In C# the derived **field initialisers run first**, before the base constructor, so `_fromInitialiser` already has its value. Anything assigned in the derived **constructor body** has not run yet, so `_fromBody` is null.\n\nThat partial initialisation is the hazard, and it is worse in Java, where field initialisers run *after* the super constructor and both fields would be null. The rule in either language: never call a virtual member from a constructor.",
+  "tags": [
+   "csharp",
+   "constructors",
+   "virtual",
+   "output-prediction",
+   "initialisation"
+  ],
+  "followups": [
+   {
+    "q": "What is the correct order of initialisation in C#?",
+    "a": "Derived field initialisers run first, then the base constructor chain executes from the most-derived base downward, then the derived constructor body. That ordering is why the derived field appears null: in C# the derived field initialisers actually run *before* the base constructor, but the field in this example is assigned in the initialiser list which the compiler places before the base call, so the surprise here is specifically that the base constructor sees the object before the derived *constructor body* has run. Java differs by running field initialisers after the super call, which makes the equivalent code even more surprising."
+   },
+   {
+    "q": "How would you restructure to avoid the problem?",
+    "a": "Move the work out of the constructor into an explicit initialisation method the caller invokes after construction, or use a static factory method that constructs and then initialises. Alternatively, make the class sealed so no override can exist, or make the method non-virtual. The factory approach is usually cleanest because it keeps the object unobservable until it is fully built, which also helps with async initialisation that a constructor cannot express."
+   },
+   {
+    "q": "Do analysers catch this?",
+    "a": "Yes, CA2214 'Do not call overridable methods in constructors' flags it, and most teams have it enabled. It is worth knowing because the rule sounds pedantic until you have debugged it once. The same warning applies to calling virtual members from Dispose, where the object may be partially torn down, and from a serialization callback, where field state depends on the serialiser's ordering."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Output Prediction",
+  "difficulty": "Medium",
+  "question": "What does this print? Nullable value types, null coalescing and lifted operators.",
+  "answer": "**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static void Main()\n    {\n        int? a = null;\n        int? b = 5;\n\n        Console.WriteLine(a + b);                  // lifted: null propagates\n        Console.WriteLine((a + b) ?? -1);\n        Console.WriteLine(a ?? 0);\n\n        Console.WriteLine(a > 0);                  // comparison with null is FALSE\n        Console.WriteLine(a <= 0);                 // also false: not the negation\n        Console.WriteLine(a == null);\n\n        int? c = null;\n        int? d = null;\n        Console.WriteLine(c == d);                 // both null: equal\n\n        Console.WriteLine(a.GetValueOrDefault());\n        Console.WriteLine(b.Value + 1);\n\n        // A nullable that holds a value boxes to the UNDERLYING type.\n        object boxed = b;\n        Console.WriteLine(boxed.GetType().Name);\n\n        object boxedNull = a;\n        Console.WriteLine(boxedNull == null);      // a null nullable boxes to null\n    }\n}\n```\n\n**Output**\n\n```\n\n-1\n0\nFalse\nFalse\nTrue\nTrue\n0\n6\nInt32\nTrue\n```\n\n**Why**\n\nArithmetic operators are *lifted* over nullable types: if either operand is null the result is null, which prints as an empty line.\n\nComparison operators are lifted differently — any comparison involving null is false, so `a > 0` and `a <= 0` are **both** false. They are not negations of each other, which breaks the usual assumption and is the trap in this question.\n\nEquality is the exception: two nulls compare equal. And boxing a nullable yields either null or a boxed value of the underlying type, never a boxed `Nullable<int>`.",
+  "tags": [
+   "csharp",
+   "nullable",
+   "lifted-operators",
+   "output-prediction",
+   "boxing"
+  ],
+  "followups": [
+   {
+    "q": "Why are both a > 0 and a <= 0 false?",
+    "a": "Because the lifted comparison operators are defined to return false whenever either operand is null, following SQL's three-valued logic where a comparison with unknown is unknown rather than true or false. C# collapses unknown to false for these operators. The consequence is that `!(a > 0)` is not equivalent to `a <= 0`, which silently breaks range checks and validation logic. The safe pattern is to test HasValue explicitly before comparing."
+   },
+   {
+    "q": "What is the difference between int? and a nullable reference type?",
+    "a": "`int?` is `Nullable<int>`, a real struct with a HasValue flag, so it changes the runtime representation and has genuine null semantics. A nullable reference type such as `string?` is purely a compile-time annotation: the runtime representation is identical to `string`, and the compiler uses it to emit warnings. That means nullable reference annotations can be defeated by reflection, by code compiled without the feature, or by a `null!` suppression, whereas `int?` cannot."
+   },
+   {
+    "q": "Why does boxing a nullable not produce a boxed Nullable<T>?",
+    "a": "Because the runtime special-cases it: a nullable with no value boxes to a null reference, and one with a value boxes to the underlying type. That makes `boxed is int` true for a populated int?, which is usually what callers expect, and it means you cannot distinguish a boxed int from a boxed int? at run time. It also explains why `object o = (int?)null;` gives a genuinely null reference rather than a non-null box containing an empty nullable."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Output Prediction",
+  "difficulty": "Hard",
+  "question": "What does this print? Dictionary iteration order and the danger of relying on it.",
+  "answer": "**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var d = new Dictionary<string, int>();\n        d[\"z\"] = 1; d[\"a\"] = 2; d[\"m\"] = 3;\n\n        // Looks like insertion order, but nothing guarantees it.\n        Console.WriteLine(string.Join(\",\", d.Keys));\n\n        d.Remove(\"a\");\n        d[\"b\"] = 4;              // reuses the freed slot: order now surprises\n        Console.WriteLine(string.Join(\",\", d.Keys));\n\n        // Sorted alternatives, where order IS part of the contract.\n        var sorted = new SortedDictionary<string, int>(d);\n        Console.WriteLine(string.Join(\",\", sorted.Keys));\n\n        // The safe way to get deterministic output from a Dictionary.\n        Console.WriteLine(string.Join(\",\", d.Keys.OrderBy(k => k, StringComparer.Ordinal)));\n\n        // Overwriting an existing key is allowed on .NET Core (it was not on\n        // .NET Framework). Adding a key still invalidates the enumerator.\n        foreach (var kv in d) d[kv.Key] = 0;\n        Console.WriteLine(\"overwrite during enumeration: allowed\");\n\n        try\n        {\n            foreach (var kv in d) d[\"new\"] = 1;\n        }\n        catch (InvalidOperationException)\n        {\n            Console.WriteLine(\"add during enumeration: throws\");\n        }\n    }\n}\n```\n\n**Output**\n\n```\nz,a,m\nz,b,m\nb,m,z\nb,m,z\noverwrite during enumeration: allowed\nadd during enumeration: throws\n```\n\n**Why**\n\n`Dictionary<K,V>` appears to preserve insertion order while only additions occur, because entries are appended to an internal array. After a removal, the freed slot goes on a free list and the next insertion reuses it, so `b` lands where `a` was. The apparent ordering was never a guarantee.\n\nThe documented contract is explicit: the order is unspecified and must not be relied upon. If order matters, use `SortedDictionary`, or sort explicitly.\n\nOverwriting an existing value during enumeration is permitted on .NET Core, though it threw on .NET Framework. Adding a key is a structural change and still invalidates the enumerator. That the same code behaves differently by runtime is itself the warning.",
+  "tags": [
+   "csharp",
+   "dictionary",
+   "ordering",
+   "output-prediction",
+   "enumeration"
+  ],
+  "followups": [
+   {
+    "q": "Why does assigning to an existing key during enumeration throw, when no key was added?",
+    "a": "Because the enumerator checks a version counter that Dictionary increments on any structural modification, and in .NET Framework the indexer setter bumped it even for an update of an existing key. .NET Core relaxed that so overwriting an existing key no longer invalidates enumerators, which means this code's behaviour differs by runtime. That divergence is itself the lesson: relying on the exact throwing behaviour is as unsafe as relying on the ordering."
+   },
+   {
+    "q": "Where has this bitten people in production?",
+    "a": "Anywhere dictionary order leaks into output: generating a config file, computing a hash of serialised state, or building a cache key by concatenating keys. It works in testing, then a removal changes the order and two logically identical inputs produce different hashes. It also breaks reproducible builds. The fix is always to sort explicitly at the boundary where order becomes observable, rather than hoping the enumeration is stable."
+   },
+   {
+    "q": "What are the ordered alternatives and their costs?",
+    "a": "SortedDictionary is a red-black tree with O(log n) operations and keeps keys in comparer order. SortedList is an array pair, so lookups are O(log n) and inserts are O(n), but it is more memory-efficient and faster to enumerate. For genuine insertion order you need an ordered dictionary; .NET has the non-generic OrderedDictionary, and .NET 9 added a generic one. Choosing based on which order you need, and whether writes or reads dominate, is the real answer."
+   }
+  ]
  }
 ]

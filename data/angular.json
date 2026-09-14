@@ -3194,5 +3194,37 @@
    "components",
    "design"
   ]
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "An Angular list of 5,000 rows is sluggish on every keystroke in a filter box. Walk through diagnosing and fixing it.",
+  "answer": "**Approach**\n\nSlowness on keystroke almost always means change detection is running the whole tree on every event, and something in the template is expensive to evaluate. Four things to check in order.\n\n**1. Are you calling a function from the template?**\n\n```html\n<!-- BAD: runs on every change detection cycle, for every row -->\n<tr *ngFor=\"let row of filterRows()\">\n```\n\nAngular cannot know whether `filterRows()` is pure, so it re-invokes it every cycle — which on a keystroke may be dozens of times. Replace with a precomputed field or a pure pipe.\n\n**2. Is the component using default change detection?**\n\n```typescript\n@Component({\n  changeDetection: ChangeDetectionStrategy.OnPush,   // only re-render on input change\n})\n```\n\nDefault strategy re-checks every binding in every component on every event anywhere in the app. OnPush restricts it to changed `@Input` references, emitted observables and explicit `markForCheck`.\n\n**3. Is `trackBy` present?**\n\n```typescript\ntrackById(index: number, row: Row) { return row.id; }\n```\n\nWithout it, a new array instance makes Angular destroy and recreate all 5,000 DOM nodes even if the contents are identical.\n\n**4. Is the input debounced?**\n\n```typescript\nthis.search.valueChanges.pipe(\n  debounceTime(200),\n  distinctUntilChanged(),\n).subscribe(...)\n```\n\n**Change detection, visualised**\n\n```\n  DEFAULT strategy                   OnPush strategy\n  keystroke                          keystroke\n      |                                  |\n      v                                  v\n   AppComponent  (checked)           AppComponent  (skipped: inputs unchanged)\n      |                                  |\n   Header        (checked)            Header       (skipped)\n   ListComponent (checked)            ListComponent (CHECKED: input changed)\n      |                                  |\n   5000 rows     (all checked)        5000 rows    (only changed rows, via trackBy)\n   Footer        (checked)            Footer       (skipped)\n```\n\n**If it is still slow: virtualise**\n\nRendering 5,000 rows means 5,000 DOM subtrees regardless of change detection. The CDK virtual scroller renders only the visible window:\n\n```html\n<cdk-virtual-scroll-viewport itemSize=\"48\" class=\"viewport\">\n  <tr *cdkVirtualFor=\"let row of rows; trackBy: trackById\">...</tr>\n</cdk-virtual-scroll-viewport>\n```\n\nThat takes the DOM from 5,000 nodes to roughly 20, which is usually the difference between sluggish and instant.",
+  "tags": [
+   "angular",
+   "change-detection",
+   "onpush",
+   "virtual-scroll",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "Why exactly is a function call in a template so expensive?",
+    "a": "Because Angular has no way to memoise it: it cannot prove the function is pure or that its inputs have not changed, so it must call it on every change detection pass to see whether the result differs. With default change detection a single keystroke can trigger several passes, and each pass calls the function once per row. A pure pipe solves it because pipes declare purity, so Angular caches the result until the inputs change by reference. A precomputed property is simpler still."
+   },
+   {
+    "q": "What breaks when you switch a component to OnPush?",
+    "a": "Anything that mutates an object in place rather than replacing it, because OnPush compares input references. Pushing onto an existing array or setting a property on a bound object no longer triggers a render. The fixes are to treat inputs as immutable and always assign a new reference, or to call `ChangeDetectorRef.markForCheck()` after a mutation. Switching to OnPush therefore often means adopting immutable update patterns, which is a larger change than the one-line annotation suggests."
+   },
+   {
+    "q": "How does Angular's signals-based change detection change this picture?",
+    "a": "Signals make dependencies explicit, so Angular knows precisely which components read which values and can re-render only those, without traversing the tree at all. That removes most of the reason for OnPush and for the zone.js monkey-patching that triggers change detection today. Zoneless Angular with signals is the direction of travel, and the practical effect is that the default becomes roughly as fast as a carefully tuned OnPush tree is now."
+   },
+   {
+    "q": "Suppose the filtering happens server-side. Does the analysis change?",
+    "a": "The rendering problems are identical, since 5,000 rows in the DOM is expensive regardless of where they came from. What changes is that debouncing becomes essential rather than merely helpful, because each keystroke is now a network request, and you need `switchMap` rather than `mergeMap` so a slow earlier response cannot arrive after a faster later one and overwrite it. That out-of-order response bug is subtle and is the main reason switchMap exists."
+   }
+  ]
  }
 ]

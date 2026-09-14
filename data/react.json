@@ -3311,5 +3311,37 @@
    "practices",
    "quality"
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "A React component re-renders on every parent update even though its props look unchanged. Diagnose and fix.",
+  "answer": "**Approach**\n\nReact re-renders a child whenever the parent renders, unless the child is memoised *and* its props are referentially stable. The usual cause is a prop that is a new object, array or function on every render.\n\n**The problem**\n\n```jsx\nfunction Parent({ items }) {\n  const [count, setCount] = useState(0);\n\n  // New array identity every render, even if contents are identical.\n  const config = { pageSize: 20 };\n  const handleSelect = (id) => console.log(id);\n\n  return (\n    <>\n      <button onClick={() => setCount(count + 1)}>{count}</button>\n      <ExpensiveList items={items} config={config} onSelect={handleSelect} />\n    </>\n  );\n}\n\nconst ExpensiveList = React.memo(function ExpensiveList({ items, config, onSelect }) {\n  // memo compares props shallowly: config and onSelect differ every time,\n  // so this re-renders on every click even though nothing it shows changed.\n});\n```\n\n**The fix**\n\n```jsx\nconst config = useMemo(() => ({ pageSize: 20 }), []);\nconst handleSelect = useCallback((id) => console.log(id), []);\n```\n\n**Render flow**\n\n```\n  click \"count\"\n      |\n      v\n  Parent re-renders\n      |\n      +-- creates NEW config object      ----+\n      +-- creates NEW handleSelect fn    ----+--> props differ by reference\n      |                                       |\n      v                                       v\n  React.memo shallow compare  ------------> NOT equal\n      |\n      v\n  ExpensiveList re-renders  (5000 rows reconciled)  <-- the waste\n\n\n  AFTER useMemo / useCallback:\n\n  click \"count\"\n      |\n      v\n  Parent re-renders\n      |\n      +-- config: same reference\n      +-- handleSelect: same reference\n      |\n      v\n  React.memo shallow compare  ------------> equal\n      |\n      v\n  ExpensiveList SKIPPED\n```\n\n**Order of investigation**\n\n| Step | Tool | Looking for |\n|---|---|---|\n| 1 | React DevTools Profiler | Which component renders, and why |\n| 2 | \"Why did this render?\" | Which prop changed |\n| 3 | Check that prop's creation | Inline object, array or arrow function |\n| 4 | useMemo / useCallback | Stabilise the reference |\n| 5 | Still slow? | Virtualise the list, or split the state |\n\n**A caution**\n\n`useMemo` and `useCallback` are not free: they allocate, run a dependency comparison, and add noise. Apply them where the profiler shows a real cost, not reflexively.",
+  "tags": [
+   "react",
+   "memo",
+   "usecallback",
+   "re-render",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "Why does React.memo compare shallowly rather than deeply?",
+    "a": "Because a deep comparison is O(size of the props) on every render, which for a large data structure can easily cost more than the re-render it avoids. Shallow comparison is O(number of props) and predictable. React makes the trade explicit by letting you pass a custom comparator as the second argument, but reaching for that is usually a sign that the props are shaped wrongly and should be narrowed to the primitives the child actually needs."
+   },
+   {
+    "q": "Does the React Compiler make useMemo and useCallback unnecessary?",
+    "a": "Largely, yes. The compiler analyses the component and inserts memoisation automatically where it is provably safe, which removes the manual bookkeeping and the bugs from wrong dependency arrays. It relies on the component following the rules of React, so mutation of props or state, or reading values outside the render, can defeat it. The practical advice today is to write correct code, profile, and memoise the hot paths manually until the compiler is adopted."
+   },
+   {
+    "q": "Suppose the child re-renders because of context rather than props.",
+    "a": "Then memo does not help at all, because any consumer of a context re-renders when the context value changes regardless of its props. The usual cause is a provider passing a new object literal as its value on every render, fixed with useMemo on the value. Beyond that, splitting one large context into several narrow ones means a consumer only re-renders for the slice it uses, which is the standard fix for a context that has accumulated too much state."
+   },
+   {
+    "q": "When is re-rendering actually the wrong thing to optimise?",
+    "a": "When the render itself is cheap, which it usually is. React's reconciliation on a small subtree is microseconds, so eliminating it buys nothing while adding complexity. The costs worth chasing are large lists, which should be virtualised rather than memoised, expensive computation inside render, which should be memoised or moved out, and layout thrashing from reading DOM measurements during render. Profiling first is what distinguishes these, and it is why the DevTools Profiler is step one rather than step four."
+   }
+  ]
  }
 ]

@@ -3904,5 +3904,37 @@
    "practices",
    "maintainability"
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimization",
+  "difficulty": "Hard",
+  "question": "A query that ran in 200 ms now takes 40 seconds after the table grew. Walk through diagnosing it.",
+  "answer": "**Approach**\n\nA sudden cliff as data grows almost always means the plan changed from index seeks to scans, or a join strategy flipped. Work from the execution plan outward, not from the query text.\n\n**1. Get the actual plan, not the estimated one**\n\n```sql\nSET STATISTICS IO, TIME ON;\n-- then run the query and read the actual plan\n```\n\nEstimated plans lie when statistics are stale, which is often the root cause.\n\n**2. Read the plan for these four things**\n\n```\n  SYMPTOM                       LIKELY CAUSE                  FIX\n  ------------------------------------------------------------------------\n  Clustered Index Scan    -->   no usable index, or       --> add index /\n  where a Seek is wanted        predicate not sargable        rewrite predicate\n                                                    \n  Key Lookup, high count  -->   index covers the filter   --> INCLUDE the\n                                but not the SELECT list       needed columns\n                                                    \n  Estimated rows 1,       -->   stale statistics or       --> UPDATE STATISTICS /\n  actual rows 2,000,000         parameter sniffing            OPTION (RECOMPILE)\n                                                    \n  Hash Match where a      -->   row estimate wrong, so    --> fix the estimate\n  Nested Loop was chosen        the optimiser mispicked       first, not the join\n```\n\n**3. The sargability trap**\n\n```sql\n-- NOT sargable: the function defeats the index on OrderDate\nWHERE YEAR(OrderDate) = 2026\n\n-- Sargable: a range the index can seek\nWHERE OrderDate >= '2026-01-01' AND OrderDate < '2027-01-01'\n\n-- NOT sargable: leading wildcard\nWHERE CustomerName LIKE '%smith'\n\n-- NOT sargable: implicit conversion, and the silent killer\nWHERE CustomerId = @idAsNvarchar   -- column is INT, parameter is NVARCHAR\n```\n\nThe implicit conversion is the one people miss: the plan shows a scan with a `CONVERT_IMPLICIT` in the predicate, and it is invisible in the query text.\n\n**4. Parameter sniffing**\n\nThe plan is compiled for the first parameter value seen and cached. A query optimal for `@customerId = 1` (a customer with three orders) can be catastrophic for a customer with two million. Symptoms: fast from one caller, slow from another, and `DBCC FREEPROCCACHE` temporarily fixes it.\n\n**Diagnostic order**\n\n```\n  slow query\n      |\n      v\n  actual plan --> scan where seek expected? --> index missing or predicate not sargable\n      |\n      +--------> estimate vs actual wildly off? --> stale stats / parameter sniffing\n      |\n      +--------> high logical reads? --> key lookups, or reading far more than needed\n      |\n      +--------> plan looks fine but still slow? --> blocking, not the plan.\n                                                    check waits\n```",
+  "tags": [
+   "sql",
+   "query-plan",
+   "sargable",
+   "parameter-sniffing",
+   "indexing"
+  ],
+  "followups": [
+   {
+    "q": "Why does an implicit conversion prevent an index seek?",
+    "a": "Because the conversion is applied to the column, not the parameter, when the parameter's type has higher precedence. The engine must therefore convert every row's value before comparing, which means reading every row. The giveaway in the plan is CONVERT_IMPLICIT wrapped around the column in the seek predicate. The fix is to match the parameter type to the column, which in .NET usually means specifying SqlDbType explicitly rather than letting the driver infer nvarchar for a string."
+   },
+   {
+    "q": "How do you fix parameter sniffing without disabling plan caching entirely?",
+    "a": "Several options with different trade-offs. OPTION (RECOMPILE) gives an optimal plan per execution at the cost of compilation on every call, which suits infrequent but wildly varying queries. OPTIMIZE FOR a representative value pins a reasonable middle plan. Splitting into separate stored procedures gives each parameter shape its own cache entry. In SQL Server 2022, Parameter Sensitive Plan optimisation caches several plans per statement automatically, which addresses the common case without intervention."
+   },
+   {
+    "q": "The plan looks fine but the query is still slow. Now what?",
+    "a": "Then the problem is not the plan, and you look at waits. Check sys.dm_exec_requests for the wait type: LCK indicates blocking by another transaction, PAGEIOLATCH indicates reading from disk because the working set does not fit in memory, and CXPACKET suggests parallelism skew. Blocking is the most common and is invisible in the plan entirely, which is why 'read the plan' is necessary but not sufficient as a diagnostic strategy."
+   },
+   {
+    "q": "When would you add an index versus rewriting the query?",
+    "a": "Rewrite first when the predicate is not sargable, because no index can help a query that wraps the column in a function. Add an index when the predicate is already sargable and the plan shows a scan. Be cautious about adding indexes reflexively: each one costs write throughput and storage, and a table with fifteen indexes has a genuinely slow insert path. Covering an existing index with INCLUDE columns to eliminate key lookups is usually cheaper than adding a new index."
+   }
+  ]
  }
 ]

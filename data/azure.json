@@ -5247,5 +5247,37 @@
    "deployment",
    "practices"
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Scalability",
+  "difficulty": "Hard",
+  "question": "Design the load balancing and scaling strategy for a .NET API on Azure serving global traffic. Draw the topology.",
+  "answer": "**Approach**\n\nMatch each Azure balancing service to the layer it actually operates at. Using the wrong one is the common mistake: Traffic Manager cannot do path-based routing, and Application Gateway is regional so it cannot fail over across regions on its own.\n\n**Topology**\n\n```\n                            INTERNET\n                                |\n                                v\n                    +-----------------------+\n                    |     Front Door        |  global, layer 7\n                    |  - anycast edge POPs  |  WAF, TLS, caching,\n                    |  - health probes      |  path routing, failover\n                    +-----------------------+\n                        /                \\\n              (lowest latency)        (failover)\n                      /                    \\\n                     v                      v\n        +------------------+        +------------------+\n        |  WEST EUROPE     |        |   EAST US        |\n        |                  |        |                  |\n        |  App Gateway     |        |  App Gateway     |  regional, layer 7\n        |  (WAF, path)     |        |  (WAF, path)     |\n        |        |         |        |        |         |\n        |        v         |        |        v         |\n        |  App Service /   |        |  App Service /   |\n        |  Container Apps  |        |  Container Apps  |\n        |  [3..20 instances]        |  [3..20 instances]\n        |        |         |        |        |         |\n        |        v         |        |        v         |\n        |  Redis  SQL(pri) | <----> |  Redis  SQL(geo) |  async replication\n        +------------------+        +------------------+\n```\n\n**Which service, and why**\n\n| Service | Layer | Scope | Use it for |\n|---|---|---|---|\n| Front Door | 7 (HTTP) | Global | Global entry, WAF, edge caching, cross-region failover |\n| Traffic Manager | DNS | Global | Non-HTTP protocols, or routing to non-Azure endpoints |\n| Application Gateway | 7 (HTTP) | Regional | Path/host routing, WAF, session affinity within a region |\n| Load Balancer | 4 (TCP/UDP) | Regional | Non-HTTP traffic, VM backends, extreme throughput |\n\nTraffic Manager works at DNS, so failover is bounded by TTL and by client DNS caching — often minutes. Front Door uses anycast and fails over in seconds, which is why it is the default choice for HTTP today.\n\n**Scaling rules**\n\n```\n  metric                    scale out when        scale in when\n  ---------------------------------------------------------------\n  CPU                       > 70% for 5 min       < 30% for 10 min\n  HTTP queue length         > 100                 < 20\n  Requests per instance     > 1000/min            < 200/min\n\n  cool-down: 5 min out, 10 min in   (asymmetric on purpose)\n```\n\nScale in more slowly than out. Aggressive scale-in causes flapping: the instance count oscillates, and every removal drops in-flight requests and cold-starts the replacement.\n\n**The constraint that actually bites**\n\nThe API tier scales horizontally without limit; the database does not. A single writable SQL instance is the ceiling, so the real work is reducing write pressure — read replicas for queries, Redis for hot reads, and async processing via Service Bus for anything not needed in the request path.",
+  "tags": [
+   "azure",
+   "load-balancing",
+   "front-door",
+   "autoscale",
+   "multi-region"
+  ],
+  "followups": [
+   {
+    "q": "Why not just use Traffic Manager, which is cheaper?",
+    "a": "Because it operates at DNS, so it hands the client an IP and then has no further involvement. Failover requires the DNS record to expire and the client to re-resolve, and many clients and intermediate resolvers ignore short TTLs, so real-world failover takes minutes rather than the configured TTL. It also cannot inspect HTTP, so no path routing, no WAF and no caching. Traffic Manager remains the right tool for non-HTTP protocols or when routing to endpoints outside Azure, which Front Door supports less naturally."
+   },
+   {
+    "q": "Suppose the West Europe region fails entirely. Walk through what happens.",
+    "a": "Front Door's health probes fail for that backend and it stops routing there within seconds, so HTTP traffic shifts to East US automatically. The harder problem is data: SQL geo-replication is asynchronous, so a failover loses whatever had not replicated, and promoting the secondary is a deliberate action with a real RPO. Redis contents are lost unless geo-replicated, so the surviving region starts cold and hammers the database. A genuine plan needs a documented RPO and RTO, and a tested failover runbook, because the automatic part only covers the stateless tier."
+   },
+   {
+    "q": "How do you handle session state across instances?",
+    "a": "Do not keep it in process. In-memory session breaks the moment a second instance exists, and sticky sessions merely postpone the problem while making scale-in drop user sessions. Put state in Redis via the distributed cache abstraction, or make the API genuinely stateless with a signed token carrying the claims. The token approach scales best because it removes a network hop, at the cost of not being revocable before expiry, which is why short lifetimes and a refresh token are the usual compromise."
+   },
+   {
+    "q": "The autoscale rules use CPU. When is that the wrong metric?",
+    "a": "Whenever the bottleneck is not CPU, which for a typical API is most of the time. An API waiting on a database is IO-bound, so CPU stays low while latency climbs and the service never scales out. Queue length or requests-per-instance are better proxies for load, and scaling on p95 latency is closest to what users experience. For queue-driven workers, scaling on queue depth is the only sensible signal, which is what KEDA provides for Container Apps."
+   }
+  ]
  }
 ]

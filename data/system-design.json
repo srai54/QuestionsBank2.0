@@ -2433,5 +2433,69 @@
    "practices",
    "judgement"
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Design a file upload service handling large files with resumable uploads. Draw the flow.",
+  "answer": "**Approach**\n\nNever stream a large file through the API server. The client uploads directly to blob storage using a short-lived pre-signed URL, and the API only issues credentials and records metadata. That keeps the API stateless, removes it as a bandwidth bottleneck, and means a failed upload never occupies an application thread.\n\nResumability comes from chunking: the client splits the file into blocks, uploads each independently, and commits the block list when all have succeeded. A retry re-sends only the missing blocks.\n\n**Flow**\n\n```\n  CLIENT                    API                 BLOB STORAGE           DB\n    |                        |                       |                  |\n    |--- 1. init upload ---->|                       |                  |\n    |    (name, size, hash)  |--- create record ----------------------->|\n    |                        |                       |         status=pending\n    |<-- 2. uploadId + ------|                       |                  |\n    |    pre-signed URL      |                       |                  |\n    |                        |                       |                  |\n    |======= 3. PUT block 1 (direct, bypasses API) ==>|                  |\n    |======= 3. PUT block 2 =========================>|                  |\n    |======  3. PUT block 3 ===X  network failure     |                  |\n    |                        |                       |                  |\n    |--- 4. GET status ----->|--- list blocks ------>|                  |\n    |<-- have 1,2 need 3 ----|<----------------------|                  |\n    |                        |                       |                  |\n    |======= 5. PUT block 3 (retry only the gap) ====>|                  |\n    |                        |                       |                  |\n    |--- 6. commit --------->|--- commit block list ->|                  |\n    |                        |                       |                  |\n    |                        |--- verify hash ------>|                  |\n    |                        |--- update record ---------------------->|\n    |<-- 7. 201 + file id ---|                       |        status=complete\n    |                        |                       |                  |\n                             |--- 8. enqueue post-processing ---> QUEUE\n                                                                    |\n                                                          thumbnail / scan / index\n```\n\n**Key decisions**\n\n| Decision | Choice | Why |\n|---|---|---|\n| Upload path | Direct to storage | API never handles the bytes; no bandwidth or thread cost |\n| Credential | Pre-signed URL, short TTL | Scoped to one blob, expires in minutes, no long-lived secret on the client |\n| Chunk size | 4–8 MB | Small enough to retry cheaply, large enough to amortise per-request overhead |\n| Resume state | Storage's block list | Single source of truth; no separate progress store to fall out of sync |\n| Post-processing | Async via queue | Upload latency stays independent of virus scanning and thumbnailing |\n\n**Capacity sketch**\n\n10,000 uploads/day averaging 50 MB is 500 GB/day, about 6 MB/s sustained — trivial for blob storage, but it would be 500 GB/day through the API tier if proxied, which is precisely what the direct path avoids.",
+  "tags": [
+   "system-design",
+   "file-upload",
+   "resumable",
+   "pre-signed-url",
+   "blob-storage"
+  ],
+  "followups": [
+   {
+    "q": "Suppose the client uploads all blocks but never commits. What happens?",
+    "a": "Uncommitted blocks occupy storage but are invisible as a blob, so they leak silently and are billed. Azure Blob Storage garbage-collects uncommitted blocks after seven days, and S3 needs an explicit lifecycle rule to abort incomplete multipart uploads. You also want your own reaper sweeping pending database records older than some threshold, both to reclaim storage and to stop the metadata table filling with abandoned rows. This is the single most commonly forgotten piece of the design."
+   },
+   {
+    "q": "How do you stop someone uploading a 10 GB file when the limit is 100 MB?",
+    "a": "The declared size in the init call is a hint, not a control, since the client can lie. Real enforcement has to come from the storage layer: a pre-signed URL scoped with a content-length constraint, and a policy limiting blob size. You also rate-limit init calls per user so nobody can mint unlimited URLs. Checking size only at commit time is too late, because the bytes are already stored and billed."
+   },
+   {
+    "q": "How do you verify the file was not corrupted in transit?",
+    "a": "The client sends a hash at init and the service verifies after commit, which is what the flow shows. Per-block checksums catch corruption earlier and let you retry just the bad block; both Azure and S3 support a per-block MD5 or CRC. Note that a hash proves integrity, not authenticity: a malicious client can send a matching hash for malicious content, so virus scanning in the post-processing stage is a separate concern rather than something the hash covers."
+   },
+   {
+    "q": "Why not just use a bigger request timeout and stream through the API?",
+    "a": "Because it makes every upload hold an application thread and a connection for its duration, so a few hundred slow uploads exhaust the server. It also means a deployment or a restart kills in-flight uploads with no way to resume, and it puts your egress bandwidth on the critical path. Proxying is acceptable only for small files where the simplicity is worth it, and the usual cutoff is a few megabytes."
+   }
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Design a notification service supporting email, SMS and push with retries. Draw the flow.",
+  "answer": "**Approach**\n\nThe core requirement is that a notification is never lost and never sent twice. That drives three decisions: accept and persist before doing any work, deliver asynchronously through a queue, and make delivery idempotent so a retry is safe.\n\nChannel-specific logic goes behind a common interface so a new channel is a new implementation rather than a change to the pipeline.\n\n**Flow**\n\n```\n  CALLER          API           DB            QUEUE          WORKER        PROVIDER\n    |              |             |              |               |              |\n    |-- send ----->|             |              |               |              |\n    |  (+ idem key)|-- check ---->|             |               |              |\n    |              |  idem key    |             |               |              |\n    |              |<-- new ------|             |               |              |\n    |              |-- persist -->|             |               |              |\n    |              |         status=queued      |               |              |\n    |              |-- enqueue ------------------>|              |              |\n    |<-- 202 ------|             |              |               |              |\n    |   accepted   |             |              |               |              |\n    |                            |              |-- dequeue --->|              |\n    |                            |              |               |-- send ----->|\n    |                            |              |               |<-- 5xx ------|\n    |                            |<-- status=retrying -----------|              |\n    |                            |              |<-- requeue ---|              |\n    |                            |              |  (backoff 1m) |              |\n    |                            |              |               |              |\n    |                            |              |-- dequeue --->|              |\n    |                            |              |               |-- send ----->|\n    |                            |              |               |<-- 200 ------|\n    |                            |<-- status=sent --------------|              |\n    |                            |              |               |              |\n    |                     after N failures      |               |              |\n    |                            |              +--> DEAD LETTER QUEUE         |\n    |                            |                      |                      |\n    |                            |                  alert + manual review      |\n```\n\n**Channel abstraction**\n\n```\n                    INotificationChannel\n                            |\n        +-------------------+-------------------+\n        |                   |                   |\n   EmailChannel        SmsChannel          PushChannel\n   (SendGrid)          (Twilio)          (FCM / APNs)\n        |                   |                   |\n   retry: 5, slow      retry: 3, costly    retry: 2, cheap\n```\n\n**Retry policy**\n\n| Failure | Retry? | Why |\n|---|---|---|\n| 5xx, timeout | Yes, exponential backoff + jitter | Transient; the provider may recover |\n| 429 rate limited | Yes, honour Retry-After | Retrying sooner makes it worse |\n| 400 bad address | No, dead-letter immediately | Retrying cannot succeed and costs money |\n| 401/403 | No, alert | A credential problem needs a human |\n\n**Why 202 rather than 200**\n\nThe API returns as soon as the request is durably recorded, not when the message is delivered. Delivery may take seconds or minutes, and blocking the caller on a third-party provider would couple their latency and availability to yours.",
+  "tags": [
+   "system-design",
+   "notifications",
+   "queue",
+   "retry",
+   "idempotency"
+  ],
+  "followups": [
+   {
+    "q": "How do you guarantee a notification is not sent twice?",
+    "a": "Most queues give at-least-once delivery, so duplicates are inevitable and the answer is idempotent delivery rather than exactly-once queuing. The caller supplies an idempotency key which you store uniquely, so a duplicate request is recognised before anything is queued. For the worker, record the provider's message id after a successful send and check it before retrying, so a crash between sending and acknowledging does not re-send. Exactly-once is achievable end-to-end only by making the effect idempotent, never by the transport alone."
+   },
+   {
+    "q": "Suppose the email provider is down for two hours. What happens?",
+    "a": "The queue absorbs it, which is the main reason for the queue. Messages accumulate, retries back off, and nothing is lost as long as the queue's retention exceeds the outage. What needs designing is the recovery: when the provider returns, the backlog floods the worker and may trip the provider's rate limits, so you want a circuit breaker that stops hammering during the outage and a rate-limited drain afterwards. You also need alerting on queue depth, because a silently growing queue is the failure mode nobody notices until retention expires."
+   },
+   {
+    "q": "How would you add user preferences and quiet hours?",
+    "a": "As a policy check between accepting and enqueuing, not inside the worker, so a suppressed notification never occupies the queue. Quiet hours are trickier because they are per-user timezone and the correct behaviour is usually to defer rather than drop, which means a scheduled queue with a visibility delay rather than immediate enqueue. Digesting several notifications into one is the natural next requirement, and that needs a windowing stage which changes the architecture more than it first appears."
+   },
+   {
+    "q": "Why persist before enqueuing rather than the other way round?",
+    "a": "Because if you enqueue first and the database write fails, a message is in flight with no record of it, so status queries and deduplication break. Persisting first means the worst case is a record with no queue message, which a sweeper can detect and re-enqueue. That ordering is the outbox pattern in miniature, and the full version writes the message into the same database transaction as the record, with a relay publishing it, which removes the dual-write problem entirely."
+   }
+  ]
  }
 ]

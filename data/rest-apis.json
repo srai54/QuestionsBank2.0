@@ -1172,5 +1172,37 @@
    "architecture",
    "versioning"
   ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "An API endpoint returns in 3 seconds. Walk through how you would find and fix the cost, as a senior engineer.",
+  "answer": "**Approach**\n\nMeasure before changing anything. The instinct to add caching first is usually wrong, because it hides a problem rather than fixing it and introduces invalidation bugs.\n\n**Where the 3 seconds could be**\n\n```\n  client ---> [ network ] ---> API ---> [ database ]\n                                 |\n                                 +----> [ downstream service ]\n                                 |\n                                 +----> [ serialization ]\n\n  breakdown from a trace:\n  ------------------------------------------------\n  network + TLS          40 ms   ####\n  auth / middleware      15 ms   #\n  DB query 1            120 ms   ############\n  DB query 2..N       2,400 ms   ########################################  <-- here\n  serialization         380 ms   ######################\n  ------------------------------------------------\n```\n\nA distributed trace makes this immediate. Without one you are guessing.\n\n**The usual culprit: N+1 queries**\n\n```csharp\n// 1 query for orders, then one per order for its customer: 1 + N round trips.\nvar orders = await db.Orders.ToListAsync();\nforeach (var o in orders)\n    o.CustomerName = (await db.Customers.FindAsync(o.CustomerId)).Name;\n\n// One query, one round trip.\nvar orders = await db.Orders\n    .Include(o => o.Customer)\n    .Select(o => new OrderDto(o.Id, o.Total, o.Customer.Name))   // project, do not materialise\n    .ToListAsync();\n```\n\n**Fix order, cheapest first**\n\n| # | Fix | Typical win | Risk |\n|---|---|---|---|\n| 1 | Eliminate N+1 | 10–100x | None; strictly better |\n| 2 | Project to a DTO, select fewer columns | 2–5x | None |\n| 3 | Add the missing index | 10–1000x | Write cost |\n| 4 | Paginate instead of returning everything | Bounded response | API change |\n| 5 | Parallelise independent downstream calls | Sum → max | Concurrency limits |\n| 6 | Cache | Large | Invalidation complexity |\n| 7 | Move work out of the request (queue) | Latency → async | Eventual consistency |\n\n**Parallelising independent calls**\n\n```csharp\n// Sequential: 300 + 250 + 400 = 950 ms\nvar user = await GetUserAsync(id);\nvar orders = await GetOrdersAsync(id);\nvar prefs = await GetPreferencesAsync(id);\n\n// Concurrent: max(300, 250, 400) = 400 ms\nvar userTask = GetUserAsync(id);\nvar ordersTask = GetOrdersAsync(id);\nvar prefsTask = GetPreferencesAsync(id);\nawait Task.WhenAll(userTask, ordersTask, prefsTask);\n```\n\nOnly valid when the calls are genuinely independent, and it multiplies load on the downstream service, so it needs a concurrency limit.\n\n**Why caching is last**\n\nCaching does not make the endpoint faster; it makes *some* requests skip the slow path. The slow path still runs on a miss, on cache expiry, and for every new key. If the underlying query is 3 seconds, a cold cache or a deployment still exposes users to 3 seconds, and now you also own invalidation bugs.",
+  "tags": [
+   "rest-api",
+   "performance",
+   "n-plus-one",
+   "profiling",
+   "caching"
+  ],
+  "followups": [
+   {
+    "q": "Why is serialization taking 380 ms, and what would you do?",
+    "a": "Almost always because the response is far larger than it needs to be, often a full entity graph where the client uses four fields. Projecting to a DTO shrinks it at the source, which fixes serialization, network transfer and database IO at once. If the payload is legitimately large, enable response compression, which typically cuts JSON by 70 to 90 percent, and consider System.Text.Json source generation to remove reflection from the hot path. Reaching for a faster serialiser before shrinking the payload is optimising the wrong thing."
+   },
+   {
+    "q": "How would you stop an N+1 from coming back?",
+    "a": "Detection rather than discipline, because code review misses them. EF Core can be configured to throw on lazy loading, which turns a silent N+1 into a failing test. Logging the query count per request and asserting a threshold in integration tests catches regressions directly. And a distributed trace showing span counts makes it obvious in production. The structural fix is to disable lazy loading entirely and require explicit Include or projection, so the cost is always visible at the call site."
+   },
+   {
+    "q": "Suppose the 3 seconds is one unavoidable downstream call. What then?",
+    "a": "Then latency cannot be removed and the question becomes what the user experiences. Options are to return immediately with 202 and have the client poll or receive a push, which changes the API contract but is honest; to return partial data immediately and stream the rest; or to precompute the result asynchronously so the request hits a materialised view. Each trades consistency or complexity for latency, and choosing between them is a product decision as much as an engineering one."
+   },
+   {
+    "q": "What would you measure to know the fix worked?",
+    "a": "p95 and p99 latency, not the mean, because the mean hides the tail and the tail is what users complain about. Also the request count and error rate, since a change that improves latency by shedding load is not an improvement. For a caching change specifically, hit rate and the latency of the miss path both matter, because a 95 percent hit rate still leaves one request in twenty on the slow path. Measuring before and after with the same instrument is the part people skip."
+   }
+  ]
  }
 ]
