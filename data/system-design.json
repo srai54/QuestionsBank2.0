@@ -17,12 +17,27 @@
   "subcategory": "Scalability",
   "difficulty": "Medium",
   "question": "How would you design a URL shortener?",
-  "answer": "API to create a short code for a URL and redirect. Generate a short unique key (base62 of an incrementing id, or hash + collision handling). Store mappings in a fast key-value store/DB (short_code → long_url) with heavy caching (Redis) since reads dominate. Use a load-balanced stateless service, 301/302 redirects, analytics via async events, and handle custom aliases, expiry, and rate limiting. Scale reads with cache + replicas; keys are read-heavy.",
+  "answer": "**Approach**\n\nThe workload is extremely read-heavy — typically a thousand redirects per short link created — so the design optimises the read path and accepts a more expensive write. The interesting decisions are key generation and how the redirect avoids touching the database.\n\n**Topology**\n\n```\n  CREATE (rare)                           REDIRECT (constant)\n\n   client                                   browser\n     |                                         |\n     |-- POST /shorten                         |-- GET /aZ3k9\n     |   { url }                               |\n     v                                         v\n  +-----------+                          +-----------+\n  |    API    |                          |    CDN    |  cache 301s\n  +-----------+                          +-----+-----+\n     |                                         | miss\n     | 1. id = counter.Next()                  v\n     | 2. key = base62(id)               +-----------+\n     | 3. store key -> url               |    API    |\n     v                                   +-----+-----+\n  +-----------+                                | 1. key -> url?\n  |    DB     |<-------------------------------+\n  +-----------+                                v\n     |                                   +-----------+\n     | async                             |   REDIS   |  hit ~99%\n     v                                   +-----+-----+\n  +-----------+                                | miss\n  | Analytics |                                v\n  +-----------+                          +-----------+\n                                         |    DB     |\n                                         +-----------+\n                                               |\n                                               v\n                                      301 Location: <long url>\n```\n\n**Key generation**\n\n| Approach | Key length | Collisions | Guessable |\n|---|---|---|---|\n| Counter + base62 | Shortest possible | Never | Yes — sequential |\n| Random base62 | Slightly longer | Must retry on clash | No |\n| Hash of URL, truncated | Fixed | Must handle clashes | No |\n| Counter + reversible obfuscation | Shortest | Never | No |\n\nThe last is usually the right answer: a counter gives uniqueness for free, and passing it through a Feistel or a modular multiplication makes the sequence unguessable without introducing collisions.\n\n**Capacity sketch**\n\n```\n  100M links created/year, 1000 redirects each\n    writes:  100M / 31.5M seconds  = ~3/second\n    reads:   100B / 31.5M seconds  = ~3,200/second     ~1000:1 ratio\n\n  Storage: 100M rows x ~500 bytes = ~50 GB/year. Trivial.\n\n  Key space: base62 with 7 characters = 62^7 = 3.5 trillion.\n  At 100M/year that lasts well beyond any planning horizon.\n\n  The whole design follows from that 1000:1 ratio: spend effort on the\n  read path, and do not worry about write throughput at all.\n```\n\n**Key decisions**\n\n| Decision | Choice | Why |\n|---|---|---|\n| Redirect status | 301 vs 302 | 301 is cached by the browser, so analytics stop. Use 302 if click tracking matters |\n| Read path | Redis in front of the DB | 99% hit rate turns the DB into a cold backstop |\n| Key generation | Counter + obfuscation | No collisions, no enumeration |\n| Counter across servers | Range allocation | Each instance claims 1000 ids at a time; no coordination per write |\n| Analytics | Async, off the redirect path | A redirect must not wait on a write |\n\n**What actually breaks**\n\nAbuse, not scale. An open URL shortener is used for phishing within days of launch, so the real work is rate limiting creation, scanning target URLs against a blocklist, and having a way to disable a link fast. The distributed counter is the other operational concern: a single sequence is a bottleneck and a single point of failure, which is why range allocation per instance is worth the small gaps it leaves in the id space.",
   "tags": [
    "system-design",
    "url-shortener",
-   "caching",
-   "scaling"
+   "base62",
+   "read-heavy",
+   "caching"
+  ],
+  "followups": [
+   {
+    "q": "301 or 302, and why does it matter more than it looks?",
+    "a": "A 301 is a permanent redirect and browsers cache it aggressively, so subsequent clicks never reach your server. That is excellent for load and fatal for analytics, and it also means you cannot change or disable the target for anyone who has already followed it. A 302 keeps every click flowing through you, costing traffic but preserving control and measurement. Most commercial shorteners use 302 for exactly that reason, which is a good illustration that the 'correct' HTTP semantic and the right product decision can differ."
+   },
+   {
+    "q": "How do you generate ids across many servers without a bottleneck?",
+    "a": "Range allocation: each instance takes a block of a thousand ids from a central sequence and issues them locally, returning to the coordinator only every thousandth link. That removes coordination from the hot path at the cost of gaps when an instance restarts, which is harmless. The alternatives are a Snowflake-style id combining machine and timestamp, which needs no coordination but produces longer keys, or hashing, which needs no coordination but reintroduces collision handling."
+   },
+   {
+    "q": "Suppose you must support custom aliases and expiry.",
+    "a": "Custom aliases collide with generated ones, so they need a reservation check and a namespace decision: either a shared key space with a uniqueness constraint, or a separate prefix. Expiry is easy to store and harder to enforce, because the cache may hold an entry past its expiry and a CDN may hold a 301 indefinitely. That is the general lesson with caching: adding a TTL to the data does not remove data already copied elsewhere, so expiry has to be designed into every layer that holds a copy."
+   }
   ]
  },
  {
@@ -223,13 +238,31 @@
   "subcategory": "Data",
   "difficulty": "Hard",
   "question": "How would you design a news feed / timeline?",
-  "answer": "Two models: fan-out on write (push each post to followers' precomputed feeds—fast reads, expensive for celebrities with millions of followers) and fan-out on read (assemble the feed at query time from followed users—cheap writes, costly reads). A hybrid pushes for normal users and pulls for high-follower accounts. Use caching, pagination (cursor), ranking, and async fan-out via queues. Balance read/write cost and freshness for the access pattern.",
+  "answer": "**Approach**\n\nThe whole design turns on one choice: compute the feed when it is written, or when it is read. Neither works alone at scale, and the honest answer is a hybrid, with the reason stated.\n\n**Fan-out on write versus on read**\n\n```\n  FAN-OUT ON WRITE                     FAN-OUT ON READ\n\n  user posts                           user opens app\n      |                                     |\n      v                                     v\n  +----------+                         +----------+\n  |  write   |                         |   read   |\n  +----+-----+                         +----+-----+\n       |                                    |\n       | for each follower                  | for each followee\n       v                                    v\n  [ feed:u1 ] [ feed:u2 ] ... [ feed:uN ]   merge N timelines\n       |                                    by timestamp (heap)\n       |                                    |\n  read = 1 lookup   <-- FAST           read = N lookups  <-- SLOW\n  write = N inserts <-- SLOW           write = 1 insert  <-- FAST\n\n  Good for: ordinary users        Good for: celebrities\n  (few followers, many reads)     (millions of followers)\n```\n\n**The hybrid, which is what real systems do**\n\n```\n   celebrity posts                    ordinary user posts\n        |                                     |\n        | NO fan-out                          | fan-out to followers\n        v                                     v\n   +-----------+                     +--------------------+\n   | celeb:tl  |                     | feed:f1, feed:f2.. |\n   +-----------+                     +--------------------+\n        \\                                     /\n         \\                                   /\n          \\        user opens app           /\n           \\              |                /\n            +------------>+<--------------+\n                          |\n                          v\n              merge precomputed feed\n              with the few celebrity\n              timelines they follow\n                          |\n                          v\n                    ranked, returned\n```\n\n**Capacity sketch**\n\n```\n  10M daily active users, 2 posts/day, 200 followers average\n    writes:    20M posts/day = ~230/second\n    fan-out:   20M x 200 = 4 BILLION feed inserts/day = ~46,000/second\n    reads:     10M x 10 refreshes = 100M/day = ~1,200/second\n\n  Fan-out dominates everything by two orders of magnitude. That is why\n  the write path is the expensive one and why celebrities are excluded:\n  ONE account with 50M followers generates 50M inserts per post, more\n  than the entire rest of the platform combined.\n\n  Feed storage: 10M users x 500 cached entries x 100 bytes = ~500 GB.\n  Cap the cached feed length; nobody scrolls past a few hundred items.\n```\n\n**Key decisions**\n\n| Decision | Choice | Why |\n|---|---|---|\n| Strategy | Hybrid by follower count | Neither pure approach survives both ends of the distribution |\n| Threshold | ~10,000 followers | Above it, fan-out cost exceeds merge cost |\n| Feed storage | Redis list per user, capped | Reads must be one lookup |\n| Feed contents | Post ids, not post bodies | Hydrate from a cache; a post edited once should not be stale in a million feeds |\n| Ranking | Separate pass over candidates | Chronological is a special case; ranking needs the candidate set first |\n| Delivery | Pull on open, push for active sessions | Websockets only for users currently watching |\n\n**What actually breaks**\n\nThe fan-out queue backs up when something goes viral, and a backlog means feeds are stale rather than wrong, which is the right failure mode. Storing post ids rather than bodies matters more than it first appears: an edited or deleted post must not survive in a million cached feeds, and indirection makes deletion a single write.",
   "tags": [
    "system-design",
    "news-feed",
    "fan-out",
-   "timeline",
-   "caching"
+   "hybrid",
+   "celebrity-problem"
+  ],
+  "followups": [
+   {
+    "q": "Where exactly is the threshold between fan-out and merge?",
+    "a": "It falls out of comparing costs rather than being chosen arbitrarily. Fan-out costs one insert per follower at write time; merge costs one timeline read per followee at read time, multiplied by how often the user refreshes. So the crossover is roughly where follower count exceeds reads-per-post across the follower base. In practice teams pick a round number, tens of thousands, and tune it by watching queue depth. What matters in an interview is deriving it from the two costs rather than quoting a figure."
+   },
+   {
+    "q": "Why store post ids rather than the posts themselves in each feed?",
+    "a": "Because duplication makes mutation expensive. A post edited or deleted would otherwise need updating in every follower's cached feed, which for a popular account is millions of writes for one edit. Storing ids means the feed is a list of pointers and the post is fetched from a single cache entry, so an edit is one write and a deletion is one. The cost is an extra lookup per item on read, which is a batch multi-get and cheap. It is the normalisation-versus-denormalisation trade applied to a cache."
+   },
+   {
+    "q": "How does ranking change the design?",
+    "a": "Chronological order is free because the feed is already a time-ordered list. Ranking needs a candidate set and a scoring pass, so the feed becomes a candidate generator rather than the final answer, and the ranking model runs at read time over a few hundred items. That makes reads more expensive and introduces a model-serving dependency on the read path. It also breaks pagination, since a re-ranked feed can show the same item twice as scores shift, which is why ranked feeds use a session-stable seed or a cursor over the ranked snapshot."
+   },
+   {
+    "q": "What happens when a user with 50 million followers posts?",
+    "a": "Under pure fan-out, 50 million queued inserts, which saturates the queue and delays every other user's feed. That is precisely why the hybrid exists: such accounts are excluded from fan-out and merged at read time instead, so one post is one write. The cost moves to readers, but only to the followers of that account, and only when they open the app. Recognising that the tail of the follower distribution breaks the naive design is the substance of this question."
+   }
   ]
  },
  {
@@ -535,12 +568,31 @@
   "subcategory": "Fundamentals",
   "difficulty": "Hard",
   "question": "How would you design a chat system?",
-  "answer": "Persistent connections through WebSocket servers with a session registry mapping users to servers, messages persisted before acknowledgement, and a pub/sub backplane to route between servers. The hard parts are delivery guarantees and ordering, offline delivery and read receipts, presence at scale, and connection storms when a server restarts.",
+  "answer": "**Approach**\n\nThe defining requirement is that a message must never be lost and must arrive exactly once in order, while the connection underneath is unreliable and mobile clients disconnect constantly. That drives persistence before acknowledgement, client-generated ids, and a sequence number per conversation.\n\n**Topology**\n\n```\n  sender                gateway            message svc          recipient\n    |                      |                    |                   |\n    |== websocket ========>|                    |<==== websocket ===|\n    |                      |                    |                   |\n    |-- send(msg, tempId)->|------------------->|                   |\n    |                      |                    |-- persist ------->| DB\n    |                      |                    |   seq = 4187      |\n    |<-- ack(tempId, id, seq) ------------------|                   |\n    |   [single tick]      |                    |                   |\n    |                      |                    |-- is recipient    |\n    |                      |                    |   connected? ---->| PRESENCE\n    |                      |                    |<-- yes, gw-7 -----|\n    |                      |                    |                   |\n    |                      |<-- route to gw-7 --|                   |\n    |                      |----------------------- deliver ------->|\n    |                      |                    |                   |\n    |<-- delivered --------|<------------------ |<-- ack -----------|\n    |   [double tick]      |                    |                   |\n\n  If the recipient is OFFLINE:\n                           |                    |-- queue + push -->| APNs/FCM\n                           |                    |   notification    |\n```\n\n**Reconnect and catch-up**\n\n```\n  client reconnects after 20 minutes offline\n        |\n        | \"my last seen seq for chat 99 is 4180\"\n        v\n  +---------------------------+\n  |  GET /chats/99?since=4180 |\n  +---------------------------+\n        |\n        v\n  messages 4181..4187 returned in order\n        |\n        v\n  client updates its cursor to 4187\n\n  The per-conversation sequence number is what makes this a simple range\n  query rather than a timestamp comparison, which would be unreliable\n  across clients with skewed clocks.\n```\n\n**Capacity sketch**\n\n```\n  50M daily users, 40 messages/day\n    = 2B messages/day = ~23,000/second average, ~70,000 at peak\n\n  Connections: 10M concurrent websockets. At ~10k per gateway node\n  that is ~1,000 gateway instances - the connection count, not the\n  message rate, is what sizes this tier.\n\n  Storage: 2B x 200 bytes = 400 GB/day = ~145 TB/year.\n  Partition by conversation id; queries are always \"messages in this\n  conversation after this sequence\", which that partition key serves\n  directly.\n```\n\n**Key decisions**\n\n| Decision | Choice | Why |\n|---|---|---|\n| Transport | Websocket, fall back to long polling | Server must push; polling at this scale is wasteful |\n| Ack timing | After persistence, before delivery | A message acknowledged but not stored can be lost |\n| Message id | Client-generated temp id + server id | Lets the sender deduplicate its own retries |\n| Ordering | Sequence number per conversation | Timestamps are unreliable across devices |\n| Offline | Queue + push notification | The recipient is not connected, but the message is durable |\n| Storage | Partitioned by conversation | Every read is scoped to one conversation |\n\n**Why exactly-once is a client concern**\n\nThe network can duplicate anything, so the transport cannot promise exactly-once. What it can promise is at-least-once delivery plus a stable id, and the client deduplicates on that id. That is the general result: exactly-once is achieved by making the effect idempotent, never by the transport. The single and double ticks in a chat UI are literally the persistence acknowledgement and the delivery acknowledgement made visible.",
   "tags": [
    "system-design",
    "chat",
-   "websockets",
-   "design"
+   "websocket",
+   "ordering",
+   "at-least-once"
+  ],
+  "followups": [
+   {
+    "q": "Why acknowledge after persistence rather than after delivery?",
+    "a": "Because the sender needs to know the message is safe, not that it has been read. Acknowledging before persisting means a crash loses a message the sender believes was sent, which is the worst outcome. Acknowledging only after delivery would block the sender whenever the recipient is offline, which is most of the time. Splitting the two acknowledgements is what gives the familiar single tick for 'stored' and double tick for 'delivered', and it maps exactly onto the durability boundary."
+   },
+   {
+    "q": "Why a sequence number per conversation rather than a global one or timestamps?",
+    "a": "Timestamps fail because client clocks are skewed and server clocks can jump, so two messages can appear out of order or identical. A global sequence would be a coordination bottleneck at 70,000 messages per second and provides ordering nobody needs, since ordering only matters within a conversation. A per-conversation counter is cheap, gives a total order where it matters, and makes catch-up a range query. It is the same reasoning as choosing a partition key: scope the guarantee to where it is actually required."
+   },
+   {
+    "q": "How do you handle group chats with a thousand members?",
+    "a": "The message is stored once against the conversation, but delivery fans out to every online member, so a thousand-member group multiplies the delivery work by a thousand while the storage stays constant. That is the same fan-out problem as a news feed, and the same answer applies at the extreme: very large groups behave more like a broadcast channel and are better served by having clients pull on open rather than pushing to all. Read receipts are the harder part, since tracking who has read what for a thousand members per message is more data than the messages themselves."
+   },
+   {
+    "q": "What does end-to-end encryption change?",
+    "a": "The server can no longer read message content, which removes server-side search, content moderation and the ability to deliver a useful push notification preview. Key exchange and multi-device support become genuinely hard, since each device needs its own keys and a new device cannot decrypt history without a transfer mechanism. Group membership changes require rekeying. It is worth being direct in an interview that E2E encryption is not a feature toggle but a constraint that reshapes several subsystems, which is why products often ship it years after launch or not at all."
+   }
   ]
  },
  {
@@ -2495,6 +2547,88 @@
    {
     "q": "Why persist before enqueuing rather than the other way round?",
     "a": "Because if you enqueue first and the database write fails, a message is in flight with no record of it, so status queries and deduplication break. Persisting first means the worst case is a record with no queue message, which a sweeper can detect and re-enqueue. That ordering is the outbox pattern in miniature, and the full version writes the message into the same database transaction as the record, with a relay publishing it, which removes the dual-write problem entirely."
+   }
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Design YouTube or Netflix: video upload, transcoding, storage and streaming.",
+  "answer": "**Approach**\n\nTwo completely different systems share a name here. The **upload and transcode** path is a batch pipeline where latency is measured in minutes and throughput matters. The **playback** path is a read-heavy CDN problem where latency is measured in milliseconds and the origin should almost never be touched.\n\nSeparating them is the first thing to say, because their requirements conflict: the write path wants durability and parallelism, the read path wants edge caching and low latency.\n\n**Topology**\n\n```\n  UPLOAD PATH (minutes, batch)\n\n  creator          API           BLOB           QUEUE        TRANSCODE WORKERS\n    |               |             |               |                 |\n    |-- init ------>|-- record -->|               |                 |\n    |<-- signed URL-|             |               |                 |\n    |=== upload raw file (direct) ==>|            |                 |\n    |-- complete -->|-- enqueue ------------------>|                 |\n    |<-- 202 ------ |             |               |-- claim ------->|\n    |               |             |               |                 |\n    |               |             |<== write renditions ============|\n    |               |             |   1080p 720p 480p 240p          |\n    |               |             |   + HLS/DASH manifest           |\n    |               |<-- mark ready (DB) ---------|                 |\n    |<-- webhook: published ------|               |                 |\n\n\n  PLAYBACK PATH (milliseconds, read-heavy)\n\n     viewer                EDGE (CDN)              ORIGIN\n       |                       |                      |\n       |-- GET manifest ------>|                      |\n       |<-- HLS manifest ------|  (cached)            |\n       |                       |                      |\n       |-- GET segment 1 ----->|-- miss ------------->|\n       |<-- 6s segment --------|<-- segment ----------|\n       |                       |                      |\n       |-- GET segment 2 ----->|  HIT (cached)        |\n       |<-- 6s segment --------|                      |\n       |                       |                      |\n       |   [bandwidth drops]   |                      |\n       |-- GET 480p segment 3->|                      |\n       |<-- lower rendition ---|   <-- adaptive bitrate switch\n```\n\n**Why segments rather than one file**\n\n| | One MP4 | Segmented HLS/DASH |\n|---|---|---|\n| Seeking | Range requests, awkward | Jump to the segment |\n| Quality switching | Restart the stream | Next segment, seamlessly |\n| CDN caching | One huge object | Many small cacheable objects |\n| Partial failure | Restart | Retry one 6-second segment |\n\nSix seconds is the usual segment length: shorter means more requests and overhead, longer means slower quality adaptation and coarser seeking.\n\n**Capacity sketch**\n\n```\n  1M daily viewers x 30 min average x 3 Mbps average bitrate\n    = 1M x 1800s x 3 Mbit/s / 8 = ~675 TB/day egress\n    = ~62 Gbps sustained, several hundred Gbps at peak\n\n  This number is why the CDN is not optional. Serving that from origin\n  would need a substantial dedicated network; from the edge it is a\n  commodity purchase. Egress is also the dominant COST, typically far\n  exceeding storage and compute combined.\n\n  Storage: one 10-min source at 4K is ~2 GB, and 5 renditions roughly\n  double it, so budget ~2.5x the raw upload volume.\n```\n\n**Key decisions**\n\n| Decision | Choice | Why |\n|---|---|---|\n| Upload | Direct to blob, resumable | Never proxy gigabytes through the API |\n| Transcode | Async workers off a queue | Minutes of CPU cannot sit in a request |\n| Renditions | Ladder: 240/480/720/1080 | Client picks by bandwidth; one size fails most users |\n| Delivery | HLS or DASH segments via CDN | Adaptive bitrate, cacheable, resumable |\n| Metadata | Relational | Small, relational, needs transactions |\n| Recommendations | Separate system entirely | Different data, different latency, different team |\n\n**What actually breaks**\n\nTranscoding is the cost centre and the queue backs up first on a viral upload day. Partial transcode failure needs care: publishing a video whose 1080p rendition is missing gives a worse experience than delaying publication, so the pipeline should publish only when the ladder is complete, or publish progressively and let the manifest advertise only what exists.",
+  "tags": [
+   "system-design",
+   "video",
+   "cdn",
+   "transcoding",
+   "hls"
+  ],
+  "companies": [
+   "Amazon",
+   "Google",
+   "Microsoft",
+   "Netflix",
+   "Adobe"
+  ],
+  "followups": [
+   {
+    "q": "Why transcode into several renditions rather than letting the client downscale?",
+    "a": "Because the bottleneck is the network, not the client's decoder. Sending a 4K stream to a phone on a weak connection wastes bandwidth and stalls regardless of what the device does with the pixels. Adaptive bitrate lets the player measure throughput and request a rendition that fits, switching mid-stream at a segment boundary. That is also why the renditions must be aligned on segment boundaries and use the same keyframe intervals, or switching produces a visible glitch."
+   },
+   {
+    "q": "How would you handle a live stream rather than an uploaded file?",
+    "a": "The pipeline inverts: transcoding must happen in real time rather than as a batch, so it runs as a continuous process with a latency budget rather than a queue of jobs. Segments are published as they are produced and the manifest is rewritten continuously, which is why live HLS has an inherent latency of roughly three segments, typically 15 to 30 seconds. Low-latency variants cut that with partial segments and chunked transfer. The other change is that there is no retry: a dropped segment is gone, so redundancy has to be in the ingest path."
+   },
+   {
+    "q": "What does the metadata store actually need to handle?",
+    "a": "Far less volume than people expect, which is the point worth making. Video records, ownership, titles and privacy settings are small, relational and low-write, so a single relational database handles them comfortably at this scale. The high-volume data is view events and watch progress, which are append-heavy and better suited to a separate store. Conflating the two is the common design error: it puts a billion-row event table next to the data that needs transactions."
+   },
+   {
+    "q": "How would you prevent someone downloading the video file directly?",
+    "a": "Signed URLs with a short expiry stop casual hotlinking, and are standard. Genuine content protection needs DRM such as Widevine or FairPlay, where segments are encrypted and keys are issued to authorised players, which is a substantially bigger undertaking involving licensed components. It is worth being honest in an interview that DRM raises the cost and complexity considerably, and that for user-generated content signed URLs plus rate limiting are usually the proportionate answer."
+   }
+  ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Design Uber or Ola: driver location, matching and trip lifecycle.",
+  "answer": "**Approach**\n\nThree subsystems with very different characteristics, and saying so early is what structures the answer. **Location ingest** is an extreme write volume of small updates. **Matching** is a geospatial query plus an assignment decision. **Trip lifecycle** is a state machine needing durability and exactly-once effects on payment.\n\nThe mistake is treating driver locations as ordinary database writes. Hundreds of thousands of drivers reporting every four seconds is a write rate no relational database should absorb, and the data is almost worthless after a few seconds.\n\n**Topology**\n\n```\n  driver app                                        rider app\n      |                                                 |\n      | location every 4s                               | request ride\n      v                                                 v\n  +-------------------+                        +-------------------+\n  |  Location Service |                        |  Matching Service |\n  |-------------------|                        |-------------------|\n  |  write to Redis   |<-----  geo query ------|  find nearby      |\n  |  GEOADD, TTL 30s  |                        |  rank + dispatch  |\n  +---------+---------+                        +---------+---------+\n            |                                            |\n            | async, sampled                             | offer\n            v                                            v\n  +-------------------+                        +-------------------+\n  |  Trip History     |                        |   Trip Service    |\n  |  (cold storage)   |                        |  state machine    |\n  +-------------------+                        +---------+---------+\n                                                         |\n                                              +----------+----------+\n                                              |                     |\n                                          Payments            Notifications\n```\n\n**Matching flow**\n\n```\n   rider requests at (lat, lon)\n            |\n            v\n   1. GEOSEARCH radius 3km  ---> Redis returns ~40 candidate drivers\n            |\n            v\n   2. filter: available? vehicle class? rating? heading toward?\n            |                                     ~12 remain\n            v\n   3. rank by ETA (road distance, not straight line)\n            |\n            v\n   4. offer to best driver ----> [15s timer] ---- accepted? --+\n            |                                                 |\n            |  declined or timeout                            | yes\n            v                                                 v\n   5. offer to next driver                            trip created,\n      (up to N attempts)                               both notified\n            |\n            | exhausted\n            v\n      widen radius, or tell the rider none available\n```\n\n**Trip state machine**\n\n```\n  REQUESTED --> MATCHED --> ARRIVING --> IN_PROGRESS --> COMPLETED\n      |            |           |              |              |\n      |            |           |              |              v\n      |            |           |              |          PAYMENT\n      v            v           v              v         (idempotent)\n   CANCELLED   CANCELLED   CANCELLED     CANCELLED\n   (no fee)    (no fee)    (may charge)  (partial fare)\n```\n\n**Capacity sketch**\n\n```\n  200,000 active drivers, location every 4 seconds\n    = 50,000 writes/second, sustained, all day\n\n  Each update is tiny (~50 bytes) and worthless after ~30 seconds.\n  That combination - high rate, small payload, short life - is exactly\n  what an in-memory geospatial store is for, and exactly what a\n  relational database is not.\n\n  Ride requests are far lower: 50,000 trips/hour is ~14/second, so the\n  matching path can afford to be much more expensive per operation.\n```\n\n**Key decisions**\n\n| Decision | Choice | Why |\n|---|---|---|\n| Location store | Redis geospatial, 30s TTL | 50k writes/s, data expires naturally |\n| Geo index | Geohash or H3 cells | Turns \"nearby\" into a key prefix lookup |\n| Matching | Offer one at a time with a timeout | Avoids double-assigning one driver |\n| Trip state | Relational, transactional | Money is involved; needs durability |\n| Payment | Idempotency key per trip | A retry must not charge twice |\n| History | Async to cold storage | Sampled, not every ping |\n\n**Why offer sequentially rather than broadcast**\n\nBroadcasting to every nearby driver and taking the first acceptance causes a race: two riders can be matched to one driver. Sequential offers with a short timeout keep assignment exclusive at the cost of latency. The usual compromise is a small batch with a lock on the driver record, so the first acceptance wins atomically and the rest are told the offer expired.",
+  "tags": [
+   "system-design",
+   "geospatial",
+   "matching",
+   "state-machine",
+   "real-time"
+  ],
+  "companies": [
+   "Amazon",
+   "Google",
+   "Microsoft",
+   "Uber",
+   "Flipkart"
+  ],
+  "followups": [
+   {
+    "q": "Why Redis for locations rather than PostGIS or a relational table?",
+    "a": "Because of the write rate and the data's lifetime. Fifty thousand writes per second of rows that are worthless after thirty seconds would generate enormous write amplification, index churn and vacuum pressure in a relational store, for data nobody will ever query historically. Redis holds it in memory, expires it automatically, and answers radius queries directly. PostGIS is the right tool for geometry that persists and needs complex spatial joins, such as service-area polygons, which is a genuinely different workload that belongs in the relational store."
+   },
+   {
+    "q": "What is a geohash or H3 cell actually buying you?",
+    "a": "It turns a two-dimensional proximity question into a one-dimensional key lookup, so nearby points share a key prefix and can be fetched without scanning. That makes sharding natural, since a cell is a partition key, and it makes the candidate set bounded. The catch is edge effects: two points either side of a cell boundary are close in reality but far apart in key space, so you must query neighbouring cells too. H3's hexagonal cells reduce that distortion compared with square geohash cells, which is why Uber built it."
+   },
+   {
+    "q": "Why rank by ETA rather than straight-line distance?",
+    "a": "Because a driver 500 metres away across a river with no bridge is useless, while one two kilometres away on the same road arrives first. Straight-line distance is a cheap filter to get the candidate set, but the ranking has to use road distance and current traffic, which means calling a routing service. That is expensive, which is why the pipeline filters to roughly a dozen candidates first: you can afford an accurate ETA for twelve drivers, not for four hundred."
+   },
+   {
+    "q": "What happens if the driver's app loses connectivity mid-trip?",
+    "a": "The location updates stop but the trip must not be cancelled, because the ride is physically happening. The trip state lives server-side and does not depend on the pings, which is the reason to separate them. The app buffers locations locally and uploads them when connectivity returns, so the route is reconstructed after the fact. Fare calculation therefore cannot depend on receiving every ping in real time, and the system needs a reconciliation step that recomputes the fare from the complete track once it arrives."
+   },
+   {
+    "q": "How do you stop a rider being charged twice?",
+    "a": "An idempotency key derived from the trip, so a retried payment request is recognised and returns the original result rather than charging again. The subtlety is that the effect must be idempotent end to end, not just at the API boundary: the payment provider also needs the key, and your record of the charge must be written in the same transaction as the trip completion, or a crash between them leaves an unrecorded charge. That is the outbox pattern, and payments is where it genuinely earns its complexity."
    }
   ]
  }
