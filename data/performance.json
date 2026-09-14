@@ -1,0 +1,278 @@
+[
+ {
+  "category": "Performance",
+  "subcategory": "Profiling",
+  "difficulty": "Medium",
+  "question": "How do you approach a report that 'the application is slow' with no further detail?",
+  "answer": "Refuse to guess, and convert the complaint into a measurement. Four questions first: slow for whom, on which operation, since when, and compared to what. \"Slow\" from one user on one screen after yesterday's deploy is a different investigation from \"slow\" for everyone since the customer's data doubled.\n\nThen measure at the outermost layer and work inward, because optimising a layer that is not the bottleneck is wasted effort. A distributed trace of a single slow request gives the breakdown immediately: network, authentication, application code, database, downstream calls, serialisation. Without tracing, the cheapest substitute is timing log statements around the suspected regions.\n\nUse percentiles, never averages. A mean of 200 ms can hide a p99 of 8 seconds, and the p99 is what generates complaints. If p50 is fine and p99 is terrible, the cause is usually contention, garbage collection pauses, or a cache miss path, not the code everyone reads.\n\nOnly once a specific operation and a specific layer are identified is it worth opening a profiler. Guessing at the fix before measuring is the single most common waste of engineering time in performance work, and it frequently makes things worse by adding caching or parallelism that introduces new failure modes.",
+  "tags": [
+   "performance",
+   "profiling",
+   "percentiles",
+   "tracing",
+   "methodology"
+  ],
+  "followups": [
+   {
+    "q": "Why are averages so misleading for latency?",
+    "a": "Because latency distributions are heavily right-skewed: most requests are fast and a small tail is very slow, so the mean sits well below the experience of the unhappy users and moves very little when the tail worsens. A service where one request in a hundred takes ten seconds has a mean barely distinguishable from one where none do. Percentiles expose the tail directly, and for a page making twenty backend calls, the p99 of each call is roughly what the p80 of the page looks like, which is why tail latency matters far more than it first appears."
+   },
+   {
+    "q": "What would you check before opening a profiler at all?",
+    "a": "Whether the problem is load-related or data-related, by correlating latency against request rate and against data volume. Whether it started at a deployment, which makes the diff the prime suspect. Whether it is one instance or all of them, since one slow instance usually means a resource problem rather than a code problem. And whether the database is the bottleneck, which is true often enough that checking query timings first is a good default. A profiler answers 'where does the CPU go', which is the wrong question if the process is waiting rather than computing."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Memory",
+  "difficulty": "Hard",
+  "question": "An ASP.NET Core service's memory climbs steadily and never returns. How do you find the cause?",
+  "answer": "Distinguish three different problems that look identical from a memory graph: a genuine managed leak, unmanaged memory growth, and fragmentation.\n\nStart by capturing two heap snapshots minutes apart under load, using `dotnet-gcdump` or a profiler. Compare them and look at which types grew. The types themselves are rarely the cause; the retention path is. A snapshot shows what holds the reference, and that path almost always ends at one of a handful of culprits: a static collection that only ever grows, an event handler never unsubscribed, a cache with no eviction, or a captured closure keeping a large object graph alive.\n\nIf the managed heap is stable but the process size grows, the leak is unmanaged: an undisposed `HttpClient` handler, native handles, or a pinned buffer. `dotnet-counters` distinguishes these by showing GC heap size separately from working set.\n\nThe specific ASP.NET Core trap is a service registered as a singleton that captures a scoped dependency, most often a `DbContext`. The context then lives for the process lifetime, and its change tracker accumulates every entity it has ever seen. Scope validation catches this at startup in Development, which is why running with the Development environment during testing is worth doing deliberately.",
+  "tags": [
+   "performance",
+   "memory-leak",
+   "gc",
+   "dotnet-gcdump",
+   "aspnet-core"
+  ],
+  "followups": [
+   {
+    "q": "How do event handlers cause leaks specifically?",
+    "a": "Subscribing creates a reference from the event publisher to the subscriber, not the other way round. So a long-lived publisher keeps every subscriber alive even after the subscriber is otherwise unreachable, and if the subscriber is a page or a request-scoped object the leak grows with usage. The fix is to unsubscribe explicitly, usually in Dispose, or to use a weak event pattern. It is easy to miss because the code that subscribes looks harmless and nothing in the type system indicates ownership."
+   },
+   {
+    "q": "What is the large object heap and why does it matter here?",
+    "a": "Objects over 85,000 bytes go on a separate heap that is not compacted by default, so repeated allocation of large arrays or strings fragments it: total free space is ample but no single contiguous block is large enough, and the process asks the operating system for more. The symptom is growing memory with a stable object count. Mitigations are pooling large buffers with ArrayPool, avoiding large intermediate arrays, and only as a last resort enabling LOH compaction, which is expensive and pauses the process."
+   },
+   {
+    "q": "How do you tell a leak from a cache that is simply working?",
+    "a": "By whether the growth has an upper bound. A cache with a size limit or a time-based eviction policy plateaus; a leak does not. The practical test is to hold load steady and watch whether memory stabilises after several GC cycles. If it climbs indefinitely at constant load, it is a leak. Many so-called leaks turn out to be caches with no eviction configured, which is why MemoryCache without a size limit is a frequent cause and why setting one should be mandatory."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Database",
+  "difficulty": "Hard",
+  "question": "What is the single most common cause of slow data access in an EF Core application, and how do you detect it?",
+  "answer": "The N+1 query. Code iterates a collection and touches a navigation property inside the loop, so one query for the parents becomes one additional query per row. A hundred orders becomes a hundred and one round trips, each with its own network latency, and the endpoint that ran in 80 ms with test data takes eight seconds in production.\n\nIt is invisible in the source. The loop body reads like a property access, and nothing at the call site suggests a database round trip. Lazy loading makes it worse by hiding the cost entirely.\n\nDetection has to be mechanical rather than by inspection. Log the generated SQL at Information level in development and watch the query count for a single request. Better, assert the count in integration tests, so an accidental N+1 fails the build. In production, a distributed trace shows it immediately as a long row of near-identical spans.\n\nThe structural fix is to disable lazy loading entirely, so every load is an explicit `Include` or a projection. Projecting to a DTO with `Select` is usually better than `Include`, because it fetches only the columns needed and avoids materialising entities into the change tracker at all.",
+  "tags": [
+   "performance",
+   "ef-core",
+   "n-plus-one",
+   "query-count",
+   "lazy-loading"
+  ],
+  "followups": [
+   {
+    "q": "When is Include worse than a projection?",
+    "a": "Almost always when the data is read-only. Include materialises full entities into the change tracker, which costs memory and CPU for snapshot comparison you never use, and it fetches every column including large ones you did not ask for. A projection to a DTO fetches only the needed columns and skips tracking. Include earns its place when you intend to modify the entities, or when the object graph is genuinely needed. Adding AsNoTracking to a read-only Include recovers some of the cost but not the column bloat."
+   },
+   {
+    "q": "Include can also make things slower through cartesian explosion. Explain.",
+    "a": "Including two or more collection navigations produces a single join whose row count is the product of the collections, so an order with ten items and ten notes returns a hundred rows carrying duplicated order data. With three collections it multiplies again. EF Core 5 added split queries, which issue one query per collection instead, trading extra round trips for a far smaller result set. The right choice depends on the cardinalities, and the default single query is correct only when the collections are small."
+   },
+   {
+    "q": "How would you catch this in CI rather than in production?",
+    "a": "Write integration tests against a real database that count the queries executed for a given endpoint and assert a maximum. EF Core's logging can be intercepted to count commands, or a DbCommandInterceptor can do it directly. The test then fails when someone introduces a loop that triggers extra queries, which is far cheaper than discovering it from a latency alert. The threshold should be a specific number rather than a vague limit, because that forces a deliberate decision whenever it changes."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Caching",
+  "difficulty": "Hard",
+  "question": "When should you not add a cache, and what problems does caching introduce?",
+  "answer": "Do not cache to hide a slow query. The slow path still runs on every miss, on expiry, on a cold start after deployment, and for every key not yet cached, so the worst-case latency is unchanged and now occurs unpredictably. Fix the query first; cache afterwards if the load justifies it.\n\nCaching introduces four problems that did not exist before. Invalidation: knowing when the cached value became wrong is genuinely hard, and stale data bugs are difficult to reproduce because they depend on timing. Consistency: two instances can hold different versions of the same value, so behaviour varies by which server answers. Memory pressure: an unbounded cache is a leak. And the thundering herd, where a popular key expires and every concurrent request simultaneously runs the expensive path.\n\nThe herd is the one people forget. A key serving a thousand requests per second that expires triggers a thousand concurrent database queries, which can be worse than no cache at all. The fix is either a lock so only one request refreshes while the others wait, or proactive refresh before expiry.\n\nCaching is right when data is read far more than written, tolerates staleness, and the source is genuinely expensive. If any of those is false, it usually costs more than it saves.",
+  "tags": [
+   "performance",
+   "caching",
+   "invalidation",
+   "thundering-herd",
+   "trade-offs"
+  ],
+  "followups": [
+   {
+    "q": "How do you prevent a thundering herd?",
+    "a": "Two approaches. A per-key lock so the first request refreshes and the rest await the same task, which in .NET is naturally expressed with a ConcurrentDictionary of Lazy<Task<T>> so concurrent callers share one in-flight computation. Or proactive refresh, where a background task renews the entry before it expires so it is never absent. Adding jitter to expiry times also helps, because without it many keys populated at startup all expire at the same instant and produce a synchronised stampede."
+   },
+   {
+    "q": "Cache-aside versus write-through: which and why?",
+    "a": "Cache-aside, where the application reads the cache, falls back to the source and populates on miss, is the default because it is simple and the cache can fail without taking the system down. Write-through updates the cache on every write, keeping it fresh but coupling write latency to the cache and doing work for data that may never be read. Write-behind batches writes and is fastest but can lose data on failure. For most CRUD services cache-aside with explicit invalidation on write is the right balance."
+   },
+   {
+    "q": "How would you decide a TTL?",
+    "a": "From how stale the data may acceptably be, which is a product question rather than a technical one. A product catalogue tolerating five minutes of staleness is very different from an account balance tolerating none. Then check the hit rate the TTL produces: a TTL shorter than the mean time between requests for a key gives almost no hits and all the complexity for no benefit. Measuring hit rate per cache is the feedback loop most teams never close."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Async",
+  "difficulty": "Hard",
+  "question": "Why does making methods async not make an application faster, and when does it actually help?",
+  "answer": "Async does not reduce the time any single operation takes. An `await` on a database call takes exactly as long as a blocking call to the same database. What it changes is what the thread does while waiting: instead of being blocked, it returns to the pool and serves another request.\n\nSo async improves *throughput and scalability* under concurrency, not latency. A service handling ten requests sees no benefit. The same service handling two thousand concurrent requests, each waiting 100 ms on IO, would need two thousand blocked threads synchronously, which exhausts the thread pool and causes queueing, while asynchronously it needs a handful.\n\nThat is why async is valuable for IO and pointless for CPU work. Wrapping a computation in `Task.Run` on the server does not make it faster; it moves it to another pool thread and adds scheduling overhead, while the original thread waits anyway. On the server there is no UI to keep responsive, so there is nothing to gain.\n\nThe corollary is that blocking on async code, with `.Result` or `.Wait()`, is worse than never having gone async: it consumes a thread *and* pays the state machine overhead, and in contexts with a synchronization context it deadlocks.",
+  "tags": [
+   "performance",
+   "async",
+   "throughput",
+   "thread-pool",
+   "scalability"
+  ],
+  "followups": [
+   {
+    "q": "Explain the deadlock that .Result causes.",
+    "a": "In a context with a single-threaded synchronization context, such as classic ASP.NET or a UI, awaiting captures that context to resume on. If the calling thread then blocks on .Result, it is holding the only slot the continuation needs to run on, so the continuation waits for the thread and the thread waits for the continuation. ASP.NET Core has no synchronization context, so this particular deadlock does not occur there, but blocking still wastes a pool thread and can cause starvation under load."
+   },
+   {
+    "q": "What is thread pool starvation and how would you recognise it?",
+    "a": "It occurs when pool threads are blocked rather than working, so new work queues while CPU sits idle. The signature is latency climbing sharply while CPU utilisation stays low, which is counter-intuitive and often misread as a downstream problem. The pool grows, but only by one or two threads per second by default, so recovery is slow. Blocking calls inside async code are the usual cause, and dotnet-counters showing a growing ThreadPool queue length alongside low CPU confirms it."
+   },
+   {
+    "q": "Is there ever a reason to use ValueTask instead of Task?",
+    "a": "When a method usually completes synchronously and is called extremely often, since Task allocates on every call while ValueTask can return a result without allocating. A cache lookup that hits in memory nine times out of ten is the canonical case. The cost is real constraints: a ValueTask may be awaited only once, must not be awaited concurrently, and should not be stored. Those rules are easy to break, so the guidance is to use Task by default and reach for ValueTask only where allocation profiling shows it matters."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Allocation",
+  "difficulty": "Hard",
+  "question": "How do you reduce allocations in a hot .NET code path, and how do you know it is worth doing?",
+  "answer": "First establish that allocation is the problem. `BenchmarkDotNet` with `[MemoryDiagnoser]` reports bytes allocated per operation, and `dotnet-counters` shows the allocation rate and how much time is spent in garbage collection. If GC time is under a few percent, allocation reduction is not where the win is.\n\nWhen it does matter, the techniques in rough order of payoff. Avoid intermediate strings: use `StringBuilder` for concatenation in loops, and `Span<char>` or `string.Create` to format without temporaries. Use `ArrayPool<T>` for large short-lived buffers rather than allocating each time. Replace LINQ in the hottest loops with explicit iteration, since each operator allocates an enumerator and each lambda may allocate a closure. Prefer `struct` for small, short-lived values, and `readonly struct` so the compiler can avoid defensive copies.\n\nThe subtler sources are worth knowing: a lambda capturing a local allocates a closure object per call; boxing a value type passed as `object` or through an unconstrained interface allocates; `params object[]` allocates an array per call, which is why structured logging APIs that take typed arguments matter.\n\nThe principle throughout is that generation-0 collections are cheap, so a few short-lived objects are fine. The problems are allocation *rate*, which drives collection frequency, and objects that survive long enough to be promoted, which drives expensive generation-2 collections.",
+  "tags": [
+   "performance",
+   "allocation",
+   "gc",
+   "span",
+   "arraypool"
+  ],
+  "followups": [
+   {
+    "q": "Why is a generation-0 collection cheap but a generation-2 collection expensive?",
+    "a": "Because generational GC assumes most objects die young, which is empirically true. A gen-0 collection only examines a small recently-allocated region and typically finds almost everything dead, so it copies the few survivors and resets, taking well under a millisecond. A gen-2 collection must examine the entire heap, which for a multi-gigabyte process takes hundreds of milliseconds and, outside background GC mode, pauses every thread. So the goal is not zero allocation but ensuring objects die in gen 0 rather than being promoted."
+   },
+   {
+    "q": "What exactly does Span<T> buy you?",
+    "a": "It lets you work with a slice of existing memory without copying it, so parsing a substring or a buffer segment needs no allocation at all. Substring allocates a new string; slicing a span does not. It is a ref struct, so it cannot be stored on the heap, captured in a lambda or used across an await, which sounds restrictive but is exactly what guarantees the underlying memory outlives it. For anything asynchronous you need Memory<T> instead, which can live on the heap."
+   },
+   {
+    "q": "Should you avoid LINQ for performance?",
+    "a": "Not generally. In most code the allocation is irrelevant next to the IO the method is doing, and LINQ's clarity is worth far more. It matters in genuinely hot loops running millions of times, where each operator's enumerator and each closure add up. The right approach is to write LINQ by default and replace it only where a benchmark shows it costs something, because hand-rolled loops are more code and more places for a bug, and that trade is only worth making with evidence."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Frontend",
+  "difficulty": "Medium",
+  "question": "A web page takes 6 seconds to become interactive. What do you measure and what do you fix first?",
+  "answer": "Measure with Core Web Vitals rather than a single load number, because they separate distinct problems. Largest Contentful Paint measures when the main content appears, Interaction to Next Paint measures responsiveness, and Cumulative Layout Shift measures visual stability. A page can paint quickly and still be unusable if the main thread is blocked, and the vitals distinguish those.\n\nThe waterfall in the browser's network tab usually identifies the cause immediately. The common ones, in rough order of frequency: a JavaScript bundle far larger than needed, render-blocking resources in the head, images served at full resolution and in the wrong format, fonts blocking text rendering, and too many sequential round trips before the first meaningful paint.\n\nFix in order of cost to benefit. Compression and correct cache headers are configuration changes with large wins. Image optimisation, correct sizing and modern formats typically halve the transferred bytes on an image-heavy page. Code splitting so a route loads only what it needs addresses bundle size structurally. Deferring non-critical JavaScript removes it from the blocking path.\n\nWhat to resist is optimising the framework's render performance before establishing that the main thread, rather than the network, is the bottleneck. On most slow pages it is the network and the bundle size, not the rendering.",
+  "tags": [
+   "performance",
+   "web-vitals",
+   "bundle-size",
+   "lcp",
+   "frontend"
+  ],
+  "followups": [
+   {
+    "q": "Why does bundle size matter more than it appears from a fast connection?",
+    "a": "Because the cost is not only transfer time but parse and execute time, which falls on the main thread and scales with the device rather than the network. A megabyte of JavaScript may download in 200 ms on a good connection and still take a second or more to parse and execute on a mid-range phone, during which the page is unresponsive. That is why testing on a throttled CPU rather than only a throttled network is essential, and why the gap between a developer's machine and a real user's is so often underestimated."
+   },
+   {
+    "q": "What causes layout shift and why does it matter?",
+    "a": "Content arriving after the initial paint and pushing existing content down: images without declared dimensions, ads or embeds injected late, and fonts swapping at a different metric from the fallback. It matters because users click the wrong thing when the target moves, which is genuinely harmful rather than merely annoying. The fixes are to reserve space with width and height attributes or an aspect ratio, and to use font-display settings that avoid a metric jump."
+   },
+   {
+    "q": "Server-side rendering is often proposed as the fix. When is it actually right?",
+    "a": "When the first paint is blocked on a client-side data fetch, which SSR removes by rendering with the data already present. It helps content-heavy pages and anything needing search engine indexing. It is not a fix for a large bundle, since the JavaScript still has to download and hydrate, and hydration itself can block the main thread and make interactivity worse rather than better. Adopting SSR to fix a bundle problem is a common and expensive misdiagnosis."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "Adding more threads made the application slower. Why does that happen?",
+  "answer": "Several distinct mechanisms, and the fix depends on which one is operating.\n\nContention is the most common. If threads contend for a lock, adding threads increases the queue at that lock without increasing the work completed. Beyond the point where the lock is saturated, additional threads add only context switching and cache traffic. The profile signature is high thread count with low CPU utilisation and rising latency.\n\nFalse sharing is subtler. Two threads writing to different variables that happen to occupy the same 64-byte cache line force the line to bounce between cores, which is dramatically slower than uncontended access despite no logical sharing. It appears as poor scaling with no visible lock.\n\nOversubscription: more runnable threads than cores means the scheduler time-slices, and each switch costs a context switch plus cache pollution. The thread pool manages this automatically, which is why creating threads manually usually performs worse than queuing work to the pool.\n\nAnd the fundamental limit is Amdahl's law: if a tenth of the work is inherently serial, no number of threads gets you past a tenfold speedup, and the coordination overhead means the practical peak arrives well before that.",
+  "tags": [
+   "performance",
+   "concurrency",
+   "contention",
+   "false-sharing",
+   "amdahl"
+  ],
+  "followups": [
+   {
+    "q": "How would you identify false sharing?",
+    "a": "It shows as poor scaling with no lock contention visible in a profiler, and hardware counters showing high cache-line invalidation rates. The usual cause is an array of per-thread counters, where adjacent elements share a cache line. The fix is padding so each thread's data occupies its own line, which .NET expresses with StructLayout and explicit size, or simply using separate objects rather than adjacent array slots. It is rare in typical application code and common in high-performance parallel loops."
+   },
+   {
+    "q": "How do you reduce lock contention without removing the lock?",
+    "a": "Shrink the critical section so the lock is held for the minimum time, which is often the single largest win. Shard the lock so different keys use different locks, turning one contended lock into many uncontended ones. Use a reader-writer lock if reads dominate, though note it has higher uncontended cost so it only pays off with a genuine read majority. Or replace the shared state with per-thread state aggregated at the end, which removes the contention entirely and is usually the best answer when it is possible."
+   },
+   {
+    "q": "When is lock-free code worth the difficulty?",
+    "a": "Rarely, and less often than people think. Interlocked operations for a simple counter are straightforward and worthwhile. Beyond that, lock-free data structures are extremely difficult to get right, the failure modes are rare and non-deterministic, and the memory ordering reasoning is subtle enough that published implementations have shipped with bugs. The pragmatic position is to use the concurrent collections in the framework, which are already carefully written, and to consider hand-rolled lock-free code only with a benchmark proving the lock is the bottleneck."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "Why is a Stopwatch around a loop an unreliable way to benchmark .NET code?",
+  "answer": "Because it measures several things other than the code under test, and usually the wrong ones.\n\nThe JIT compiles a method on first call, so the first iteration includes compilation time. Tiered compilation then recompiles hot methods with better optimisation partway through, so throughput changes during the measurement. Garbage collection may or may not occur during the window, which swings results by a wide margin depending on timing. And the CPU's frequency scaling means the first runs may execute at a lower clock than later ones.\n\nWorse, the optimiser may eliminate the work entirely. Code computing a value that is never used can legally be removed, so a benchmark measuring an empty loop reports absurdly fast results that seem to validate an optimisation.\n\n`BenchmarkDotNet` addresses all of this: it warms up until timings stabilise, runs enough iterations for statistical confidence, reports standard deviation so you can judge significance, isolates each benchmark in its own process, and consumes results so they cannot be optimised away. It also reports allocations with `[MemoryDiagnoser]`, which is frequently the more useful number.\n\nThe broader point is that a measurement without a confidence interval is not evidence. A 5 percent improvement inside 15 percent run-to-run variance is noise, and acting on it wastes effort or makes things worse.",
+  "tags": [
+   "performance",
+   "benchmarkdotnet",
+   "jit",
+   "measurement",
+   "statistics"
+  ],
+  "followups": [
+   {
+    "q": "What is tiered compilation and how does it affect measurement?",
+    "a": "The JIT first compiles quickly with minimal optimisation so startup is fast, then recompiles methods that prove hot with full optimisation. So the same method genuinely runs at different speeds over the process lifetime, and a naive benchmark may measure the tier-0 code, the tier-1 code, or a mixture. BenchmarkDotNet warms up until this has settled. It also means startup-focused and throughput-focused measurements are answering different questions, and which matters depends on whether the code is a short-lived tool or a long-running service."
+   },
+   {
+    "q": "How do you avoid the optimiser deleting the code you are timing?",
+    "a": "Consume the result in a way the compiler cannot prove is pointless. BenchmarkDotNet does this automatically by returning the value from the benchmark method, which it then stores. Hand-rolled benchmarks typically accumulate results into a field or write them to a volatile variable. The reason this matters is that dead-code elimination produces results that look like an enormous win, which is exactly the outcome the person benchmarking was hoping for, so it tends not to be questioned."
+   },
+   {
+    "q": "Microbenchmarks can be fast and the application still slow. Why?",
+    "a": "Because a microbenchmark runs the code in a tight loop with warm caches and no competing work, which is unlike production. A method that is fast in isolation may be slow in context because its data is cold in cache, because it contends for a lock, or because it allocates and shifts GC pressure onto other code. The benchmark is a useful signal about a specific operation, not a prediction about the system, which is why end-to-end measurement remains necessary even when microbenchmarks look good."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Database",
+  "difficulty": "Medium",
+  "question": "What is connection pooling, and what goes wrong when it is misconfigured?",
+  "answer": "Opening a database connection is expensive: a TCP handshake, TLS negotiation, and authentication, typically tens of milliseconds. Pooling keeps established connections open and hands them out, so the cost is paid once rather than per request. In ADO.NET this is on by default and keyed on the exact connection string, which matters more than it sounds.\n\nThe common misconfigurations. A pool too small causes requests to queue waiting for a connection, which appears as latency with no obvious cause and eventually as timeout exceptions mentioning the pool. A pool too large overwhelms the database, since each connection consumes server memory and a database has its own limit; exceeding it turns a client-side problem into a server-side one affecting every application sharing that database.\n\nThe subtle failure is connections not being returned. A connection not disposed, usually because of an early return or an exception on a path without a `using`, is leaked until it is finalised, and under load the pool exhausts. The symptom is an application that works fine and then fails suddenly after a period of use.\n\nAnd because the pool is keyed on the connection string, a string built dynamically with varying parameters silently creates a separate pool per variant, so pooling effectively stops working while appearing to be enabled.",
+  "tags": [
+   "performance",
+   "connection-pooling",
+   "ado-net",
+   "timeouts",
+   "configuration"
+  ],
+  "followups": [
+   {
+    "q": "How do you size the pool?",
+    "a": "Start from the concurrency the application actually needs, not from a round number. If a request holds a connection for 20 ms and you serve 500 requests per second, you need roughly 10 concurrent connections, so a pool of 20 to 30 gives headroom. Sizing far above that does not increase throughput, because the database is the constraint, and it risks exhausting the server's connection limit. Measuring the number of active connections under peak load is more useful than any formula."
+   },
+   {
+    "q": "What changes when the application runs serverless or autoscales aggressively?",
+    "a": "Each instance has its own pool, so the total connections to the database is the pool size times the instance count, which can exceed the server's limit as you scale out. Short-lived instances also mean pools are created and discarded constantly, so the pooling benefit diminishes. The usual answers are a much smaller per-instance pool, or an external connection pooler such as PgBouncer or the Azure SQL proxy, which multiplexes many client connections onto fewer server ones."
+   },
+   {
+    "q": "Why does a leaked connection take so long to surface?",
+    "a": "Because the pool has spare capacity initially, so leaks are absorbed silently and the application behaves normally. Only when cumulative leaks exhaust the pool do requests begin to block and then time out, which may be hours into a deployment and therefore hard to correlate with the change that caused it. The defence is structural: always dispose via using or a dependency-injected scoped lifetime, and never hold a connection across an await that does not need it."
+   }
+  ]
+ }
+]
