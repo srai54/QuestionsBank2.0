@@ -4296,19 +4296,33 @@
   "subcategory": "Trees",
   "difficulty": "Hard",
   "question": "Word search II (find multiple words in a grid using a Trie).",
-  "answer": "Build a Trie of the words, then DFS from each cell following Trie edges, marking visited cells; when a Trie node marks a word end, record it. Prune Trie branches once matched to speed up. O(cells * 4^L) worst case, much faster with Trie pruning.",
+  "answer": "**Approach**\n\nRunning the single-word search once per word is O(words × cells × 4^L). Instead build a trie of all the words and do one DFS from each cell, walking the trie in lockstep with the grid.\n\n**Logic**\n\nAt each step the path must correspond to a trie node; the moment no child matches the current letter, the branch is dead and is abandoned immediately. That prunes far harder than checking a single word, because one traversal tests every word at once.\n\nTwo refinements matter. Store the word on its terminal node so a match needs no reconstruction. And clear that word once found, so the same word is never reported twice from different starting cells.\n\nO(cells × 4^L) for the whole dictionary rather than per word.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private sealed class TrieNode\n    {\n        public readonly Dictionary<char, TrieNode> Children = new();\n        public string Word;            // non-null only on a terminal node\n    }\n\n    public static IList<string> FindWords(char[][] board, string[] words)\n    {\n        var root = new TrieNode();\n\n        foreach (string word in words)\n        {\n            var node = root;\n            foreach (char c in word)\n            {\n                if (!node.Children.TryGetValue(c, out var next))\n                    node.Children[c] = next = new TrieNode();\n                node = next;\n            }\n            node.Word = word;\n        }\n\n        var found = new List<string>();\n        if (board == null || board.Length == 0) return found;\n\n        for (int r = 0; r < board.Length; r++)\n            for (int c = 0; c < board[0].Length; c++)\n                Search(board, r, c, root, found);\n\n        return found;\n    }\n\n    private static void Search(char[][] board, int r, int c, TrieNode node, IList<string> found)\n    {\n        if (r < 0 || r >= board.Length || c < 0 || c >= board[0].Length) return;\n\n        char letter = board[r][c];\n        if (letter == '#' || !node.Children.TryGetValue(letter, out var next)) return;\n\n        if (next.Word != null)\n        {\n            found.Add(next.Word);\n            next.Word = null;          // report each word once\n        }\n\n        board[r][c] = '#';             // in use on this path only\n\n        Search(board, r - 1, c, next, found);\n        Search(board, r + 1, c, next, found);\n        Search(board, r, c - 1, next, found);\n        Search(board, r, c + 1, next, found);\n\n        board[r][c] = letter;          // restore for other paths\n    }\n\n    private static char[][] Parse(params string[] rows)\n    {\n        var g = new char[rows.Length][];\n        for (int i = 0; i < rows.Length; i++) g[i] = rows[i].ToCharArray();\n        return g;\n    }\n\n    private static string Show(IList<string> r)\n    {\n        if (r.Count == 0) return \"(none)\";\n        var copy = new List<string>(r);\n        copy.Sort(StringComparer.Ordinal);\n        return string.Join(\",\", copy);\n    }\n\n    public static void Main()\n    {\n        var board = Parse(\"oaan\", \"etae\", \"ihkr\", \"iflv\");\n        Console.WriteLine(Show(FindWords(board, new[] { \"oath\", \"pea\", \"eat\", \"rain\" })));\n\n        Console.WriteLine(Show(FindWords(Parse(\"ab\", \"cd\"), new[] { \"abcb\" })));   // needs reuse\n        Console.WriteLine(Show(FindWords(Parse(\"a\"), new[] { \"a\" })));\n        Console.WriteLine(Show(FindWords(Parse(\"ab\"), new[] { \"ba\" })));\n\n        // The same word reachable from two starts is reported once.\n        Console.WriteLine(Show(FindWords(Parse(\"aa\", \"aa\"), new[] { \"aa\" })));\n    }\n}\n```\n\n**Output**\n\n```\neat,oath\n(none)\na\nba\naa\n```",
   "tags": [
-   "trees",
    "trie",
-   "dfs",
+   "backtracking",
    "grid",
-   "hard"
+   "pruning",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why is a trie so much better than searching each word separately?",
+    "a": "Because words sharing a prefix share the traversal. Searching 'application' and 'applesauce' separately walks 'app' twice; with a trie one path tests both. More importantly the pruning is stronger: a path is abandoned the moment no word in the entire dictionary continues with that prefix, whereas per-word search only knows about the one word it is chasing. For a large dictionary that difference is the whole problem."
+   },
+   {
+    "q": "Why clear the word from the node after finding it?",
+    "a": "Because the same word can be reachable from several starting cells, and reporting it repeatedly is wrong. Nulling the terminal marker is cheaper than checking a result set for membership on every match, and it also prunes: a word already found no longer terminates a path. The cost is that the trie is mutated, so a second call with the same trie would miss words - which is fine here since the trie is built per call, but would be a bug if it were cached."
+   },
+   {
+    "q": "What further optimisation would you make for a large dictionary?",
+    "a": "Prune the trie as words are found: once a node has no children and no word, it can be removed from its parent, which shrinks the search space as the run progresses. You can also skip words containing letters absent from the board, checked with a frequency count before building the trie. Both are cheap and can cut a large dictionary dramatically, which matters because the grid is small and the dictionary is what makes the problem expensive."
+   }
   ]
  },
  {
@@ -4819,16 +4833,32 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Decode ways (number of ways to decode a digit string).",
-  "answer": "dp[i] = ways to decode the first i digits. Add dp[i-1] if the current digit is 1-9, and dp[i-2] if the last two digits form 10-26. Handle leading zeros (invalid). O(n) time, O(1) space with two variables.",
+  "answer": "**Approach**\n\nFibonacci-shaped DP with validity conditions. At each position you may take one digit, if non-zero, or two digits, if they form 10 to 26.\n\n**Logic**\n\n`ways(i) = ways(i-1) if the single digit is valid, plus ways(i-2) if the pair is valid`.\n\nZero is the entire difficulty. A zero has no single-character decoding, so it must pair with the digit before it, and that pair must be 10 or 20. Anything else makes the string undecodable from that point, and the count collapses to zero.\n\nOnly the previous two values are needed, so two rolling variables give O(n) time and O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int NumDecodings(string s)\n    {\n        if (string.IsNullOrEmpty(s) || s[0] == '0') return 0;\n\n        int twoBack = 1;   // the empty prefix\n        int oneBack = 1;   // the first character, known not to be '0'\n\n        for (int i = 1; i < s.Length; i++)\n        {\n            int current = 0;\n\n            if (s[i] != '0') current += oneBack;                 // valid single\n\n            int pair = (s[i - 1] - '0') * 10 + (s[i] - '0');\n            if (pair >= 10 && pair <= 26) current += twoBack;    // valid pair\n\n            if (current == 0) return 0;   // this position cannot be decoded at all\n\n            twoBack = oneBack;\n            oneBack = current;\n        }\n\n        return oneBack;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(NumDecodings(\"12\"));\n        Console.WriteLine(NumDecodings(\"226\"));\n        Console.WriteLine(NumDecodings(\"06\"));     // leading zero\n        Console.WriteLine(NumDecodings(\"100\"));    // the second zero has no partner\n        Console.WriteLine(NumDecodings(\"2101\"));\n        Console.WriteLine(NumDecodings(\"11106\"));\n    }\n}\n```\n\n**Output**\n\n```\n2\n3\n0\n0\n1\n2\n```",
   "tags": [
    "dp",
-   "decode",
-   "string"
+   "fibonacci",
+   "zero-handling",
+   "rolling-variables",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why is 100 undecodable?",
+    "a": "The first zero pairs with the 1 to make 10, which is valid. The second zero then has a 0 before it, and 00 is not in the range 10 to 26, nor can a zero stand alone. So there is no way to consume it and the answer is 0. Solutions that handle only a leading zero pass '06' and fail '100', which is why both belong in the tests. The general rule is that a zero must always be the second digit of a 10 or a 20."
+   },
+   {
+    "q": "Why return immediately when the count reaches zero?",
+    "a": "Because an undecodable position makes the whole string undecodable, and continuing would let a later position read a stale rolling value and produce a non-zero answer. It is also a genuine early exit rather than only a correctness guard. Writing the recurrence so that zeros propagate naturally also works, but the explicit return states the intent and avoids depending on multiplication-by-zero behaviour that a later edit could break."
+   },
+   {
+    "q": "How does decode ways II with wildcards differ?",
+    "a": "A '*' can stand for any digit 1 to 9, so each term becomes a count of possibilities rather than a boolean: a single '*' contributes nine ways, and a pair involving a star contributes a count depending on which combinations fall in 10 to 26. The structure is identical but each branch multiplies by a factor, and the answer must be taken modulo a large prime because it grows enormously. It is a good illustration that the recurrence survives while the arithmetic inside it changes."
+   }
   ]
  },
  {
@@ -4902,18 +4932,32 @@
   "subcategory": "DP",
   "difficulty": "Hard",
   "question": "Regular expression / wildcard matching with DP.",
-  "answer": "dp[i][j] = does s[0..i) match p[0..j). For '?' or a matching char, dp[i][j]=dp[i-1][j-1]; for '*', dp[i][j] = dp[i][j-1] (empty) or dp[i-1][j] (consume one char). Initialize dp[0][j] for leading stars. O(m*n) time and space.",
+  "answer": "**Approach**\n\nWildcard matching, where `?` matches exactly one character and `*` matches any sequence including empty. Unlike regex `*`, this star is standalone rather than bound to a preceding character, which makes the recurrence simpler.\n\n**Logic**\n\n`match[i][j]` means the first i characters of the input match the first j of the pattern.\n\nFor `?` or an equal character, carry the diagonal. For `*`, two options: it matches nothing, which looks one column back, or it consumes one more input character, which looks one row up. Either suffices, so they are combined with an OR.\n\nThe base row matters: an empty input matches a pattern of stars only.\n\nO(n·m) time and space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsMatch(string s, string p)\n    {\n        int n = s.Length, m = p.Length;\n        var match = new bool[n + 1, m + 1];\n        match[0, 0] = true;\n\n        // An empty input matches only a run of stars.\n        for (int j = 1; j <= m; j++)\n            if (p[j - 1] == '*') match[0, j] = match[0, j - 1];\n\n        for (int i = 1; i <= n; i++)\n            for (int j = 1; j <= m; j++)\n            {\n                if (p[j - 1] == '*')\n                {\n                    // star matches nothing, or consumes one more character\n                    match[i, j] = match[i, j - 1] || match[i - 1, j];\n                }\n                else if (p[j - 1] == '?' || p[j - 1] == s[i - 1])\n                {\n                    match[i, j] = match[i - 1, j - 1];\n                }\n            }\n\n        return match[n, m];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsMatch(\"aa\", \"a\"));\n        Console.WriteLine(IsMatch(\"aa\", \"*\"));\n        Console.WriteLine(IsMatch(\"cb\", \"?a\"));\n        Console.WriteLine(IsMatch(\"adceb\", \"*a*b\"));\n        Console.WriteLine(IsMatch(\"acdcb\", \"a*c?b\"));\n        Console.WriteLine(IsMatch(\"\", \"***\"));       // stars can match nothing\n    }\n}\n```\n\n**Output**\n\n```\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\n```",
   "tags": [
    "dp",
    "wildcard",
-   "matching",
-   "strings",
-   "hard"
+   "pattern-matching",
+   "two-dimensional",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Facebook",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "How does this differ from regex matching with '.' and '*'?",
+    "a": "There the star binds to the character before it and means zero or more of *that* character, so the recurrence must look two columns back to skip the pair and must check the bound character before consuming input. Here the star is standalone and matches any sequence, so it looks one column back and one row up. That difference makes wildcard matching noticeably simpler, and it is why the two problems have different solutions despite looking similar."
+   },
+   {
+    "q": "Is there a linear-time solution?",
+    "a": "Yes, a greedy two-pointer with backtracking on the last star. Advance both pointers while characters match; on a star, record its position and the input position and try matching nothing; on a mismatch, return to the last star and let it consume one more character. That is O(n) time and O(1) space in practice, though adversarial patterns with many stars can degrade. It is the harder solution to get right, so the DP is the safer interview answer with the greedy mentioned as the optimisation."
+   },
+   {
+    "q": "Where is wildcard matching actually used?",
+    "a": "Shell globbing, file filters, and routing rules in gateways and firewalls. That last one matters for security: a rule like `/admin/*` matching more or less than intended is a real vulnerability class, and different implementations disagree about whether a star crosses a path separator. It is worth knowing that glob semantics are not standardised the way regex largely is, so a pattern that works in one system may match differently in another."
+   }
   ]
  },
  {
@@ -5261,16 +5305,32 @@
   "subcategory": "Backtracking",
   "difficulty": "Medium",
   "question": "Palindrome partitioning: all ways to split into palindromes.",
-  "answer": "Backtracking: try each prefix; if it's a palindrome, add it and recurse on the suffix, backtracking after. Precompute a palindrome DP table for O(1) checks. Exponential number of partitions in the worst case.",
+  "answer": "**Approach**\n\nBacktracking over cut positions, with a precomputed palindrome table so the test inside the recursion is a lookup rather than a scan.\n\n**Logic**\n\nFrom the current index, try every prefix; when it is a palindrome, take it as one part and recurse on the remainder. Reaching the end means the accumulated parts form a complete partition.\n\nThe palindrome table is built with an interval DP: a range is a palindrome when its ends match and the interior is one, which requires the inner range to be computed first, so the start index iterates downward.\n\nThe output can be exponential, so no polynomial bound exists; the precomputation removes an O(n) factor from every node of the tree.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<IList<string>> Partition(string s)\n    {\n        var result = new List<IList<string>>();\n        if (string.IsNullOrEmpty(s)) return result;\n\n        int n = s.Length;\n        var isPalindrome = new bool[n, n];\n\n        // Downward, so the shorter inner range is already computed.\n        for (int start = n - 1; start >= 0; start--)\n            for (int end = start; end < n; end++)\n                isPalindrome[start, end] = s[start] == s[end]\n                    && (end - start < 2 || isPalindrome[start + 1, end - 1]);\n\n        Backtrack(s, 0, isPalindrome, new List<string>(), result);\n        return result;\n    }\n\n    private static void Backtrack(string s, int start, bool[,] isPalindrome,\n                                  List<string> current, IList<IList<string>> result)\n    {\n        if (start == s.Length) { result.Add(new List<string>(current)); return; }\n\n        for (int end = start; end < s.Length; end++)\n        {\n            if (!isPalindrome[start, end]) continue;   // O(1) lookup\n\n            current.Add(s[start..(end + 1)]);\n            Backtrack(s, end + 1, isPalindrome, current, result);\n            current.RemoveAt(current.Count - 1);\n        }\n    }\n\n    private static string Render(IList<IList<string>> r) =>\n        r.Count == 0 ? \"(none)\" : string.Join(\" \", r.Select(p => \"[\" + string.Join(\",\", p) + \"]\"));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(Partition(\"aab\")));\n        Console.WriteLine(Render(Partition(\"a\")));\n        Console.WriteLine(Render(Partition(\"ab\")));\n        Console.WriteLine(Render(Partition(\"aaa\")));\n        Console.WriteLine(Partition(\"aaaaa\").Count);   // 2^(n-1) for all-equal input\n        Console.WriteLine(Render(Partition(\"\")));\n    }\n}\n```\n\n**Output**\n\n```\n[a,a,b] [aa,b]\n[a]\n[a,b]\n[a,a,a] [a,aa] [aa,a] [aaa]\n16\n(none)\n```",
   "tags": [
    "backtracking",
+   "dp",
    "palindrome",
-   "partitioning"
+   "precomputation",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why is the count 16 for a five-character string of identical letters?",
+    "a": "Because every single character is a palindrome, so every possible set of cut positions is valid, and with n characters there are n-1 possible cut points each independently taken or not: 2^(n-1), which is 16 for n of 5. That is the worst case and it is exponential, which proves no polynomial algorithm can exist for enumerating all partitions. It is the same argument as for word break II, and stating it is more valuable than trying to optimise further."
+   },
+   {
+    "q": "Why must the precomputation loop start from the end?",
+    "a": "Because isPalindrome[start, end] depends on isPalindrome[start + 1, end - 1], a range starting one position later, which must already be computed. Iterating start upward reads uninitialised false values and silently misses palindromes, giving too few partitions rather than an error. The rule is general: when a recurrence refers to a larger index, that loop runs in the opposite direction."
+   },
+   {
+    "q": "What changes if only the minimum number of cuts is wanted?",
+    "a": "It becomes a one-dimensional DP rather than an enumeration: cuts[i] is the fewest cuts for the first i characters, computed as the best over every j where j..i is a palindrome. That is O(n squared) total and polynomial, because you are counting rather than listing. The contrast is worth drawing explicitly: the same precomputed table serves both, but one problem is tractable and the other cannot be, purely because of output size."
+   }
   ]
  },
  {
@@ -5443,16 +5503,31 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Longest arithmetic subsequence.",
-  "answer": "dp[i] is a map from common-difference→length of the arithmetic subsequence ending at i with that difference. For each pair (j,i), diff = nums[i]-nums[j], dp[i][diff] = dp[j][diff] + 1. Track the max. O(n^2) time and space.",
+  "answer": "**Approach**\n\nA DP keyed on the pair (index, common difference). For each pair of indices, the difference between them extends whatever run already ended at the earlier index with that same difference.\n\n**Logic**\n\n`best[i][d]` is the length of the longest arithmetic subsequence ending at index i with common difference d. Since d can be any integer, including negative, a dictionary per index is used rather than an array.\n\nFor each j before i, the difference is `nums[i] - nums[j]`. If a run with that difference already ends at j, extend it; otherwise start a new run of length 2, since two elements always form an arithmetic sequence.\n\nO(n²) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int LongestArithSeqLength(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n        if (nums.Length <= 2) return nums.Length;\n\n        // One dictionary per index: the difference can be any integer.\n        var best = new Dictionary<int, int>[nums.Length];\n        for (int i = 0; i < nums.Length; i++) best[i] = new Dictionary<int, int>();\n\n        int longest = 2;\n\n        for (int i = 1; i < nums.Length; i++)\n            for (int j = 0; j < i; j++)\n            {\n                int difference = nums[i] - nums[j];\n\n                // Extend a run ending at j, or start a new pair.\n                int length = best[j].TryGetValue(difference, out int previous) ? previous + 1 : 2;\n\n                best[i][difference] = Math.Max(best[i].GetValueOrDefault(difference), length);\n                longest = Math.Max(longest, best[i][difference]);\n            }\n\n        return longest;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestArithSeqLength(new[] { 3, 6, 9, 12 }));\n        Console.WriteLine(LongestArithSeqLength(new[] { 9, 4, 7, 2, 10 }));\n        Console.WriteLine(LongestArithSeqLength(new[] { 20, 1, 15, 3, 10, 5, 8 }));\n        Console.WriteLine(LongestArithSeqLength(new[] { 5 }));\n        Console.WriteLine(LongestArithSeqLength(new[] { 7, 7, 7, 7 }));   // difference of 0\n        Console.WriteLine(LongestArithSeqLength(new[] { 1, 2 }));\n    }\n}\n```\n\n**Output**\n\n```\n4\n3\n4\n1\n4\n2\n```",
   "tags": [
    "dp",
-   "arithmetic",
-   "subsequence",
-   "hashmap"
+   "hashmap",
+   "arithmetic-sequence",
+   "pairs",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why a dictionary per index rather than a two-dimensional array?",
+    "a": "Because the common difference ranges over all integers, including negatives, so it cannot index an array directly without offsetting by the value range, which for large values is impractical. A dictionary keyed on the difference stores only the differences that actually occur, which is at most n per index. If the value range were small and known, an offset array would be faster by avoiding hashing, and that is a reasonable optimisation to mention when the constraints allow it."
+   },
+   {
+    "q": "Why is the base length 2 rather than 1?",
+    "a": "Because any two elements form an arithmetic sequence by definition - the difference between them is the common difference. So the first time a difference is seen between j and i, the run is already length 2, not 1. Starting at 1 would undercount every result by one. It also means the answer for any array of two or more elements is at least 2, which is why the short-array case returns the length directly."
+   },
+   {
+    "q": "Does this handle a common difference of zero?",
+    "a": "Yes, and the all-sevens test confirms it: the difference is 0 and each element extends the run, giving 4. That case is worth testing because a solution using the difference as an array index with an offset can mishandle zero, and because some implementations special-case duplicates unnecessarily. Here it needs no special handling at all, which is a sign the abstraction is right."
+   }
   ]
  },
  {
@@ -7122,15 +7197,31 @@
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "Reverse only the vowels of a string.",
-  "answer": "Two pointers moving inward, each skipping non-vowels, swapping when both land on vowels. Time O(n), space O(1) if the string is mutable, otherwise O(n) for the output buffer.",
+  "answer": "**Approach**\n\nTwo pointers from both ends. Advance each until it lands on a vowel, swap, and continue inward.\n\n**Logic**\n\nNon-vowels stay exactly where they are, so the pointers skip them. Only when both point at vowels does a swap occur.\n\nThe detail worth getting right is case: both upper and lower case vowels count, and the case travels with the letter rather than with the position, so swapping characters directly gives the correct result.\n\nO(n) time, O(n) space only because C# strings are immutable and a char array is needed.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private const string Vowels = \"aeiouAEIOU\";\n\n    public static string ReverseVowels(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return s;\n\n        var chars = s.ToCharArray();\n        int left = 0, right = chars.Length - 1;\n\n        while (left < right)\n        {\n            while (left < right && Vowels.IndexOf(chars[left]) < 0) left++;\n            while (left < right && Vowels.IndexOf(chars[right]) < 0) right--;\n\n            if (left < right)\n            {\n                (chars[left], chars[right]) = (chars[right], chars[left]);\n                left++;\n                right--;\n            }\n        }\n\n        return new string(chars);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ReverseVowels(\"hello\"));\n        Console.WriteLine(ReverseVowels(\"leetcode\"));\n        Console.WriteLine(ReverseVowels(\"aA\"));          // case travels with the letter\n        Console.WriteLine(ReverseVowels(\"bcd\"));         // no vowels\n        Console.WriteLine(ReverseVowels(\"\"));\n        Console.WriteLine(ReverseVowels(\"Programming\"));\n    }\n}\n```\n\n**Output**\n\n```\nholle\nleotcede\nAa\nbcd\n\nPrigrammong\n```",
   "tags": [
    "strings",
    "two-pointers",
-   "implementation"
+   "in-place",
+   "vowels",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the case travel with the letter?",
+    "a": "Because the swap moves whole characters, not just their vowel identity, so an uppercase A ending up where a lowercase a was stays uppercase. The 'aA' test shows it becoming 'Aa'. Some phrasings of the problem instead ask for the case to stay with the position, which would require detecting the case before swapping and reapplying it afterwards. The two produce different answers, so confirming which is intended is worth a sentence before writing anything."
+   },
+   {
+    "q": "Vowels.IndexOf on every character is a linear scan. Does it matter?",
+    "a": "The string has ten characters so it is a small constant, and for readability it is hard to beat. A HashSet<char> makes it O(1) with a hash, which for ten items is not obviously faster. The genuinely fastest version is a switch expression, which the compiler turns into a jump table with no allocation at all. For a hot loop that is the version to write, and it is a reasonable answer to give while noting the current one is clearer."
+   },
+   {
+    "q": "What about Unicode vowels such as accented characters?",
+    "a": "They are not matched, so 'café' would leave the é alone. Whether that is correct depends entirely on the requirement, and the honest answer is that 'vowel' is a linguistic concept rather than a character property, so any implementation encodes an assumption. A broader version would normalise the string and check the base character after stripping combining marks, which is considerably more work and worth doing only if the requirement genuinely covers non-English text."
+   }
   ]
  },
  {
@@ -7138,16 +7229,31 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Longest word in a dictionary that can be built one character at a time from other words.",
-  "answer": "Sort words by length then lexicographically, keep a set of buildable words seeded with the empty string, and accept a word when its prefix minus the last character is already in the set. Time O(n log n plus total length). A trie gives the same result with prefix checks.",
+  "answer": "**Approach**\n\nA word qualifies only if every prefix of it is also in the dictionary. Sort so that shorter words come first, then build up a set of qualifying words, checking each candidate against its own prefix.\n\n**Logic**\n\nSorting by length ensures that when a word is examined, every shorter word has already been considered, so checking whether `word[..^1]` is in the buildable set is sufficient — the rest of the chain was verified transitively.\n\nSingle-character words have an empty prefix, which counts as buildable, so they seed the set.\n\nTies are broken lexicographically, so sorting by length then alphabetically means the first qualifying word of maximal length is the answer and no comparison is needed afterwards.\n\nO(n log n) for the sort, then linear.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static string LongestWord(string[] words)\n    {\n        if (words == null || words.Length == 0) return \"\";\n\n        // Shortest first, then alphabetical, so the first qualifying longest wins.\n        var sorted = words.OrderBy(w => w.Length).ThenBy(w => w, StringComparer.Ordinal);\n\n        var buildable = new HashSet<string> { \"\" };   // the empty prefix seeds it\n        string best = \"\";\n\n        foreach (string word in sorted)\n        {\n            // Only the immediate prefix needs checking: the rest was verified already.\n            if (!buildable.Contains(word[..^1])) continue;\n\n            buildable.Add(word);\n            if (word.Length > best.Length) best = word;\n        }\n\n        return best;\n    }\n\n    private static string Show(string s) => s.Length == 0 ? \"(none)\" : s;\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(LongestWord(new[] { \"w\", \"wo\", \"wor\", \"worl\", \"world\" })));\n        Console.WriteLine(Show(LongestWord(new[] { \"a\", \"banana\", \"app\", \"appl\", \"ap\", \"apply\", \"apple\" })));\n        Console.WriteLine(Show(LongestWord(new[] { \"abc\", \"bc\", \"ab\", \"qwe\" })));   // no chain\n        Console.WriteLine(Show(LongestWord(new[] { \"a\" })));\n        Console.WriteLine(Show(LongestWord(Array.Empty<string>())));\n        Console.WriteLine(Show(LongestWord(new[] { \"b\", \"br\", \"bre\", \"brea\", \"break\", \"a\", \"ap\" })));\n    }\n}\n```\n\n**Output**\n\n```\nworld\napple\n(none)\na\n(none)\nbreak\n```",
   "tags": [
    "strings",
-   "trie",
    "sorting",
-   "hashset"
+   "hashset",
+   "prefix-chain",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why is checking only the immediate prefix sufficient?",
+    "a": "Because of the sort order. A word is examined only after every shorter word, so if its immediate prefix is in the buildable set then that prefix itself passed the same check, and so on transitively down to the empty string. Checking every prefix would be correct but redundant and would make it O(total characters) rather than O(n). The induction is what the sort buys, and it is worth stating explicitly because the shortcut looks unsafe without it."
+   },
+   {
+    "q": "Why sort alphabetically as the tie-break?",
+    "a": "Because the problem specifies the lexicographically smallest answer among equal-length candidates, and sorting that way means the first qualifying word of a given length is already the smallest, so no comparison is needed when updating the best. Without it you would need an explicit tie-break on every update. Pushing the ordering requirement into the sort rather than into the loop is a small simplification that also removes a place to get the comparison backwards."
+   },
+   {
+    "q": "Would a trie be better?",
+    "a": "It is the other standard solution: insert every word, then DFS from the root following only nodes marked as complete words, tracking the deepest reached. That avoids the sort and is O(total characters), and it naturally handles the lexicographic tie-break by visiting children in order. It uses more memory for the trie structure. For this problem either is fine; the trie generalises better if you also need prefix queries, which is usually why it appears in the same interview."
+   }
   ]
  },
  {
@@ -7155,16 +7261,32 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Find the shortest distance between two words in a list of words.",
-  "answer": "Single pass tracking the most recent index of each of the two words, updating the minimum whenever one is seen and the other has been seen already. Time O(n), space O(1). For repeated queries, precompute index lists per word and merge them with two pointers.",
+  "answer": "**Approach**\n\nOne pass tracking the most recent index of each word. Whenever either is seen, the distance to the other's last position is a candidate.\n\n**Logic**\n\nBecause only the most recent occurrence of each word can produce the shortest distance to a new occurrence of the other, two integers suffice. There is no need to store all positions.\n\nThe same-word variant, where both arguments are identical, needs separate handling: the distance is between consecutive occurrences of that one word, so the previous index is compared against the current one rather than against a different word's index.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int ShortestDistance(string[] words, string a, string b)\n    {\n        if (words == null || words.Length == 0) return -1;\n\n        int lastA = -1, lastB = -1, best = int.MaxValue;\n        bool sameWord = a == b;\n\n        for (int i = 0; i < words.Length; i++)\n        {\n            if (words[i] == a)\n            {\n                // Same word: the previous occurrence of a IS the other endpoint.\n                if (sameWord) { if (lastA >= 0) best = Math.Min(best, i - lastA); lastA = i; continue; }\n\n                lastA = i;\n                if (lastB >= 0) best = Math.Min(best, i - lastB);\n            }\n            else if (words[i] == b)\n            {\n                lastB = i;\n                if (lastA >= 0) best = Math.Min(best, i - lastA);\n            }\n        }\n\n        return best == int.MaxValue ? -1 : best;\n    }\n\n    public static void Main()\n    {\n        var words = new[] { \"practice\", \"makes\", \"perfect\", \"coding\", \"makes\" };\n\n        Console.WriteLine(ShortestDistance(words, \"coding\", \"practice\"));\n        Console.WriteLine(ShortestDistance(words, \"makes\", \"coding\"));\n        Console.WriteLine(ShortestDistance(words, \"makes\", \"makes\"));      // same word\n        Console.WriteLine(ShortestDistance(words, \"missing\", \"makes\"));    // absent\n        Console.WriteLine(ShortestDistance(new[] { \"a\", \"b\", \"a\" }, \"a\", \"b\"));\n        Console.WriteLine(ShortestDistance(Array.Empty<string>(), \"a\", \"b\"));\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n3\n-1\n1\n-1\n```",
   "tags": [
-   "strings",
    "arrays",
-   "two-pointers"
+   "strings",
+   "one-pass",
+   "two-pointers",
+   "csharp"
   ],
   "companies": [
    "LinkedIn",
    "Amazon",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is tracking only the most recent index sufficient?",
+    "a": "Because for any new occurrence of one word, the closest occurrence of the other must be the most recent one before it - anything earlier is strictly further away. So older positions can never produce a better answer and need not be kept. That observation is what turns an O(n squared) comparison of all pairs into a single pass with two integers, and it is the same reasoning as in the 'contiguous array' and 'two sum' prefix techniques."
+   },
+   {
+    "q": "Why does the same-word case need separate handling?",
+    "a": "Because the general branch compares against the other word's last index, and when both words are identical there is no other word - lastA and lastB would track the same thing and the distance would compute as zero. The correct answer is the gap between consecutive occurrences, which means comparing the current index against the previous one before updating it. Solutions that miss this return 0 for the same-word query, which is the standard failure."
+   },
+   {
+    "q": "How would you handle many repeated queries on the same word list?",
+    "a": "Preprocess once into a dictionary from word to a sorted list of its indices. Each query then merges the two index lists with two pointers, which is O(occurrences of the two words) rather than O(n). For a large corpus queried repeatedly that is a substantial win, and it is exactly how an inverted index supports proximity search in a search engine. It is the standard preprocess-once-query-many trade."
+   }
   ]
  },
  {
@@ -7269,16 +7391,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Continuous subarray sum: is there a subarray of length at least two summing to a multiple of k?",
-  "answer": "Store the first index at which each prefix remainder appeared. When the same remainder recurs at least two positions later, the subarray between them is a multiple of k. Seed remainder zero at index -1. Time O(n), space O(k).",
+  "answer": "**Approach**\n\nPrefix sums modulo k. Two prefixes with the same remainder bound a subarray whose sum is a multiple of k.\n\n**Logic**\n\nStore the earliest index at which each remainder was seen. When a remainder repeats, the subarray between the two positions sums to a multiple of k. Recording the earliest occurrence maximises the span, which is what allows the length-at-least-two requirement to be met.\n\nSeed the map with remainder 0 at index -1, representing the empty prefix, so a qualifying subarray starting at index 0 is found.\n\nThe length check is the trap: the two indices must differ by more than one, or a single element that happens to be a multiple of k would qualify.\n\nO(n) time, O(min(n, k)) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool CheckSubarraySum(int[] nums, int k)\n    {\n        if (nums == null || nums.Length < 2) return false;\n\n        // remainder -> EARLIEST index. -1 represents the empty prefix.\n        var firstSeen = new Dictionary<int, int> { [0] = -1 };\n        int running = 0;\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            running += nums[i];\n\n            // k of 0 means \"sums to zero\", so skip the modulo in that case.\n            int remainder = k == 0 ? running : ((running % k) + k) % k;\n\n            if (firstSeen.TryGetValue(remainder, out int earlier))\n            {\n                if (i - earlier > 1) return true;   // length at least two\n            }\n            else\n            {\n                firstSeen[remainder] = i;           // record only the first\n            }\n        }\n\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CheckSubarraySum(new[] { 23, 2, 4, 6, 7 }, 6));     // 2+4\n        Console.WriteLine(CheckSubarraySum(new[] { 23, 2, 6, 4, 7 }, 13));    // total is 42, not a multiple\n        Console.WriteLine(CheckSubarraySum(new[] { 23, 2, 6, 4, 7 }, 6));\n        Console.WriteLine(CheckSubarraySum(new[] { 1, 0 }, 2));               // not a multiple\n        Console.WriteLine(CheckSubarraySum(new[] { 0, 0 }, 0));               // k of zero\n        Console.WriteLine(CheckSubarraySum(new[] { 6 }, 6));                  // too short\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\n```",
   "tags": [
    "arrays",
    "prefix-sum",
-   "hashmap"
+   "modulo",
+   "hashmap",
+   "csharp"
   ],
   "companies": [
    "Facebook",
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why record only the earliest index for each remainder?",
+    "a": "Because the span between two equal remainders is the qualifying subarray, and to satisfy the length-at-least-two requirement you want the widest possible span. Overwriting with a later index would shrink every span and could reduce a valid length-two subarray to length one, producing a false negative. It is the mirror of problems wanting the shortest span, where you would update to the latest index, and deciding which based on what is being maximised is the reusable part."
+   },
+   {
+    "q": "Why does k equal to zero need a special case?",
+    "a": "Because taking a modulo by zero throws. When k is zero the question becomes whether a subarray of length at least two sums to exactly zero, so the raw running sum is the key rather than a remainder, and the rest of the algorithm is unchanged. Problem statements vary on whether k can be zero, so it is worth asking; handling it costs one conditional and avoids a crash on an input the statement may permit."
+   },
+   {
+    "q": "Why the double modulo for negative values?",
+    "a": "Because C# gives the remainder the sign of the dividend, so -3 % 5 is -2 rather than 3, and the two representations of the same residue class would never match. Adding k and taking the modulo again normalises into 0..k-1. It is the same idiom as in array rotation and subarrays-divisible-by-k, and it only manifests when the input contains negatives, which is why such a test case is essential."
+   }
   ]
  },
  {
@@ -7318,16 +7456,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Car pooling: can all trips be completed given a vehicle capacity?",
-  "answer": "Sweep line over stops: add passengers at each start and subtract at each end, either by sorting events or by bucketing into a fixed-size difference array over locations. Any prefix sum exceeding capacity fails. Time O(n log n) sorting, or O(n + range) with buckets.",
+  "answer": "**Approach**\n\nA difference array over the route. Each trip adds passengers at its start and removes them at its end; sweeping the prefix sum gives the occupancy at every point.\n\n**Logic**\n\nRather than incrementing every location in a trip's range, add the count at the start index and subtract it at the end index. The running sum of that difference array is the actual occupancy, computed in one pass.\n\nThe subtlety is that passengers leave *at* the drop-off point, so a trip ending where another begins does not overlap. Subtracting at the end index rather than after it encodes that.\n\nO(locations + trips) time, O(locations) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // trips[i] = [passengers, from, to]\n    public static bool CarPooling(int[][] trips, int capacity)\n    {\n        if (trips == null || trips.Length == 0) return true;\n\n        int furthest = 0;\n        foreach (var t in trips) furthest = Math.Max(furthest, t[2]);\n\n        var delta = new int[furthest + 1];\n\n        foreach (var t in trips)\n        {\n            delta[t[1]] += t[0];    // board here\n            delta[t[2]] -= t[0];    // alight here, so this point does not overlap\n        }\n\n        int onboard = 0;\n        foreach (int change in delta)\n        {\n            onboard += change;\n            if (onboard > capacity) return false;\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CarPooling(new[] {\n            new[] { 2, 1, 5 }, new[] { 3, 3, 7 } }, 4));     // overlap of 5 exceeds 4\n\n        Console.WriteLine(CarPooling(new[] {\n            new[] { 2, 1, 5 }, new[] { 3, 3, 7 } }, 5));\n\n        // Back to back: the first ends exactly where the second begins.\n        Console.WriteLine(CarPooling(new[] {\n            new[] { 3, 2, 7 }, new[] { 3, 7, 9 } }, 3));\n\n        Console.WriteLine(CarPooling(new[] { new[] { 5, 0, 1 } }, 4));\n        Console.WriteLine(CarPooling(Array.Empty<int[]>(), 1));\n        Console.WriteLine(CarPooling(new[] { new[] { 1, 0, 1 } }, 1));\n    }\n}\n```\n\n**Output**\n\n```\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\n```",
   "tags": [
    "arrays",
+   "difference-array",
    "sweep-line",
-   "greedy"
+   "intervals",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Uber",
    "Lyft"
+  ],
+  "followups": [
+   {
+    "q": "Why a difference array rather than incrementing every point in the range?",
+    "a": "Because incrementing a range of length L costs O(L) per trip, so with many long trips the total is the sum of all trip lengths, which can be far larger than the input. The difference array makes each trip two O(1) updates and defers the accumulation to one final sweep. It is the standard technique for many range updates followed by one read, and the inverse of a prefix-sum array, which serves many range reads after one build."
+   },
+   {
+    "q": "Why subtract at the end index rather than after it?",
+    "a": "Because passengers alight at the drop-off point, so a trip ending at location 7 and another starting at 7 do not overlap - the seat is free. Subtracting at index 7 makes the occupancy drop before the boarding is added, which is the correct semantics. Subtracting at 8 instead would treat them as overlapping and wrongly reject the back-to-back case, which is exactly what the third test checks. It is the same closed-versus-half-open interval question as in meeting rooms."
+   },
+   {
+    "q": "What if locations were timestamps rather than small integers?",
+    "a": "An array indexed by location becomes impossible, so you switch to sorting the events: a boarding and an alighting per trip, sorted by position with alightings first at equal positions. Sweeping those events gives the same running occupancy in O(n log n). That is the general sweep-line formulation and it handles unbounded or sparse coordinates, which is why meeting-rooms-II uses it. The difference array is the specialisation that applies when the coordinate space is small and dense."
+   }
   ]
  },
  {
@@ -7367,16 +7521,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Queue reconstruction by height: rebuild a queue from (height, number of taller people in front) pairs.",
-  "answer": "Sort descending by height, ascending by count, then insert each person at the index equal to their count. Because everyone already placed is at least as tall, the count remains correct. Time O(n^2) with list insertion, improvable with a Fenwick tree.",
+  "answer": "**Approach**\n\nSort tallest first, breaking ties by the count ascending, then insert each person at the index given by their count.\n\n**Logic**\n\nThe insight is that inserting in descending height order makes each insertion safe. When a person is placed, everyone already in the list is at least as tall, so the count of taller people in front is exactly the number of people before them — which is the index. Shorter people inserted later do not affect that count, because they are not taller.\n\nSorting ties by count ascending matters: among equal heights, the one expecting fewer people in front must be placed first, or the later insertion would displace it.\n\nO(n²) because of the list insertions.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    // people[i] = [height, countOfTallerOrEqualInFront]\n    public static int[][] ReconstructQueue(int[][] people)\n    {\n        if (people == null || people.Length == 0) return Array.Empty<int[]>();\n\n        // Tallest first; among equals, the smaller count first.\n        var sorted = people.OrderByDescending(p => p[0]).ThenBy(p => p[1]).ToArray();\n\n        var queue = new List<int[]>();\n\n        foreach (var person in sorted)\n        {\n            // Everyone already placed is at least as tall, so the count IS the index.\n            queue.Insert(person[1], person);\n        }\n\n        return queue.ToArray();\n    }\n\n    private static string Show(int[][] q) =>\n        q.Length == 0 ? \"(empty)\" : string.Join(\" \", q.Select(p => $\"[{p[0]},{p[1]}]\"));\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(ReconstructQueue(new[] {\n            new[] { 7, 0 }, new[] { 4, 4 }, new[] { 7, 1 },\n            new[] { 5, 0 }, new[] { 6, 1 }, new[] { 5, 2 } })));\n\n        Console.WriteLine(Show(ReconstructQueue(new[] {\n            new[] { 6, 0 }, new[] { 5, 0 }, new[] { 4, 0 },\n            new[] { 3, 2 }, new[] { 2, 2 }, new[] { 1, 4 } })));\n\n        Console.WriteLine(Show(ReconstructQueue(new[] { new[] { 1, 0 } })));\n        Console.WriteLine(Show(ReconstructQueue(Array.Empty<int[]>())));\n    }\n}\n```\n\n**Output**\n\n```\n[5,0] [7,0] [5,2] [6,1] [4,4] [7,1]\n[4,0] [5,0] [2,2] [3,2] [1,4] [6,0]\n[1,0]\n(empty)\n```",
   "tags": [
-   "arrays",
    "greedy",
-   "sorting"
+   "sorting",
+   "insertion",
+   "reconstruction",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does inserting in descending height order work?",
+    "a": "Because when a person is inserted, every person already in the list is at least as tall as them, so the number of taller-or-equal people in front equals the number of people in front, which is the insertion index. Inserting a shorter person later cannot change that count, since they do not qualify as taller. So each placement is correct at the moment it is made and stays correct. That invariant is the whole proof, and it is what makes an apparently arbitrary greedy provably right."
+   },
+   {
+    "q": "Why break ties by the count ascending?",
+    "a": "Because among people of equal height, each counts toward the other's total. The one expecting fewer people in front must be placed first; if the larger count went first, inserting the smaller-count person before it would push it back and invalidate its position. Sorting ties the other way produces output that satisfies most entries and quietly breaks on equal heights, which is why the test includes two 7s and two 5s."
+   },
+   {
+    "q": "The list insertion makes this O(n squared). Can it be improved?",
+    "a": "Yes, with a Fenwick tree or segment tree over the free positions, turning each insertion into a binary search for the k-th remaining empty slot, which gives O(n log n). It is considerably more code and only worth it for large inputs. For interview purposes the O(n squared) version with the correctness argument is the expected answer, and naming the improvement shows you know where the ceiling is without spending the time on it."
+   }
   ]
  },
  {
@@ -7384,15 +7554,31 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Boats to save people: minimum boats when each carries at most two people within a weight limit.",
-  "answer": "Sort, then two pointers from lightest and heaviest. If the pair fits, both board and both pointers move; otherwise the heaviest goes alone. Each boat is counted once. Time O(n log n), space O(1).",
+  "answer": "**Approach**\n\nSort, then two pointers from both ends. Pair the lightest with the heaviest whenever they fit together; otherwise the heaviest goes alone.\n\n**Logic**\n\nThe heaviest person must travel, so the only question is whether anyone can accompany them. If the lightest cannot, nobody can, so they go alone. If the lightest can, pairing them is optimal: the lightest is the easiest to place later, so using them here costs the least future flexibility.\n\nThat exchange argument is what makes the greedy provable rather than merely plausible.\n\nO(n log n) for the sort, then one linear pass.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int NumRescueBoats(int[] people, int limit)\n    {\n        if (people == null || people.Length == 0) return 0;\n\n        Array.Sort(people);\n\n        int light = 0, heavy = people.Length - 1, boats = 0;\n\n        while (light <= heavy)\n        {\n            // The heaviest always boards. Take the lightest too if they fit.\n            if (people[light] + people[heavy] <= limit) light++;\n\n            heavy--;\n            boats++;\n        }\n\n        return boats;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(NumRescueBoats(new[] { 1, 2 }, 3));\n        Console.WriteLine(NumRescueBoats(new[] { 3, 2, 2, 1 }, 3));\n        Console.WriteLine(NumRescueBoats(new[] { 3, 5, 3, 4 }, 5));   // nobody pairs\n        Console.WriteLine(NumRescueBoats(new[] { 5 }, 5));\n        Console.WriteLine(NumRescueBoats(Array.Empty<int>(), 5));\n        Console.WriteLine(NumRescueBoats(new[] { 1, 1, 1, 1 }, 2));\n    }\n}\n```\n\n**Output**\n\n```\n1\n3\n4\n1\n0\n2\n```",
   "tags": [
-   "arrays",
    "greedy",
-   "two-pointers"
+   "two-pointers",
+   "sorting",
+   "exchange-argument",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is pairing the heaviest with the lightest optimal?",
+    "a": "Because the heaviest person must board some boat regardless, so the decision is only whether to fill the remaining seat. If the lightest does not fit, nobody does and the boat is necessarily half empty. If the lightest does fit, pairing them is at least as good as any alternative: the lightest is the easiest person to accommodate later, so spending them here preserves the most flexibility for everyone else. That exchange argument converts a plausible greedy into a proved one."
+   },
+   {
+    "q": "Why does the loop condition use <= rather than <?",
+    "a": "Because when the two pointers meet there is still one person left to place, and stopping early would leave them without a boat. With light equal to heavy, the condition inside may or may not advance light, but heavy always decrements and a boat is always counted, so the single remaining person is handled correctly either way. Using a strict less-than undercounts by one on any odd-sized input, which the single-person test catches."
+   },
+   {
+    "q": "What if a boat could carry three people?",
+    "a": "The greedy breaks. With two seats the only question is a yes-or-no pairing, but with three the choice of which two to add to the heaviest is a genuine optimisation, and the exchange argument no longer holds. That variant is a bin-packing problem, which is NP-hard in general, so you would use a heuristic such as first-fit-decreasing and accept an approximation. It is a good illustration that a small relaxation can move a problem from a two-line greedy to intractable."
+   }
   ]
  },
  {
