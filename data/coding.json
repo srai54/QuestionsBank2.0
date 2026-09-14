@@ -12476,17 +12476,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Determine whether a binary tree is a complete binary tree.",
-  "answer": "Level-order traversal including nulls; once a null is seen, no further non-null node may appear. Time O(n), space O(width). Checking by index arithmetic against node count works too but requires computing indices during traversal.",
+  "answer": "**Approach**\n\nLevel-order traversal enqueuing nulls. Once a null is dequeued, every remaining node must also be null.\n\n**Logic**\n\nA complete tree fills every level except possibly the last, which fills left to right. That means in level order the real nodes form a contiguous prefix followed only by gaps.\n\nEnqueuing nulls turns that into a single check: after the first null appears, seeing any real node proves a gap was skipped.\n\nO(n) time, O(width) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static bool IsCompleteTree(TreeNode root)\n    {\n        if (root == null) return true;\n\n        var queue = new Queue<TreeNode>();\n        queue.Enqueue(root);\n\n        bool seenGap = false;\n\n        while (queue.Count > 0)\n        {\n            var node = queue.Dequeue();\n\n            if (node == null) { seenGap = true; continue; }\n\n            // A real node after a gap means the level was not filled left to right.\n            if (seenGap) return false;\n\n            queue.Enqueue(node.left);    // nulls are enqueued deliberately\n            queue.Enqueue(node.right);\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        var complete = new TreeNode(1)\n        {\n            left = new TreeNode(2) { left = new TreeNode(4), right = new TreeNode(5) },\n            right = new TreeNode(3) { left = new TreeNode(6) }\n        };\n        Console.WriteLine(IsCompleteTree(complete));\n\n        var gap = new TreeNode(1)\n        {\n            left = new TreeNode(2) { left = new TreeNode(4) },\n            right = new TreeNode(3) { right = new TreeNode(7) }   // hole before the 7\n        };\n        Console.WriteLine(IsCompleteTree(gap));\n\n        Console.WriteLine(IsCompleteTree(new TreeNode(1)));\n        Console.WriteLine(IsCompleteTree(null));\n\n        // Right child without a left child: incomplete even at one node.\n        Console.WriteLine(IsCompleteTree(new TreeNode(1) { right = new TreeNode(2) }));\n        Console.WriteLine(IsCompleteTree(new TreeNode(1) { left = new TreeNode(2) }));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n```",
   "tags": [
    "trees",
    "bfs",
-   "validation",
-   "traversal"
+   "completeness",
+   "null-sentinels",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why enqueue the nulls rather than skipping them?",
+    "a": "Because the nulls are the information - completeness is a statement about where the gaps are, and skipping them discards exactly what needs checking. With nulls in the queue, level order visits every position including the empty ones, so the property reduces to 'no real node after the first gap'. Skipping them would require tracking indices and comparing against the node count instead, which works but is more machinery for the same fact."
+   },
+   {
+    "q": "How does this differ from a perfect or a balanced tree?",
+    "a": "A perfect tree has every level completely full, so it is a strictly stronger condition than complete, which allows a partially filled last level. Balanced only constrains the height difference between subtrees, which neither implies nor is implied by completeness - a balanced tree can have gaps on the left of its last level. Being precise about the three is worth it, since interviewers often use the words loosely and the check differs for each."
+   },
+   {
+    "q": "Why does completeness matter in practice?",
+    "a": "Because it is what lets a binary heap live in a flat array with children at 2i+1 and 2i+2 and no pointers at all - the contiguity guarantees no wasted slots. That is the entire reason heaps are implemented as arrays and why heap operations have such good cache behaviour. So the property is not a puzzle condition; it is the invariant a heap maintains through sift-up and sift-down."
+   }
   ]
  },
  {
@@ -12494,16 +12509,31 @@
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Find the second minimum value in a special binary tree where each node is the minimum of its children.",
-  "answer": "The root is the global minimum, so search for the smallest value strictly greater than it, pruning any subtree whose root already exceeds the current candidate. Time O(n) worst case but usually far less due to pruning.",
+  "answer": "**Approach**\n\nThe root is the global minimum by the tree's own property, so the answer is the smallest value strictly greater than the root. A DFS can stop descending as soon as it finds one.\n\n**Logic**\n\nThe pruning is what makes this better than a full traversal: once a node's value exceeds the root, everything below it is at least as large by the minimum property, so there is nothing smaller to find down that branch.\n\nThe answer may not exist — a tree of all-equal values has no second minimum, which is reported as -1.\n\nO(n) worst case, much less with pruning.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static int FindSecondMinimum(TreeNode root)\n    {\n        if (root == null) return -1;\n\n        long best = long.MaxValue;\n        Walk(root, root.val, ref best);\n\n        return best == long.MaxValue ? -1 : (int)best;\n    }\n\n    private static void Walk(TreeNode node, int minimum, ref long best)\n    {\n        if (node == null) return;\n\n        if (node.val > minimum)\n        {\n            // Everything below is at least this large, so stop here.\n            if (node.val < best) best = node.val;\n            return;\n        }\n\n        Walk(node.left, minimum, ref best);\n        Walk(node.right, minimum, ref best);\n    }\n\n    public static void Main()\n    {\n        var a = new TreeNode(2)\n        {\n            left = new TreeNode(2),\n            right = new TreeNode(5) { left = new TreeNode(5), right = new TreeNode(7) }\n        };\n        Console.WriteLine(FindSecondMinimum(a));\n\n        var allEqual = new TreeNode(2) { left = new TreeNode(2), right = new TreeNode(2) };\n        Console.WriteLine(FindSecondMinimum(allEqual));       // no second value\n\n        Console.WriteLine(FindSecondMinimum(new TreeNode(1)));\n        Console.WriteLine(FindSecondMinimum(null));\n\n        var deep = new TreeNode(1)\n        {\n            left = new TreeNode(1) { left = new TreeNode(1), right = new TreeNode(3) },\n            right = new TreeNode(2)\n        };\n        Console.WriteLine(FindSecondMinimum(deep));           // 2, not 3\n\n        var big = new TreeNode(2) { left = new TreeNode(2), right = new TreeNode(2147483647) };\n        Console.WriteLine(FindSecondMinimum(big));\n    }\n}\n```\n\n**Output**\n\n```\n5\n-1\n-1\n-1\n2\n2147483647\n```",
   "tags": [
    "trees",
    "dfs",
    "pruning",
-   "search"
+   "special-property",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "LinkedIn"
+  ],
+  "followups": [
+   {
+    "q": "Why can the search stop as soon as a node exceeds the root?",
+    "a": "Because the tree's property says every node is the minimum of its children, so values never decrease as you descend - anything below a node is at least that node's value. Once a value above the root is found, the whole subtree beneath it is at least that large and cannot contain a smaller second minimum. The pruning is a consequence of the stated invariant, which is why the question gives it rather than describing an ordinary tree."
+   },
+   {
+    "q": "Why track the best in a long?",
+    "a": "Because the sentinel has to be larger than any possible node value, and int.MaxValue is itself a legitimate value - using it as 'not found' would report a real answer as absent. Widening to long gives a sentinel outside the value domain. The alternative is a separate bool flag, which is arguably clearer; either is fine as long as the sentinel is genuinely out of band, and the int.MaxValue test is there to prove it."
+   },
+   {
+    "q": "What if the tree property did not hold?",
+    "a": "Then the pruning is invalid and you would need a full traversal tracking the smallest and second-smallest distinct values seen - O(n) with no early exit. The interesting part of this question is entirely the invariant, so a solution that ignores it and scans everything is correct but misses the point. Recognising which stated property licenses which shortcut is the transferable skill."
+   }
   ]
  },
  {
@@ -12511,17 +12541,32 @@
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Given a binary tree, return all root-to-leaf paths as strings.",
-  "answer": "DFS accumulating the path, appending at each leaf, and backtracking by removing the current node after recursion. Passing an immutable string per call is simpler but allocates per node; a mutable list with explicit backtracking is the efficient form. Time O(n times path length).",
+  "answer": "**Approach**\n\nDFS building the path on a shared StringBuilder, truncating back to the previous length on the way out.\n\n**Logic**\n\nThe truncate-on-exit is what makes one buffer serve every branch: the builder always holds exactly the path from the root to the current node, and restoring its length undoes this node's contribution.\n\nBuilding a new string at each level instead is simpler to write and allocates once per node per level, which is O(n·height) characters copied.\n\nA leaf is both children null — a one-child node is not a leaf, otherwise partial paths get emitted.\n\nO(n·height) output size, which is unavoidable.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static IList<string> BinaryTreePaths(TreeNode root)\n    {\n        var paths = new List<string>();\n        if (root == null) return paths;\n\n        Walk(root, new StringBuilder(), paths);\n        return paths;\n    }\n\n    private static void Walk(TreeNode node, StringBuilder path, IList<string> paths)\n    {\n        int restoreTo = path.Length;   // remember, so the buffer can be reused\n\n        if (path.Length > 0) path.Append(\"->\");\n        path.Append(node.val);\n\n        if (node.left == null && node.right == null) paths.Add(path.ToString());\n        else\n        {\n            if (node.left != null) Walk(node.left, path, paths);\n            if (node.right != null) Walk(node.right, path, paths);\n        }\n\n        path.Length = restoreTo;   // undo this node before returning\n    }\n\n    private static void Show(IList<string> paths) =>\n        Console.WriteLine(paths.Count == 0 ? \"(none)\" : string.Join(\" | \", paths));\n\n    public static void Main()\n    {\n        var a = new TreeNode(1)\n        {\n            left = new TreeNode(2) { right = new TreeNode(5) },\n            right = new TreeNode(3)\n        };\n        Show(BinaryTreePaths(a));\n\n        Show(BinaryTreePaths(new TreeNode(1)));\n        Show(BinaryTreePaths(null));\n\n        var chain = new TreeNode(1) { left = new TreeNode(2) { left = new TreeNode(3) } };\n        Show(BinaryTreePaths(chain));       // one path, not three\n\n        var negatives = new TreeNode(-1) { left = new TreeNode(-2), right = new TreeNode(-3) };\n        Show(BinaryTreePaths(negatives));\n    }\n}\n```\n\n**Output**\n\n```\n1->2->5 | 1->3\n1\n(none)\n1->2->3\n-1->-2 | -1->-3\n```",
   "tags": [
    "trees",
    "dfs",
    "backtracking",
-   "paths"
+   "string-building",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why restore the builder's length instead of allocating per call?",
+    "a": "Because a shared buffer with an undo step allocates one string per completed path rather than one per node per level. Passing a freshly concatenated string down copies the whole prefix at every level, which is O(n times height) characters of copying even before the output is produced. The restore is the classic backtracking pattern - mutate, recurse, undo - and it applies to any accumulated path state, not just strings."
+   },
+   {
+    "q": "Why must a leaf have both children null?",
+    "a": "Because a node with one child sits in the middle of a longer path, and emitting there would produce a partial path that is not root-to-leaf. The chain test checks it: 1 to 2 to 3 must produce one path, not three. It is the same single-null trap as in the root-to-leaf sum problem, and it only shows up on trees that have a one-child node, which balanced test data often lacks."
+   },
+   {
+    "q": "Is the recursion a risk on a deep tree?",
+    "a": "Yes - a degenerate tree that is one long chain recurses as deep as the node count, and a few tens of thousands of frames will overflow the default stack. Converting to an explicit stack holding (node, restore length) pairs removes the limit at the cost of readability. For balanced trees the depth is logarithmic and it is a non-issue, so the fix is worth applying only when the input shape is unknown or adversarial."
+   }
   ]
  },
  {
@@ -12529,18 +12574,33 @@
   "subcategory": "Trees",
   "difficulty": "Hard",
   "question": "Serialise a binary tree so it can be reconstructed exactly.",
-  "answer": "Preorder traversal writing a sentinel for null children, which uniquely determines the structure and reconstructs with an index cursor. Level-order with sentinels works equally. Inorder alone is insufficient because different trees share an inorder sequence - a common trap in this question.",
+  "answer": "**Approach**\n\nPreorder with an explicit marker for null. The markers are what make the structure recoverable from a single traversal.\n\n**Logic**\n\nPreorder alone is ambiguous — many different trees share one preorder sequence — but recording the nulls removes the ambiguity, because the reader then knows exactly when a subtree ends.\n\nThat is also why in-order plus preorder is the usual pair when nulls are not recorded: two traversals carry the same information the markers do.\n\nBoth directions are O(n).\n\nThe test asserts a structural round-trip rather than comparing strings, since that is the property that matters.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Codec\n{\n    private const string Null = \"#\";\n\n    public string Serialise(TreeNode root)\n    {\n        var sb = new StringBuilder();\n        Write(root, sb);\n        return sb.ToString().TrimEnd(',');\n    }\n\n    private void Write(TreeNode node, StringBuilder sb)\n    {\n        // The null markers are what make a single traversal unambiguous.\n        if (node == null) { sb.Append(Null).Append(','); return; }\n\n        sb.Append(node.val).Append(',');\n        Write(node.left, sb);\n        Write(node.right, sb);\n    }\n\n    public TreeNode Deserialise(string data)\n    {\n        var tokens = data.Split(',');\n        int index = 0;\n        return Read(tokens, ref index);\n    }\n\n    private TreeNode Read(string[] tokens, ref int index)\n    {\n        string token = tokens[index++];\n        if (token == Null) return null;\n\n        var node = new TreeNode(int.Parse(token));\n        node.left = Read(tokens, ref index);\n        node.right = Read(tokens, ref index);\n        return node;\n    }\n}\n\npublic class Solution\n{\n    private static bool Same(TreeNode a, TreeNode b)\n    {\n        if (a == null || b == null) return a == null && b == null;\n        return a.val == b.val && Same(a.left, b.left) && Same(a.right, b.right);\n    }\n\n    public static void Main()\n    {\n        var codec = new Codec();\n\n        var tree = new TreeNode(1)\n        {\n            left = new TreeNode(2),\n            right = new TreeNode(3) { left = new TreeNode(4), right = new TreeNode(5) }\n        };\n\n        Console.WriteLine(codec.Serialise(tree));\n        Console.WriteLine(Same(tree, codec.Deserialise(codec.Serialise(tree))));\n\n        // Two trees with the SAME preorder values but different shapes.\n        var leftChain = new TreeNode(1) { left = new TreeNode(2) };\n        var rightChain = new TreeNode(1) { right = new TreeNode(2) };\n\n        Console.WriteLine(codec.Serialise(leftChain));\n        Console.WriteLine(codec.Serialise(rightChain));\n        Console.WriteLine(codec.Serialise(leftChain) != codec.Serialise(rightChain));\n\n        Console.WriteLine(codec.Serialise(null));\n        Console.WriteLine(codec.Deserialise(codec.Serialise(null)) == null);\n\n        var negatives = new TreeNode(-7) { left = new TreeNode(-100) };\n        Console.WriteLine(Same(negatives, codec.Deserialise(codec.Serialise(negatives))));\n    }\n}\n```\n\n**Output**\n\n```\n1,2,#,#,3,4,#,#,5,#,#\nTrue\n1,2,#,#,#\n1,#,2,#,#\nTrue\n#\nTrue\nTrue\n```",
   "tags": [
    "trees",
    "serialisation",
-   "traversal",
-   "design"
+   "preorder",
+   "round-trip",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook",
    "LinkedIn"
+  ],
+  "followups": [
+   {
+    "q": "Why are the null markers necessary?",
+    "a": "Because preorder alone does not determine the tree - 1 then 2 could be 2 as a left child or as a right child, and without markers both serialise identically. The markers record where each subtree ends, which is exactly the missing structural information. The alternative is to store two traversals, typically preorder and in-order, which together pin the shape down; the markers are the cheaper single-pass equivalent."
+   },
+   {
+    "q": "Why does the test compare structure rather than the serialised strings?",
+    "a": "Because equal strings only prove the encoder is deterministic, not that the decoder rebuilds the right tree - a matched pair of bugs would agree with itself. Walking both trees and comparing values and shape tests the actual round-trip property. The deliberate left-chain versus right-chain comparison is the complement: it proves the encoding distinguishes trees that a marker-less preorder would conflate."
+   },
+   {
+    "q": "What would you change for a production format?",
+    "a": "The delimiter and marker are unescaped, so a value containing a comma or the literal hash would corrupt the stream - fine for ints, unsafe the moment values become strings. A length-prefixed or properly escaped encoding fixes it. I would also consider a level-order format, which is more human-readable and matches how these trees are usually written in problem statements, at the cost of a slightly more involved reader."
+   }
   ]
  },
  {
@@ -12548,16 +12608,31 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Find the maximum difference between a node and any of its ancestors.",
-  "answer": "DFS carrying the minimum and maximum seen on the path, updating the answer at each node with the larger of the differences against both. Time O(n), space O(h). Computing ancestors per node separately would be quadratic.",
+  "answer": "**Approach**\n\nCarry the minimum and maximum seen along the path from the root. At each node the best candidate is its distance from whichever of those two is further.\n\n**Logic**\n\nOnly the extremes along the path matter — an intermediate ancestor can never give a larger difference than the smallest or largest one, so two numbers summarise the whole path.\n\nUpdating the running extremes before recursing means each child sees the path including its parent.\n\nAn empty tree or a single node has no ancestor pair, so the answer is zero.\n\nO(n) time, O(height) stack.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static int MaxAncestorDiff(TreeNode root)\n    {\n        if (root == null) return 0;\n        return Walk(root, root.val, root.val);\n    }\n\n    // Only the path's extremes matter; intermediate ancestors never win.\n    private static int Walk(TreeNode node, int lowest, int highest)\n    {\n        if (node == null) return highest - lowest;\n\n        lowest = Math.Min(lowest, node.val);\n        highest = Math.Max(highest, node.val);\n\n        return Math.Max(Walk(node.left, lowest, highest),\n                        Walk(node.right, lowest, highest));\n    }\n\n    public static void Main()\n    {\n        var a = new TreeNode(8)\n        {\n            left = new TreeNode(3)\n            {\n                left = new TreeNode(1),\n                right = new TreeNode(6) { left = new TreeNode(4), right = new TreeNode(7) }\n            },\n            right = new TreeNode(10) { right = new TreeNode(14) { left = new TreeNode(13) } }\n        };\n        Console.WriteLine(MaxAncestorDiff(a));\n\n        var b = new TreeNode(1) { right = new TreeNode(2) { right = new TreeNode(0)\n                                  { left = new TreeNode(3) } } };\n        Console.WriteLine(MaxAncestorDiff(b));\n\n        Console.WriteLine(MaxAncestorDiff(new TreeNode(5)));       // no ancestor pair\n        Console.WriteLine(MaxAncestorDiff(null));\n\n        var negatives = new TreeNode(-10) { left = new TreeNode(5) };\n        Console.WriteLine(MaxAncestorDiff(negatives));\n\n        var chain = new TreeNode(1) { left = new TreeNode(100) { left = new TreeNode(2) } };\n        Console.WriteLine(MaxAncestorDiff(chain));\n    }\n}\n```\n\n**Output**\n\n```\n7\n3\n0\n0\n15\n99\n```",
   "tags": [
    "trees",
    "dfs",
-   "recursion",
-   "paths"
+   "path-state",
+   "extremes",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why do only the path's extremes matter?",
+    "a": "Because the difference with any intermediate ancestor is bounded by the difference with the smallest or the largest one - if a node is below some ancestor, the largest ancestor gives at least as big a gap, and symmetrically for the smallest. So two running values summarise an arbitrarily long path. That collapse from 'all ancestors' to 'two numbers' is what makes the traversal linear rather than quadratic."
+   },
+   {
+    "q": "Why is the answer computed at the null children?",
+    "a": "Because by then the path is complete and the extremes reflect every node on it, so the difference is final for that root-to-leaf path. Computing at each node instead would also work if you took a running maximum, and both are correct - the null-return version just avoids threading an extra accumulator. What it must not do is compute before updating the extremes, which would omit the current node from its own path."
+   },
+   {
+    "q": "Why is a single node zero rather than undefined?",
+    "a": "Because there is no ancestor-descendant pair at all, and the problem defines that as zero rather than an error. The code produces it naturally: the root seeds both extremes with its own value, so the difference is zero before anything else happens. Seeding with sentinel extremes instead would produce a huge spurious difference, which is the mistake this test is there to catch."
+   }
   ]
  },
  {
@@ -12565,17 +12640,32 @@
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Given a BST and a target, find two nodes summing to the target.",
-  "answer": "In-order traversal gives a sorted sequence, so two pointers from both ends work - either materialising it or using two iterators walking forward and backward. Time O(n), space O(h) with iterators rather than O(n) with an array.",
+  "answer": "**Approach**\n\nIn-order traversal gives a sorted sequence, so the classic two-pointer scan applies. Shown here with two iterative iterators so no full copy of the tree is needed.\n\n**Logic**\n\nUsing a hash set during any traversal is simpler and also O(n), but it ignores the BST property entirely. The two-pointer version uses O(height) memory rather than O(n), which is the point of the question.\n\nThe forward iterator descends left; the backward one descends right. Together they walk in from both ends exactly as array indices would.\n\nThe two pointers must not meet on the same node, or a value would pair with itself.\n\nO(n) time, O(height) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    // O(height) memory rather than O(n): descends one side at a time.\n    private class Walker\n    {\n        private readonly Stack<TreeNode> _stack = new();\n        private readonly bool _forward;\n\n        public Walker(TreeNode root, bool forward) { _forward = forward; Push(root); }\n\n        private void Push(TreeNode node)\n        {\n            while (node != null) { _stack.Push(node); node = _forward ? node.left : node.right; }\n        }\n\n        public bool HasNext => _stack.Count > 0;\n\n        public TreeNode Next()\n        {\n            var node = _stack.Pop();\n            Push(_forward ? node.right : node.left);\n            return node;\n        }\n    }\n\n    public static bool FindTarget(TreeNode root, int target)\n    {\n        if (root == null) return false;\n\n        var ascending = new Walker(root, true);\n        var descending = new Walker(root, false);\n\n        if (!ascending.HasNext || !descending.HasNext) return false;\n\n        var low = ascending.Next();\n        var high = descending.Next();\n\n        // Must not meet: a node cannot pair with itself.\n        while (low != high)\n        {\n            long sum = (long)low.val + high.val;\n\n            if (sum == target) return true;\n\n            if (sum < target) { if (!ascending.HasNext) break; low = ascending.Next(); }\n            else { if (!descending.HasNext) break; high = descending.Next(); }\n        }\n\n        return false;\n    }\n\n    private static TreeNode Bst() => new TreeNode(5)\n    {\n        left = new TreeNode(3) { left = new TreeNode(2), right = new TreeNode(4) },\n        right = new TreeNode(6) { right = new TreeNode(7) }\n    };\n\n    public static void Main()\n    {\n        Console.WriteLine(FindTarget(Bst(), 9));\n        Console.WriteLine(FindTarget(Bst(), 28));       // too large\n        Console.WriteLine(FindTarget(Bst(), 4));        // too small\n        Console.WriteLine(FindTarget(Bst(), 10));       // 3 + 7\n        Console.WriteLine(FindTarget(new TreeNode(2), 4));   // cannot use one node twice\n        Console.WriteLine(FindTarget(null, 0));\n        Console.WriteLine(FindTarget(Bst(), 13));       // 6 + 7\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nFalse\nTrue\nFalse\nFalse\nTrue\n```",
   "tags": [
-   "trees",
    "bst",
    "two-pointers",
-   "iterator"
+   "iterator",
+   "in-order",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why prefer this over a hash set during traversal?",
+    "a": "Because the hash set holds up to n values, while the two stacks hold only O(height) - logarithmic for a balanced tree. Both are O(n) time, so the difference is purely memory, and on a large tree it is substantial. The hash set version is also the honest answer when the tree is not a BST, since it needs no ordering. Choosing between them is a space-versus-simplicity call, not a correctness one."
+   },
+   {
+    "q": "Why must the two pointers not meet?",
+    "a": "Because meeting means both refer to the same node, and the problem requires two distinct nodes - otherwise a single node whose value is half the target would falsely qualify. The single-node test with target 4 checks exactly that. It is the same distinctness rule as in two-sum on an array, where the guard is usually about indices rather than references."
+   },
+   {
+    "q": "Why compute the sum in a long?",
+    "a": "Because two node values near int.MaxValue overflow when added, wrapping to a negative number that could then compare equal to a small target or push the search the wrong way. Widening the sum costs nothing and removes the case entirely. It is the same defensive habit as using lo + (hi - lo) / 2 in binary search: the inputs are in range but an intermediate is not."
+   }
   ]
  },
  {
@@ -12583,17 +12673,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Given a grid of costs, find the minimum cost path from top-left to bottom-right with four-directional movement.",
-  "answer": "Dijkstra with a priority queue over cells, since movement in all directions means dynamic programming over rows is insufficient. With only right and down moves it reduces to simple dynamic programming. Time O(mn log mn) for the general case.",
+  "answer": "**Approach**\n\nDijkstra over the grid. Four-directional movement means paths can revisit rows and columns, so the simple right-and-down DP does not apply.\n\n**Logic**\n\nThis is the distinction worth drawing: with only right and down moves the subproblems are acyclic and an O(rows × cols) DP works. Allowing all four directions creates cycles in the state graph, and a DP has no valid evaluation order — a shortest-path search is required.\n\nCosts are non-negative, so Dijkstra is valid and A* with a Manhattan heuristic would be the next refinement.\n\nO(cells log cells).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private static readonly int[] RowStep = { -1, 1, 0, 0 };\n    private static readonly int[] ColStep = { 0, 0, -1, 1 };\n\n    public static int MinimumCostPath(int[][] grid)\n    {\n        if (grid == null || grid.Length == 0) return 0;\n\n        int rows = grid.Length, cols = grid[0].Length;\n\n        var best = new int[rows, cols];\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++) best[r, c] = int.MaxValue;\n\n        best[0, 0] = grid[0][0];\n\n        var heap = new PriorityQueue<(int Row, int Col), int>();\n        heap.Enqueue((0, 0), best[0, 0]);\n\n        var settled = new bool[rows, cols];\n\n        while (heap.Count > 0)\n        {\n            var (row, col) = heap.Dequeue();\n\n            if (settled[row, col]) continue;\n            settled[row, col] = true;\n\n            if (row == rows - 1 && col == cols - 1) return best[row, col];\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = row + RowStep[d], nc = col + ColStep[d];\n\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n\n                int total = best[row, col] + grid[nr][nc];\n\n                if (total < best[nr, nc]) { best[nr, nc] = total; heap.Enqueue((nr, nc), total); }\n            }\n        }\n\n        return best[rows - 1, cols - 1];\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(MinimumCostPath(Grid(\n            new[] { 1, 3, 1 }, new[] { 1, 5, 1 }, new[] { 4, 2, 1 })));\n\n        Console.WriteLine(MinimumCostPath(Grid(new[] { 1, 2, 3 }, new[] { 4, 5, 6 })));\n        Console.WriteLine(MinimumCostPath(Grid(new[] { 5 })));\n        Console.WriteLine(MinimumCostPath(Grid(new[] { 1, 100 }, new[] { 1, 1 })));\n\n        // Going UP is cheaper than the direct route: a right-and-down DP would miss it.\n        Console.WriteLine(MinimumCostPath(Grid(\n            new[] { 1, 1, 1, 1 },\n            new[] { 9, 9, 9, 1 },\n            new[] { 1, 1, 1, 1 })));\n    }\n}\n```\n\n**Output**\n\n```\n7\n12\n5\n3\n6\n```",
   "tags": [
    "graphs",
    "dijkstra",
-   "matrix",
-   "shortest-path"
+   "grid",
+   "shortest-path",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Goldman Sachs"
+  ],
+  "followups": [
+   {
+    "q": "Why does the right-and-down DP not work here?",
+    "a": "Because four-directional movement lets a path move up or left, so a cell's best cost can depend on a cell that itself depends on the first - the dependency graph has cycles and there is no topological order to evaluate in. With only right and down, dependencies always point one way and a single pass suffices. Dijkstra resolves the cyclic case by settling cells in increasing cost order, which is a valid order even when the grid is not acyclic."
+   },
+   {
+    "q": "Why is the start cell's own cost included?",
+    "a": "Because the usual formulation charges for entering every cell on the path including the first. If the problem instead charged only for cells entered after the start, the seed would be zero. Neither is more correct - it is a convention, and the single-cell test returning 5 rather than 0 is what pins down which one this code implements. Stating it avoids an off-by-one argument about an otherwise correct solution."
+   },
+   {
+    "q": "Would A* help?",
+    "a": "Yes, if the destination is fixed: the Manhattan distance times the minimum cell cost is an admissible heuristic, so A* expands far fewer cells than Dijkstra while returning the same answer. It matters on large grids where Dijkstra fans out in all directions. Dijkstra is A* with a zero heuristic, so the change is small - and when the goal is not a single known cell, the heuristic has nothing to aim at and Dijkstra is what you want."
+   }
   ]
  },
  {
@@ -12601,17 +12706,32 @@
   "subcategory": "Graphs",
   "difficulty": "Easy",
   "question": "Find whether a path exists between two nodes in an undirected graph.",
-  "answer": "BFS or DFS from the source marking visited nodes until the target is reached or the frontier empties. Union-Find is better when many connectivity queries follow, because after building the structure each query is near constant time rather than a fresh traversal.",
+  "answer": "**Approach**\n\nAny traversal answers it — BFS is shown. Union-find is the better choice when many such queries are asked on one static graph.\n\n**Logic**\n\nThe marking must happen at enqueue time, not at dequeue time. Marking on dequeue lets the same node be enqueued several times before it is first processed, which wastes memory and can blow up on a dense graph.\n\nThe source-equals-destination case must be handled: a node trivially reaches itself.\n\nO(V + E) per query for the traversal; union-find answers each subsequent query in near-constant time after an O(E α) build.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool PathExists(int n, int[][] edges, int source, int destination)\n    {\n        if (source == destination) return true;   // trivially reaches itself\n\n        var graph = new List<int>[n];\n        for (int i = 0; i < n; i++) graph[i] = new List<int>();\n\n        foreach (var e in edges) { graph[e[0]].Add(e[1]); graph[e[1]].Add(e[0]); }\n\n        var visited = new bool[n];\n        var queue = new Queue<int>();\n\n        queue.Enqueue(source);\n        visited[source] = true;   // mark on ENQUEUE, not on dequeue\n\n        while (queue.Count > 0)\n        {\n            int node = queue.Dequeue();\n\n            foreach (int next in graph[node])\n            {\n                if (visited[next]) continue;\n                if (next == destination) return true;\n\n                visited[next] = true;\n                queue.Enqueue(next);\n            }\n        }\n\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(PathExists(3, new[] { new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 } }, 0, 2));\n\n        Console.WriteLine(PathExists(6, new[] {\n            new[] { 0, 1 }, new[] { 0, 2 }, new[] { 3, 5 }, new[] { 5, 4 }, new[] { 4, 3 } }, 0, 5));\n\n        Console.WriteLine(PathExists(1, Array.Empty<int[]>(), 0, 0));     // same node\n        Console.WriteLine(PathExists(2, Array.Empty<int[]>(), 0, 1));     // no edges\n        Console.WriteLine(PathExists(4, new[] { new[] { 0, 1 }, new[] { 2, 3 } }, 1, 0));\n        Console.WriteLine(PathExists(4, new[] { new[] { 0, 1 }, new[] { 2, 3 } }, 1, 3));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\n```",
   "tags": [
    "graphs",
    "bfs",
-   "union-find",
-   "connectivity"
+   "reachability",
+   "union-find-alternative",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why mark visited on enqueue rather than on dequeue?",
+    "a": "Because between enqueuing a node and processing it, other nodes may also try to enqueue it - marking only on dequeue lets duplicates pile up, so on a dense graph the queue can grow to O(E) rather than O(V). The result is still correct but the memory is not. Marking at enqueue time guarantees each node enters the queue exactly once, which is the invariant that makes BFS's space bound meaningful."
+   },
+   {
+    "q": "When would union-find be the better choice?",
+    "a": "When many reachability queries are asked against one static graph: a single O(E alpha) build then answers each query by comparing two roots in near-constant time, whereas a traversal costs O(V + E) every time. It also handles edges arriving incrementally. Traversal wins when you need the path itself or any other information about the route, since union-find only ever answers yes or no."
+   },
+   {
+    "q": "Would DFS be different here?",
+    "a": "Not for correctness - both find a path if one exists. BFS finds the shortest one in edges, which matters if the follow-up asks for the route length, and its memory is proportional to the frontier width. Recursive DFS uses stack depth proportional to the longest path, which overflows on a long chain. For a bare existence check either is fine; naming why you would switch is the useful part."
+   }
   ]
  },
  {
@@ -12619,17 +12739,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Count the number of distinct islands considering shapes as identical under translation.",
-  "answer": "DFS each island recording the relative offsets of its cells from the starting cell, normalise into a canonical form, and store in a set. The set size is the answer. Time O(mn), and the canonical shape encoding is the part that must be done carefully.",
+  "answer": "**Approach**\n\nFlood-fill each island recording the moves taken, then hash the move sequence. Two islands with the same sequence are the same shape.\n\n**Logic**\n\nRecording relative coordinates against the starting cell also works, but the move-path encoding is more compact and naturally translation-invariant.\n\nThe backtrack marker is essential. Without it, two genuinely different shapes can produce the same move string — a branch that goes down-then-returns is indistinguishable from one that only goes down, so the 'b' records the return.\n\nO(cells).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    public static int CountDistinctIslands(int[][] grid)\n    {\n        if (grid == null || grid.Length == 0) return 0;\n\n        int rows = grid.Length, cols = grid[0].Length;\n        var shapes = new HashSet<string>();\n\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n            {\n                if (grid[r][c] != 1) continue;\n\n                var path = new StringBuilder();\n                Explore(grid, r, c, 's', path);       // 's' for start\n                shapes.Add(path.ToString());\n            }\n\n        return shapes.Count;\n    }\n\n    private static void Explore(int[][] grid, int r, int c, char direction, StringBuilder path)\n    {\n        if (r < 0 || r >= grid.Length || c < 0 || c >= grid[0].Length || grid[r][c] != 1) return;\n\n        grid[r][c] = 0;\n        path.Append(direction);\n\n        Explore(grid, r - 1, c, 'u', path);\n        Explore(grid, r + 1, c, 'd', path);\n        Explore(grid, r, c - 1, 'l', path);\n        Explore(grid, r, c + 1, 'r', path);\n\n        path.Append('b');   // backtrack marker: without it, different shapes collide\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(CountDistinctIslands(Grid(\n            new[] { 1, 1, 0, 0, 0 },\n            new[] { 1, 1, 0, 0, 0 },\n            new[] { 0, 0, 0, 1, 1 },\n            new[] { 0, 0, 0, 1, 1 })));            // two identical 2x2 squares\n\n        Console.WriteLine(CountDistinctIslands(Grid(\n            new[] { 1, 1, 0, 1, 1 },\n            new[] { 1, 0, 0, 0, 0 },\n            new[] { 0, 0, 0, 1, 1 },\n            new[] { 1, 1, 0, 1, 0 })));\n\n        Console.WriteLine(CountDistinctIslands(Grid(new[] { 0, 0 }, new[] { 0, 0 })));\n        Console.WriteLine(CountDistinctIslands(Grid(new[] { 1 })));\n\n        // Same cell count, different shape: an L against a line.\n        Console.WriteLine(CountDistinctIslands(Grid(\n            new[] { 1, 1, 0, 1, 1, 1 },\n            new[] { 1, 0, 0, 0, 0, 0 })));\n    }\n}\n```\n\n**Output**\n\n```\n1\n2\n0\n1\n2\n```",
   "tags": [
-   "graphs",
+   "grid",
    "dfs",
-   "matrix",
-   "hashing"
+   "flood-fill",
+   "canonical-form",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is the backtrack marker necessary?",
+    "a": "Because without it, the move string cannot distinguish a branch that descends and returns from one that simply continues - a shape like a T and a shape like an L can produce identical sequences. Appending a marker when leaving a cell records the tree structure of the exploration, not just the moves made. It is the same reason a preorder tree serialisation needs null markers: the path down is not enough, you need to know where each branch ends."
+   },
+   {
+    "q": "Why is the encoding translation-invariant?",
+    "a": "Because it records only the moves relative to wherever the flood fill started, never absolute coordinates - shifting an island anywhere in the grid produces the same sequence. Recording relative offsets from the start cell is the other standard encoding and has the same property. What neither handles is rotation or reflection, which the follow-up 'distinct islands II' asks for and which needs a canonical form over all eight transformations."
+   },
+   {
+    "q": "The code mutates the input grid. Is that acceptable?",
+    "a": "It is the usual trade in flood fill: sinking each visited cell avoids a separate visited array, saving memory proportional to the grid. The cost is that the caller's grid comes back empty, which is surprising if it is reused. For an interview I would say so explicitly; in production I would either document it loudly or allocate the visited array, since a silently destructive function is a good source of bugs in someone else's code."
+   }
   ]
  },
  {
@@ -12637,17 +12772,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Given a list of dependencies, detect whether a cycle exists in a directed graph.",
-  "answer": "DFS with three colours - unvisited, in progress and done - where reaching an in-progress node indicates a back edge and therefore a cycle. Alternatively Kahn's topological sort, where leftover nodes indicate a cycle. Both O(V+E).",
+  "answer": "**Approach**\n\nDFS with three states per node: unvisited, on the current path, and fully explored. Reaching a node that is on the current path is a cycle.\n\n**Logic**\n\nThe three states are the point. Two states cannot distinguish a back edge, which closes a cycle, from a cross edge to a node already finished on another branch, which is harmless. The third state records 'currently on the stack'.\n\nThis is where directed and undirected cycle detection genuinely differ: undirected needs a parent check, directed needs the on-path state.\n\nO(V + E).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private const int Unvisited = 0, OnPath = 1, Done = 2;\n\n    public static bool HasCycle(int n, int[][] edges)\n    {\n        var graph = new List<int>[n];\n        for (int i = 0; i < n; i++) graph[i] = new List<int>();\n\n        foreach (var e in edges) graph[e[0]].Add(e[1]);\n\n        var state = new int[n];\n\n        for (int i = 0; i < n; i++)\n            if (state[i] == Unvisited && Visit(i, graph, state)) return true;\n\n        return false;\n    }\n\n    private static bool Visit(int node, List<int>[] graph, int[] state)\n    {\n        state[node] = OnPath;\n\n        foreach (int next in graph[node])\n        {\n            // On the current path: a back edge, so a cycle. Done: harmless cross edge.\n            if (state[next] == OnPath) return true;\n            if (state[next] == Unvisited && Visit(next, graph, state)) return true;\n        }\n\n        state[node] = Done;\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(HasCycle(3, new[] { new[] { 0, 1 }, new[] { 1, 2 } }));\n        Console.WriteLine(HasCycle(3, new[] { new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 } }));\n        Console.WriteLine(HasCycle(1, new[] { new[] { 0, 0 } }));    // self-loop\n\n        // A diamond: two paths reach node 3, but there is no cycle.\n        Console.WriteLine(HasCycle(4, new[] {\n            new[] { 0, 1 }, new[] { 0, 2 }, new[] { 1, 3 }, new[] { 2, 3 } }));\n\n        Console.WriteLine(HasCycle(3, Array.Empty<int[]>()));\n\n        // The cycle is in a component unreachable from node 0.\n        Console.WriteLine(HasCycle(5, new[] {\n            new[] { 0, 1 }, new[] { 2, 3 }, new[] { 3, 4 }, new[] { 4, 2 } }));\n    }\n}\n```\n\n**Output**\n\n```\nFalse\nTrue\nTrue\nFalse\nFalse\nTrue\n```",
   "tags": [
    "graphs",
    "dfs",
    "cycle-detection",
-   "topological-sort"
+   "three-colour",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why are two states not enough?",
+    "a": "Because a plain visited flag cannot tell a back edge from a cross edge. In the diamond, node 3 is reached twice by different paths and is already visited the second time, but that is no cycle - it is simply a shared descendant. Only an edge into a node still on the current recursion path closes a loop. The third state marks exactly that, and without it the diamond is falsely reported as cyclic."
+   },
+   {
+    "q": "How does this differ from undirected cycle detection?",
+    "a": "Undirected graphs store each edge twice, so every node sees its parent as visited and the check is to exclude the parent - a visited non-parent neighbour is a cycle. Directed graphs store each edge once and direction matters, so the parent is not special but the on-path state is. Applying the undirected rule to a directed graph reports false cycles on any diamond; applying the directed rule to an undirected one reports a cycle on every single edge."
+   },
+   {
+    "q": "Why start a DFS from every node?",
+    "a": "Because a directed graph need not be reachable from any single starting point, and the cycle may live entirely in a component nothing else points into. The last test has its cycle among nodes 2, 3 and 4 with no edge from node 0 - starting only at 0 would miss it. The state array makes the repeated starts cheap, since a finished node is skipped immediately, keeping the whole thing linear."
+   }
   ]
  },
  {
@@ -12655,16 +12805,31 @@
   "subcategory": "Graphs",
   "difficulty": "Easy",
   "question": "Find the centre node of a star graph.",
-  "answer": "The centre appears in every edge, so it is the common node between any two edges - checkable in constant time from the first two. Counting degrees works but is unnecessary work. It is a reminder to look for the structural shortcut before writing the general algorithm.",
+  "answer": "**Approach**\n\nCompare the first two edges. The centre appears in every edge, so it is the node they share.\n\n**Logic**\n\nCounting degrees works and is the obvious O(n) answer, but any two edges already determine the centre: in a star each edge has the centre at one end, so two distinct edges must share exactly that node.\n\nThat makes the whole problem O(1) — the input does not even need to be read past the second edge.\n\nThe reasoning relies on the input genuinely being a star; without that guarantee the shortcut is invalid and degree counting is required.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Two edges suffice: the centre is in every edge, so it is the shared node.\n    public static int FindCentre(int[][] edges)\n    {\n        int a = edges[0][0], b = edges[0][1];\n        return a == edges[1][0] || a == edges[1][1] ? a : b;\n    }\n\n    // The general version, valid even if the input is not guaranteed to be a star.\n    public static int FindCentreByDegree(int n, int[][] edges)\n    {\n        // A star has exactly n-1 edges; without this check a triangle passes.\n        if (edges.Length != n - 1) return -1;\n\n        var degree = new int[n + 1];\n\n        foreach (var e in edges) { degree[e[0]]++; degree[e[1]]++; }\n\n        for (int node = 1; node <= n; node++)\n            if (degree[node] == n - 1) return node;\n\n        return -1;\n    }\n\n    public static void Main()\n    {\n        var a = new[] { new[] { 1, 2 }, new[] { 2, 3 }, new[] { 4, 2 } };\n        Console.WriteLine($\"{FindCentre(a)} (degree {FindCentreByDegree(4, a)})\");\n\n        var b = new[] { new[] { 1, 2 }, new[] { 5, 1 }, new[] { 1, 3 }, new[] { 1, 4 } };\n        Console.WriteLine($\"{FindCentre(b)} (degree {FindCentreByDegree(5, b)})\");\n\n        var c = new[] { new[] { 3, 1 }, new[] { 3, 2 } };\n        Console.WriteLine($\"{FindCentre(c)} (degree {FindCentreByDegree(3, c)})\");\n\n        // Not a star: the shortcut is unsound, the degree version reports none.\n        var notStar = new[] { new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 1 } };\n        Console.WriteLine($\"degree says {FindCentreByDegree(3, notStar)}\");\n    }\n}\n```\n\n**Output**\n\n```\n2 (degree 2)\n1 (degree 1)\n3 (degree 3)\ndegree says -1\n```",
   "tags": [
    "graphs",
+   "degree",
    "observation",
-   "simple",
-   "degree"
+   "constant-time",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why do two edges suffice?",
+    "a": "Because in a star every edge has the centre at one of its ends, so two distinct edges both contain it - and since a star has no edge between two leaves, the only node they can share is the centre. That makes the answer readable from a constant amount of input. The argument depends entirely on the promise that the input is a star, which is why the general version exists alongside it."
+   },
+   {
+    "q": "What if the input is not actually a star?",
+    "a": "The two-edge shortcut becomes unsound - a triangle has two edges sharing a node that is no centre, and it returns that node confidently. Degree alone does not save you either: in a triangle every node has degree 2, which is n-1, so the degree test passes as well. A star is pinned down by having exactly n-1 edges AND a node of degree n-1, which is why the general version checks the edge count first. It is a good example of a validity check that looks sufficient and is not."
+   },
+   {
+    "q": "Is the constant-time version worth preferring?",
+    "a": "For this problem yes, since it is shorter and the precondition is given. More broadly, the interesting part is noticing that a stated structural guarantee can collapse an O(n) scan to O(1) - the same instinct that finds the single missing number by summation rather than sorting. But a shortcut that silently depends on an unchecked promise is a liability in production code, so the guarantee should be visible at the call site or asserted."
+   }
   ]
  },
  {
@@ -12672,17 +12837,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Find the minimum number of moves for a knight to reach a target square.",
-  "answer": "BFS over board positions with the eight knight moves, since every move has equal cost. Bidirectional BFS from both squares roughly halves the explored area. Time proportional to the reachable board area, and unbounded boards need a bound derived from symmetry.",
+  "answer": "**Approach**\n\nBFS over board squares. Every knight move costs one, so the first time the target is reached is the minimum.\n\n**Logic**\n\nBFS rather than DFS because the cost is uniform — DFS would find a path but not the shortest, and would wander an effectively unbounded board.\n\nOn an infinite board the symmetry reduction matters: reflecting the target into the first quadrant and bounding the search keeps the explored region finite. Here the board is bounded, which does the same job.\n\nO(cells) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private static readonly int[] RowStep = { -2, -2, -1, -1, 1, 1, 2, 2 };\n    private static readonly int[] ColStep = { -1, 1, -2, 2, -2, 2, -1, 1 };\n\n    public static int MinKnightMoves(int size, int startRow, int startCol,\n                                     int targetRow, int targetCol)\n    {\n        if (startRow == targetRow && startCol == targetCol) return 0;\n\n        var seen = new bool[size, size];\n        var queue = new Queue<(int Row, int Col)>();\n\n        queue.Enqueue((startRow, startCol));\n        seen[startRow, startCol] = true;\n\n        int moves = 0;\n\n        while (queue.Count > 0)\n        {\n            moves++;\n            int levelSize = queue.Count;\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                var (row, col) = queue.Dequeue();\n\n                for (int d = 0; d < 8; d++)\n                {\n                    int nr = row + RowStep[d], nc = col + ColStep[d];\n\n                    if (nr < 0 || nr >= size || nc < 0 || nc >= size) continue;\n                    if (seen[nr, nc]) continue;\n\n                    if (nr == targetRow && nc == targetCol) return moves;\n\n                    seen[nr, nc] = true;\n                    queue.Enqueue((nr, nc));\n                }\n            }\n        }\n\n        return -1;   // unreachable, which happens on boards smaller than 3x3\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinKnightMoves(8, 0, 0, 1, 2));\n        Console.WriteLine(MinKnightMoves(8, 0, 0, 0, 0));      // already there\n        Console.WriteLine(MinKnightMoves(8, 0, 0, 7, 7));\n        Console.WriteLine(MinKnightMoves(8, 0, 0, 1, 1));      // awkward: not two moves\n        Console.WriteLine(MinKnightMoves(3, 0, 0, 1, 1));      // centre of a 3x3: unreachable\n        Console.WriteLine(MinKnightMoves(2, 0, 0, 1, 1));      // too small to move at all\n        Console.WriteLine(MinKnightMoves(8, 3, 3, 4, 5));\n    }\n}\n```\n\n**Output**\n\n```\n1\n0\n6\n4\n-1\n-1\n1\n```",
   "tags": [
    "graphs",
    "bfs",
+   "chess",
    "shortest-path",
-   "state-space"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why BFS rather than DFS?",
+    "a": "Because every move costs the same, so the first time a square is reached is necessarily by a shortest path - that is BFS's defining property. DFS would find some path but not the shortest, and would explore very deep before backtracking. If the moves had differing costs, BFS would no longer be valid and Dijkstra would be needed; the uniform cost is what licenses the simpler algorithm."
+   },
+   {
+    "q": "Why is the centre of a 3x3 board unreachable?",
+    "a": "Because every knight move from the centre lands off the board, and symmetrically no legal move from any corner or edge square lands on it - the knight's L shape simply does not fit. So the BFS exhausts the reachable squares and returns -1. It is a good reminder that reachability is not guaranteed just because both squares exist, and that the 'no path' branch needs to be reachable in tests rather than dead code."
+   },
+   {
+    "q": "How would you handle an infinite board?",
+    "a": "Use the symmetry: reflect the target into the first quadrant by taking absolute values, since the knight's moves are symmetric in both axes, then bound the search to a small margin beyond the target - going far past it is never optimal. Without that, BFS on an unbounded plane expands forever when the target is unreachable or far away. There is also a closed-form formula for the infinite board, though deriving it under interview pressure is a poor use of time."
+   }
   ]
  },
  {
