@@ -10243,16 +10243,31 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Find the longest path of equal values in a binary tree.",
-  "answer": "DFS returning the longest downward path of the node's value from each child; a node extends a child's path only when the values match, and the answer at each node is the sum of its two qualifying child paths. Track the global maximum. Time O(n), space O(h).",
+  "answer": "**Approach**\n\nPost-order DFS. Each node returns the longest same-value *downward arm* through it, while a separate running maximum absorbs the best *through-path* formed by joining its two arms.\n\n**Logic**\n\nThe distinction between the return value and the recorded answer is the whole problem. A path may bend at its highest node, using both children, but a parent can only extend one arm — so the bent path is recorded and the straight arm is returned.\n\nAn arm counts only when the child's value matches the node's; otherwise it contributes zero regardless of how long it is below.\n\nThe answer is measured in edges, so a single node scores 0.\n\nO(n) time, O(height) stack.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static int LongestUnivaluePath(TreeNode root)\n    {\n        int best = 0;\n        Arm(root, ref best);\n        return best;\n    }\n\n    // Returns the longest same-value arm going DOWN from node.\n    private static int Arm(TreeNode node, ref int best)\n    {\n        if (node == null) return 0;\n\n        int leftArm = Arm(node.left, ref best);\n        int rightArm = Arm(node.right, ref best);\n\n        // An arm only counts if the child's value matches.\n        int left = node.left != null && node.left.val == node.val ? leftArm + 1 : 0;\n        int right = node.right != null && node.right.val == node.val ? rightArm + 1 : 0;\n\n        // A path may bend here, using both arms - record it but never return it.\n        best = Math.Max(best, left + right);\n\n        return Math.Max(left, right);\n    }\n\n    public static void Main()\n    {\n        var a = new TreeNode(5)\n        {\n            left = new TreeNode(4) { left = new TreeNode(1), right = new TreeNode(1) },\n            right = new TreeNode(5) { right = new TreeNode(5) }\n        };\n        Console.WriteLine(LongestUnivaluePath(a));\n\n        var b = new TreeNode(1)\n        {\n            left = new TreeNode(4) { left = new TreeNode(4), right = new TreeNode(4) },\n            right = new TreeNode(5) { right = new TreeNode(5) }\n        };\n        Console.WriteLine(LongestUnivaluePath(b));   // bends at the 4\n\n        Console.WriteLine(LongestUnivaluePath(new TreeNode(1)));\n        Console.WriteLine(LongestUnivaluePath(null));\n\n        var chain = new TreeNode(2) { left = new TreeNode(2) { left = new TreeNode(2) } };\n        Console.WriteLine(LongestUnivaluePath(chain));\n\n        var none = new TreeNode(1) { left = new TreeNode(2), right = new TreeNode(3) };\n        Console.WriteLine(LongestUnivaluePath(none));\n    }\n}\n```\n\n**Output**\n\n```\n2\n2\n0\n0\n2\n0\n```",
   "tags": [
    "trees",
    "dfs",
-   "recursion",
-   "paths"
+   "post-order",
+   "path",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the function return one arm but record the sum of both?",
+    "a": "Because a path that bends at a node enters from one child and leaves to the other, so it cannot continue upward through the parent - the node is already used twice. The parent can only extend a straight arm. So the bent length is a candidate answer recorded in the running maximum, while the return value is the longest single arm. That split is the same pattern as in the tree diameter and maximum path sum problems, and conflating the two is the standard bug."
+   },
+   {
+    "q": "Why check the child's value rather than trusting the recursive result?",
+    "a": "Because the child may sit atop a long same-value run of a DIFFERENT value, which is useless to this node. The recursion must still visit it, since that run may be the global answer, but its length cannot be inherited across a value change. Hence the arm is reset to zero when the values differ, regardless of what came back. Returning the child's length unconditionally would join unrelated runs and report paths that do not exist."
+   },
+   {
+    "q": "Why is the answer in edges rather than nodes?",
+    "a": "It is the problem's definition, and it makes the recurrence cleaner: adding one per matching child counts the edge just traversed, so an isolated node correctly scores zero. If the answer were wanted in nodes it would be the edge count plus one, with the empty tree as a special case since it has no nodes at all. Stating which convention is in use avoids an off-by-one that otherwise looks like a logic error."
+   }
   ]
  },
  {
@@ -10260,16 +10275,31 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Given a binary tree, find the smallest subtree containing all the deepest nodes.",
-  "answer": "DFS returning both the depth and the candidate subtree from each node. When the two children report equal depth, the current node is the answer for that subtree; otherwise propagate the deeper child's result. Time O(n), space O(h).",
+  "answer": "**Approach**\n\nOne post-order pass returning both the depth of a subtree and its answer node. When the two children have equal depth, the current node is the meeting point; otherwise the answer comes from the deeper side.\n\n**Logic**\n\nEqual depths mean the deepest nodes are spread across both subtrees, so no descendant can contain them all — the current node is the smallest subtree that does.\n\nUnequal depths mean every deepest node lives on one side, so the answer is whatever that side reported, unchanged.\n\nReturning both values together is what makes this a single pass. Computing depth separately and then searching would be O(n²) on a skewed tree.\n\nO(n) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static TreeNode SubtreeWithAllDeepest(TreeNode root) => Walk(root).Node;\n\n    private static (int Depth, TreeNode Node) Walk(TreeNode node)\n    {\n        if (node == null) return (0, null);\n\n        var left = Walk(node.left);\n        var right = Walk(node.right);\n\n        // Equal depths: the deepest nodes straddle both sides, so they meet HERE.\n        if (left.Depth == right.Depth) return (left.Depth + 1, node);\n\n        // Otherwise every deepest node is on one side; pass its answer straight up.\n        return left.Depth > right.Depth\n            ? (left.Depth + 1, left.Node)\n            : (right.Depth + 1, right.Node);\n    }\n\n    public static void Main()\n    {\n        var a = new TreeNode(3)\n        {\n            left = new TreeNode(5)\n            {\n                left = new TreeNode(6),\n                right = new TreeNode(2) { left = new TreeNode(7), right = new TreeNode(4) }\n            },\n            right = new TreeNode(1) { left = new TreeNode(0), right = new TreeNode(8) }\n        };\n        Console.WriteLine(SubtreeWithAllDeepest(a).val);   // the 2\n\n        Console.WriteLine(SubtreeWithAllDeepest(new TreeNode(1)).val);\n\n        var skew = new TreeNode(0) { left = new TreeNode(1) { right = new TreeNode(2) } };\n        Console.WriteLine(SubtreeWithAllDeepest(skew).val);\n\n        var balanced = new TreeNode(1) { left = new TreeNode(2), right = new TreeNode(3) };\n        Console.WriteLine(SubtreeWithAllDeepest(balanced).val);\n\n        Console.WriteLine(SubtreeWithAllDeepest(null) == null);\n    }\n}\n```\n\n**Output**\n\n```\n2\n1\n2\n1\nTrue\n```",
   "tags": [
    "trees",
-   "dfs",
-   "recursion",
-   "lca"
+   "post-order",
+   "tuple-return",
+   "lca",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does equal depth mean the current node is the answer?",
+    "a": "Because equal subtree depths put deepest nodes on both sides, and no node below can contain nodes from the sibling subtree - only their common ancestor can. The current node is the lowest such ancestor, hence the smallest qualifying subtree. It is exactly a lowest-common-ancestor argument, applied to the whole set of deepest nodes rather than to two named ones."
+   },
+   {
+    "q": "Why return a tuple instead of computing depth separately?",
+    "a": "Because a separate depth query per node makes the traversal O(n squared) on a skewed tree - each node recomputes the depth of its whole subtree. Bundling the depth with the answer means every node is visited once and both facts propagate upward together. Returning a composite from a recursion to avoid recomputation is the general technique, and it is what turns many tree problems from quadratic to linear."
+   },
+   {
+    "q": "What if you needed the deepest nodes themselves, not the subtree?",
+    "a": "Then a BFS collecting the last complete level is simpler and more direct - it hands you the list rather than an ancestor. This formulation is asked because the subtree answer forces the LCA reasoning, which the BFS does not exercise. Knowing both, and saying which you would pick for which question, is more useful than defending one as universally better."
+   }
   ]
  },
  {
@@ -10277,16 +10307,32 @@
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Find the closest value to a target in a binary search tree.",
-  "answer": "Walk down from the root updating the best candidate by absolute difference and branching left or right by comparison, since the BST property guarantees the closest lies on the path. Time O(h), space O(1) iteratively.",
+  "answer": "**Approach**\n\nDescend from the root, updating the best candidate at every node, and turn left or right by comparing the target with the node's value.\n\n**Logic**\n\nThe BST property means one side can always be discarded: if the target is below the node, nothing in the right subtree can be closer than the node itself.\n\nThe candidate must be updated at *every* node on the way down, not just at the leaf, because the closest value is often an interior node that the descent passes through.\n\nComparing in double avoids integer overflow when the target and values are at opposite extremes.\n\nO(height) time — O(log n) balanced, O(n) skewed.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static int ClosestValue(TreeNode root, double target)\n    {\n        int best = root.val;\n\n        for (var node = root; node != null; )\n        {\n            // Every node on the descent is a candidate, not just the last one.\n            if (Math.Abs(node.val - target) < Math.Abs(best - target)) best = node.val;\n\n            node = target < node.val ? node.left : node.right;\n        }\n\n        return best;\n    }\n\n    private static TreeNode Bst() => new TreeNode(4)\n    {\n        left = new TreeNode(2) { left = new TreeNode(1), right = new TreeNode(3) },\n        right = new TreeNode(5)\n    };\n\n    public static void Main()\n    {\n        Console.WriteLine(ClosestValue(Bst(), 3.714286));\n        Console.WriteLine(ClosestValue(Bst(), 0.5));         // below everything\n        Console.WriteLine(ClosestValue(Bst(), 100));         // above everything\n        Console.WriteLine(ClosestValue(Bst(), 3.0));         // exact hit\n        Console.WriteLine(ClosestValue(new TreeNode(7), 2.5));\n\n        // A tie: 2 and 3 are equidistant from 2.5, and the first seen wins.\n        Console.WriteLine(ClosestValue(Bst(), 2.5));\n    }\n}\n```\n\n**Output**\n\n```\n4\n1\n5\n3\n7\n2\n```",
   "tags": [
-   "trees",
    "bst",
-   "search"
+   "search",
+   "descent",
+   "floating-point",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why update the candidate at every node rather than only at the leaf?",
+    "a": "Because the descent may pass the closest value and end somewhere worse - the target often falls between an interior node and a subtree that does not contain anything nearer. The 3.714286 case ends the descent below the 4, yet 4 is the answer. Only tracking the final node gives the wrong result whenever the target sits between a node and its child, which is most of the time."
+   },
+   {
+    "q": "Why is discarding half the tree safe?",
+    "a": "Because of the BST ordering: if the target is less than the node's value, every value in the right subtree is greater than the node's and therefore strictly further from the target than the node itself. So that entire side cannot improve on the current candidate and can be skipped without checking. That is the argument that makes the descent O(height) rather than O(n), and it is what the question is really testing."
+   },
+   {
+    "q": "Why compare in double, and what about ties?",
+    "a": "Double because the target is fractional in the problem statement and because subtracting two extreme ints can overflow, which absolute value would not rescue. On an exact tie the strict less-than keeps the first candidate seen, which is the node higher up the descent - the problem usually leaves the tie unspecified, so stating the rule the code implements is better than assuming. If the smaller value were required on ties, the comparison would need an explicit equality branch."
+   }
   ]
  },
  {
@@ -10294,17 +10340,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Given preorder traversal of a BST, reconstruct the tree.",
-  "answer": "Recurse with an upper bound: consume the next value as the node if it is below the bound, build the left subtree with the node value as the bound, then the right with the inherited bound. One pass with an index cursor gives O(n) rather than the O(n^2) of searching for the split each time.",
+  "answer": "**Approach**\n\nOne pass with a value bound. Each recursive call consumes values while they stay under an upper limit, which is what separates a node's right subtree from its ancestors'.\n\n**Logic**\n\nPreorder gives the root first, so the next value is either the left child, if it is smaller, or belongs to some ancestor's right subtree. The bound tells the recursion when to stop and hand the value back up.\n\nThe naive alternative — find the first larger value by scanning, then split — is O(n²) on a skewed input because each split rescans the tail.\n\nO(n) time with the bound, since every value is consumed exactly once.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static TreeNode BstFromPreorder(int[] preorder)\n    {\n        int index = 0;\n        return Build(preorder, ref index, int.MaxValue);\n    }\n\n    private static TreeNode Build(int[] preorder, ref int index, int upperBound)\n    {\n        // Stop when the next value belongs to an ancestor's right subtree.\n        if (index == preorder.Length || preorder[index] > upperBound) return null;\n\n        var node = new TreeNode(preorder[index++]);\n\n        node.left = Build(preorder, ref index, node.val);\n        node.right = Build(preorder, ref index, upperBound);\n\n        return node;\n    }\n\n    private static string InOrder(TreeNode node)\n    {\n        var values = new List<int>();\n        void Walk(TreeNode n) { if (n == null) return; Walk(n.left); values.Add(n.val); Walk(n.right); }\n        Walk(node);\n        return string.Join(\",\", values);\n    }\n\n    private static string PreOrder(TreeNode node)\n    {\n        var values = new List<int>();\n        void Walk(TreeNode n) { if (n == null) return; values.Add(n.val); Walk(n.left); Walk(n.right); }\n        Walk(node);\n        return string.Join(\",\", values);\n    }\n\n    public static void Main()\n    {\n        var input = new[] { 8, 5, 1, 7, 10, 12 };\n        var tree = BstFromPreorder(input);\n\n        // The real invariants: preorder round-trips, and in-order is sorted.\n        Console.WriteLine(PreOrder(tree));\n        Console.WriteLine(InOrder(tree));\n\n        Console.WriteLine(PreOrder(BstFromPreorder(new[] { 1, 3 })));\n        Console.WriteLine(InOrder(BstFromPreorder(new[] { 3, 2, 1 })));      // left chain\n        Console.WriteLine(InOrder(BstFromPreorder(new[] { 1, 2, 3 })));      // right chain\n        Console.WriteLine(BstFromPreorder(Array.Empty<int>()) == null);\n    }\n}\n```\n\n**Output**\n\n```\n8,5,1,7,10,12\n1,5,7,8,10,12\n1,3\n1,2,3\n1,2,3\nTrue\n```",
   "tags": [
-   "trees",
    "bst",
-   "construction",
-   "recursion"
+   "preorder",
+   "reconstruction",
+   "bounds",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "What does the upper bound actually represent?",
+    "a": "It is the smallest value that must NOT be consumed by this subtree - the value of the nearest ancestor whose right subtree the remaining values belong to. When the next preorder value exceeds it, this subtree is finished and the value is handed back up the recursion to be placed correctly. That single number carries all the structural information the split would otherwise have to rediscover by scanning."
+   },
+   {
+    "q": "Why is the scanning approach O(n squared)?",
+    "a": "Because finding the first value greater than the root means scanning the remainder, and on a left-skewed input that scan reaches the end every time, giving the classic quadratic sum. The bound version consumes each value exactly once with no rescanning, so it is linear regardless of shape. The left-chain and right-chain tests are there because they are the shapes where the two approaches diverge most."
+   },
+   {
+    "q": "Why does the test check the traversals rather than the node structure?",
+    "a": "Because the pair of properties - preorder matches the input, and in-order is sorted - together characterise the correct BST uniquely, whereas hand-comparing node links tests an incidental encoding of the answer. Asserting the defining invariants means the test stays valid if the implementation changes, and it would catch a tree that happens to look right in one traversal but violates the ordering in the other."
+   }
   ]
  },
  {
@@ -10312,16 +10373,31 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Count the number of distinct binary search trees that can be built from values 1 to n and return them.",
-  "answer": "Recurse over the choice of root, generating all left subtrees from the smaller values and all right subtrees from the larger, and combining every pair. Memoise on the range to avoid rebuilding. The count alone follows the Catalan numbers; generating them is exponential in output size.",
+  "answer": "**Approach**\n\nRecursion with memoisation over value ranges. For each choice of root, combine every left-subtree shape with every right-subtree shape.\n\n**Logic**\n\nThe count alone is the Catalan number, but returning the trees themselves requires actually constructing the cross product of the two sides.\n\nMemoising on the range is what makes it tractable: the same range recurs many times across different parents, and its set of shapes is identical each time.\n\nThe subtle part is that memoised subtrees are *shared* between different parent trees. That is safe only because nothing mutates them afterwards.\n\nThe count is Catalan(n), which grows exponentially, so enumerating is only practical for small n.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static IList<TreeNode> GenerateTrees(int n)\n    {\n        if (n == 0) return new List<TreeNode>();\n        return Build(1, n, new Dictionary<(int, int), IList<TreeNode>>());\n    }\n\n    private static IList<TreeNode> Build(int lo, int hi,\n        Dictionary<(int, int), IList<TreeNode>> memo)\n    {\n        if (lo > hi) return new List<TreeNode> { null };   // one empty shape\n\n        if (memo.TryGetValue((lo, hi), out var cached)) return cached;\n\n        var shapes = new List<TreeNode>();\n\n        for (int root = lo; root <= hi; root++)\n        {\n            var lefts = Build(lo, root - 1, memo);\n            var rights = Build(root + 1, hi, memo);\n\n            // Cross product: every left shape pairs with every right shape.\n            foreach (var left in lefts)\n                foreach (var right in rights)\n                    shapes.Add(new TreeNode(root) { left = left, right = right });\n        }\n\n        memo[(lo, hi)] = shapes;\n        return shapes;\n    }\n\n    private static string PreOrder(TreeNode node)\n    {\n        if (node == null) return \"#\";\n        return node.val + \",\" + PreOrder(node.left) + \",\" + PreOrder(node.right);\n    }\n\n    public static void Main()\n    {\n        for (int n = 0; n <= 5; n++)\n            Console.WriteLine($\"n={n}: {GenerateTrees(n).Count} trees\");\n\n        // All shapes must be distinct, and each must be a valid BST.\n        var three = GenerateTrees(3);\n        var seen = new HashSet<string>();\n        foreach (var t in three) seen.Add(PreOrder(t));\n        Console.WriteLine($\"n=3 distinct shapes: {seen.Count}\");\n\n        foreach (var t in three) Console.WriteLine(PreOrder(t));\n    }\n}\n```\n\n**Output**\n\n```\nn=0: 0 trees\nn=1: 1 trees\nn=2: 2 trees\nn=3: 5 trees\nn=4: 14 trees\nn=5: 42 trees\nn=3 distinct shapes: 5\n1,#,2,#,3,#,#\n1,#,3,2,#,#,#\n2,1,#,#,3,#,#\n3,1,#,2,#,#,#\n3,2,1,#,#,#,#\n```",
   "tags": [
-   "trees",
    "bst",
    "recursion",
-   "backtracking"
+   "memoisation",
+   "catalan",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is it safe for different trees to share memoised subtrees?",
+    "a": "Because nothing ever mutates a constructed node - the subtrees are built once and only ever read. Sharing turns what would be an enormous amount of duplicate allocation into a compact DAG of nodes. It becomes unsafe the moment a caller modifies a returned tree, since the change would appear in every tree sharing that subtree. If mutation were expected, each shape would have to be deep-copied on the way out, which costs the memoisation's main benefit."
+   },
+   {
+    "q": "Why does the empty range return a list containing one null?",
+    "a": "Because an empty subtree is one valid shape, not zero shapes - a root with no left child still counts as a tree. Returning an empty list would make the cross product empty, so the whole branch would vanish and the count would collapse to zero. It is the multiplicative identity for this recursion, exactly like an empty product being one, and getting it wrong is the usual reason a first attempt returns nothing."
+   },
+   {
+    "q": "How do the counts relate to Catalan numbers?",
+    "a": "They are exactly the Catalan sequence - 1, 1, 2, 5, 14, 42 - because the recurrence sums over the root position the product of the two sides, which is Catalan's defining recurrence. So if only the count is wanted, a one-dimensional DP or the closed form gives it in linear time without building anything. Enumerating the trees is inherently exponential, which is why the question is only ever posed for small n."
+   }
   ]
  },
  {
@@ -10329,16 +10405,32 @@
   "subcategory": "Graphs",
   "difficulty": "Easy",
   "question": "Find the town judge: the person trusted by everyone else who trusts nobody.",
-  "answer": "Compute in-degree minus out-degree per person from the trust pairs; the judge has a value of n-1. One pass over the edges and one over the people gives O(V+E) time and O(V) space, with no graph structure needed.",
+  "answer": "**Approach**\n\nA single score per person: plus one for being trusted, minus one for trusting. The judge is the only person who can score n-1.\n\n**Logic**\n\nCombining in-degree and out-degree into one number works because the two conditions are mutually reinforcing. The judge is trusted by all n-1 others and trusts nobody, so scores exactly n-1. Anybody who trusts someone loses a point and can never reach n-1, even if trusted by everyone else.\n\nThe uniqueness is structural: only one person can have in-degree n-1 while everyone else's out-degree accounts for it.\n\nThe n equals 1 case is real — a lone person trusting nobody is trivially the judge.\n\nO(n + edges) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int FindJudge(int n, int[][] trust)\n    {\n        // +1 for being trusted, -1 for trusting. Only the judge can reach n-1.\n        var score = new int[n + 1];\n\n        foreach (var pair in trust)\n        {\n            score[pair[0]]--;\n            score[pair[1]]++;\n        }\n\n        for (int person = 1; person <= n; person++)\n            if (score[person] == n - 1) return person;\n\n        return -1;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindJudge(2, new[] { new[] { 1, 2 } }));\n        Console.WriteLine(FindJudge(3, new[] { new[] { 1, 3 }, new[] { 2, 3 } }));\n\n        // 3 trusts 1, so 3 is not a judge and nobody else qualifies.\n        Console.WriteLine(FindJudge(3, new[] { new[] { 1, 3 }, new[] { 2, 3 }, new[] { 3, 1 } }));\n\n        Console.WriteLine(FindJudge(1, Array.Empty<int[]>()));      // alone: trivially judge\n        Console.WriteLine(FindJudge(2, Array.Empty<int[]>()));      // nobody trusts anybody\n        Console.WriteLine(FindJudge(4, new[] { new[] { 1, 3 }, new[] { 1, 4 },\n                                               new[] { 2, 3 }, new[] { 2, 4 },\n                                               new[] { 4, 3 } }));\n    }\n}\n```\n\n**Output**\n\n```\n2\n3\n-1\n1\n-1\n3\n```",
   "tags": [
    "graphs",
-   "degree",
-   "counting"
+   "degree-counting",
+   "in-degree",
+   "linear",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why can one combined score replace separate in- and out-degree checks?",
+    "a": "Because the maximum achievable in-degree is n-1 and any out-edge subtracts from the total, so reaching n-1 requires in-degree exactly n-1 AND out-degree exactly zero - both conditions at once. No other combination can hit the value. It collapses two arrays and two checks into one, and the argument for why it is equivalent is the substance of the answer rather than the trick itself."
+   },
+   {
+    "q": "Why is n equal to 1 with no trust relationships a judge?",
+    "a": "Because the conditions are vacuous: there is nobody else to fail to trust the judge, and the judge trusts nobody. The score is 0, which equals n-1, so the general rule handles it without a special case. It is a good example of a boundary that falls out correctly from a well-chosen formulation, and a solution that explicitly required at least one trust edge would wrongly return -1."
+   },
+   {
+    "q": "Could there ever be two judges?",
+    "a": "No. If two people both had in-degree n-1, each would have to be trusted by the other, but a judge trusts nobody - a contradiction. So the answer is unique when it exists, which is why the loop can return on the first match rather than continuing to check for a second. Stating that uniqueness argument is worth doing, because it justifies the early return rather than leaving it as an assumption."
+   }
   ]
  },
  {
@@ -10346,17 +10438,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Determine whether a course schedule with prerequisites has a valid order, and return one.",
-  "answer": "Kahn's algorithm: compute in-degrees, enqueue zero-degree nodes, and repeatedly remove one appending it to the order while decrementing its neighbours. If the order is shorter than the node count there is a cycle. Time O(V+E), space O(V+E).",
+  "answer": "**Approach**\n\nKahn's algorithm. Repeatedly take a course with no outstanding prerequisites, emit it, and decrement its dependents' counts.\n\n**Logic**\n\nThe cycle detection falls out for free: if fewer than all courses are emitted, the remainder are all waiting on each other, which is exactly a cycle. No separate check is needed.\n\nThe queue must be seeded with every zero-in-degree course before the loop begins, since a valid schedule may have several independent starting points.\n\nO(V + E) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[] FindOrder(int numCourses, int[][] prerequisites)\n    {\n        var dependents = new List<int>[numCourses];\n        for (int i = 0; i < numCourses; i++) dependents[i] = new List<int>();\n\n        var waitingOn = new int[numCourses];\n\n        // pair = [course, prerequisite]\n        foreach (var pair in prerequisites)\n        {\n            dependents[pair[1]].Add(pair[0]);\n            waitingOn[pair[0]]++;\n        }\n\n        var ready = new Queue<int>();\n        for (int i = 0; i < numCourses; i++)\n            if (waitingOn[i] == 0) ready.Enqueue(i);\n\n        var order = new int[numCourses];\n        int placed = 0;\n\n        while (ready.Count > 0)\n        {\n            int course = ready.Dequeue();\n            order[placed++] = course;\n\n            foreach (int next in dependents[course])\n                if (--waitingOn[next] == 0) ready.Enqueue(next);\n        }\n\n        // Anything left is stuck waiting on itself: a cycle.\n        return placed == numCourses ? order : Array.Empty<int>();\n    }\n\n    private static void Show(int[] order) =>\n        Console.WriteLine(order.Length == 0 ? \"impossible\" : string.Join(\",\", order));\n\n    public static void Main()\n    {\n        Show(FindOrder(2, new[] { new[] { 1, 0 } }));\n        Show(FindOrder(4, new[] { new[] { 1, 0 }, new[] { 2, 0 },\n                                  new[] { 3, 1 }, new[] { 3, 2 } }));\n        Show(FindOrder(2, new[] { new[] { 1, 0 }, new[] { 0, 1 } }));   // cycle\n        Show(FindOrder(1, Array.Empty<int[]>()));\n        Show(FindOrder(3, Array.Empty<int[]>()));                        // all independent\n        Show(FindOrder(3, new[] { new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 } }));\n    }\n}\n```\n\n**Output**\n\n```\n0,1\n0,1,2,3\nimpossible\n0\n0,1,2\nimpossible\n```",
   "tags": [
    "graphs",
    "topological-sort",
    "kahn",
-   "cycle-detection"
+   "cycle-detection",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does an incomplete emission prove a cycle?",
+    "a": "Because the loop only stops when no course has a zero waiting count, and every remaining course therefore has at least one unsatisfied prerequisite among the remaining set. Following those edges backwards in a finite set must eventually repeat a course, which is a cycle. So the count check is a complete cycle test, not a heuristic - that is the property that makes Kahn's algorithm attractive over a DFS-based topological sort with separate colour marking."
+   },
+   {
+    "q": "Why seed the queue with all zero-in-degree courses rather than one?",
+    "a": "Because a schedule can have several independent starting points, and starting from only one would leave whole components unvisited, wrongly reporting a cycle. The three-independent-courses test checks it: with no prerequisites at all, every course is a valid start. Seeding all of them is also what allows the order to be produced level by level, which is how the parallel-course-scheduling variant counts semesters."
+   },
+   {
+    "q": "Is the returned order unique?",
+    "a": "No - any order respecting the dependencies is valid, and which one you get depends on the queue discipline. A FIFO queue gives one answer, a stack gives another, and a priority queue gives the lexicographically smallest, which some variants of this problem require. Saying that the answer is one of possibly many is important, because a test that compares against a single expected array is testing the queue's incidental behaviour rather than correctness."
+   }
   ]
  },
  {
@@ -10364,16 +10471,31 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Find strongly connected components in a directed graph.",
-  "answer": "Tarjan's algorithm with a single DFS tracking discovery indices, low-link values and a stack, emitting a component whenever a node's low-link equals its index. Kosaraju's two-pass approach using the transposed graph is easier to remember. Both are O(V+E).",
+  "answer": "**Approach**\n\nKosaraju's algorithm: a DFS recording finish order, then a DFS on the reversed graph taking vertices in reverse finish order. Each tree in the second pass is one component.\n\n**Logic**\n\nThe reason it works: reversing the graph preserves strongly connected components exactly — mutual reachability is symmetric — but destroys reachability between different components. So processing in reverse finish order means the second DFS starts in a component that cannot escape into any other.\n\nThe first DFS is written iteratively, because a recursive one overflows the stack on a long chain, which real graphs have.\n\nO(V + E), two passes.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static List<List<int>> StronglyConnected(int n, int[][] edges)\n    {\n        var graph = new List<int>[n];\n        var reversed = new List<int>[n];\n        for (int i = 0; i < n; i++) { graph[i] = new List<int>(); reversed[i] = new List<int>(); }\n\n        foreach (var e in edges) { graph[e[0]].Add(e[1]); reversed[e[1]].Add(e[0]); }\n\n        // Pass 1: finish order, iteratively so a long chain cannot blow the stack.\n        var visited = new bool[n];\n        var finishOrder = new List<int>();\n\n        for (int start = 0; start < n; start++)\n        {\n            if (visited[start]) continue;\n\n            var stack = new Stack<(int Node, int Next)>();\n            stack.Push((start, 0));\n            visited[start] = true;\n\n            while (stack.Count > 0)\n            {\n                var (node, next) = stack.Pop();\n\n                if (next < graph[node].Count)\n                {\n                    stack.Push((node, next + 1));\n\n                    int child = graph[node][next];\n                    if (!visited[child]) { visited[child] = true; stack.Push((child, 0)); }\n                }\n                else finishOrder.Add(node);   // all children done: this node is finished\n            }\n        }\n\n        // Pass 2: reverse finish order on the reversed graph.\n        var assigned = new bool[n];\n        var components = new List<List<int>>();\n\n        for (int i = finishOrder.Count - 1; i >= 0; i--)\n        {\n            int root = finishOrder[i];\n            if (assigned[root]) continue;\n\n            var component = new List<int>();\n            var stack = new Stack<int>();\n            stack.Push(root);\n            assigned[root] = true;\n\n            while (stack.Count > 0)\n            {\n                int node = stack.Pop();\n                component.Add(node);\n\n                foreach (int back in reversed[node])\n                    if (!assigned[back]) { assigned[back] = true; stack.Push(back); }\n            }\n\n            component.Sort();\n            components.Add(component);\n        }\n\n        components.Sort((a, b) => a[0].CompareTo(b[0]));   // stable output for testing\n        return components;\n    }\n\n    private static void Show(List<List<int>> components) =>\n        Console.WriteLine(string.Join(\" \", components.Select(c => \"{\" + string.Join(\",\", c) + \"}\")));\n\n    public static void Main()\n    {\n        Show(StronglyConnected(5, new[] {\n            new[] { 0, 2 }, new[] { 2, 1 }, new[] { 1, 0 }, new[] { 0, 3 }, new[] { 3, 4 } }));\n\n        Show(StronglyConnected(4, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 } }));        // a chain: all singletons\n\n        Show(StronglyConnected(3, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 } }));        // one big cycle\n\n        Show(StronglyConnected(3, Array.Empty<int[]>()));\n        Show(StronglyConnected(1, Array.Empty<int[]>()));\n    }\n}\n```\n\n**Output**\n\n```\n{0,1,2} {3} {4}\n{0} {1} {2} {3}\n{0,1,2}\n{0} {1} {2}\n{0}\n```",
   "tags": [
    "graphs",
-   "tarjan",
+   "kosaraju",
    "scc",
-   "dfs"
+   "iterative-dfs",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why does reversing the graph and using reverse finish order work?",
+    "a": "Because reversal leaves strongly connected components unchanged - mutual reachability is symmetric, so if u reaches v and v reaches u, the same holds with every edge flipped - but it reverses reachability BETWEEN components. Taking vertices in decreasing finish order starts in a component that is a sink in the reversed condensation, so the DFS cannot leak into another component and collects exactly one. The finish order is what identifies that sink without computing the condensation explicitly."
+   },
+   {
+    "q": "Why write the first DFS iteratively?",
+    "a": "Because the finish order requires post-order processing, and a recursive version on a graph that is one long chain recurses as deep as the vertex count - tens of thousands of frames is enough to overflow the default stack. The explicit stack stores a node with its next-child index, which is the standard way to express post-order iteratively: a node is finished only when its child index passes the end of its adjacency list. The second pass needs no post-order so it uses a plain stack."
+   },
+   {
+    "q": "How does Tarjan's algorithm compare?",
+    "a": "Tarjan finds the same components in a single DFS using low-link values, so it touches the graph once rather than twice and needs no reversed copy - a real memory saving on a large graph. Kosaraju is easier to explain and to get right under interview pressure, which is why it is usually the one to write. Naming Tarjan as the single-pass alternative, and the reversed-graph memory as the reason it matters, is the right level of detail."
+   }
   ]
  },
  {
@@ -10381,16 +10503,31 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Find the shortest path visiting all nodes in a small graph.",
-  "answer": "BFS over states of node plus a bitmask of visited nodes, since the same node can be revisited with different visit sets. The state space is n times two to the n, which is why this only works for small n - it is the travelling salesman structure.",
+  "answer": "**Approach**\n\nBFS over states of (current node, set of visited nodes as a bitmask). The graph is small, so the bitmask fits in an integer and the state space is n·2ⁿ.\n\n**Logic**\n\nThe state must include which nodes have been visited, not just where you are — revisiting a node is allowed and often necessary, so plain BFS over nodes would terminate far too early.\n\nEvery start node is seeded simultaneously, because the path may begin anywhere.\n\nBFS rather than Dijkstra because every edge costs one, so the first time a full mask is reached is the shortest.\n\nO(n² · 2ⁿ) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int ShortestPathLength(int[][] graph)\n    {\n        int n = graph.Length;\n        if (n <= 1) return 0;\n\n        int fullMask = (1 << n) - 1;\n\n        var queue = new Queue<(int Node, int Mask)>();\n        var seen = new bool[n, 1 << n];\n\n        // The path may start anywhere, so seed every node.\n        for (int i = 0; i < n; i++)\n        {\n            queue.Enqueue((i, 1 << i));\n            seen[i, 1 << i] = true;\n        }\n\n        int steps = 0;\n\n        while (queue.Count > 0)\n        {\n            int levelSize = queue.Count;\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                var (node, mask) = queue.Dequeue();\n\n                if (mask == fullMask) return steps;\n\n                foreach (int next in graph[node])\n                {\n                    int nextMask = mask | (1 << next);   // revisiting is allowed\n\n                    if (seen[next, nextMask]) continue;\n\n                    seen[next, nextMask] = true;\n                    queue.Enqueue((next, nextMask));\n                }\n            }\n\n            steps++;\n        }\n\n        return -1;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ShortestPathLength(new[] {\n            new[] { 1, 2, 3 }, new[] { 0 }, new[] { 0 }, new[] { 0 } }));   // a star\n\n        Console.WriteLine(ShortestPathLength(new[] {\n            new[] { 1 }, new[] { 0, 2, 4 }, new[] { 1, 3, 4 },\n            new[] { 2 }, new[] { 1, 2 } }));\n\n        Console.WriteLine(ShortestPathLength(new[] { Array.Empty<int>() }));   // single node\n        Console.WriteLine(ShortestPathLength(new[] { new[] { 1 }, new[] { 0 } }));\n        Console.WriteLine(ShortestPathLength(new[] {\n            new[] { 1, 2 }, new[] { 0, 2 }, new[] { 0, 1 } }));               // triangle\n    }\n}\n```\n\n**Output**\n\n```\n4\n4\n0\n1\n2\n```",
   "tags": [
    "graphs",
-   "bfs",
    "bitmask",
-   "state-space"
+   "bfs",
+   "state-space",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why must the visited set be part of the state?",
+    "a": "Because the walk may revisit nodes, so 'where I am' does not determine what remains to be done - the same node with different sets of nodes already covered are genuinely different situations with different distances to the goal. Marking only nodes as seen would cut off exactly the revisits the problem requires, and the star graph shows why: covering three leaves means passing through the centre repeatedly, which a node-only BFS forbids after the first visit."
+   },
+   {
+    "q": "Why seed every node rather than starting from node 0?",
+    "a": "Because the problem allows the walk to begin anywhere, and the best starting point depends on the shape - in the star graph, starting at the centre saves a step over starting at a leaf. Seeding all n starts at distance zero makes the BFS explore them in lockstep, so the first full mask reached is optimal over all starts. Running n separate searches would give the same answer at n times the cost."
+   },
+   {
+    "q": "Why is this exponential and can it be avoided?",
+    "a": "It cannot: the problem is essentially the travelling salesman path, which is NP-hard, and the bitmask BFS is the standard Held-Karp-style state space of n times 2 to the n. That is why the problem specifies a small n, around twelve - the constraint is the hint that an exponential state space is intended. For larger graphs you would drop to heuristics such as Christofides or simulated annealing and accept an approximation."
+   }
   ]
  },
  {
@@ -10398,17 +10535,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Given a list of flights, find the cheapest route with unlimited stops.",
-  "answer": "Dijkstra with a priority queue over cumulative cost, since all edge weights are non-negative. With a stop limit it becomes Bellman-Ford bounded by iterations instead, because Dijkstra's finality assumption no longer holds under the extra constraint.",
+  "answer": "**Approach**\n\nDijkstra with a priority queue. With no stop limit this is a plain shortest-path problem, so settling each city once is safe.\n\n**Logic**\n\nThe contrast with the bounded-stops version matters. With a stop limit, a city may need revisiting at a higher cost but fewer stops, so Dijkstra's settle-once rule breaks and Bellman-Ford over k rounds is used instead. Without the limit, that complication disappears.\n\nFares are non-negative, which is the precondition Dijkstra needs.\n\nO((V + E) log V).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int CheapestRoute(int n, int[][] flights, int source, int destination)\n    {\n        var graph = new List<(int To, int Fare)>[n];\n        for (int i = 0; i < n; i++) graph[i] = new List<(int, int)>();\n\n        foreach (var f in flights) graph[f[0]].Add((f[1], f[2]));\n\n        var cheapest = new int[n];\n        Array.Fill(cheapest, int.MaxValue);\n        cheapest[source] = 0;\n\n        var settled = new bool[n];\n        var heap = new PriorityQueue<int, int>();\n        heap.Enqueue(source, 0);\n\n        while (heap.Count > 0)\n        {\n            int city = heap.Dequeue();\n            if (settled[city]) continue;      // a stale entry from a worse path\n            settled[city] = true;\n\n            if (city == destination) return cheapest[city];\n\n            foreach (var (next, fare) in graph[city])\n            {\n                int total = cheapest[city] + fare;\n\n                if (total < cheapest[next])\n                {\n                    cheapest[next] = total;\n                    heap.Enqueue(next, total);\n                }\n            }\n        }\n\n        return -1;\n    }\n\n    public static void Main()\n    {\n        var flights = new[] {\n            new[] { 0, 1, 100 }, new[] { 1, 2, 100 },\n            new[] { 0, 2, 500 }, new[] { 2, 3, 100 } };\n\n        Console.WriteLine(CheapestRoute(4, flights, 0, 2));   // two hops beat the direct\n        Console.WriteLine(CheapestRoute(4, flights, 0, 3));\n        Console.WriteLine(CheapestRoute(4, flights, 0, 0));\n        Console.WriteLine(CheapestRoute(4, flights, 3, 0));   // no route back\n        Console.WriteLine(CheapestRoute(2, Array.Empty<int[]>(), 0, 1));\n        Console.WriteLine(CheapestRoute(3, new[] { new[] { 0, 1, 5 }, new[] { 1, 0, 5 } }, 0, 1));\n    }\n}\n```\n\n**Output**\n\n```\n200\n300\n0\n-1\n-1\n5\n```",
   "tags": [
    "graphs",
    "dijkstra",
    "shortest-path",
-   "heap"
+   "priority-queue",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why does a stop limit break Dijkstra?",
+    "a": "Because with a limit, a city can be worth revisiting on a more expensive path that uses fewer stops - the cheapest way to reach a city is no longer the most useful way. Dijkstra's correctness rests on a settled city never needing revision, which that destroys. The bounded version is solved with Bellman-Ford relaxed exactly k+1 rounds, using a snapshot of the previous round's costs so one round cannot chain two flights. Knowing why the two questions need different algorithms is the point of the pair."
+   },
+   {
+    "q": "Why skip already-settled cities rather than updating the heap?",
+    "a": "Because .NET's PriorityQueue has no decrease-key, so the idiom is to push an improved entry and ignore stale pops. The heap can grow to E entries instead of V, trading memory for simplicity, and each stale pop is O(log n) wasted. An indexed priority queue would avoid it but is a lot of machinery for a marginal gain - the lazy version is what I would write unless profiling said otherwise."
+   },
+   {
+    "q": "What if some fares were negative, say a subsidy?",
+    "a": "Dijkstra would be wrong, because settling a city assumes no later path can improve it and a negative edge can. Bellman-Ford handles negative edges in O(V times E) and additionally detects negative cycles, which in this setting would mean an infinitely profitable loop - the answer would be unbounded rather than merely wrong. Checking whether the weights can be negative before choosing the algorithm is the habit worth having."
+   }
   ]
  },
  {
@@ -10416,16 +10568,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Detect whether an undirected graph contains a cycle using DFS.",
-  "answer": "DFS tracking the parent of each node; a visited neighbour that is not the parent indicates a cycle. For a directed graph the equivalent uses a recursion stack rather than a parent, since a visited node that is not on the current path is not a cycle. Time O(V+E).",
+  "answer": "**Approach**\n\nDFS carrying the parent of each node. A visited neighbour that is not the parent closes a cycle.\n\n**Logic**\n\nThe parent check is essential and specific to undirected graphs: every edge appears in both adjacency lists, so a node always sees its parent as an already-visited neighbour. Without excluding it, every single edge looks like a cycle.\n\nEvery component must be tried, since a cycle may live in a component not reachable from node 0.\n\nThe iterative form carries the parent alongside each stacked node.\n\nO(V + E).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool HasCycle(int n, int[][] edges)\n    {\n        var graph = new List<int>[n];\n        for (int i = 0; i < n; i++) graph[i] = new List<int>();\n\n        foreach (var e in edges) { graph[e[0]].Add(e[1]); graph[e[1]].Add(e[0]); }\n\n        var visited = new bool[n];\n\n        for (int start = 0; start < n; start++)   // a cycle may be in any component\n        {\n            if (visited[start]) continue;\n\n            var stack = new Stack<(int Node, int Parent)>();\n            stack.Push((start, -1));\n            visited[start] = true;\n\n            while (stack.Count > 0)\n            {\n                var (node, parent) = stack.Pop();\n\n                foreach (int next in graph[node])\n                {\n                    // Every undirected edge is stored twice, so the parent is not a cycle.\n                    if (next == parent) continue;\n\n                    if (visited[next]) return true;\n\n                    visited[next] = true;\n                    stack.Push((next, node));\n                }\n            }\n        }\n\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(HasCycle(4, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 } }));            // a path\n\n        Console.WriteLine(HasCycle(4, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 0 } }));\n\n        Console.WriteLine(HasCycle(3, Array.Empty<int[]>()));\n        Console.WriteLine(HasCycle(2, new[] { new[] { 0, 1 } }));           // one edge\n\n        // The cycle is in the SECOND component, unreachable from node 0.\n        Console.WriteLine(HasCycle(5, new[] {\n            new[] { 0, 1 }, new[] { 2, 3 }, new[] { 3, 4 }, new[] { 4, 2 } }));\n    }\n}\n```\n\n**Output**\n\n```\nFalse\nTrue\nFalse\nFalse\nTrue\n```",
   "tags": [
    "graphs",
    "dfs",
-   "cycle-detection"
+   "cycle-detection",
+   "undirected",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why exclude the parent, and why is that wrong for directed graphs?",
+    "a": "Because an undirected edge appears in both endpoints' adjacency lists, so from any node its parent is always an already-visited neighbour - without the exclusion, the single edge 0-1 would report a cycle. In a directed graph edges are stored once and direction matters, so a back edge to the immediate predecessor IS a genuine two-node cycle. Directed detection instead tracks which nodes are on the current recursion path, typically with three colours, because a visited node off the current path is not a cycle."
+   },
+   {
+    "q": "What breaks if the graph has parallel edges or a self-loop?",
+    "a": "A self-loop is a cycle, and this code catches it - the node sees itself as a visited neighbour that is not its parent. Parallel edges between two nodes are also a cycle, but the parent check suppresses them, since the second copy looks identical to the first. If multi-edges are possible, the fix is to track the edge used to arrive rather than the parent node. That distinction is worth raising because the input format usually decides whether it can happen."
+   },
+   {
+    "q": "How would union-find compare here?",
+    "a": "It is arguably cleaner for this exact question: process each edge and if both endpoints already share a root, that edge closes a cycle. No traversal, no parent bookkeeping, and it works incrementally as edges arrive. DFS wins when you also need the cycle itself or other traversal information. For a yes-or-no answer on a static edge list, I would reach for union-find first and mention DFS as the alternative."
+   }
   ]
  },
  {
@@ -10433,17 +10601,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Find the minimum number of swaps to sort an array using cycle decomposition.",
-  "answer": "Pair each value with its target index, then traverse the permutation's cycles - a cycle of length k requires k-1 swaps. Sum over all cycles. Time O(n log n) for the sort to determine targets, space O(n).",
+  "answer": "**Approach**\n\nView the permutation as disjoint cycles. A cycle of length k needs exactly k-1 swaps, so the answer is n minus the number of cycles.\n\n**Logic**\n\nEach swap can place at most one element permanently, and within a cycle the last element falls into place for free once the others are fixed — hence k-1 rather than k.\n\nFinding the cycles requires knowing where each value belongs, which comes from sorting a copy and recording target positions. Duplicate values need a deterministic tie-break, otherwise the mapping is ambiguous; sorting index pairs handles it.\n\nO(n log n) for the sort, O(n) for the cycle walk.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int MinSwaps(int[] nums)\n    {\n        int n = nums.Length;\n\n        // Where each element must end up. Sorting index pairs makes duplicates deterministic.\n        var order = Enumerable.Range(0, n).ToArray();\n        Array.Sort(order, (a, b) =>\n            nums[a] != nums[b] ? nums[a].CompareTo(nums[b]) : a.CompareTo(b));\n\n        var visited = new bool[n];\n        int swaps = 0;\n\n        for (int i = 0; i < n; i++)\n        {\n            // Already placed, or a cycle of length 1 which needs no swap.\n            if (visited[i] || order[i] == i) continue;\n\n            int length = 0;\n\n            for (int j = i; !visited[j]; j = order[j]) { visited[j] = true; length++; }\n\n            swaps += length - 1;   // a k-cycle costs k-1 swaps\n        }\n\n        return swaps;\n    }\n\n    // Independent check: apply that many swaps greedily and confirm it sorts.\n    private static int GreedySwapCount(int[] input)\n    {\n        var a = (int[])input.Clone();\n        var target = (int[])input.Clone();\n        Array.Sort(target);\n\n        int count = 0;\n\n        for (int i = 0; i < a.Length; i++)\n            while (a[i] != target[i])\n            {\n                int j = Array.IndexOf(a, target[i], i);\n                (a[i], a[j]) = (a[j], a[i]);\n                count++;\n            }\n\n        return count;\n    }\n\n    public static void Main()\n    {\n        int[][] cases =\n        {\n            new[] { 4, 3, 2, 1 },\n            new[] { 1, 5, 4, 3, 2 },\n            new[] { 1, 2, 3 },\n            new[] { 2, 3, 4, 1, 5 },\n            new[] { 1 },\n            new[] { 2, 2, 1, 1 }\n        };\n\n        foreach (var c in cases)\n            Console.WriteLine($\"{string.Join(\",\", c)} -> {MinSwaps(c)} (greedy {GreedySwapCount(c)})\");\n    }\n}\n```\n\n**Output**\n\n```\n4,3,2,1 -> 2 (greedy 2)\n1,5,4,3,2 -> 2 (greedy 2)\n1,2,3 -> 0 (greedy 0)\n2,3,4,1,5 -> 3 (greedy 3)\n1 -> 0 (greedy 0)\n2,2,1,1 -> 2 (greedy 2)\n```",
   "tags": [
-   "graphs",
-   "cycles",
-   "permutation",
-   "sorting"
+   "permutations",
+   "cycle-decomposition",
+   "sorting",
+   "greedy-check",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does a cycle of length k need exactly k-1 swaps?",
+    "a": "Because each swap can fix at most one element permanently, so k elements need at least k-1 - the last one lands correctly for free once the others are placed, since there is nowhere else for it to go. And k-1 is achievable by repeatedly swapping the current element into its target. Both bounds together make it exact, not an estimate, which is why the total is simply n minus the number of cycles."
+   },
+   {
+    "q": "Why do duplicate values need a tie-break?",
+    "a": "Because with equal values there is more than one valid target position, and an arbitrary choice can split what should be one cycle into two or merge two into one, changing the count. Sorting by value and then by original index fixes a single canonical target assignment, which makes the decomposition well defined. The [2,2,1,1] case exercises it, and it is the input where a naive value-to-index map silently gives the wrong answer."
+   },
+   {
+    "q": "Why include a greedy cross-check in the tests?",
+    "a": "Because the cycle formula is a counting argument, and a test that only prints its result proves nothing about whether that count actually sorts the array. The greedy routine physically performs swaps until sorted and counts them, so agreement between the two is real evidence. It is quadratic and would never ship, but as an independent oracle in a test it catches exactly the kind of off-by-one that a self-consistent formula hides."
+   }
   ]
  },
  {
