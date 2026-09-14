@@ -11955,17 +11955,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Given an array of intervals, find the point covered by the most intervals.",
-  "answer": "Create start and end events, sort them, then sweep incrementing on a start and decrementing on an end, tracking the running maximum. Ties are broken by processing ends before starts at the same coordinate if intervals are half-open. Time O(n log n), space O(n).",
+  "answer": "**Approach**\n\nSweep line over events. Each interval contributes a +1 at its start and a -1 just past its end; sorting the events and running a counter gives the peak.\n\n**Logic**\n\nBecause the end event is already offset to end + 1, it marks the first coordinate NO LONGER covered - so at a shared coordinate the decrement must apply before the increment. Sorting increments first would double-count two intervals that merely abut.\n\nThe intervals are closed, so a point genuinely shared by two intervals is still covered by both: there the second interval starts at or before the first ends, so its increment lands before the offset decrement.\n\nO(n log n) for the sort, O(n) for the sweep.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static (int Point, int Count) BusiestPoint(int[][] intervals)\n    {\n        if (intervals == null || intervals.Length == 0) return (0, 0);\n\n        // +1 at a start, -1 just past an end (closed intervals).\n        var events = new List<(int At, int Delta)>();\n\n        foreach (var i in intervals)\n        {\n            events.Add((i[0], 1));\n            events.Add((i[1] + 1, -1));\n        }\n\n        // At a shared coordinate the decrement applies first (ends are already offset).\n        events.Sort((a, b) => a.At != b.At ? a.At.CompareTo(b.At) : a.Delta.CompareTo(b.Delta));\n\n        int running = 0, best = 0, bestPoint = intervals[0][0];\n\n        foreach (var (at, delta) in events)\n        {\n            running += delta;\n\n            if (running > best) { best = running; bestPoint = at; }\n        }\n\n        return (bestPoint, best);\n    }\n\n    private static void Show((int Point, int Count) r) =>\n        Console.WriteLine($\"point {r.Point} covered {r.Count} times\");\n\n    public static void Main()\n    {\n        Show(BusiestPoint(new[] { new[] { 1, 5 }, new[] { 2, 6 }, new[] { 3, 4 } }));\n        Show(BusiestPoint(new[] { new[] { 1, 2 }, new[] { 3, 4 }, new[] { 5, 6 } }));  // disjoint\n        Show(BusiestPoint(new[] { new[] { 1, 10 } }));\n        Show(BusiestPoint(new[] { new[] { 1, 3 }, new[] { 3, 5 } }));   // shared endpoint\n        Show(BusiestPoint(new[] { new[] { 2, 2 }, new[] { 2, 2 } }));   // single points\n        Show(BusiestPoint(Array.Empty<int[]>()));\n    }\n}\n```\n\n**Output**\n\n```\npoint 3 covered 3 times\npoint 1 covered 1 times\npoint 1 covered 1 times\npoint 3 covered 2 times\npoint 2 covered 2 times\npoint 0 covered 0 times\n```",
   "tags": [
-   "arrays",
-   "sweep-line",
    "intervals",
-   "sorting"
+   "sweep-line",
+   "sorting",
+   "events",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why does the end event go at end + 1?",
+    "a": "Because the intervals are closed, so the last covered point is the end itself and coverage only drops at the next coordinate. Placing the decrement at the end would remove the interval while it is still active and undercount by one wherever intervals share a boundary. If the intervals were half-open, the decrement would belong exactly at the end - so this single offset encodes which convention the problem uses."
+   },
+   {
+    "q": "Why must the decrement sort first at a shared coordinate?",
+    "a": "Because the end event was already moved to end + 1, so it marks the first coordinate the interval does not cover - applying it after an increment at that coordinate would keep counting an interval that has finished. With [1,2] and [3,4] the decrement sits at 3 and the next interval starts at 3, and the true coverage there is 1, not 2. The offset and the tie-break are a matched pair: change one and you must change the other, which is why writing them together is safer than reasoning about each alone."
+   },
+   {
+    "q": "What if the coordinates were huge or fractional?",
+    "a": "The sweep is unaffected, since it only ever compares and sorts coordinates rather than indexing by them - that is its advantage over a difference array, which would need a slot per coordinate and is only viable for a small dense range. For fractional coordinates you would switch the type and keep the same tie-break logic. Choosing between the sweep and a difference array on the basis of coordinate range rather than habit is the practical point."
+   }
   ]
  },
  {
@@ -11973,17 +11988,32 @@
   "subcategory": "Arrays",
   "difficulty": "Easy",
   "question": "Given a list of meeting intervals, determine whether a person can attend all of them.",
-  "answer": "Sort by start time and check that each interval's start is not before the previous end. Any overlap fails immediately. Time O(n log n), space O(1). The follow-up asking for the minimum rooms needs a heap of end times or a sweep instead.",
+  "answer": "**Approach**\n\nSort by start time and check each meeting against only its immediate predecessor.\n\n**Logic**\n\nAfter sorting, if any meeting overlaps an earlier one it must overlap the one directly before it — so a single adjacent comparison suffices and the quadratic all-pairs check is unnecessary.\n\nThe comparison is strict: a meeting starting exactly when the previous ends is fine, since the intervals are half-open in this problem. That is the opposite convention from the interval-coverage question, and the difference is in the problem statement, not the algorithm.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool CanAttendAll(int[][] meetings)\n    {\n        if (meetings == null || meetings.Length < 2) return true;\n\n        Array.Sort(meetings, (a, b) => a[0].CompareTo(b[0]));\n\n        for (int i = 1; i < meetings.Length; i++)\n            // Touching is fine; strictly overlapping is not.\n            if (meetings[i][0] < meetings[i - 1][1]) return false;\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CanAttendAll(new[] { new[] { 0, 30 }, new[] { 5, 10 }, new[] { 15, 20 } }));\n        Console.WriteLine(CanAttendAll(new[] { new[] { 7, 10 }, new[] { 2, 4 } }));\n        Console.WriteLine(CanAttendAll(new[] { new[] { 1, 5 }, new[] { 5, 10 } }));   // touching\n        Console.WriteLine(CanAttendAll(new[] { new[] { 1, 5 }, new[] { 4, 10 } }));\n        Console.WriteLine(CanAttendAll(new[] { new[] { 1, 2 } }));\n        Console.WriteLine(CanAttendAll(Array.Empty<int[]>()));\n\n        // Unsorted input where the conflict is not between adjacent entries as given.\n        Console.WriteLine(CanAttendAll(new[] { new[] { 9, 10 }, new[] { 4, 9 }, new[] { 4, 17 } }));\n    }\n}\n```\n\n**Output**\n\n```\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\n```",
   "tags": [
-   "arrays",
    "intervals",
    "sorting",
-   "greedy"
+   "adjacent-check",
+   "conventions",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is checking only adjacent pairs sufficient?",
+    "a": "Because once sorted by start time, any meeting that conflicts with an earlier one necessarily conflicts with its immediate predecessor - the predecessor starts no later and so its end must also reach past this meeting's start if anything does. So a conflict cannot hide between non-adjacent pairs. That reduces an all-pairs check from O(n squared) to one linear scan after the sort, and the argument is what makes it a proof rather than a plausible shortcut."
+   },
+   {
+    "q": "Why is touching allowed here but counted as overlap in the coverage problem?",
+    "a": "Because the conventions differ: a meeting from 1 to 5 occupies time up to but not including 5, so a meeting starting at 5 is fine, whereas a closed interval [1,5] genuinely contains the point 5. Same arithmetic, different half-openness, opposite answer at the boundary. The lesson is to ask or state which convention applies rather than assume, since the code differs by one comparison operator."
+   },
+   {
+    "q": "How does this extend to counting the rooms needed?",
+    "a": "Sorting alone no longer suffices - you need to know how many meetings are simultaneously active, which is a min-heap of end times, or the same sweep-line count as in the coverage problem. The yes-or-no version is the degenerate case asking whether that maximum ever exceeds one. Recognising them as the same underlying quantity is why these two questions are so often asked back to back."
+   }
   ]
  },
  {
@@ -11991,17 +12021,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find the minimum number of platforms needed for a train schedule.",
-  "answer": "Sort arrival and departure times separately and sweep with two pointers, incrementing when the next event is an arrival and decrementing on a departure, tracking the maximum concurrent count. Time O(n log n), space O(1) beyond the sorted arrays.",
+  "answer": "**Approach**\n\nSort arrivals and departures independently, then walk both with two pointers, incrementing on an arrival and decrementing on a departure. The peak is the answer.\n\n**Logic**\n\nSorting the two lists separately and losing the pairing is counter-intuitive but valid: the platform count at any instant depends only on how many arrivals and departures have occurred by then, not on which train did what.\n\nThe tie-break says a train departing at the same minute another arrives does not free a platform in time — the safe engineering assumption, and the usual convention for this problem.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MinimumPlatforms(int[] arrivals, int[] departures)\n    {\n        if (arrivals == null || arrivals.Length == 0) return 0;\n\n        // Sorted independently: only the COUNTS matter at any instant.\n        var arrive = (int[])arrivals.Clone();\n        var depart = (int[])departures.Clone();\n        Array.Sort(arrive);\n        Array.Sort(depart);\n\n        int i = 0, j = 0, onPlatform = 0, peak = 0;\n\n        while (i < arrive.Length)\n        {\n            // A departure at the same minute does not free the platform in time.\n            if (arrive[i] <= depart[j]) { onPlatform++; i++; peak = Math.Max(peak, onPlatform); }\n            else { onPlatform--; j++; }\n        }\n\n        return peak;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinimumPlatforms(\n            new[] { 900, 940, 950, 1100, 1500, 1800 },\n            new[] { 910, 1200, 1120, 1130, 1900, 2000 }));\n\n        Console.WriteLine(MinimumPlatforms(new[] { 900, 1100, 1235 },\n                                           new[] { 1000, 1200, 1240 }));   // never overlap\n\n        Console.WriteLine(MinimumPlatforms(new[] { 900 }, new[] { 910 }));\n        Console.WriteLine(MinimumPlatforms(new[] { 900, 900, 900 },\n                                           new[] { 910, 910, 910 }));      // all at once\n\n        Console.WriteLine(MinimumPlatforms(new[] { 900, 910 }, new[] { 910, 920 }));  // tie\n        Console.WriteLine(MinimumPlatforms(Array.Empty<int>(), Array.Empty<int>()));\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n1\n3\n2\n0\n```",
   "tags": [
-   "arrays",
-   "sweep-line",
-   "greedy",
-   "intervals"
+   "intervals",
+   "two-pointers",
+   "sorting",
+   "sweep",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Goldman Sachs"
+  ],
+  "followups": [
+   {
+    "q": "Why is it valid to sort arrivals and departures independently?",
+    "a": "Because the number of platforms in use at a given moment is simply the count of arrivals so far minus the count of departures so far - which train paired with which is irrelevant to that arithmetic. Breaking the pairing loses information that the answer never needed. It feels wrong the first time, and being able to say exactly why it is safe is what distinguishes understanding the algorithm from having memorised it."
+   },
+   {
+    "q": "Why does the loop only test the arrival index?",
+    "a": "Because once every train has arrived, the peak has already been recorded - remaining departures can only lower the count. So there is nothing left to learn and the loop can stop. It also means the departure index can never run past its array while the loop is live, since departures never outnumber arrivals at any prefix, which is what keeps the indexing safe without an explicit bound."
+   },
+   {
+    "q": "Why does a simultaneous arrival and departure need an extra platform?",
+    "a": "It is a modelling decision: physically a train departing at 10:00 has not cleared the platform for one arriving at 10:00, so the conservative reading requires both. The code encodes it with less-than-or-equal on the arrival branch. If the problem stated that departures complete first, flipping to strict less-than would give the other answer. Stating the assumption is important, because the two conventions differ on exactly the tie case the tests include."
+   }
   ]
  },
  {
@@ -12009,16 +12054,32 @@
   "subcategory": "Arrays",
   "difficulty": "Easy",
   "question": "Given an array, find the equilibrium index where left sum equals right sum.",
-  "answer": "Compute the total, then sweep maintaining the running left sum; at each index the right sum is total minus left minus the current value. Return the first index where they match. Time O(n), space O(1) - computing both sums per index would be quadratic.",
+  "answer": "**Approach**\n\nCompute the total once, then sweep maintaining the running left sum. The right sum is the total minus the left sum minus the current element.\n\n**Logic**\n\nDeriving the right sum arithmetically rather than recomputing it is what makes this linear instead of quadratic.\n\nThe element at the equilibrium index belongs to neither side, which is why it is subtracted out.\n\nNegative numbers matter: they mean an equilibrium can exist in places a positive-only intuition would not expect, and the first index can qualify when everything to its right cancels.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int EquilibriumIndex(int[] nums)\n    {\n        long total = 0;\n        foreach (int n in nums) total += n;\n\n        long left = 0;\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            // The current element belongs to neither side.\n            long right = total - left - nums[i];\n\n            if (left == right) return i;\n\n            left += nums[i];\n        }\n\n        return -1;\n    }\n\n    public static IList<int> AllEquilibriumIndices(int[] nums)\n    {\n        long total = 0;\n        foreach (int n in nums) total += n;\n\n        var found = new List<int>();\n        long left = 0;\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            if (left == total - left - nums[i]) found.Add(i);\n            left += nums[i];\n        }\n\n        return found;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(EquilibriumIndex(new[] { -7, 1, 5, 2, -4, 3, 0 }));\n        Console.WriteLine(EquilibriumIndex(new[] { 1, 2, 3 }));         // none\n        Console.WriteLine(EquilibriumIndex(new[] { 1 }));               // trivially index 0\n        Console.WriteLine(EquilibriumIndex(new[] { 2, 0, -2 }));        // no index balances\n        Console.WriteLine(EquilibriumIndex(Array.Empty<int>()));\n        Console.WriteLine(string.Join(\",\", AllEquilibriumIndices(new[] { 0, 0, 0 })));\n    }\n}\n```\n\n**Output**\n\n```\n3\n-1\n0\n-1\n-1\n0,1,2\n```",
   "tags": [
    "arrays",
    "prefix-sum",
-   "two-pass"
+   "linear-scan",
+   "negatives",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "TCS"
+  ],
+  "followups": [
+   {
+    "q": "Why subtract the current element from the total?",
+    "a": "Because the equilibrium element belongs to neither the left nor the right sum - it is the pivot. Leaving it in would make the right side include it and the comparison would be testing a different property. The single-element case makes it clearest: with only one element both sides are empty and equal, so index 0 qualifies, which only works if the element is excluded."
+   },
+   {
+    "q": "Why does the sum accumulate in long?",
+    "a": "Because an array of large ints can sum past int range even when every individual value is fine - a thousand values near two billion overflows immediately. The intermediate total is the vulnerable quantity, not the inputs. Widening it costs nothing and removes a class of silent wrong answers that only appear on large realistic data, never on the small examples used to develop the solution."
+   },
+   {
+    "q": "Why include a version returning all indices?",
+    "a": "Because the single-index version's early return hides that multiple equilibria can exist - an all-zeros array has one at every position. Returning just the first is fine when the problem asks for it, but the all-indices variant is a common follow-up and it documents the structure of the answer. It is also nearly free: the same scan without the early exit."
+   }
   ]
  },
  {
@@ -12026,17 +12087,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Rearrange an array so positive and negative numbers alternate.",
-  "answer": "Partition in place with a two-pointer pass, then swap alternate elements from each side, or use two output positions and fill from the separated groups. Handling unequal counts requires deciding where the surplus goes, which is the part the problem statement usually leaves ambiguous.",
+  "answer": "**Approach**\n\nTwo index cursors writing into a result array — one for the even positions, one for the odd. Positives take the even slots, negatives the odd.\n\n**Logic**\n\nThis version preserves relative order within each sign group, which the in-place rotation approaches do not. The problem is usually under-specified about that, so the choice is worth stating.\n\nWhen the counts are unequal, the surplus is appended once the alternation runs out — there is no way to keep alternating past that point.\n\nZero is treated as non-negative, which is a stated convention rather than a derivable fact.\n\nO(n) time, O(n) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[] Rearrange(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return Array.Empty<int>();\n\n        var positives = new List<int>();\n        var negatives = new List<int>();\n\n        // Zero counts as non-negative: a stated convention, not a derivation.\n        foreach (int n in nums) (n >= 0 ? positives : negatives).Add(n);\n\n        var result = new int[nums.Length];\n        int at = 0, p = 0, q = 0;\n\n        // Alternate while both remain, preserving each group's original order.\n        while (p < positives.Count && q < negatives.Count)\n        {\n            result[at++] = positives[p++];\n            result[at++] = negatives[q++];\n        }\n\n        while (p < positives.Count) result[at++] = positives[p++];\n        while (q < negatives.Count) result[at++] = negatives[q++];\n\n        return result;\n    }\n\n    private static void Show(int[] values) =>\n        Console.WriteLine(values.Length == 0 ? \"(empty)\" : string.Join(\",\", values));\n\n    public static void Main()\n    {\n        Show(Rearrange(new[] { 1, 2, 3, -4, -1, 4 }));\n        Show(Rearrange(new[] { -5, -2, 5, 2, 4, 7, 1, 8, 0, -8 }));\n        Show(Rearrange(new[] { 1, 2, 3 }));              // no negatives\n        Show(Rearrange(new[] { -1, -2, -3 }));           // no positives\n        Show(Rearrange(new[] { 0, -1 }));                // zero is non-negative\n        Show(Rearrange(Array.Empty<int>()));\n    }\n}\n```\n\n**Output**\n\n```\n1,-4,2,-1,3,4\n5,-5,2,-2,4,-8,7,1,8,0\n1,2,3\n-1,-2,-3\n0,-1\n(empty)\n```",
   "tags": [
    "arrays",
-   "two-pointers",
-   "in-place",
-   "rearrangement"
+   "partitioning",
+   "stability",
+   "conventions",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Infosys"
+  ],
+  "followups": [
+   {
+    "q": "Why use extra space rather than rearranging in place?",
+    "a": "Because the in-place versions that use rotations to fix each misplaced element are O(n squared) in the worst case, and the O(n) in-place ones destroy the relative order within each sign group. Since the problem rarely specifies stability, I chose to preserve it and said so. If O(1) space were a hard requirement and order did not matter, a two-pointer partition followed by a swap pass is the version to write instead - the trade is explicit either way."
+   },
+   {
+    "q": "What happens when the counts are unequal?",
+    "a": "Alternation is impossible past the point where one group runs out, so the surplus is appended in order. Some variants instead require the leftover to be discarded or the arrangement to be declared impossible - all reasonable, and none derivable from the phrase 'alternate'. Handling it explicitly and stating the rule is better than letting the loop bounds decide by accident."
+   },
+   {
+    "q": "Why does zero need a stated convention?",
+    "a": "Because zero is neither positive nor negative, so 'alternate positive and negative' does not say where it goes, and a solution that uses n > 0 and one that uses n >= 0 give different answers on the same input. Making the choice visible in a comment and in a test means a reader can change it deliberately. Silent conventions in edge cases are where most disagreements about a 'correct' answer actually come from."
+   }
   ]
  },
  {
@@ -12108,17 +12184,32 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Given an unsorted array, find the smallest positive integer missing using constant space.",
-  "answer": "Place each value v between one and n at index v-1 by cyclic swapping, then scan for the first index whose value does not match. The array itself becomes the presence marker. Time O(n) because each swap places a value permanently, space O(1).",
+  "answer": "**Approach**\n\nUse the array itself as a hash table. Place each value v in position v-1 by swapping, then scan for the first position whose value is wrong.\n\n**Logic**\n\nThe answer is always between 1 and n+1, since n values cannot cover more than the first n positive integers. That bound is what makes an in-array marking scheme possible at all.\n\nThe placement loop uses `while` rather than `if`, because one swap brings in a new value that may itself be misplaced.\n\nThe loop terminates despite looking unbounded: every swap puts at least one value into its final position, so at most n swaps happen overall.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int FirstMissingPositive(int[] nums)\n    {\n        int n = nums.Length;\n\n        for (int i = 0; i < n; i++)\n            // while, not if: a swap brings in a value that may also be misplaced.\n            while (nums[i] >= 1 && nums[i] <= n && nums[nums[i] - 1] != nums[i])\n            {\n                int target = nums[i] - 1;\n                (nums[i], nums[target]) = (nums[target], nums[i]);\n            }\n\n        for (int i = 0; i < n; i++)\n            if (nums[i] != i + 1) return i + 1;\n\n        return n + 1;   // 1..n all present\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FirstMissingPositive(new[] { 1, 2, 0 }));\n        Console.WriteLine(FirstMissingPositive(new[] { 3, 4, -1, 1 }));\n        Console.WriteLine(FirstMissingPositive(new[] { 7, 8, 9, 11, 12 }));   // none in range\n        Console.WriteLine(FirstMissingPositive(new[] { 1, 2, 3 }));           // n+1\n        Console.WriteLine(FirstMissingPositive(new[] { 1, 1 }));              // duplicates\n        Console.WriteLine(FirstMissingPositive(Array.Empty<int>()));\n        Console.WriteLine(FirstMissingPositive(new[] { -1, -2 }));\n    }\n}\n```\n\n**Output**\n\n```\n3\n2\n1\n4\n2\n1\n1\n```",
   "tags": [
    "arrays",
    "in-place",
    "cyclic-sort",
-   "index-marking"
+   "constant-space",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why is the answer always between 1 and n+1?",
+    "a": "Because n values can cover at most the n distinct positive integers 1 through n, so if every one of them is present the smallest missing is n+1, and otherwise it is one of them. That bound is what makes the whole approach possible: values outside the range are irrelevant and can be ignored rather than stored, so the array has exactly enough slots to act as the hash table."
+   },
+   {
+    "q": "Why does the while loop terminate?",
+    "a": "Because every swap places at least one value into its correct final position, and a value once correctly placed is never moved again - the swap condition explicitly excludes it. So the total number of swaps across the entire outer loop is bounded by n, making the whole thing linear despite the nested loop. That amortised argument is essential; without it the code reads as potentially quadratic or non-terminating."
+   },
+   {
+    "q": "Why does the condition compare values rather than indices?",
+    "a": "Because comparing nums[nums[i] - 1] with nums[i] stops when the target slot already holds the right value, which handles duplicates - otherwise two equal values would swap each other forever. A condition written as 'nums[i] != i + 1' instead would loop infinitely on the [1,1] input. That test case exists precisely to catch the version that looks equivalent and hangs."
+   }
   ]
  },
  {
@@ -12126,17 +12217,32 @@
   "subcategory": "Arrays",
   "difficulty": "Easy",
   "question": "Given two arrays, find their intersection including duplicate counts.",
-  "answer": "Count occurrences in the smaller array with a hash map, then walk the larger decrementing counts and collecting matches. Time O(m+n), space O(min(m,n)). If both are sorted, two pointers give the same result in constant extra space.",
+  "answer": "**Approach**\n\nCount the smaller array's values in a dictionary, then walk the larger array consuming counts.\n\n**Logic**\n\nConsuming rather than merely testing membership is what makes duplicates come out right: a value appearing twice in one array and three times in the other must appear exactly twice in the result.\n\nCounting the *smaller* array bounds the memory by the smaller input, which matters when one side is much larger.\n\nO(n + m) time, O(min(n, m)) space.\n\nThe sorted two-pointer alternative uses O(1) extra space and is preferable when the inputs are already sorted or too large for memory.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[] Intersect(int[] a, int[] b)\n    {\n        a ??= Array.Empty<int>(); b ??= Array.Empty<int>();\n\n        // Count the SMALLER side: memory is bounded by the smaller input.\n        if (a.Length > b.Length) (a, b) = (b, a);\n\n        var counts = new Dictionary<int, int>();\n        foreach (int n in a) counts[n] = counts.GetValueOrDefault(n) + 1;\n\n        var result = new List<int>();\n\n        foreach (int n in b)\n            // Consume, do not merely test: duplicates must be matched one for one.\n            if (counts.TryGetValue(n, out int left) && left > 0)\n            {\n                counts[n] = left - 1;\n                result.Add(n);\n            }\n\n        return result.ToArray();\n    }\n\n    private static void Show(int[] values) =>\n        Console.WriteLine(values.Length == 0 ? \"(empty)\" : string.Join(\",\", values));\n\n    public static void Main()\n    {\n        Show(Intersect(new[] { 1, 2, 2, 1 }, new[] { 2, 2 }));\n        Show(Intersect(new[] { 4, 9, 5 }, new[] { 9, 4, 9, 8, 4 }));\n        Show(Intersect(new[] { 1, 1, 1 }, new[] { 1 }));       // limited by the smaller count\n        Show(Intersect(new[] { 1, 2 }, new[] { 3, 4 }));       // disjoint\n        Show(Intersect(Array.Empty<int>(), new[] { 1 }));\n        Show(Intersect(new[] { -1, -1 }, new[] { -1 }));\n    }\n}\n```\n\n**Output**\n\n```\n2,2\n9,4\n1\n(empty)\n(empty)\n-1\n```",
   "tags": [
    "arrays",
-   "hashmap",
-   "two-pointers",
-   "sets"
+   "hash-map",
+   "multiset",
+   "counting",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why decrement the count rather than just checking membership?",
+    "a": "Because the result must respect multiplicities - a value present twice in one array and three times in the other appears twice, not three times. A membership test would emit it on every occurrence in the second array. Decrementing turns the dictionary into a multiset that is consumed as it matches, which is exactly the semantics the problem wants and the difference from the distinct-intersection variant."
+   },
+   {
+    "q": "Why count the smaller array?",
+    "a": "Because the dictionary's size is what dominates memory, and it only needs to hold the smaller side's distinct values - the larger array is streamed through without being stored. When one input is a million entries and the other a hundred, that is a hundred entries instead of a million. The swap is one line and makes the space bound O(min(n, m)) rather than depending on argument order."
+   },
+   {
+    "q": "When would you use the sorted two-pointer version instead?",
+    "a": "When the inputs are already sorted, which makes it O(n + m) with no extra memory at all, or when one array is on disk and cannot be held in memory - the two-pointer walk streams both sides. Sorting purely to enable it costs O(n log n) and is usually not worth it unless memory is the binding constraint. That is the honest trade: hashing is faster on unsorted data, the merge wins on memory and on already-sorted input."
+   }
   ]
  },
  {
@@ -12144,15 +12250,31 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Find the longest substring with at most one character replaced to make it uniform.",
-  "answer": "A sliding window tracking character counts where the window is valid while its length minus the most frequent count is at most one. Expand right, contract left when invalid, and record the maximum. Time O(n), space O(alphabet).",
+  "answer": "**Approach**\n\nSliding window tracking the count of the most frequent character. The window is valid while its width minus that count is at most one.\n\n**Logic**\n\nThe replacements needed for a window is its width minus the count of its most common character — everything else has to change.\n\nThe window never shrinks, only slides. That is the subtle part: once a width is achieved, a smaller one is never interesting, so on an invalid window both edges advance together and the recorded maximum is still correct.\n\nThat also means the stale maximum frequency is harmless, since it can only cause the window to hold its size rather than grow wrongly.\n\nO(n) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int LongestWithOneReplacement(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        var counts = new int[128];   // indexed by the character itself: no case assumption\n        int left = 0, mostFrequent = 0;\n\n        for (int right = 0; right < s.Length; right++)\n        {\n            mostFrequent = Math.Max(mostFrequent, ++counts[s[right]]);\n\n            // Replacements needed = width - count of the most common character.\n            if (right - left + 1 - mostFrequent > 1)\n                counts[s[left++]]--;   // slide, never shrink\n        }\n\n        return s.Length - left;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestWithOneReplacement(\"ABAB\"));\n        Console.WriteLine(LongestWithOneReplacement(\"AABABBA\"));\n        Console.WriteLine(LongestWithOneReplacement(\"AAAA\"));      // already uniform\n        Console.WriteLine(LongestWithOneReplacement(\"AB\"));\n        Console.WriteLine(LongestWithOneReplacement(\"A\"));\n        Console.WriteLine(LongestWithOneReplacement(\"\"));\n        Console.WriteLine(LongestWithOneReplacement(\"ABCDE\"));\n    }\n}\n```\n\n**Output**\n\n```\n3\n4\n4\n2\n1\n0\n2\n```",
   "tags": [
-   "strings",
    "sliding-window",
-   "hashmap"
+   "strings",
+   "frequency",
+   "monotonic-window",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the window never shrink?",
+    "a": "Because the answer is the maximum width ever achieved, so a window smaller than the best so far can never improve it - there is no reason to contract. On an invalid window both edges advance by one, holding the width constant, and it grows again only when a genuinely better window appears. That is why the answer can be read off as the string length minus the final left pointer, with no separate maximum variable."
+   },
+   {
+    "q": "Is it a bug that mostFrequent is never decreased?",
+    "a": "No, and it is the part worth explaining. A stale value can only be too high, which makes the validity test too permissive - but a too-permissive test only lets the window keep its current size, never exceed the true best, because reaching a larger width would require a genuinely higher frequency to be observed first. So the maximum recorded is still correct. Recomputing the true maximum each step would be correct too, at 26 times the cost for no benefit."
+   },
+   {
+    "q": "How does this generalise to k replacements?",
+    "a": "Change the constant in the validity test from one to k; nothing else moves. That is the standard 'longest repeating character replacement' problem, and this is the k equals one instance. The same template with the count condition inverted gives the longest substring with at most k distinct characters, which is why this window shape is worth internalising rather than treating each variant as new."
+   }
   ]
  },
  {
@@ -12160,16 +12282,31 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Given a string, find the minimum number of characters to remove to make all characters unique counts.",
-  "answer": "Count frequencies, then process them in descending order decrementing each until it reaches an unused count or zero, accumulating the deletions. A set of used counts makes the check constant time. Time O(n + k log k) for k distinct characters.",
+  "answer": "**Approach**\n\nCount the characters, then process the counts in descending order, decrementing any that collide with a count already taken.\n\n**Logic**\n\nProcessing the largest counts first minimises deletions, because a large count has more room to descend before hitting zero, whereas reducing a small count wastes the opportunity.\n\nEach decrement is one deletion. A count driven to zero means the character is removed entirely, and zero is not reserved — several characters may end at zero.\n\nO(n + 26 log 26).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int MinDeletions(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        var counts = new int[26];\n        foreach (char c in s) counts[c - 'a']++;\n\n        var taken = new HashSet<int>();\n        int deletions = 0;\n\n        // Largest first: a big count has more room to descend.\n        foreach (int original in counts.Where(c => c > 0).OrderByDescending(c => c))\n        {\n            int count = original;\n\n            while (count > 0 && !taken.Add(count)) { count--; deletions++; }\n            // Reaching zero removes the character entirely; zero is not reserved.\n        }\n\n        return deletions;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinDeletions(\"aab\"));\n        Console.WriteLine(MinDeletions(\"aaabbbcc\"));\n        Console.WriteLine(MinDeletions(\"ceabaacb\"));\n        Console.WriteLine(MinDeletions(\"abcdef\"));    // six counts of 1 all collide\n        Console.WriteLine(MinDeletions(\"a\"));\n        Console.WriteLine(MinDeletions(\"\"));\n        Console.WriteLine(MinDeletions(\"bbcebab\"));\n    }\n}\n```\n\n**Output**\n\n```\n0\n2\n2\n5\n0\n0\n2\n```",
   "tags": [
-   "strings",
    "greedy",
-   "counting",
-   "hashset"
+   "frequency",
+   "hash-set",
+   "strings",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why process the largest counts first?",
+    "a": "Because a large count can be decremented many times before reaching zero, so it has room to find a free value, whereas a small count exhausts quickly and any deletion spent on it is more likely wasted. An exchange argument makes it precise: if a smaller count took a value that a larger one then had to descend past, swapping their assignments never increases the total deletions. Ascending order gives strictly worse answers on inputs like 'abcdef'."
+   },
+   {
+    "q": "Why does abcdef need five deletions?",
+    "a": "Because all six characters have a count of 1 and the frequencies must be distinct, so only one character can keep its single occurrence - the other five each descend from 1 to 0, one deletion apiece, removing them entirely. Five in total. It is the case that shows distinct CHARACTERS is not the same as distinct COUNTS: a string with no repeats at all can still need most of itself deleted."
+   },
+   {
+    "q": "Why is zero not reserved in the set?",
+    "a": "Because a count of zero means the character does not appear at all, and any number of characters can be absent - the uniqueness requirement applies to the frequencies of characters that remain. Reserving zero would force each subsequent exhausted character into an impossible position and loop or overcount. The while condition stopping at zero encodes that, and it is easy to get wrong by writing the loop without the lower bound."
+   }
   ]
  },
  {
@@ -12209,17 +12346,32 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Given a list of strings, group them by their character composition ignoring order.",
-  "answer": "Key each string by a canonical form - sorted characters, or a frequency signature which avoids the sort - and group in a hash map. The frequency signature is O(n) per string against O(n log n) for sorting, which matters for long strings.",
+  "answer": "**Approach**\n\nKey each string by a canonical form of its character multiset, then group on that key. A 26-slot count signature avoids sorting each word.\n\n**Logic**\n\nAny canonical form works as long as two strings share it exactly when they are anagrams. Sorting the characters is the obvious choice at O(L log L); a count signature is O(L) and is the better answer when the words are long.\n\nThe count signature must include separators, or counts of 1 and 1 would be indistinguishable from 11 and nothing.\n\nO(total characters).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\nusing System.Text;\n\npublic class Solution\n{\n    public static IList<IList<string>> GroupAnagrams(string[] words)\n    {\n        var groups = new Dictionary<string, List<string>>();\n\n        foreach (string word in words)\n        {\n            string key = Signature(word);\n\n            if (!groups.TryGetValue(key, out var group))\n                groups[key] = group = new List<string>();\n\n            group.Add(word);\n        }\n\n        return groups.Values.Cast<IList<string>>().ToList();\n    }\n\n    // O(L) rather than the O(L log L) of sorting the characters.\n    private static string Signature(string word)\n    {\n        var counts = new int[26];\n        foreach (char c in word) counts[c - 'a']++;\n\n        var sb = new StringBuilder();\n        // Separators matter: counts of 1,1 must not read the same as 11,0.\n        foreach (int c in counts) sb.Append(c).Append('#');\n\n        return sb.ToString();\n    }\n\n    private static void Show(IList<IList<string>> groups)\n    {\n        var rendered = groups\n            .Select(g => \"[\" + string.Join(\",\", g.OrderBy(w => w)) + \"]\")\n            .OrderBy(s => s);\n\n        Console.WriteLine(string.Join(\" \", rendered));\n    }\n\n    public static void Main()\n    {\n        Show(GroupAnagrams(new[] { \"eat\", \"tea\", \"tan\", \"ate\", \"nat\", \"bat\" }));\n        Show(GroupAnagrams(new[] { \"\" }));\n        Show(GroupAnagrams(new[] { \"a\" }));\n        Show(GroupAnagrams(new[] { \"abc\", \"bca\", \"cab\" }));\n        Show(GroupAnagrams(new[] { \"ab\", \"abb\" }));      // different multiplicities\n        Show(GroupAnagrams(Array.Empty<string>()));\n    }\n}\n```\n\n**Output**\n\n```\n[ate,eat,tea] [bat] [nat,tan]\n[]\n[a]\n[abc,bca,cab]\n[ab] [abb]\n\n```",
   "tags": [
-   "strings",
-   "hashmap",
+   "hash-map",
    "grouping",
-   "anagram"
+   "canonical-form",
+   "anagrams",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why do the separators in the signature matter?",
+    "a": "Because without them a word with counts 1 and 1 for two letters and a word with count 11 for the first and 0 for the second both render as '110...', so unrelated words collide and are grouped together. The separator makes the encoding unambiguous. It is the general rule for building a key by concatenation: the delimiter must not be producible by the data, which is the same point as in the n-ary tree serialisation."
+   },
+   {
+    "q": "When is sorting the characters the better key?",
+    "a": "When the alphabet is large or unknown - Unicode, mixed case, arbitrary symbols - because a fixed 26-slot signature does not apply and a sparse count map would be more expensive to canonicalise than simply sorting. Sorting is also shorter to write and obviously correct. The count signature wins for long words over a small known alphabet, where O(L) beats O(L log L) and the key is a fixed size regardless of word length."
+   },
+   {
+    "q": "Why does the test sort the output?",
+    "a": "Because dictionary enumeration order is not part of the contract and can vary, so comparing raw output would be testing an implementation detail of the runtime. Sorting the groups and the words inside them makes the assertion about the grouping itself, which is what the problem specifies. It is the same discipline as asserting a distribution rather than a seeded sequence - test the property, not the incidental ordering."
+   }
   ]
  },
  {
@@ -12227,17 +12379,32 @@
   "subcategory": "Strings",
   "difficulty": "Hard",
   "question": "Find the shortest substring containing all characters of the alphabet present in the string.",
-  "answer": "Sliding window tracking counts of required characters and how many are satisfied, expanding until valid then contracting while it stays valid, recording the shortest. Time O(n), space O(alphabet). It is the minimum window template with the target derived from the input itself.",
+  "answer": "**Approach**\n\nSliding window over the string with a target of every distinct character it contains. Expand to satisfy, then contract while still satisfied.\n\n**Logic**\n\nThe target set is derived from the string itself, so it is always satisfiable — the whole string qualifies, and the question is only how much can be trimmed.\n\nTracking how many distinct requirements are currently met, rather than rescanning the counts, keeps the check O(1) per step.\n\nContracting as far as possible before recording is what makes each recorded window minimal for its right edge.\n\nO(n) time — each index enters and leaves the window once.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static string ShortestCoveringSubstring(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return \"\";\n\n        var required = new HashSet<char>(s);      // derived from the string: always satisfiable\n        var window = new Dictionary<char, int>();\n\n        int satisfied = 0, left = 0, bestStart = 0, bestLength = s.Length + 1;\n\n        for (int right = 0; right < s.Length; right++)\n        {\n            char c = s[right];\n            window[c] = window.GetValueOrDefault(c) + 1;\n\n            if (window[c] == 1) satisfied++;      // a newly covered requirement\n\n            // Contract as far as possible before recording.\n            while (satisfied == required.Count)\n            {\n                if (right - left + 1 < bestLength)\n                {\n                    bestLength = right - left + 1;\n                    bestStart = left;\n                }\n\n                char leaving = s[left++];\n                if (--window[leaving] == 0) satisfied--;\n            }\n        }\n\n        return s.Substring(bestStart, bestLength);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ShortestCoveringSubstring(\"aabcbcdbca\"));\n        Console.WriteLine(ShortestCoveringSubstring(\"abcabc\"));\n        Console.WriteLine(ShortestCoveringSubstring(\"aaaa\"));       // one distinct character\n        Console.WriteLine(ShortestCoveringSubstring(\"abc\"));\n        Console.WriteLine($\"[{ShortestCoveringSubstring(\"\")}]\");\n        Console.WriteLine(ShortestCoveringSubstring(\"abaccb\"));\n    }\n}\n```\n\n**Output**\n\n```\ndbca\nabc\na\nabc\n[]\nbac\n```",
   "tags": [
-   "strings",
    "sliding-window",
-   "hashmap",
-   "optimisation"
+   "strings",
+   "two-pointers",
+   "minimum-window",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why track a satisfied counter rather than comparing the maps?",
+    "a": "Because comparing two dictionaries on every step is O(alphabet) and turns the scan into O(n times alphabet). The counter changes only when a character's count crosses the threshold from zero to one or back, which is O(1) per move. That transition-based bookkeeping is the standard way to make a window check constant time, and it is the same device used in the general minimum-window-substring problem where the threshold is a required count rather than one."
+   },
+   {
+    "q": "Why contract before recording rather than after?",
+    "a": "Because recording first would capture a window that still has removable characters on its left, so the recorded length would not be minimal for that right edge. Contracting while the window remains valid, and recording at each step, guarantees the best window ending at every position is considered. The loop as written records and then removes, which covers both - it records the current width, then tries a narrower one on the next iteration."
+   },
+   {
+    "q": "How does this differ from the classic minimum window substring?",
+    "a": "There the target comes from a separate pattern string with required multiplicities, so a character may need to appear three times and the satisfied counter increments only when that count is reached - and the answer may not exist at all. Here the target is the string's own distinct characters with a required count of one each, so it always exists and the bookkeeping is simpler. Same template, different threshold, plus an existence check in the general case."
+   }
   ]
  },
  {
@@ -12277,16 +12444,31 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Given a binary tree, find the sum of nodes at the deepest level.",
-  "answer": "Level-order traversal keeping the sum of each level and returning the last one, or a DFS tracking depth that resets the accumulator when a deeper level is found. Both are O(n) time; BFS uses O(width) space and DFS O(height).",
+  "answer": "**Approach**\n\nLevel-order traversal, resetting the accumulator at the start of each level. When the queue empties, the last accumulated sum is the deepest level's.\n\n**Logic**\n\nResetting per level rather than keeping a map from depth to sum means only one number is held at a time — the earlier levels are never needed once passed.\n\nProcessing a whole level per outer iteration, by capturing the queue's size first, is what defines the level boundaries. Without it the queue mixes depths and the resets land in the wrong places.\n\nO(n) time, O(width) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static int DeepestLevelSum(TreeNode root)\n    {\n        if (root == null) return 0;\n\n        var queue = new Queue<TreeNode>();\n        queue.Enqueue(root);\n\n        int levelSum = 0;\n\n        while (queue.Count > 0)\n        {\n            int levelSize = queue.Count;   // capture first: this defines the level\n            levelSum = 0;                  // reset, so only the last level survives\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                var node = queue.Dequeue();\n                levelSum += node.val;\n\n                if (node.left != null) queue.Enqueue(node.left);\n                if (node.right != null) queue.Enqueue(node.right);\n            }\n        }\n\n        return levelSum;\n    }\n\n    public static void Main()\n    {\n        var a = new TreeNode(1)\n        {\n            left = new TreeNode(2) { left = new TreeNode(4), right = new TreeNode(5) },\n            right = new TreeNode(3) { right = new TreeNode(6) }\n        };\n        Console.WriteLine(DeepestLevelSum(a));   // 4 + 5 + 6\n\n        var skew = new TreeNode(1) { left = new TreeNode(2) { left = new TreeNode(3) } };\n        Console.WriteLine(DeepestLevelSum(skew));\n\n        Console.WriteLine(DeepestLevelSum(new TreeNode(7)));\n        Console.WriteLine(DeepestLevelSum(null));\n\n        var negatives = new TreeNode(1) { left = new TreeNode(-5), right = new TreeNode(-5) };\n        Console.WriteLine(DeepestLevelSum(negatives));\n\n        // Deepest nodes on different branches at the same depth.\n        var wide = new TreeNode(1)\n        {\n            left = new TreeNode(2) { left = new TreeNode(10) },\n            right = new TreeNode(3) { right = new TreeNode(20) }\n        };\n        Console.WriteLine(DeepestLevelSum(wide));\n    }\n}\n```\n\n**Output**\n\n```\n15\n3\n7\n0\n-10\n30\n```",
   "tags": [
    "trees",
    "bfs",
-   "dfs",
-   "traversal"
+   "level-order",
+   "accumulator",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why capture the queue size before the inner loop?",
+    "a": "Because the loop enqueues the next level's nodes as it goes, so reading Count inside would keep growing and the level boundary would dissolve - every level would run into the next and the reset would never happen at the right moment. Capturing it first freezes the current level's width. That snapshot is the standard idiom for any level-by-level BFS, including the level-order and right-side-view problems."
+   },
+   {
+    "q": "Why reset rather than keep a sum per depth?",
+    "a": "Because only the deepest level's sum is wanted, and earlier levels are irrelevant once passed - so one variable suffices and memory stays O(width) rather than O(height) extra. If the problem asked for all level sums, a list would be the natural change. Keeping only what the answer needs is a small discipline that also makes the code say what it is doing."
+   },
+   {
+    "q": "Could this be done with DFS?",
+    "a": "Yes - track the maximum depth seen and a running sum, resetting the sum whenever a deeper level is first reached and adding to it when at the current maximum. That is O(height) stack rather than O(width) queue, which is better for a wide shallow tree and worse for a deep skewed one. Neither dominates, so the choice follows the expected tree shape, and saying which you would pick and why is better than asserting one is correct."
+   }
   ]
  },
  {
