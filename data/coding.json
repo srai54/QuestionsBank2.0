@@ -8182,16 +8182,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Check whether one binary tree is a subtree of another.",
-  "answer": "For each node of the main tree matching the subtree's root value, run an identical-trees check. Time O(mn) worst case. Serialising both to strings with explicit null markers and doing substring search gives O(m+n) with a correct serialisation.",
+  "answer": "**Approach**\n\nFor every node of the larger tree whose value matches the candidate root, run an identical-trees check from there. O(n·m) worst case.\n\nThe faster alternative serialises both trees with explicit null markers and asks whether one string contains the other, which with a linear substring search is O(n + m).\n\n**Logic**\n\nThe identical check must compare structure and values together: both null is a match, exactly one null is not.\n\nFor the serialisation approach, the null markers are essential. Without them the serialisation of a node with one child is ambiguous, so a subtree could be \"found\" that is not actually present — the classic false positive being a tree whose values appear in the right order but in a different shape.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static bool IsSubtree(TreeNode root, TreeNode sub)\n    {\n        if (sub == null) return true;\n        if (root == null) return false;\n\n        return IsSame(root, sub)\n            || IsSubtree(root.Left, sub)\n            || IsSubtree(root.Right, sub);\n    }\n\n    private static bool IsSame(TreeNode a, TreeNode b)\n    {\n        if (a == null && b == null) return true;\n        if (a == null || b == null) return false;\n\n        return a.Val == b.Val && IsSame(a.Left, b.Left) && IsSame(a.Right, b.Right);\n    }\n\n    // O(n + m): serialise with null markers, then substring search.\n    public static bool IsSubtreeBySerialisation(TreeNode root, TreeNode sub) =>\n        Serialise(root).Contains(Serialise(sub), StringComparison.Ordinal);\n\n    private static string Serialise(TreeNode node)\n    {\n        var sb = new StringBuilder();\n        Write(node, sb);\n        return sb.ToString();\n    }\n\n    private static void Write(TreeNode node, StringBuilder sb)\n    {\n        // The leading marker prevents 2 matching inside 12.\n        if (node == null) { sb.Append(\",#\"); return; }\n\n        sb.Append(',').Append(node.Val);\n        Write(node.Left, sb);\n        Write(node.Right, sb);\n    }\n\n    public static void Main()\n    {\n        //     3\n        //    / \\\n        //   4   5\n        //  / \\\n        // 1   2\n        var root = new TreeNode(3,\n            new TreeNode(4, new TreeNode(1), new TreeNode(2)),\n            new TreeNode(5));\n\n        var sub = new TreeNode(4, new TreeNode(1), new TreeNode(2));\n        Console.WriteLine(IsSubtree(root, sub));\n        Console.WriteLine(IsSubtreeBySerialisation(root, sub));\n\n        // Same values but the subtree has an extra node, so it is NOT present.\n        var deeper = new TreeNode(4, new TreeNode(1), new TreeNode(2, new TreeNode(0)));\n        Console.WriteLine(IsSubtree(root, deeper));\n\n        Console.WriteLine(IsSubtree(root, new TreeNode(5)));\n        Console.WriteLine(IsSubtree(null, new TreeNode(1)));\n        Console.WriteLine(IsSubtree(root, null));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\n```",
   "tags": [
    "trees",
    "recursion",
-   "string-matching"
+   "serialisation",
+   "substring",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why do the null markers matter in the serialisation approach?",
+    "a": "Because without them, different trees can serialise identically. A node with only a left child and a node with only a right child would both produce the parent followed by the one value, so a subtree could be found that has the wrong shape. The markers make the structure explicit, which is the same reason serialise-and-deserialise needs them to round-trip. It is the difference between encoding the values and encoding the tree."
+   },
+   {
+    "q": "Why does the serialisation prefix every value with a comma?",
+    "a": "To prevent a value matching inside a larger number. Without a separator, a subtree rooted at 2 would be found inside a tree containing 12, since the substring search sees the digits. The leading comma makes every token delimited, so the match is on whole values. It is the same delimiter hazard as in the group-anagrams count key, where 1 and 11 concatenate ambiguously."
+   },
+   {
+    "q": "Which version would you ship?",
+    "a": "The recursive one, in most cases. It is shorter, allocates nothing, and its worst case only materialises when the candidate root value is extremely common in the larger tree. The serialisation version allocates two strings proportional to the trees and relies on the substring search being linear, which .NET's Contains is in practice but is not contractually guaranteed. If the same subtree were tested against many trees, precomputing its serialisation once would tip the balance."
+   }
   ]
  },
  {
@@ -8199,17 +8215,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Recover a binary search tree where exactly two nodes were swapped.",
-  "answer": "In-order traversal yields a sorted sequence with either one or two inversions; record the first and second offending nodes and swap their values at the end. Morris traversal achieves O(1) space; a plain recursive traversal uses O(h) stack. Time O(n).",
+  "answer": "**Approach**\n\nAn in-order traversal of a valid BST is strictly increasing. Swapping two nodes creates one or two places where that order breaks, and identifying them locates the culprits.\n\n**Logic**\n\nWalk in order tracking the previous node. When `previous.Val > current.Val`, an inversion has been found.\n\nIf the swapped nodes are **not adjacent** in order, there are two inversions: the first node is the earlier element of the first inversion, the second is the later element of the second. If they **are adjacent**, there is only one inversion and both culprits come from it.\n\nHandling both cases with the same code is the trick: record the first culprit only on the first inversion, and the second culprit on every inversion, so a single inversion sets both.\n\nO(n) time, O(h) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static void RecoverTree(TreeNode root)\n    {\n        TreeNode first = null, second = null, previous = null;\n\n        // Iterative in-order: no recursion depth limit.\n        var stack = new Stack<TreeNode>();\n        var node = root;\n\n        while (node != null || stack.Count > 0)\n        {\n            while (node != null) { stack.Push(node); node = node.Left; }\n            node = stack.Pop();\n\n            if (previous != null && previous.Val > node.Val)\n            {\n                first ??= previous;   // only the FIRST inversion sets this\n                second = node;        // every inversion updates this\n            }\n\n            previous = node;\n            node = node.Right;\n        }\n\n        if (first != null) (first.Val, second.Val) = (second.Val, first.Val);\n    }\n\n    private static string InOrder(TreeNode node)\n    {\n        var values = new List<int>();\n        void Walk(TreeNode n) { if (n == null) return; Walk(n.Left); values.Add(n.Val); Walk(n.Right); }\n        Walk(node);\n        return values.Count == 0 ? \"(empty)\" : string.Join(\",\", values);\n    }\n\n    public static void Main()\n    {\n        // In-order reads 3,2,1 and must become 1,2,3.\n        //   3            1\n        //  / \\    ->    / \\\n        // 1   2        3   2   (in-order 3,1,2 should be 1,2,3)\n        var a = new TreeNode(1, new TreeNode(3, null, new TreeNode(2)));\n        Console.WriteLine(InOrder(a));\n        RecoverTree(a);\n        Console.WriteLine(InOrder(a));\n\n        // Adjacent swap: a single inversion.\n        var b = new TreeNode(3, new TreeNode(1), new TreeNode(4, new TreeNode(2)));\n        Console.WriteLine(InOrder(b));\n        RecoverTree(b);\n        Console.WriteLine(InOrder(b));\n\n        // Already valid: nothing changes.\n        var c = new TreeNode(2, new TreeNode(1), new TreeNode(3));\n        RecoverTree(c);\n        Console.WriteLine(InOrder(c));\n\n        var single = new TreeNode(1);\n        RecoverTree(single);\n        Console.WriteLine(InOrder(single));\n    }\n}\n```\n\n**Output**\n\n```\n3,2,1\n1,2,3\n1,3,2,4\n1,2,3,4\n1,2,3\n1\n```",
   "tags": [
    "trees",
    "bst",
    "in-order",
-   "morris"
+   "inversions",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does first use ??= while second is assigned unconditionally?",
+    "a": "Because the two cases need different behaviour and this expresses both with one rule. With two separate inversions, first must stay pinned to the earlier element of the first inversion while second advances to the later element of the second. With a single inversion, the same line sets first to the earlier element and second to the later one in the same step. Writing two branches for the adjacent and non-adjacent cases also works but is easy to get subtly wrong."
+   },
+   {
+    "q": "Can this be done in O(1) space?",
+    "a": "Yes, with Morris traversal, which threads unused right pointers to walk in order without a stack and restores them afterwards. That gives genuine O(1) auxiliary space and is the answer if the interviewer pushes on it. The cost is that the tree is temporarily mutated during traversal, so it is unusable if anything else may read the tree concurrently, and the code is considerably harder to verify by eye."
+   },
+   {
+    "q": "Why swap the values rather than relinking the nodes?",
+    "a": "Because relinking two arbitrary nodes in a tree means fixing up to six pointers including both parents, and the nodes may be ancestor and descendant of each other, which needs special handling. Swapping values is two assignments and is correct for the problem as stated. The caveat is the usual one: any external reference to a specific node now sees a different value, so if nodes carry identity the relink is the honest fix."
+   }
   ]
  },
  {
@@ -8217,16 +8248,31 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Convert a BST to a greater tree where each node holds the sum of all greater values.",
-  "answer": "Reverse in-order traversal - right, node, left - maintaining a running sum, assigning it to each node as it is visited. Time O(n), space O(h). Doing it in forward order requires a second pass over the total.",
+  "answer": "**Approach**\n\nReverse in-order traversal — right, node, left — visits values in descending order, so a running total accumulated along the way is exactly the sum of everything greater.\n\n**Logic**\n\nA normal in-order walk gives ascending order. Reversing it gives descending, which means every node is visited after all larger values and before all smaller ones. Adding the node's value to a running sum and then writing the sum back gives the required result in one pass.\n\nThe order of those two operations matters: the node's own value must be added to the total before the total is written, because the definition is sum of all greater values *plus itself* in the usual phrasing of this problem.\n\nO(n) time, O(h) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static TreeNode ConvertBst(TreeNode root)\n    {\n        int running = 0;\n        Walk(root, ref running);\n        return root;\n    }\n\n    // Right, node, left: descending order, so everything larger is seen first.\n    private static void Walk(TreeNode node, ref int running)\n    {\n        if (node == null) return;\n\n        Walk(node.Right, ref running);\n\n        running += node.Val;\n        node.Val = running;\n\n        Walk(node.Left, ref running);\n    }\n\n    private static string InOrder(TreeNode node)\n    {\n        var values = new List<int>();\n        void Go(TreeNode n) { if (n == null) return; Go(n.Left); values.Add(n.Val); Go(n.Right); }\n        Go(node);\n        return values.Count == 0 ? \"(empty)\" : string.Join(\",\", values);\n    }\n\n    private static TreeNode Build(params int[] values)\n    {\n        TreeNode root = null;\n        foreach (int v in values) root = Insert(root, v);\n        return root;\n    }\n\n    private static TreeNode Insert(TreeNode n, int v)\n    {\n        if (n == null) return new TreeNode(v);\n        if (v < n.Val) n.Left = Insert(n.Left, v); else n.Right = Insert(n.Right, v);\n        return n;\n    }\n\n    public static void Main()\n    {\n        // 1,2,3,4,5 becomes 15,14,12,9,5\n        Console.WriteLine(InOrder(ConvertBst(Build(3, 2, 4, 1, 5))));\n\n        Console.WriteLine(InOrder(ConvertBst(Build(1))));\n        Console.WriteLine(InOrder(ConvertBst(null)));\n        Console.WriteLine(InOrder(ConvertBst(Build(2, 1))));\n        Console.WriteLine(InOrder(ConvertBst(Build(1, 2, 3))));   // right-leaning chain\n        Console.WriteLine(InOrder(ConvertBst(Build(0, -1, 1))));  // negatives: -1 becomes 0, 0 becomes 1, 1 stays 1\n    }\n}\n```\n\n**Output**\n\n```\n15,14,12,9,5\n1\n(empty)\n3,2\n6,5,3\n0,1,1\n```",
   "tags": [
    "trees",
    "bst",
-   "in-order",
-   "recursion"
+   "reverse-in-order",
+   "running-sum",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why reverse in-order rather than collecting and sorting?",
+    "a": "Because the BST already encodes the order, so a traversal in the right direction gives descending values for free in O(n). Collecting into a list, sorting and writing back would be O(n log n) and O(n) space for no benefit. It is a good illustration that the structure's invariant is the thing you are paying for, and using a general-purpose sort on a BST discards it."
+   },
+   {
+    "q": "Why pass the running sum by ref rather than using a field?",
+    "a": "To keep the method free of shared mutable state, so two threads converting different trees cannot corrupt each other, and so the dependency is visible in the signature. A private field would work single-threaded but makes the method non-reentrant. The alternative is to return the running total from each call and thread it through, which is purely functional and arguably cleaner at the cost of slightly noisier code. It is the same choice as passing best by ref in tree diameter."
+   },
+   {
+    "q": "The negatives case leaves the tree unchanged. Why?",
+    "a": "For values -1, 0, 1 the sums happen to be 0, -1 and 1 again, which coincidentally matches the input. It is worth including precisely because a coincidence like that can mask a bug in the other direction, and because it confirms negatives are handled rather than assumed away. Checking the in-order sequence rather than individual nodes is what makes the test meaningful here."
+   }
   ]
  },
  {
@@ -8234,17 +8280,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Count the number of structurally unique BSTs with n nodes.",
-  "answer": "Each value in turn is the root, splitting the rest into left and right subtrees, so the count is the Catalan recurrence - the sum over i of count(i) times count(n-1-i). Compute bottom-up with dynamic programming. Time O(n^2), space O(n).",
+  "answer": "**Approach**\n\nFor each choice of root, the left subtree is built from the smaller values and the right from the larger, and those two are independent. So the count for n is the sum over every root position of left count times right count — the Catalan recurrence.\n\n**Logic**\n\nWith i nodes on the left and n-1-i on the right, the number of trees is `count[i] * count[n-1-i]`. Summing over every i from 0 to n-1 gives `count[n]`.\n\nThe base case `count[0] = 1` represents the empty tree, which is essential: a root with no left child has exactly one arrangement of nothing, not zero.\n\nO(n²) time, O(n) space. The closed form is the nth Catalan number.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static long NumTrees(int n)\n    {\n        if (n < 0) throw new ArgumentOutOfRangeException(nameof(n));\n\n        var count = new long[n + 1];\n        count[0] = 1;      // the empty tree: exactly one arrangement of nothing\n\n        for (int nodes = 1; nodes <= n; nodes++)\n            for (int leftSize = 0; leftSize < nodes; leftSize++)\n                count[nodes] += count[leftSize] * count[nodes - 1 - leftSize];\n\n        return count[n];\n    }\n\n    public static void Main()\n    {\n        for (int n = 0; n <= 5; n++) Console.Write(NumTrees(n) + \" \");\n        Console.WriteLine();\n\n        Console.WriteLine(NumTrees(10));\n        Console.WriteLine(NumTrees(19));\n        Console.WriteLine(NumTrees(30));   // exceeds int range\n    }\n}\n```\n\n**Output**\n\n```\n1 1 2 5 14 42 \n16796\n1767263190\n3814986502092304\n```",
   "tags": [
+   "dp",
+   "catalan",
    "trees",
-   "dynamic-programming",
-   "math",
-   "catalan"
+   "counting",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why is count[0] equal to 1 rather than 0?",
+    "a": "Because it represents the empty tree, and there is exactly one way to arrange no nodes. Setting it to 0 would make every product zero and the whole table collapse. It is the same convention as the empty product being 1 and 0 factorial being 1, and it is what lets a root with no left child contribute its right subtree's count unchanged rather than annihilating it."
+   },
+   {
+    "q": "Where else does this sequence appear?",
+    "a": "These are the Catalan numbers, and they count a surprising range of things: balanced bracket sequences, which is why generate-parentheses has the same answers; triangulations of a convex polygon; the ways to parenthesise a product; and monotonic lattice paths below a diagonal. Recognising the sequence 1, 1, 2, 5, 14, 42 is often the fastest route to an answer, because if a problem produces those counts it almost certainly has the same recursive structure."
+   },
+   {
+    "q": "Why return long?",
+    "a": "Because Catalan numbers grow roughly 4^n, so the count exceeds int range at n of 19 and long range around n of 33. The test at n of 30 makes that visible. Returning int would silently wrap and produce a plausible negative number, which is worse than an exception. Where n could be larger still, you would compute modulo a prime, which is what competitive problem statements specify for exactly this reason."
+   }
   ]
  },
  {
@@ -8252,16 +8313,31 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Cheapest flights within k stops.",
-  "answer": "Bellman-Ford relaxed exactly k+1 times, using a copy of the distance array each round so a path cannot use more than the allowed edges in one iteration. Time O(k times E), space O(V). Plain Dijkstra is wrong here because the cheapest path may exceed the stop limit.",
+  "answer": "**Approach**\n\nBellman-Ford limited to k+1 relaxation rounds. Plain Dijkstra is wrong here, because the cheapest route may use more stops than allowed, and settling a node by cost alone discards the stop count.\n\n**Logic**\n\nEach round relaxes every edge once, which extends every reachable path by one more flight. After k+1 rounds, the distances reflect the cheapest routes using at most k+1 flights, which is k stops.\n\nThe critical detail is relaxing from a *snapshot* of the previous round's distances. Using the live array would let a path improved earlier in the same round be extended again, effectively using more flights than the round count permits.\n\nO(k · edges) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // flights[i] = [from, to, price]\n    public static int FindCheapestPrice(int n, int[][] flights, int source, int destination, int k)\n    {\n        const int Unreachable = int.MaxValue;\n\n        var cost = new int[n];\n        Array.Fill(cost, Unreachable);\n        cost[source] = 0;\n\n        // k stops means at most k+1 flights, so k+1 relaxation rounds.\n        for (int round = 0; round <= k; round++)\n        {\n            // Snapshot: without this, one round could chain several flights.\n            var previous = (int[])cost.Clone();\n\n            foreach (var f in flights)\n            {\n                if (previous[f[0]] == Unreachable) continue;\n\n                int candidate = previous[f[0]] + f[2];\n                if (candidate < cost[f[1]]) cost[f[1]] = candidate;\n            }\n        }\n\n        return cost[destination] == Unreachable ? -1 : cost[destination];\n    }\n\n    public static void Main()\n    {\n        var flights = new[] {\n            new[] { 0, 1, 100 }, new[] { 1, 2, 100 }, new[] { 2, 0, 100 },\n            new[] { 1, 3, 600 }, new[] { 2, 3, 200 } };\n\n        Console.WriteLine(FindCheapestPrice(4, flights, 0, 3, 1));   // 0-1-3\n        Console.WriteLine(FindCheapestPrice(4, flights, 0, 3, 2));   // 0-1-2-3 is cheaper\n\n        var simple = new[] { new[] { 0, 1, 100 }, new[] { 1, 2, 100 }, new[] { 0, 2, 500 } };\n        Console.WriteLine(FindCheapestPrice(3, simple, 0, 2, 0));    // direct only\n        Console.WriteLine(FindCheapestPrice(3, simple, 0, 2, 1));    // one stop is cheaper\n\n        Console.WriteLine(FindCheapestPrice(2, Array.Empty<int[]>(), 0, 1, 5));   // no route\n        Console.WriteLine(FindCheapestPrice(1, Array.Empty<int[]>(), 0, 0, 0));   // already there\n    }\n}\n```\n\n**Output**\n\n```\n700\n400\n500\n200\n-1\n0\n```",
   "tags": [
    "graphs",
    "bellman-ford",
-   "shortest-path",
-   "dynamic-programming"
+   "constrained-shortest-path",
+   "snapshot",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is the snapshot essential?",
+    "a": "Because relaxing against the live array lets a distance improved earlier in the same round be used again later in that round, chaining two flights into one round. The stop limit would then be silently exceeded and the answer too cheap. The first test exposes it: with one stop allowed, the answer must be 700 via 0-1-3, and a version without the snapshot finds 400 via three flights. It is the difference between bounding path length and bounding iterations."
+   },
+   {
+    "q": "Why not Dijkstra?",
+    "a": "Because Dijkstra settles a node once, at its cheapest cost, and discards any more expensive route to it - but a more expensive route with fewer stops may be the only one that can reach the destination within the limit. The constraint makes cost alone an insufficient state. A modified Dijkstra keyed on the pair (node, stops used) does work and is often faster in practice, since it explores in cost order, but it needs the state widened to include the stop count."
+   },
+   {
+    "q": "Why k+1 rounds rather than k?",
+    "a": "Because k stops means k intermediate airports, which is k+1 flights. A direct flight is zero stops and one flight, so with k of 0 the loop must still run once. Off-by-one here gives answers that are correct for larger k and wrong at the boundary, which is why the test includes k of 0 explicitly. Restating the constraint in terms of edges rather than stops before writing the loop avoids the mistake."
+   }
   ]
  },
  {
@@ -8269,15 +8345,31 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Redundant connection: find the edge that can be removed to make a tree.",
-  "answer": "Union-Find over the edges in order; the first edge whose endpoints already share a root is the answer. Time near O(n) with path compression and union by rank. For a directed graph the problem splits into cases involving a node with two parents.",
+  "answer": "**Approach**\n\nUnion-find, processing edges in order. The first edge whose endpoints are already connected is the one closing a cycle, and the problem asks for the last such edge in input order — which, since exactly one cycle exists, is the first one found.\n\n**Logic**\n\nA tree on n nodes has n-1 edges. Given n edges, exactly one creates a cycle. Union-find detects it: if `Find` returns the same root for both endpoints, they were already connected and this edge is redundant.\n\nPath compression and union by rank keep each operation effectively constant.\n\nO(n α(n)), which is linear for practical purposes.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int[] FindRedundantConnection(int[][] edges)\n    {\n        int n = edges.Length;\n        var parent = new int[n + 1];\n        var rank = new int[n + 1];\n        for (int i = 0; i <= n; i++) parent[i] = i;\n\n        int Find(int x)\n        {\n            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n            return x;\n        }\n\n        foreach (var edge in edges)\n        {\n            int a = Find(edge[0]), b = Find(edge[1]);\n\n            // Already connected: this edge closes the cycle.\n            if (a == b) return edge;\n\n            if (rank[a] < rank[b]) (a, b) = (b, a);\n            parent[b] = a;\n            if (rank[a] == rank[b]) rank[a]++;\n        }\n\n        return Array.Empty<int>();\n    }\n\n    private static string Show(int[] e) => e.Length == 0 ? \"(none)\" : $\"[{e[0]},{e[1]}]\";\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(FindRedundantConnection(new[] {\n            new[] { 1, 2 }, new[] { 1, 3 }, new[] { 2, 3 } })));\n\n        Console.WriteLine(Show(FindRedundantConnection(new[] {\n            new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 4 },\n            new[] { 1, 4 }, new[] { 1, 5 } })));\n\n        Console.WriteLine(Show(FindRedundantConnection(new[] {\n            new[] { 1, 2 }, new[] { 1, 2 } })));            // a parallel edge\n\n        Console.WriteLine(Show(FindRedundantConnection(new[] {\n            new[] { 1, 2 }, new[] { 2, 3 }, new[] { 1, 3 } })));\n    }\n}\n```\n\n**Output**\n\n```\n[2,3]\n[1,4]\n[1,2]\n[1,3]\n```",
   "tags": [
    "graphs",
    "union-find",
-   "cycle-detection"
+   "cycle-detection",
+   "trees",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the first cycle-closing edge happen to be the answer the problem wants?",
+    "a": "Because the input is guaranteed to contain exactly one redundant edge, so only one edge can ever close a cycle during the scan. The problem phrases it as 'the last edge in input order' to disambiguate in general, but with a single cycle the first edge found is also the last such edge, since there is only one. If there were several, you would continue scanning and keep the most recent, which is a one-line change."
+   },
+   {
+    "q": "Why union-find rather than DFS?",
+    "a": "Because union-find processes edges incrementally, which matches the problem exactly: you want the edge that closes a cycle at the moment it is added, which is precisely what a failed union reports. A DFS would find that a cycle exists but not naturally identify which edge in input order created it, so you would need extra bookkeeping. It is a good example of choosing the structure that answers the question directly rather than one that answers a related question."
+   },
+   {
+    "q": "How does the directed version differ?",
+    "a": "Considerably. In a directed graph the redundant edge might create a node with two parents rather than a cycle, or both, so you first look for a node with in-degree two and try removing each of its incoming edges, checking whether the rest forms a valid tree. That is redundant-connection II and is noticeably harder, because union-find alone cannot distinguish a cycle from a two-parent violation. Naming that difference is worth doing if the interviewer escalates."
+   }
   ]
  },
  {
@@ -8285,17 +8377,32 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Accounts merge: group email accounts belonging to the same person.",
-  "answer": "Union-Find over emails, unioning every email in an account with the first one, then group emails by their root and attach the owner's name. Time O(n alpha n) plus sorting the output. A DFS over an email graph works equally well.",
+  "answer": "**Approach**\n\nUnion-find over emails. Every email in one account belongs to the same person, so union them all with the first. Accounts sharing any email end up in the same component.\n\n**Logic**\n\nUnion the emails rather than the accounts, because the shared email is the evidence of identity and an account may link two previously separate groups.\n\nAfter unioning, group emails by their root, sort each group, and attach the owner's name — which is looked up from any email in the group, since all emails in a component belong to one person.\n\nSorting is required by the problem and also makes the output deterministic.\n\nO(n log n) dominated by the sort.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<IList<string>> AccountsMerge(IList<IList<string>> accounts)\n    {\n        var parent = new Dictionary<string, string>();\n        var owner = new Dictionary<string, string>();\n\n        string Find(string x)\n        {\n            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n            return x;\n        }\n\n        foreach (var account in accounts)\n        {\n            string name = account[0];\n\n            for (int i = 1; i < account.Count; i++)\n            {\n                string email = account[i];\n                parent.TryAdd(email, email);\n                owner[email] = name;\n\n                // Every email in one account is the same person.\n                if (i > 1) parent[Find(email)] = Find(account[1]);\n            }\n        }\n\n        var groups = new Dictionary<string, List<string>>();\n\n        foreach (string email in parent.Keys)\n        {\n            string root = Find(email);\n            if (!groups.TryGetValue(root, out var list)) groups[root] = list = new List<string>();\n            list.Add(email);\n        }\n\n        return groups.Select(g =>\n        {\n            var emails = g.Value;\n            emails.Sort(StringComparer.Ordinal);\n            var row = new List<string> { owner[g.Key] };\n            row.AddRange(emails);\n            return (IList<string>)row;\n        }).ToList();\n    }\n\n    private static string Show(IList<IList<string>> r)\n    {\n        var rendered = r.Select(g => \"[\" + string.Join(\",\", g) + \"]\").ToList();\n        rendered.Sort(StringComparer.Ordinal);\n        return rendered.Count == 0 ? \"(none)\" : string.Join(\" \", rendered);\n    }\n\n    public static void Main()\n    {\n        var accounts = new List<IList<string>>\n        {\n            new List<string> { \"John\", \"a@x.com\", \"b@x.com\" },\n            new List<string> { \"John\", \"b@x.com\", \"c@x.com\" },   // shares b, so merges\n            new List<string> { \"Mary\", \"m@x.com\" },\n            new List<string> { \"John\", \"z@x.com\" },              // a different John\n        };\n\n        Console.WriteLine(Show(AccountsMerge(accounts)));\n\n        Console.WriteLine(Show(AccountsMerge(new List<IList<string>>\n        {\n            new List<string> { \"A\", \"one@x.com\" },\n        })));\n\n        Console.WriteLine(Show(AccountsMerge(new List<IList<string>>())));\n    }\n}\n```\n\n**Output**\n\n```\n[John,a@x.com,b@x.com,c@x.com] [John,z@x.com] [Mary,m@x.com]\n[A,one@x.com]\n(none)\n```",
   "tags": [
    "graphs",
    "union-find",
-   "hashmap",
-   "dfs"
+   "grouping",
+   "merging",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why union emails rather than accounts?",
+    "a": "Because the email is the identity evidence and an account is just a bundle of them. Unioning accounts directly would require first working out which accounts overlap, which is the problem itself. Unioning emails makes the overlap emerge automatically: two accounts sharing any email end up with their emails in one component. It is a good example of choosing the right thing to union, which is usually the atom of identity rather than the container."
+   },
+   {
+    "q": "Why can the name be taken from any email in the group?",
+    "a": "Because the problem guarantees that accounts sharing an email belong to the same person, so every email in a component maps to the same name. That guarantee is what makes the lookup safe. Note the converse does not hold: two people with the same name and no shared email stay separate, which the two Johns in the test demonstrate. Confusing the name for the identity is the modelling error the question is probing."
+   },
+   {
+    "q": "What would this look like in a real identity system?",
+    "a": "The same connected-components idea, but the evidence is richer and weaker: shared email, shared device, shared payment method, shared address. Each carries a confidence rather than a certainty, so a plain union-find over-merges - one shared household device would fuse two families. Real systems use weighted evidence with a threshold, keep the merge reversible, and require human review above a certain blast radius, because an incorrect merge of two customers is far more damaging than a missed one."
+   }
   ]
  },
  {
@@ -8303,18 +8410,33 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Evaluate division: answer queries like a/c given ratios a/b and b/c.",
-  "answer": "Build a weighted graph where an edge carries the ratio and its reciprocal, then DFS or BFS from the numerator to the denominator multiplying weights. Union-Find with weights is the faster alternative for many queries. Time O(V+E) per query.",
+  "answer": "**Approach**\n\nA weighted graph. Each equation `a / b = k` is an edge from a to b with weight k and from b to a with weight 1/k. A query is then a path search, multiplying weights along the way.\n\n**Logic**\n\nDFS from the numerator to the denominator, carrying the product so far. Reaching the target gives the answer; exhausting the search means the two are not connected and the answer is -1.\n\nTwo cases need care. A variable divided by itself is 1, but only if the variable appears in the input at all — an unknown variable has no answer even for `x / x`. And unconnected components mean no path exists, which is different from a path of weight zero.\n\nO(queries × edges).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static double[] CalcEquation(IList<IList<string>> equations, double[] values,\n                                        IList<IList<string>> queries)\n    {\n        var graph = new Dictionary<string, List<(string To, double Weight)>>();\n\n        for (int i = 0; i < equations.Count; i++)\n        {\n            string a = equations[i][0], b = equations[i][1];\n\n            graph.TryAdd(a, new List<(string, double)>());\n            graph.TryAdd(b, new List<(string, double)>());\n\n            graph[a].Add((b, values[i]));          // a / b = k\n            graph[b].Add((a, 1.0 / values[i]));    // so b / a = 1/k\n        }\n\n        var results = new double[queries.Count];\n\n        for (int i = 0; i < queries.Count; i++)\n        {\n            string from = queries[i][0], to = queries[i][1];\n\n            // An unknown variable has no answer, even for x / x.\n            if (!graph.ContainsKey(from) || !graph.ContainsKey(to)) { results[i] = -1; continue; }\n\n            results[i] = Search(graph, from, to, 1.0, new HashSet<string>());\n        }\n\n        return results;\n    }\n\n    private static double Search(Dictionary<string, List<(string To, double Weight)>> graph,\n                                 string current, string target, double product,\n                                 HashSet<string> visited)\n    {\n        if (current == target) return product;\n        if (!visited.Add(current)) return -1;\n\n        foreach (var (next, weight) in graph[current])\n        {\n            double result = Search(graph, next, target, product * weight, visited);\n            if (result > 0) return result;\n        }\n\n        return -1;\n    }\n\n    public static void Main()\n    {\n        var equations = new List<IList<string>>\n        {\n            new List<string> { \"a\", \"b\" },\n            new List<string> { \"b\", \"c\" },\n        };\n        var values = new[] { 2.0, 3.0 };\n\n        var queries = new List<IList<string>>\n        {\n            new List<string> { \"a\", \"c\" },   // 2 * 3\n            new List<string> { \"b\", \"a\" },   // 1/2\n            new List<string> { \"a\", \"e\" },   // unknown variable\n            new List<string> { \"a\", \"a\" },   // known, so 1\n            new List<string> { \"x\", \"x\" },   // unknown, so -1\n            new List<string> { \"c\", \"a\" },\n        };\n\n        foreach (double r in CalcEquation(equations, values, queries))\n            Console.WriteLine(Math.Round(r, 5));\n    }\n}\n```\n\n**Output**\n\n```\n6\n0.5\n-1\n1\n-1\n0.16667\n```",
   "tags": [
    "graphs",
    "dfs",
-   "union-find",
-   "weighted"
+   "weighted-edges",
+   "queries",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Facebook",
    "Amazon",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why does x / x return -1 while a / a returns 1?",
+    "a": "Because the answer must be derivable from the given equations, and an unknown variable gives no basis for any claim about it - not even that it equals itself, since it might be zero or undefined. A variable that appears in the input is known to be a well-defined non-zero quantity, so dividing it by itself is 1. That asymmetry is the detail most implementations miss, and it is why the membership check precedes the search rather than being folded into it."
+   },
+   {
+    "q": "Why union-find rather than DFS, if the queries are numerous?",
+    "a": "A weighted union-find stores each node's ratio to its component root, so a query becomes two Find operations and a division, which is near-constant after path compression. That beats a DFS per query when there are many queries over a static equation set. The complication is that path compression must update the stored weights as it rewires, which is more delicate than the plain version. For a handful of queries the DFS is simpler and fast enough."
+   },
+   {
+    "q": "What about floating-point accumulation over a long path?",
+    "a": "Multiplying many ratios accumulates rounding error, so a long chain can drift measurably from the exact value. For interview inputs it is irrelevant, but in a real unit-conversion system you would store ratios as exact rationals or convert via a canonical base unit rather than chaining, which bounds the error to one multiplication. It is the same reasoning as converting currencies through a base rather than composing pairwise rates."
+   }
   ]
  },
  {
@@ -8322,16 +8444,31 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Minimum height trees: find all roots that minimise tree height.",
-  "answer": "Repeatedly trim leaves layer by layer, like a topological peel, until one or two nodes remain - those are the centroids. Time O(V+E), space O(V). Running BFS from every node is O(V times (V+E)) and unnecessary.",
+  "answer": "**Approach**\n\nPeel leaves layer by layer. The nodes remaining at the end are the centroids, and there are at most two of them.\n\n**Logic**\n\nRooting at a leaf always gives a tall tree, so the optimal roots are as far from the leaves as possible — the centre of the graph. Repeatedly removing all current leaves shrinks the tree inward, and the last one or two nodes standing are the centres.\n\nThere are at most two because a tree's centre is either one node, when the longest path has even length, or two adjacent nodes, when it is odd. Stopping when two or fewer remain is therefore correct.\n\nO(n) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<int> FindMinHeightTrees(int n, int[][] edges)\n    {\n        if (n <= 2) return Enumerable.Range(0, n).ToList();\n\n        var adjacency = new List<int>[n];\n        var degree = new int[n];\n        for (int i = 0; i < n; i++) adjacency[i] = new List<int>();\n\n        foreach (var e in edges)\n        {\n            adjacency[e[0]].Add(e[1]);\n            adjacency[e[1]].Add(e[0]);\n            degree[e[0]]++;\n            degree[e[1]]++;\n        }\n\n        var leaves = new List<int>();\n        for (int i = 0; i < n; i++) if (degree[i] == 1) leaves.Add(i);\n\n        int remaining = n;\n\n        // Peel inward until at most two nodes are left: those are the centres.\n        while (remaining > 2)\n        {\n            remaining -= leaves.Count;\n            var next = new List<int>();\n\n            foreach (int leaf in leaves)\n                foreach (int neighbour in adjacency[leaf])\n                    if (--degree[neighbour] == 1) next.Add(neighbour);\n\n            leaves = next;\n        }\n\n        return leaves;\n    }\n\n    private static string Show(IList<int> r)\n    {\n        var copy = new List<int>(r);\n        copy.Sort();\n        return copy.Count == 0 ? \"(none)\" : string.Join(\",\", copy);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(FindMinHeightTrees(4, new[] {\n            new[] { 1, 0 }, new[] { 1, 2 }, new[] { 1, 3 } })));      // a star: centre is 1\n\n        Console.WriteLine(Show(FindMinHeightTrees(6, new[] {\n            new[] { 3, 0 }, new[] { 3, 1 }, new[] { 3, 2 },\n            new[] { 3, 4 }, new[] { 5, 4 } })));\n\n        Console.WriteLine(Show(FindMinHeightTrees(2, new[] { new[] { 0, 1 } })));  // two centres\n        Console.WriteLine(Show(FindMinHeightTrees(1, Array.Empty<int[]>())));\n        Console.WriteLine(Show(FindMinHeightTrees(4, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 } })));      // a path: two centres\n    }\n}\n```\n\n**Output**\n\n```\n1\n3,4\n0,1\n0\n1,2\n```",
   "tags": [
    "graphs",
+   "topological-peeling",
+   "tree-centre",
    "bfs",
-   "topological",
-   "trees"
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why can there be at most two answers?",
+    "a": "Because a tree's centre is defined by its longest path, the diameter. If the diameter has an even number of edges there is a single middle node; if odd, there are two adjacent middle nodes. No other configuration is possible, so the peeling can safely stop at two. If the algorithm ever left three, that would indicate a bug or a graph that is not a tree, which is worth knowing as a sanity check."
+   },
+   {
+    "q": "Why peel leaves rather than computing the height from every node?",
+    "a": "Because computing the height rooted at each node is O(n) per node and O(n squared) overall, which is fine for small graphs and hopeless for large ones. Peeling touches each node and edge once, so it is linear. The insight is that you do not need the heights at all - you only need to identify the centre, and peeling finds it directly. That reframing from 'evaluate every candidate' to 'construct the answer' is the substance of the problem."
+   },
+   {
+    "q": "Why is n of 2 or fewer special-cased?",
+    "a": "Because with two nodes both have degree 1, so both are leaves and the peeling loop would never start, yet both are valid answers. With one node the degree is 0 so it is never added to the initial leaf list at all. Returning all nodes directly for those cases is simpler than trying to make the general loop handle them, and it matches the definition: with two nodes, rooting at either gives height 1."
+   }
   ]
  },
  {
@@ -8339,17 +8476,32 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Reconstruct an itinerary from a list of tickets using every ticket once.",
-  "answer": "Hierholzer's algorithm for an Eulerian path: sort destinations per airport, DFS consuming edges, and prepend nodes to the result as recursion unwinds, then reverse. Time O(E log E) for sorting. Greedy forward construction gets stuck on dead ends.",
+  "answer": "**Approach**\n\nHierholzer's algorithm for an Eulerian path. Every ticket must be used exactly once, which is precisely an Eulerian path over the directed graph of flights.\n\n**Logic**\n\nA naive greedy — always take the smallest available destination — can strand you at a dead end while tickets remain. Hierholzer's fixes that: walk until stuck, then add the stuck airport to the front of the route and back up. The route is built in reverse.\n\nUsing a min-heap or sorted list per airport gives the lexicographically smallest itinerary, which the problem requires.\n\nO(E log E) for the sorting.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<string> FindItinerary(IList<IList<string>> tickets)\n    {\n        var destinations = new Dictionary<string, PriorityQueue<string, string>>();\n\n        foreach (var t in tickets)\n        {\n            if (!destinations.TryGetValue(t[0], out var queue))\n                destinations[t[0]] = queue = new PriorityQueue<string, string>();\n\n            queue.Enqueue(t[1], t[1]);   // lexicographic order\n        }\n\n        var route = new List<string>();\n        var stack = new Stack<string>();\n        stack.Push(\"JFK\");\n\n        while (stack.Count > 0)\n        {\n            string airport = stack.Peek();\n\n            // Walk as far as possible; when stuck, this airport joins the route.\n            if (destinations.TryGetValue(airport, out var queue) && queue.Count > 0)\n                stack.Push(queue.Dequeue());\n            else\n                route.Add(stack.Pop());\n        }\n\n        route.Reverse();   // built backwards\n        return route;\n    }\n\n    private static IList<IList<string>> Tickets(params string[][] pairs) =>\n        pairs.Select(p => (IList<string>)new List<string> { p[0], p[1] }).ToList();\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\"->\", FindItinerary(Tickets(\n            new[] { \"MUC\", \"LHR\" }, new[] { \"JFK\", \"MUC\" },\n            new[] { \"SFO\", \"SJC\" }, new[] { \"LHR\", \"SFO\" }))));\n\n        // The greedy trap: taking ATL first from JFK strands you.\n        Console.WriteLine(string.Join(\"->\", FindItinerary(Tickets(\n            new[] { \"JFK\", \"SFO\" }, new[] { \"JFK\", \"ATL\" },\n            new[] { \"SFO\", \"ATL\" }, new[] { \"ATL\", \"JFK\" },\n            new[] { \"ATL\", \"SFO\" }))));\n\n        Console.WriteLine(string.Join(\"->\", FindItinerary(Tickets(\n            new[] { \"JFK\", \"KUL\" }, new[] { \"JFK\", \"NRT\" }, new[] { \"NRT\", \"JFK\" }))));\n\n        Console.WriteLine(string.Join(\"->\", FindItinerary(Tickets(\n            new[] { \"JFK\", \"AAA\" }))));\n    }\n}\n```\n\n**Output**\n\n```\nJFK->MUC->LHR->SFO->SJC\nJFK->ATL->JFK->SFO->ATL->SFO\nJFK->NRT->JFK->KUL\nJFK->AAA\n```",
   "tags": [
    "graphs",
    "eulerian-path",
-   "dfs",
-   "greedy"
+   "hierholzer",
+   "lexicographic",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why does the plain greedy fail?",
+    "a": "Because taking the lexicographically smallest destination at every step can lead into a dead end while tickets remain elsewhere. The third test shows it: from JFK, taking KUL first strands you there with the NRT ticket unused, even though JFK-NRT-JFK-KUL uses everything. Hierholzer's handles it by treating a dead end as the *end* of the route rather than a failure, backing up and building the itinerary in reverse. The stranded airport is genuinely last, which is why prepending is correct."
+   },
+   {
+    "q": "Why is the route built in reverse?",
+    "a": "Because an airport is only added when it has no unused tickets left, which means nothing can follow it in the final route. So the first airport added is the last one visited. Popping into a list and reversing at the end is the natural expression of that. Trying to build it forwards requires knowing in advance which branch is the dead end, which is exactly the information the algorithm is discovering."
+   },
+   {
+    "q": "When does an Eulerian path exist at all?",
+    "a": "For a directed graph, when it is connected over the edges and at most one vertex has out-degree exceeding in-degree by one (the start), at most one has in-degree exceeding out-degree by one (the end), and all others are balanced. The problem guarantees a valid itinerary exists, so the check is omitted. Adding it would be the responsible thing in production, since without it the algorithm silently returns a partial route rather than reporting that the tickets cannot be used."
+   }
   ]
  },
  {
@@ -8357,16 +8509,31 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Find the critical connections (bridges) in a network.",
-  "answer": "Tarjan's bridge-finding DFS tracking discovery time and the lowest reachable discovery time per node; an edge to a child whose low value exceeds the parent's discovery time is a bridge. Time O(V+E), space O(V).",
+  "answer": "**Approach**\n\nTarjan's bridge-finding algorithm. A DFS assigns each node a discovery time and computes the earliest discovery time reachable from its subtree via a back edge. An edge is a bridge when the child's reachable minimum is strictly greater than the parent's discovery time.\n\n**Logic**\n\nIf a child's subtree can reach no node discovered before the parent, then removing the edge disconnects that subtree — so the edge is critical.\n\nThe parent edge must be excluded when computing the minimum, or every tree edge would look like a back edge to its own parent and no bridge would ever be found.\n\nO(V + E) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<IList<int>> CriticalConnections(int n, IList<IList<int>> connections)\n    {\n        var adjacency = new List<int>[n];\n        for (int i = 0; i < n; i++) adjacency[i] = new List<int>();\n\n        foreach (var c in connections)\n        {\n            adjacency[c[0]].Add(c[1]);\n            adjacency[c[1]].Add(c[0]);\n        }\n\n        var discovered = new int[n];\n        var lowest = new int[n];\n        Array.Fill(discovered, -1);\n\n        var bridges = new List<IList<int>>();\n        int timer = 0;\n\n        void Dfs(int node, int parent)\n        {\n            discovered[node] = lowest[node] = timer++;\n\n            foreach (int next in adjacency[node])\n            {\n                if (next == parent) continue;    // never count the edge we arrived on\n\n                if (discovered[next] == -1)\n                {\n                    Dfs(next, node);\n                    lowest[node] = Math.Min(lowest[node], lowest[next]);\n\n                    // The subtree cannot reach back past this node: the edge is critical.\n                    if (lowest[next] > discovered[node])\n                        bridges.Add(new List<int> { node, next });\n                }\n                else\n                {\n                    lowest[node] = Math.Min(lowest[node], discovered[next]);\n                }\n            }\n        }\n\n        for (int i = 0; i < n; i++)\n            if (discovered[i] == -1) Dfs(i, -1);\n\n        return bridges;\n    }\n\n    private static IList<IList<int>> Edges(params int[][] pairs) =>\n        pairs.Select(p => (IList<int>)new List<int> { p[0], p[1] }).ToList();\n\n    private static string Show(IList<IList<int>> r)\n    {\n        if (r.Count == 0) return \"(none)\";\n        var rendered = r.Select(e => $\"[{Math.Min(e[0], e[1])},{Math.Max(e[0], e[1])}]\").ToList();\n        rendered.Sort(StringComparer.Ordinal);\n        return string.Join(\" \", rendered);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(CriticalConnections(4, Edges(\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 }, new[] { 1, 3 }))));\n\n        // A cycle has no bridges at all.\n        Console.WriteLine(Show(CriticalConnections(3, Edges(\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 }))));\n\n        // A path: every edge is critical.\n        Console.WriteLine(Show(CriticalConnections(3, Edges(\n            new[] { 0, 1 }, new[] { 1, 2 }))));\n\n        Console.WriteLine(Show(CriticalConnections(2, Edges(new[] { 0, 1 }))));\n        Console.WriteLine(Show(CriticalConnections(1, Edges())));\n    }\n}\n```\n\n**Output**\n\n```\n[1,3]\n(none)\n[0,1] [1,2]\n[0,1]\n(none)\n```",
   "tags": [
    "graphs",
    "tarjan",
+   "bridges",
    "dfs",
-   "bridges"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is the comparison strictly greater rather than greater-or-equal?",
+    "a": "Because equality means the child's subtree can reach back to the parent itself, which is only possible through a cycle containing the edge - so removing it leaves the graph connected and it is not a bridge. Strictly greater means the subtree cannot reach even as far back as the parent, so the edge is the only link. Using >= would report every edge in a cycle as critical, which the triangle test immediately exposes."
+   },
+   {
+    "q": "Why must the parent edge be skipped?",
+    "a": "Because the edge you arrived on always leads back to a node with an earlier discovery time, so counting it would make every node's reachable minimum equal its parent's, and no edge would ever satisfy the bridge condition. Skipping it is what makes back edges meaningful. The subtlety is that skipping by parent *node* is wrong when parallel edges exist, since a second edge to the same parent genuinely is a cycle; skipping by edge identity handles that correctly."
+   },
+   {
+    "q": "What is the practical use of finding bridges?",
+    "a": "Identifying single points of failure in a network: a bridge is a link whose loss partitions the system. The same algorithm with a slightly different condition finds articulation points, which are the equivalent for nodes rather than edges. In distributed systems it tells you which connections need redundancy, and in dependency graphs it identifies modules whose removal would disconnect parts of the codebase, which is a useful signal when planning a refactor."
+   }
   ]
  },
  {
@@ -8374,17 +8541,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Walls and gates: fill each empty room with the distance to the nearest gate.",
-  "answer": "Multi-source BFS from all gates at once, writing distances as rooms are first reached. Time O(mn), space O(mn). Running a separate BFS per gate is correct but quadratic in the number of gates.",
+  "answer": "**Approach**\n\nMulti-source BFS seeded with every gate at once. The first time a room is reached is by the shortest path from the nearest gate.\n\n**Logic**\n\nRunning a separate BFS from each gate and taking minimums would be correct but far slower. Seeding the queue with all gates makes the initial frontier distance zero everywhere a gate exists, so BFS naturally computes the minimum over all of them in one traversal.\n\nRooms are marked as they are enqueued, using the fact that an unvisited room holds the sentinel value. Walls are skipped and never enqueued.\n\nO(rows × cols) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private const int Wall = -1;\n    private const int Gate = 0;\n    private const int Empty = int.MaxValue;\n\n    public static void WallsAndGates(int[][] rooms)\n    {\n        if (rooms == null || rooms.Length == 0) return;\n\n        int height = rooms.Length, width = rooms[0].Length;\n        var queue = new Queue<(int r, int c)>();\n\n        // Every gate is a source, so one BFS computes the minimum over all of them.\n        for (int r = 0; r < height; r++)\n            for (int c = 0; c < width; c++)\n                if (rooms[r][c] == Gate) queue.Enqueue((r, c));\n\n        int[] dr = { -1, 1, 0, 0 };\n        int[] dc = { 0, 0, -1, 1 };\n\n        while (queue.Count > 0)\n        {\n            var (r, c) = queue.Dequeue();\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = r + dr[d], nc = c + dc[d];\n\n                if (nr < 0 || nr >= height || nc < 0 || nc >= width) continue;\n                if (rooms[nr][nc] != Empty) continue;   // wall, gate, or already reached\n\n                rooms[nr][nc] = rooms[r][c] + 1;\n                queue.Enqueue((nr, nc));\n            }\n        }\n    }\n\n    private static string Render(int[][] m)\n    {\n        var rows = new List<string>();\n        foreach (var row in m)\n        {\n            var cells = new List<string>();\n            foreach (int v in row) cells.Add(v == Empty ? \"INF\" : v.ToString());\n            rows.Add(string.Join(\",\", cells));\n        }\n        return string.Join(\" / \", rows);\n    }\n\n    public static void Main()\n    {\n        var rooms = new[] {\n            new[] { Empty, Wall, Gate, Empty },\n            new[] { Empty, Empty, Empty, Wall },\n            new[] { Empty, Wall, Empty, Wall },\n            new[] { Gate, Wall, Empty, Empty } };\n\n        WallsAndGates(rooms);\n        Console.WriteLine(Render(rooms));\n\n        // A room walled off from every gate stays at INF.\n        var isolated = new[] {\n            new[] { Gate, Wall, Empty } };\n        WallsAndGates(isolated);\n        Console.WriteLine(Render(isolated));\n\n        var noGates = new[] { new[] { Empty, Empty } };\n        WallsAndGates(noGates);\n        Console.WriteLine(Render(noGates));\n\n        var onlyGate = new[] { new[] { Gate } };\n        WallsAndGates(onlyGate);\n        Console.WriteLine(Render(onlyGate));\n    }\n}\n```\n\n**Output**\n\n```\n3,-1,0,1 / 2,2,1,-1 / 1,-1,2,-1 / 0,-1,3,4\n0,-1,INF\nINF,INF\n0\n```",
   "tags": [
    "graphs",
    "bfs",
-   "matrix",
-   "multi-source"
+   "multi-source",
+   "grid",
+   "csharp"
   ],
   "companies": [
    "Facebook",
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why is multi-source BFS correct rather than just convenient?",
+    "a": "Because BFS explores in order of distance from the frontier, and seeding with every gate makes the initial frontier the set of all gates at distance zero. The first time any room is reached is therefore by the shortest path from whichever gate is nearest. It is not an approximation of running k separate searches and taking the minimum - it computes the same result in one pass. The same argument applies to rotting oranges and the 01-matrix problem."
+   },
+   {
+    "q": "Why does checking for the sentinel double as a visited check?",
+    "a": "Because a room is only ever written once, when it is first reached, and writing it changes it from the sentinel to a real distance. So the condition 'still equals the sentinel' means exactly 'not yet reached'. That removes the need for a separate visited array, which is neat, but it depends on the sentinel being outside the range of real distances - int.MaxValue is safe because no path can be that long."
+   },
+   {
+    "q": "What if the gates could be added or removed over time?",
+    "a": "Recomputing the whole grid on every change is O(rc) and may be fine for a small grid. Adding a gate only ever decreases distances, so you can BFS from just the new gate and stop early wherever the existing distance is already smaller, which is usually much cheaper. Removing a gate is the hard direction, because distances can increase and you cannot know how far the effect spreads without recomputation - which is a general property of shortest-path maintenance under edge deletion."
+   }
   ]
  },
  {
