@@ -12870,15 +12870,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Count the number of ways to climb stairs with steps of arbitrary allowed sizes.",
-  "answer": "dp[i] is the sum of dp[i minus each allowed step] where the index is non-negative, seeded with dp[0] equal to one. Time O(n times k), space O(n) or O(max step). It is the unbounded knapsack counting form rather than the fixed Fibonacci recurrence.",
+  "answer": "**Approach**\n\nOne-dimensional DP where the totals loop is outside and the step sizes inside — the ordering that counts *sequences*, since taking a 1 then a 2 is a different climb from a 2 then a 1.\n\n**Logic**\n\nThis is the same loop-order question as coin change, with the opposite answer. Here order matters, so the totals must be outside; in coin change combinations, coins go outside.\n\nThe base case is one way to be at the bottom — the empty climb.\n\nO(total × steps) time, O(total) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Sequences: 1 then 2 differs from 2 then 1, so totals loop OUTSIDE.\n    public static long CountWays(int stairs, int[] allowedSteps)\n    {\n        if (stairs < 0) return 0;\n\n        var ways = new long[stairs + 1];\n        ways[0] = 1;   // one way to stand at the bottom: take nothing\n\n        for (int at = 1; at <= stairs; at++)\n            foreach (int step in allowedSteps)\n                if (step <= at) ways[at] += ways[at - step];\n\n        return ways[stairs];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CountWays(4, new[] { 1, 2 }));        // the Fibonacci case\n        Console.WriteLine(CountWays(4, new[] { 1, 2, 3 }));\n        Console.WriteLine(CountWays(0, new[] { 1, 2 }));\n        Console.WriteLine(CountWays(3, new[] { 2 }));           // unreachable\n        Console.WriteLine(CountWays(6, new[] { 2, 3 }));\n        Console.WriteLine(CountWays(10, new[] { 1 }));          // exactly one climb\n        Console.WriteLine(CountWays(30, new[] { 1, 2 }));\n    }\n}\n```\n\n**Output**\n\n```\n5\n7\n1\n0\n2\n1\n1346269\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
    "counting",
-   "combinations"
+   "loop-order",
+   "sequences",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the totals loop go outside here but inside for coin combinations?",
+    "a": "Because this problem counts ordered sequences and that one counts multisets. With totals outside, every step size is offered at every position, so 1-then-2 and 2-then-1 are both reached and both counted - which is correct for a climb. With the step sizes outside, each is introduced once and the sequences are forced into a canonical order, collapsing those two into one. Same three lines, and the loop order is the entire specification."
+   },
+   {
+    "q": "Why does the [1,2] case give Fibonacci numbers?",
+    "a": "Because with steps of 1 and 2 the recurrence is ways[n] = ways[n-1] + ways[n-2], which is exactly the Fibonacci relation with a shifted index - stairs of 30 giving 1346269 is the 31st Fibonacci number. That also means the [1,2] case has a closed form and an O(log n) matrix-power solution, though the DP generalises to arbitrary step sets and the closed form does not."
+   },
+   {
+    "q": "Why accumulate in long?",
+    "a": "Because the count grows exponentially in the number of stairs - 30 stairs with steps of 1 and 2 already exceeds a million, and a hundred stairs overflows int comfortably. Overflow would wrap to a plausible-looking wrong number rather than throwing. For very large inputs even long overflows and the usual answer is to reduce modulo a prime, which the problem statement normally requests explicitly."
+   }
   ]
  },
  {
@@ -12886,17 +12902,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Hard",
   "question": "Given a string, find the minimum cuts needed to partition it into palindromes.",
-  "answer": "Precompute palindrome status for every substring with a two-dimensional table, then dp over prefixes taking the minimum cuts where the trailing segment is a palindrome. Time O(n^2), space O(n^2) - reducible with expansion around centres for the palindrome check.",
+  "answer": "**Approach**\n\nTwo tables. First mark which substrings are palindromes by expanding around every centre, then a linear DP over prefixes using those marks.\n\n**Logic**\n\nComputing the palindrome table by expansion is O(n²); doing it by checking each substring independently would be O(n³) and is the usual reason a first attempt is too slow.\n\nThe cut DP says: the cuts needed for a prefix is one more than the best over every split point whose right part is a palindrome — and zero if the whole prefix is itself a palindrome.\n\nO(n²) time and space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MinCut(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        int n = s.Length;\n        var isPalindrome = new bool[n, n];\n\n        // Expand around every centre: O(n^2) rather than O(n^3).\n        for (int centre = 0; centre < n; centre++)\n        {\n            for (int l = centre, r = centre; l >= 0 && r < n && s[l] == s[r]; l--, r++)\n                isPalindrome[l, r] = true;\n\n            for (int l = centre, r = centre + 1; l >= 0 && r < n && s[l] == s[r]; l--, r++)\n                isPalindrome[l, r] = true;\n        }\n\n        var cuts = new int[n];\n\n        for (int end = 0; end < n; end++)\n        {\n            if (isPalindrome[0, end]) { cuts[end] = 0; continue; }   // no cut needed at all\n\n            cuts[end] = end;   // worst case: cut before every character\n\n            for (int start = 1; start <= end; start++)\n                if (isPalindrome[start, end])\n                    cuts[end] = Math.Min(cuts[end], cuts[start - 1] + 1);\n        }\n\n        return cuts[n - 1];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinCut(\"aab\"));\n        Console.WriteLine(MinCut(\"a\"));\n        Console.WriteLine(MinCut(\"ab\"));\n        Console.WriteLine(MinCut(\"\"));\n        Console.WriteLine(MinCut(\"racecar\"));       // already a palindrome\n        Console.WriteLine(MinCut(\"abcde\"));         // nothing pairs\n        Console.WriteLine(MinCut(\"aabbaa\"));\n        Console.WriteLine(MinCut(\"cabababcbc\"));\n    }\n}\n```\n\n**Output**\n\n```\n1\n0\n1\n0\n0\n4\n0\n3\n```",
   "tags": [
-   "dynamic-programming",
-   "strings",
+   "dp",
    "palindrome",
-   "partitioning"
+   "partitioning",
+   "precomputation",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why precompute the palindrome table by expanding around centres?",
+    "a": "Because checking each of the O(n squared) substrings independently costs O(n) each, giving O(n cubed) - which is the usual reason a correct first attempt times out. Expansion computes every palindrome in O(n squared) total, since each centre's expansion is bounded by the string length and there are 2n-1 centres. The alternative interval DP filling the table by length is the same bound; either is fine as long as it is not the naive check."
+   },
+   {
+    "q": "Why is cuts[end] seeded with end rather than a large sentinel?",
+    "a": "Because cutting before every character is always achievable - single characters are palindromes - so 'end' cuts is a genuine upper bound rather than an arbitrary infinity. Using it avoids any sentinel arithmetic and makes the value meaningful at every step. It also guarantees the minimum is well defined even if no longer palindromic suffix is ever found, which is what happens for a string with no repeats."
+   },
+   {
+    "q": "Can the space be reduced?",
+    "a": "The cuts array is already O(n); the palindrome table is the O(n squared) part. It can be avoided by interleaving the expansion with the DP - when expanding around a centre, update the cut value for the right endpoint directly, which gives O(n) space and the same time. That version is harder to read and worth reaching for only when n is large enough that an n-squared boolean table is a real cost, which for strings of a few thousand it is not."
+   }
   ]
  },
  {
@@ -12904,17 +12935,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Find the maximum sum of non-adjacent elements in a circular array.",
-  "answer": "Run the linear house-robber twice - once excluding the first element and once excluding the last - and take the maximum, because the first and last cannot both be used in a circle. Time O(n), space O(1).",
+  "answer": "**Approach**\n\nRun the linear house-robber twice: once excluding the last element, once excluding the first. The answer is the larger.\n\n**Logic**\n\nThe circularity only adds one constraint — the first and last are now adjacent — so at most one of them is in the answer. Excluding each in turn covers both possibilities, and the case where neither is taken is covered by both runs.\n\nThe single-element case is the exception: with one house, removing either end leaves nothing, so it needs handling before the split.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxNonAdjacentCircular(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n        if (nums.Length == 1) return Math.Max(0, nums[0]);   // both splits would be empty\n\n        // First and last are adjacent, so at most one of them is used.\n        return Math.Max(LinearBest(nums, 0, nums.Length - 2),\n                        LinearBest(nums, 1, nums.Length - 1));\n    }\n\n    private static int LinearBest(int[] nums, int from, int to)\n    {\n        int take = 0, skip = 0;\n\n        for (int i = from; i <= to; i++)\n        {\n            int nextTake = skip + nums[i];\n            skip = Math.Max(skip, take);\n            take = nextTake;\n        }\n\n        return Math.Max(take, skip);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxNonAdjacentCircular(new[] { 2, 3, 2 }));\n        Console.WriteLine(MaxNonAdjacentCircular(new[] { 1, 2, 3, 1 }));\n        Console.WriteLine(MaxNonAdjacentCircular(new[] { 1, 2, 3 }));\n        Console.WriteLine(MaxNonAdjacentCircular(new[] { 5 }));\n        Console.WriteLine(MaxNonAdjacentCircular(new[] { 1, 2 }));\n        Console.WriteLine(MaxNonAdjacentCircular(Array.Empty<int>()));\n        Console.WriteLine(MaxNonAdjacentCircular(new[] { 200, 3, 140, 20, 10 }));\n    }\n}\n```\n\n**Output**\n\n```\n3\n4\n3\n5\n2\n0\n340\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
+   "house-robber",
    "circular",
-   "arrays",
-   "house-robber"
+   "case-split",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why do two runs suffice?",
+    "a": "Because the only new constraint is that the first and last cannot both be chosen, so any valid selection either omits the last or omits the first - possibly both, which is covered by either run. Excluding one end in turn enumerates both cases exhaustively, and taking the larger gives the optimum. It is a clean example of breaking a circular constraint by fixing one decision and solving the resulting linear problem twice."
+   },
+   {
+    "q": "Why does a single element need special handling?",
+    "a": "Because both ranges become empty - excluding the last leaves nothing, and so does excluding the first - so both runs return zero and the real answer is lost. With two or more elements each range is non-empty and the general argument holds. It is the boundary where the case split degenerates, and it is why the length check sits before the split rather than being folded into the helper."
+   },
+   {
+    "q": "Why does the answer never go negative?",
+    "a": "Because skipping everything is always allowed, so the rolling 'skip' value starts at zero and the maximum can never fall below it - an all-negative array correctly yields zero rather than the least-bad element. That is the usual formulation, but if the problem demanded a non-empty selection the seeds would have to change and an all-negative input would return its largest value. Which one applies should be settled from the statement rather than assumed."
+   }
   ]
  },
  {
@@ -12922,17 +12968,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Given two strings, find the length of the longest common substring, not subsequence.",
-  "answer": "dp[i][j] is the length of the common suffix ending at those positions - one plus the diagonal when characters match, zero otherwise - with the answer being the maximum cell. Time O(mn), space O(n) with a rolling row. Unlike subsequence, a mismatch resets to zero.",
+  "answer": "**Approach**\n\nDP where the cell holds the length of the common run *ending exactly at* those two positions. A mismatch resets it to zero.\n\n**Logic**\n\nThe reset is the whole difference from longest common subsequence. A subsequence may skip characters, so a mismatch inherits the better neighbour; a substring must be contiguous, so a mismatch destroys the run.\n\nThe answer is the maximum over the whole table rather than the last cell, because the best run can end anywhere.\n\nO(m × n) time, O(n) space with a rolling row iterated backwards.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int LongestCommonSubstring(string a, string b)\n    {\n        a ??= \"\"; b ??= \"\";\n        if (a.Length == 0 || b.Length == 0) return 0;\n\n        var row = new int[b.Length + 1];\n        int best = 0;\n\n        foreach (char ca in a)\n            // Backwards, so row[j-1] still holds the previous row's diagonal.\n            for (int j = b.Length; j >= 1; j--)\n            {\n                // A mismatch RESETS: substrings must be contiguous.\n                row[j] = ca == b[j - 1] ? row[j - 1] + 1 : 0;\n\n                if (row[j] > best) best = row[j];\n            }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestCommonSubstring(\"abcde\", \"abfce\"));   // \"ab\"\n        Console.WriteLine(LongestCommonSubstring(\"abcdef\", \"zabcf\"));\n        Console.WriteLine(LongestCommonSubstring(\"abc\", \"def\"));\n        Console.WriteLine(LongestCommonSubstring(\"\", \"abc\"));\n        Console.WriteLine(LongestCommonSubstring(\"aaa\", \"aa\"));\n        Console.WriteLine(LongestCommonSubstring(\"same\", \"same\"));\n\n        // LCS would say 3 (\"abc\"); the longest common SUBSTRING is only 1.\n        Console.WriteLine(LongestCommonSubstring(\"axbxc\", \"abc\"));\n    }\n}\n```\n\n**Output**\n\n```\n2\n3\n0\n0\n2\n4\n1\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
    "strings",
-   "substring",
-   "matrix"
+   "substring-vs-subsequence",
+   "rolling-row",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does a mismatch reset to zero rather than inherit a neighbour?",
+    "a": "Because a substring must be contiguous, so a mismatch ends the run - there is no way to skip a character and continue. The subsequence version inherits the better of the two neighbours precisely because skipping is allowed. That one line is the entire difference between the two algorithms, and the 'axbxc' against 'abc' test makes it visible: the subsequence answer is 3 and the substring answer is 1."
+   },
+   {
+    "q": "Why is the answer the maximum over the table?",
+    "a": "Because each cell measures a run ending exactly at that pair of positions, and the best run can end anywhere - the bottom-right cell only describes runs ending at both strings' final characters. The subsequence version does read the last cell, since its value is a running optimum rather than a run length. Mixing the two conventions is a common and hard-to-spot error, because it gives the right answer whenever the best match happens to be at the end."
+   },
+   {
+    "q": "Is there a faster approach?",
+    "a": "Yes - a generalised suffix automaton or suffix tree over both strings finds the longest common substring in O(m + n), and binary searching the length with rolling hashes gives O((m + n) log n) expected. Both are considerably more machinery. The quadratic DP is the right answer for interview-scale inputs, and naming the linear alternative shows you know where the ceiling is without spending the time to build it."
+   }
   ]
  },
  {
@@ -12940,17 +13001,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Determine whether a string can be constructed from a given set of words used any number of times.",
-  "answer": "dp over prefixes where a position is reachable if some word ends there and its start position is reachable, seeded at zero. A trie or a length-bounded lookup avoids checking every dictionary word per position. Time O(n^2) with a hash set of words.",
+  "answer": "**Approach**\n\nWord-break DP over prefixes. A position is reachable if some earlier reachable position has a dictionary word bridging the gap.\n\n**Logic**\n\nGreedy matching fails: taking the longest word at each step can strand the remainder, and the failure only shows up after many further characters. The DP explores every split.\n\nBounding the inner loop by the longest dictionary word turns O(n²) splits into O(n · maxLength), which matters when the string is long and the words are short.\n\nReuse is unlimited, which is what makes this a reachability problem rather than a matching one.\n\nO(n · maxLength) substring lookups.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool CanConstruct(string s, string[] words)\n    {\n        if (string.IsNullOrEmpty(s)) return true;\n\n        var dictionary = new HashSet<string>(words);\n\n        int longest = 0;\n        foreach (string w in words) longest = Math.Max(longest, w.Length);\n        if (longest == 0) return false;\n\n        var reachable = new bool[s.Length + 1];\n        reachable[0] = true;\n\n        for (int end = 1; end <= s.Length; end++)\n            // No word is longer than 'longest', so do not look further back.\n            for (int start = Math.Max(0, end - longest); start < end; start++)\n            {\n                if (!reachable[start]) continue;\n\n                if (dictionary.Contains(s.Substring(start, end - start)))\n                { reachable[end] = true; break; }\n            }\n\n        return reachable[s.Length];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CanConstruct(\"leetcode\", new[] { \"leet\", \"code\" }));\n        Console.WriteLine(CanConstruct(\"applepenapple\", new[] { \"apple\", \"pen\" }));   // reuse\n        Console.WriteLine(CanConstruct(\"catsandog\",\n            new[] { \"cats\", \"dog\", \"sand\", \"and\", \"cat\" }));\n\n        // Greedy would take \"aaaa\" first and strand the rest.\n        Console.WriteLine(CanConstruct(\"aaaaab\", new[] { \"aaaa\", \"aaa\", \"b\", \"aa\" }));\n\n        Console.WriteLine(CanConstruct(\"\", new[] { \"a\" }));\n        Console.WriteLine(CanConstruct(\"abc\", Array.Empty<string>()));\n        Console.WriteLine(CanConstruct(\"aaaaaaa\", new[] { \"a\", \"aa\" }));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n```",
   "tags": [
-   "dynamic-programming",
-   "strings",
+   "dp",
    "word-break",
-   "trie"
+   "reachability",
+   "hash-set",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why does greedy longest-match fail?",
+    "a": "Because a locally longest word can consume characters a later word needed. For 'aaaaab' with words including 'aaaa' and 'aaa', taking 'aaaa' leaves 'ab' which cannot be built, while taking 'aaa' then 'aa' then 'b' works. The failure appears far from the decision, so no local rule detects it. The DP considers every split and shares the results, which is why it is both correct and still linear-ish."
+   },
+   {
+    "q": "Why bound the inner loop by the longest word?",
+    "a": "Because a split further back than the longest dictionary word can never be bridged, so those iterations construct substrings and hash them for nothing. With a long string and short words that is the difference between O(n squared) and O(n times maxLength). It also caps the substring allocation, which is the real cost here - a trie walk would remove the allocation entirely and is the next refinement."
+   },
+   {
+    "q": "How would you also return the actual segmentation?",
+    "a": "Record, for each reachable position, the start index that reached it, then walk backwards from the end reconstructing the words - O(n) extra space and the same time. Returning ALL segmentations is a different problem: there can be exponentially many, so it needs backtracking with memoisation on the suffix, and the output size rather than the algorithm becomes the bound. Distinguishing 'one answer' from 'all answers' before choosing the approach matters here."
+   }
   ]
  },
  {
@@ -12958,16 +13034,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Find the number of ways to reach a score in a game with different point values.",
-  "answer": "Unbounded knapsack counting combinations: iterate point values in the outer loop and scores in the inner, accumulating. The loop order determines whether order matters - values outside counts combinations, scores outside counts sequences, which is the classic distinction to state explicitly.",
+  "answer": "**Approach**\n\nUnbounded counting DP with the point values on the outer loop, so combinations are counted rather than orderings.\n\n**Logic**\n\nThe classic version of this question uses scores of 3, 5 and 10 and asks for distinct *combinations* — scoring 3 then 5 is the same outcome as 5 then 3. That makes it the coin-change combinations recurrence, with the values outside.\n\nIf the question intended distinct orderings of plays, the loops would swap. Both are shown so the difference is explicit.\n\nO(values × score) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Combinations: 3 then 5 is the same outcome as 5 then 3.\n    public static long CountCombinations(int score, int[] values)\n    {\n        var ways = new long[score + 1];\n        ways[0] = 1;\n\n        foreach (int value in values)            // values OUTSIDE\n            for (int total = value; total <= score; total++)\n                ways[total] += ways[total - value];\n\n        return ways[score];\n    }\n\n    // Orderings: each distinct sequence of plays counts separately.\n    public static long CountSequences(int score, int[] values)\n    {\n        var ways = new long[score + 1];\n        ways[0] = 1;\n\n        for (int total = 1; total <= score; total++)\n            foreach (int value in values)\n                if (value <= total) ways[total] += ways[total - value];\n\n        return ways[score];\n    }\n\n    public static void Main()\n    {\n        var points = new[] { 3, 5, 10 };\n\n        foreach (int score in new[] { 0, 3, 8, 13, 20 })\n            Console.WriteLine($\"{score}: combinations {CountCombinations(score, points)}, \" +\n                              $\"sequences {CountSequences(score, points)}\");\n\n        Console.WriteLine(CountCombinations(7, points));    // unreachable\n        Console.WriteLine(CountCombinations(100, points));\n    }\n}\n```\n\n**Output**\n\n```\n0: combinations 1, sequences 1\n3: combinations 1, sequences 1\n8: combinations 1, sequences 2\n13: combinations 2, sequences 5\n20: combinations 4, sequences 11\n0\n44\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
    "counting",
-   "knapsack",
-   "combinations"
+   "combinations",
+   "unbounded",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Which interpretation does the question want?",
+    "a": "Almost always combinations - the classic form asks how many distinct ways a team can reach a score, and scoring a 3 then a 5 gives the same scoreline as a 5 then a 3. So the values go on the outer loop. But the wording rarely says so outright, and the two answers diverge quickly: at a score of 20 it is 4 versus 25. Asking which is meant, or stating the assumption, is better than picking silently."
+   },
+   {
+    "q": "Why is a score of 7 unreachable with 3, 5 and 10?",
+    "a": "Because no non-negative combination of those values sums to 7 - 3 and 5 are the only ones small enough and neither 3+3 nor 5 nor 3+5 hits it. The DP returns zero naturally rather than needing a special case. More generally, with 3 and 5 every score from 8 upward is reachable, so 1, 2, 4 and 7 are the only impossible ones, which is the Frobenius coin problem."
+   },
+   {
+    "q": "Why does ways[0] equal one in both versions?",
+    "a": "Because scoring nothing is exactly one outcome - the empty set of plays - and it is the base every other count builds from. Seeding zero collapses the whole table. It is the same identity as in coin change and the BST enumeration: the empty case is a valid case with multiplicity one, not an absence, and getting it wrong is usually why a first attempt returns zero everywhere."
+   }
   ]
  },
  {
@@ -12975,17 +13066,32 @@
   "subcategory": "Greedy",
   "difficulty": "Medium",
   "question": "Given job deadlines and profits, schedule to maximise profit with unit-time jobs.",
-  "answer": "Sort by profit descending and place each job in the latest free slot before its deadline, using a disjoint set to find the free slot quickly. Time O(n log n) with union-find, or O(n times d) with a naive scan backwards from the deadline.",
+  "answer": "**Approach**\n\nSort by profit descending, then place each job in the latest free slot at or before its deadline.\n\n**Logic**\n\nTwo greedy choices, both needing justification. Taking the most profitable jobs first is the exchange argument: swapping a lower-profit job for a higher one in the same slot never loses. Placing as late as possible preserves earlier slots for jobs with tighter deadlines.\n\nThe latest-free-slot search is a linear scan here, which is O(n · maxDeadline). Union-find with path compression reduces it to near-linear by pointing each full slot at the next free one below.\n\nO(n log n + n · maxDeadline).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static (int Count, int Profit) Schedule(int[] deadlines, int[] profits)\n    {\n        int n = deadlines.Length;\n        if (n == 0) return (0, 0);\n\n        // Most profitable first: an exchange argument makes this safe.\n        var jobs = Enumerable.Range(0, n)\n            .Select(i => (Deadline: deadlines[i], Profit: profits[i]))\n            .OrderByDescending(j => j.Profit)\n            .ToArray();\n\n        int lastSlot = deadlines.Max();\n        var takenBy = new int[lastSlot + 1];\n        Array.Fill(takenBy, -1);\n\n        int count = 0, total = 0;\n\n        foreach (var job in jobs)\n            // Latest free slot: leaves earlier slots for tighter deadlines.\n            for (int slot = Math.Min(lastSlot, job.Deadline); slot >= 1; slot--)\n                if (takenBy[slot] == -1)\n                {\n                    takenBy[slot] = job.Profit;\n                    count++; total += job.Profit;\n                    break;\n                }\n\n        return (count, total);\n    }\n\n    private static void Show((int Count, int Profit) r) =>\n        Console.WriteLine($\"{r.Count} jobs, profit {r.Profit}\");\n\n    public static void Main()\n    {\n        Show(Schedule(new[] { 4, 1, 1, 1 }, new[] { 20, 10, 40, 30 }));\n        Show(Schedule(new[] { 2, 1, 2, 1, 1 }, new[] { 100, 19, 27, 25, 15 }));\n        Show(Schedule(new[] { 1, 1, 1 }, new[] { 5, 10, 15 }));     // only one slot\n        Show(Schedule(new[] { 3, 3, 3 }, new[] { 5, 10, 15 }));     // all three fit\n        Show(Schedule(new[] { 1 }, new[] { 7 }));\n        Show(Schedule(Array.Empty<int>(), Array.Empty<int>()));\n    }\n}\n```\n\n**Output**\n\n```\n2 jobs, profit 60\n2 jobs, profit 127\n1 jobs, profit 15\n3 jobs, profit 30\n1 jobs, profit 7\n0 jobs, profit 0\n```",
   "tags": [
    "greedy",
    "scheduling",
-   "union-find",
-   "sorting"
+   "exchange-argument",
+   "sorting",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Goldman Sachs"
+  ],
+  "followups": [
+   {
+    "q": "Why place each job as late as possible?",
+    "a": "Because early slots are the scarce resource - they are the only ones available to jobs with tight deadlines, while a job with a late deadline can use any slot. Filling from the back leaves the constrained slots free for the jobs that need them. Placing at the earliest free slot instead can block a tight-deadline job that would otherwise have fitted, losing profit on exactly the inputs where deadlines cluster early."
+   },
+   {
+    "q": "Why is taking the most profitable first optimal?",
+    "a": "By an exchange argument: take any optimal schedule and compare it with the greedy one at the first point they differ. The greedy picked a job of at least as much profit, and swapping it into the optimal schedule's slot keeps the schedule feasible - deadlines still hold, since the slot is unchanged - and does not reduce the total. Repeating the swap turns any optimal schedule into the greedy one without loss, so greedy is optimal."
+   },
+   {
+    "q": "How does union-find speed up the slot search?",
+    "a": "Each slot points to the latest free slot at or below it; when a slot is filled, it is unioned to the slot below, so subsequent searches jump straight past runs of full slots instead of scanning them one at a time. With path compression that is near-constant per job, giving O(n log n) overall dominated by the sort rather than O(n times maxDeadline). It matters when deadlines are large, and it is the standard follow-up on this question."
+   }
   ]
  },
  {
@@ -12993,17 +13099,32 @@
   "subcategory": "Greedy",
   "difficulty": "Medium",
   "question": "Given a set of activities with start and end times, select the maximum number that do not overlap.",
-  "answer": "Sort by end time and greedily take each activity that starts after the last selected one ends. Sorting by end rather than start or duration is what makes the greedy choice optimal, provable by an exchange argument. Time O(n log n).",
+  "answer": "**Approach**\n\nSort by end time and take greedily. Each selected activity is the one that frees the resource soonest.\n\n**Logic**\n\nSorting by end time is what makes greedy optimal. Sorting by start time or by duration both fail — a short activity in the middle can block two others, and an early-starting one can run long.\n\nThe exchange argument: the activity finishing earliest is in some optimal solution, because swapping it for whatever that solution picked first never causes a conflict and never reduces the count.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<int[]> SelectActivities(int[][] activities)\n    {\n        var chosen = new List<int[]>();\n        if (activities == null || activities.Length == 0) return chosen;\n\n        // By END time: sorting by start or by duration is NOT optimal.\n        var byEnd = activities.OrderBy(a => a[1]).ToArray();\n\n        int freeFrom = int.MinValue;\n\n        foreach (var activity in byEnd)\n            if (activity[0] >= freeFrom)\n            {\n                chosen.Add(activity);\n                freeFrom = activity[1];\n            }\n\n        return chosen;\n    }\n\n    private static void Show(IList<int[]> chosen) =>\n        Console.WriteLine(chosen.Count == 0\n            ? \"none\"\n            : $\"{chosen.Count}: \" + string.Join(\" \", chosen.Select(a => $\"[{a[0]},{a[1]}]\")));\n\n    public static void Main()\n    {\n        Show(SelectActivities(new[] {\n            new[] { 1, 4 }, new[] { 3, 5 }, new[] { 0, 6 },\n            new[] { 5, 7 }, new[] { 3, 9 }, new[] { 8, 9 } }));\n\n        // Sorting by start would take [0,10] and get only one.\n        Show(SelectActivities(new[] {\n            new[] { 0, 10 }, new[] { 1, 2 }, new[] { 3, 4 }, new[] { 5, 6 } }));\n\n        // Sorting by duration would take [4,6] and block both others.\n        Show(SelectActivities(new[] {\n            new[] { 1, 5 }, new[] { 4, 6 }, new[] { 5, 9 } }));\n\n        Show(SelectActivities(new[] { new[] { 1, 2 } }));\n        Show(SelectActivities(Array.Empty<int[]>()));\n    }\n}\n```\n\n**Output**\n\n```\n3: [1,4] [5,7] [8,9]\n3: [1,2] [3,4] [5,6]\n2: [1,5] [5,9]\n1: [1,2]\nnone\n```",
   "tags": [
    "greedy",
    "intervals",
    "scheduling",
-   "sorting"
+   "exchange-argument",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why sort by end time rather than start time or duration?",
+    "a": "Because finishing earliest leaves the most room for everything after it, which is the quantity that matters. Sorting by start takes [0,10] first and gets one activity where three fit. Sorting by duration takes the shortest, [4,6], which straddles the boundary between two longer activities and blocks both. Each test in the code is built to break one of the wrong orderings, which is more convincing than asserting the right one."
+   },
+   {
+    "q": "Give the exchange argument for optimality.",
+    "a": "Let the greedy pick activity g, which finishes earliest overall, and let some optimal solution pick f first. Since g finishes no later than f, replacing f with g leaves every later activity in the optimal solution still compatible - they all start after f ends, hence after g ends. The count is unchanged, so the modified solution is still optimal and now agrees with greedy on the first choice. Induct on the remainder."
+   },
+   {
+    "q": "How does this relate to the meeting-rooms and platform problems?",
+    "a": "They are different questions on the same input. This one maximises how many activities fit in ONE resource; the platform problem asks how many resources are needed to fit ALL of them. Greedy by end time answers the first; a sweep or a min-heap of end times answers the second. Confusing them is common because both start by sorting intervals, and noticing which quantity is being asked for is the actual skill."
+   }
   ]
  },
  {
@@ -13011,16 +13132,31 @@
   "subcategory": "Greedy",
   "difficulty": "Hard",
   "question": "Given denominations and an amount, determine whether a greedy coin change is optimal.",
-  "answer": "Greedy is optimal only for canonical systems such as standard currency; for arbitrary denominations it can fail - with coins of one, three and four, making six greedily takes three coins where two suffice. Verifying canonicity requires checking against dynamic programming over a bounded range.",
+  "answer": "**Approach**\n\nCompare greedy against the true DP optimum for every amount up to a bound. If they agree everywhere in the bound, the system is canonical.\n\n**Logic**\n\nGreedy is not universally optimal — with {1, 3, 4} and amount 6 it gives 4+1+1 while the optimum is 3+3 — so the only honest check is against a known-correct method.\n\nThe Pearson result says a counterexample, if one exists, occurs below the sum of the two largest denominations, so testing up to that bound is sufficient rather than merely a heuristic.\n\nThe function also reports the smallest counterexample, which is more useful than a bare yes or no.\n\nO(bound × denominations).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    // Returns the smallest amount where greedy is suboptimal, or -1 if none.\n    public static int SmallestCounterexample(int[] denominations)\n    {\n        var coins = denominations.OrderByDescending(c => c).ToArray();\n\n        if (coins.Length < 2 || coins[^1] != 1) return -1;   // needs a 1 to always be solvable\n\n        // A counterexample, if any, occurs below the sum of the two largest coins.\n        int bound = coins[0] + coins[1];\n\n        var optimal = new int[bound + 1];\n\n        for (int amount = 1; amount <= bound; amount++)\n        {\n            optimal[amount] = int.MaxValue;\n\n            foreach (int coin in coins)\n                if (coin <= amount && optimal[amount - coin] != int.MaxValue)\n                    optimal[amount] = Math.Min(optimal[amount], optimal[amount - coin] + 1);\n        }\n\n        for (int amount = 1; amount <= bound; amount++)\n            if (Greedy(coins, amount) != optimal[amount]) return amount;\n\n        return -1;\n    }\n\n    private static int Greedy(int[] descending, int amount)\n    {\n        int used = 0;\n\n        foreach (int coin in descending)\n        {\n            used += amount / coin;\n            amount %= coin;\n        }\n\n        return used;\n    }\n\n    private static void Report(int[] coins)\n    {\n        int bad = SmallestCounterexample(coins);\n\n        Console.WriteLine(bad == -1\n            ? $\"[{string.Join(\",\", coins)}] greedy is optimal\"\n            : $\"[{string.Join(\",\", coins)}] greedy fails first at {bad}\");\n    }\n\n    public static void Main()\n    {\n        Report(new[] { 1, 5, 10, 25 });    // US coins\n        Report(new[] { 1, 3, 4 });         // the classic counterexample\n        Report(new[] { 1, 2, 5, 10, 20, 50 });\n        Report(new[] { 1, 7, 10 });\n        Report(new[] { 1, 2 });\n        Report(new[] { 1 });\n    }\n}\n```\n\n**Output**\n\n```\n[1,5,10,25] greedy is optimal\n[1,3,4] greedy fails first at 6\n[1,2,5,10,20,50] greedy is optimal\n[1,7,10] greedy fails first at 14\n[1,2] greedy is optimal\n[1] greedy is optimal\n```",
   "tags": [
    "greedy",
-   "coin-change",
-   "correctness",
-   "dynamic-programming"
+   "dp",
+   "canonical-systems",
+   "verification",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why does greedy fail on 1, 3, 4 at amount 6?",
+    "a": "Because greedy takes the 4 first, leaving 2, which needs two 1s - three coins in total. The optimum is 3 plus 3, which is two. Taking the largest coin is locally attractive and globally wrong because it leaves a remainder that the smaller denominations cannot cover efficiently. That is the canonical demonstration that coin systems have to EARN the greedy property rather than having it by default."
+   },
+   {
+    "q": "Why is testing up to the two largest coins enough?",
+    "a": "It is Pearson's result: if a coin system is non-canonical, the smallest counterexample lies strictly below the sum of the two largest denominations. So checking that range is a decision procedure, not a sampling heuristic - passing it proves greedy is optimal for every amount. Without that theorem you could only ever say 'no counterexample found below X', which is a materially weaker claim and worth being careful to distinguish."
+   },
+   {
+    "q": "Why does the check require a coin of value 1?",
+    "a": "Because without it some amounts are not representable at all, and comparing greedy against an optimum that does not exist is meaningless - greedy would also leave a remainder it cannot clear. Real currency systems always include a unit coin for exactly this reason. If the problem allowed systems without one, the comparison would have to treat unrepresentable amounts as a separate case rather than a disagreement."
+   }
   ]
  },
  {
@@ -13028,16 +13164,31 @@
   "subcategory": "Greedy",
   "difficulty": "Medium",
   "question": "Minimise the maximum difference between the tallest and shortest tower after adjusting each by a fixed amount.",
-  "answer": "Sort, then consider each split point where the prefix is raised and the suffix lowered, tracking the minimum resulting range. The key insight is that the optimal solution raises a prefix and lowers a suffix after sorting. Time O(n log n).",
+  "answer": "**Approach**\n\nSort, then consider every split point: towers below it go up by k, towers above go down by k. Track the best resulting spread.\n\n**Logic**\n\nAfter sorting, an optimal solution always raises a prefix and lowers a suffix — there is never a reason to lower a tower and raise a taller one, since that only widens the gap.\n\nAt each split the new maximum is the larger of the last raised and the last lowered tower; the new minimum is the smaller of the first raised and the first lowered.\n\nThe non-negativity constraint matters: if towers may not go below zero, splits that would make a tower negative must be skipped. Both variants exist and the code takes the version that allows negatives, stating so.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Heights may go negative here; the non-negative variant skips such splits.\n    public static int MinimiseSpread(int[] heights, int k)\n    {\n        if (heights == null || heights.Length <= 1) return 0;\n\n        var sorted = (int[])heights.Clone();\n        Array.Sort(sorted);\n\n        int n = sorted.Length;\n        int best = sorted[n - 1] - sorted[0];   // change nothing\n\n        for (int split = 0; split < n - 1; split++)\n        {\n            // 0..split go UP, split+1..n-1 go DOWN.\n            int high = Math.Max(sorted[split] + k, sorted[n - 1] - k);\n            int low = Math.Min(sorted[0] + k, sorted[split + 1] - k);\n\n            best = Math.Min(best, high - low);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinimiseSpread(new[] { 1, 5, 8, 10 }, 2));\n        Console.WriteLine(MinimiseSpread(new[] { 3, 9, 12, 16, 20 }, 3));\n        Console.WriteLine(MinimiseSpread(new[] { 1, 10, 14, 14, 14, 15 }, 6));\n        Console.WriteLine(MinimiseSpread(new[] { 4, 6 }, 10));\n        Console.WriteLine(MinimiseSpread(new[] { 7 }, 3));          // nothing to compare\n        Console.WriteLine(MinimiseSpread(new[] { 5, 5, 5 }, 2));     // already uniform\n        Console.WriteLine(MinimiseSpread(Array.Empty<int>(), 1));\n    }\n}\n```\n\n**Output**\n\n```\n5\n11\n5\n2\n0\n0\n0\n```",
   "tags": [
    "greedy",
    "sorting",
+   "split-point",
    "optimisation",
-   "arrays"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does an optimal solution always raise a prefix and lower a suffix?",
+    "a": "Because if a shorter tower were lowered while a taller one was raised, swapping those two decisions strictly narrows the spread - the pair moves toward each other rather than apart. So no optimal solution contains that inversion, which means the decisions are monotone in sorted order and a single split point describes them. That reduces an exponential set of choices to n-1 candidates, which is the whole algorithm."
+   },
+   {
+    "q": "Why is the initial best the untouched spread?",
+    "a": "Because every tower moving in the same direction leaves the spread unchanged, and that is always available - so the answer can never be worse than the original range. Seeding with it also covers the case where k is large enough that every split makes things worse, as with [4,6] and k of 10, where the answer is the original 2 rather than something produced by a split. Omitting the seed gives a wrong answer on exactly those inputs."
+   },
+   {
+    "q": "What changes if heights may not go negative?",
+    "a": "Splits that would push the smallest lowered tower below zero become illegal and must be skipped, which can make the answer larger. That is the version usually posed as 'minimum difference among tower heights' in Indian interview sets, and it is a genuinely different problem - the two answers diverge whenever k exceeds the smallest height. Stating which variant is being solved matters more here than usual, because both are common and neither is wrong."
+   }
   ]
  },
  {
@@ -13045,17 +13196,32 @@
   "subcategory": "Heap",
   "difficulty": "Hard",
   "question": "Merge k sorted streams of unknown length.",
-  "answer": "A min-heap of the current head of each stream with a reference to its source, popping the smallest and pulling the next from that stream. Time O(n log k) overall, space O(k). It works for streams because it never requires knowing the total length in advance.",
+  "answer": "**Approach**\n\nA min-heap holding one pending value per stream, refilled from the same stream after each extraction. The difference from merging arrays is that a stream cannot be indexed or measured, so the interface must be pull-based.\n\n**Logic**\n\nThe heap never holds more than k values regardless of how long the streams are, so memory does not grow with the data. That is the property that makes this work for streams at all.\n\nThe result is produced lazily with an iterator, so the caller can consume a prefix without materialising everything — which matters when the total is unbounded.\n\nO(n log k) time, O(k) memory.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    // Streams are pull-based: no length, no indexing.\n    public static IEnumerable<int> MergeStreams(IEnumerable<IEnumerable<int>> streams)\n    {\n        var readers = streams.Select(s => s.GetEnumerator()).ToList();\n        var heap = new PriorityQueue<int, int>();   // value -> which reader\n\n        try\n        {\n            for (int i = 0; i < readers.Count; i++)\n                if (readers[i].MoveNext()) heap.Enqueue(i, readers[i].Current);\n\n            while (heap.Count > 0)\n            {\n                heap.TryDequeue(out int reader, out int value);\n                yield return value;\n\n                // Refill from the SAME stream: at most k pending values at any time.\n                if (readers[reader].MoveNext())\n                    heap.Enqueue(reader, readers[reader].Current);\n            }\n        }\n        finally\n        {\n            foreach (var reader in readers) reader.Dispose();\n        }\n    }\n\n    // A stream whose length the merger never learns.\n    private static IEnumerable<int> Counting(int start, int step, int count)\n    {\n        for (int i = 0; i < count; i++) yield return start + i * step;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", MergeStreams(new[] {\n            new[] { 1, 4, 5 }, new[] { 1, 3, 4 }, new[] { 2, 6 } })));\n\n        Console.WriteLine(string.Join(\",\", MergeStreams(new[] {\n            Array.Empty<int>(), new[] { 1 }, Array.Empty<int>() })));\n\n        Console.WriteLine(string.Join(\",\", MergeStreams(Array.Empty<int[]>())));\n\n        Console.WriteLine(string.Join(\",\", MergeStreams(new[] {\n            Counting(0, 3, 4), Counting(1, 3, 4), Counting(2, 3, 4) })));\n\n        // Lazy: only the first five are pulled, however long the streams are.\n        var lazy = MergeStreams(new[] { Counting(0, 2, 1000000), Counting(1, 2, 1000000) });\n        Console.WriteLine(string.Join(\",\", lazy.Take(5)));\n    }\n}\n```\n\n**Output**\n\n```\n1,1,2,3,4,4,5,6\n1\n\n0,1,2,3,4,5,6,7,8,9,10,11\n0,1,2,3,4\n```",
   "tags": [
    "heap",
-   "streaming",
-   "k-way-merge",
-   "design"
+   "streams",
+   "lazy-evaluation",
+   "iterators",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "What actually differs from merging k sorted arrays?",
+    "a": "The interface. An array can be indexed and its length known, so the heap can store (array, index) pairs and the total output size can be allocated up front. A stream can only be pulled one item at a time and may not have a knowable length, so the heap stores reader handles and the output has to be produced lazily. The algorithm and its O(n log k) bound are identical; what changes is that nothing may assume the data is finite or measurable."
+   },
+   {
+    "q": "Why does laziness matter here?",
+    "a": "Because the caller may only want a prefix - the top hundred results from streams of millions - and materialising everything to return a list would do unbounded work for nothing. The iterator pulls exactly as far as it is consumed, which the last test shows by taking five values from two million-element streams. It also means the merger works over genuinely infinite streams, which a list-returning version cannot."
+   },
+   {
+    "q": "Why dispose the readers in a finally block?",
+    "a": "Because an enumerator may hold a file handle, socket or database cursor, and a caller who abandons the iteration part-way - which laziness actively encourages - would otherwise leak it. Putting the disposal in a finally inside the iterator means it runs when the enumeration is disposed, including on early exit or an exception. It is the part most hand-written merge implementations omit, and it only bites in production rather than in tests."
+   }
   ]
  },
  {
@@ -13063,18 +13229,33 @@
   "subcategory": "Heap",
   "difficulty": "Medium",
   "question": "Find the k most frequent words with ties broken alphabetically.",
-  "answer": "Count frequencies, then use a heap of size k with a comparator ordering by frequency ascending and, for equal frequency, by word descending, so the worst candidate is at the root. Reverse the extracted result. Time O(n + m log k) for m distinct words.",
+  "answer": "**Approach**\n\nCount, then use a bounded heap of size k whose comparison is deliberately *inverted* so the worst element sits on top and can be evicted.\n\n**Logic**\n\nThe inversion is the subtle part. To keep the k best in a min-heap, the comparison must rank the least desirable element highest: lowest frequency first, and among equal frequencies the alphabetically *last* word — because that is the one to discard.\n\nThe final result must then be reversed, since popping a min-heap yields the worst first.\n\nO(n + m log k), better than sorting everything when k is much smaller than the vocabulary.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private class WorstFirst : IComparer<(string Word, int Count)>\n    {\n        // Inverted: the element to EVICT must sort highest.\n        public int Compare((string Word, int Count) a, (string Word, int Count) b)\n        {\n            if (a.Count != b.Count) return a.Count.CompareTo(b.Count);   // lowest count first\n            return string.CompareOrdinal(b.Word, a.Word);                 // latest word first\n        }\n    }\n\n    public static IList<string> TopKFrequent(string[] words, int k)\n    {\n        var counts = new Dictionary<string, int>();\n        foreach (string w in words) counts[w] = counts.GetValueOrDefault(w) + 1;\n\n        var heap = new PriorityQueue<(string Word, int Count), (string Word, int Count)>(\n            new WorstFirst());\n\n        foreach (var pair in counts)\n        {\n            var entry = (pair.Key, pair.Value);\n            heap.Enqueue(entry, entry);\n\n            if (heap.Count > k) heap.Dequeue();   // evict the worst\n        }\n\n        var result = new List<string>();\n        while (heap.Count > 0) result.Add(heap.Dequeue().Word);\n\n        result.Reverse();   // popped worst-first, so reverse for best-first\n        return result;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", TopKFrequent(\n            new[] { \"i\", \"love\", \"leetcode\", \"i\", \"love\", \"coding\" }, 2)));\n\n        Console.WriteLine(string.Join(\",\", TopKFrequent(\n            new[] { \"the\", \"day\", \"is\", \"sunny\", \"the\", \"the\", \"the\",\n                    \"sunny\", \"is\", \"is\" }, 4)));\n\n        // All tied: pure alphabetical order.\n        Console.WriteLine(string.Join(\",\", TopKFrequent(new[] { \"b\", \"a\", \"c\" }, 3)));\n\n        Console.WriteLine(string.Join(\",\", TopKFrequent(new[] { \"a\" }, 1)));\n        Console.WriteLine(string.Join(\",\", TopKFrequent(new[] { \"a\", \"b\" }, 5)));   // k too large\n        Console.WriteLine($\"[{string.Join(\",\", TopKFrequent(new[] { \"a\" }, 0))}]\");\n    }\n}\n```\n\n**Output**\n\n```\ni,love\nthe,is,sunny,day\na,b,c\na\na,b\n[]\n```",
   "tags": [
    "heap",
-   "counting",
-   "sorting",
-   "comparators"
+   "top-k",
+   "comparator",
+   "tie-break",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Uber",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why is the comparator inverted?",
+    "a": "Because a bounded heap keeps the k best by always evicting the worst, so the worst element must be the one the heap surfaces. That means lowest count first and, among equal counts, the alphabetically LAST word - since that is the one to drop when frequencies tie. Writing the comparator the way you would for sorting the final answer puts the best element on top and evicts exactly the wrong one, which is the classic bug on every top-k-with-ties problem."
+   },
+   {
+    "q": "Why reverse at the end?",
+    "a": "Because draining the heap yields the worst of the kept elements first, which is the reverse of the required order. Reversing an already-k-sized list is trivial. The alternative is to insert into the front of a list or use a deque, which is equivalent - what matters is noticing the direction at all, since a k of 1 or a fully tied input will not reveal a missing reversal."
+   },
+   {
+    "q": "When is sorting everything the better answer?",
+    "a": "When k is close to the vocabulary size, since the heap's advantage is O(m log k) against O(m log m) and the two converge - at that point sorting is simpler and has better constants. The heap wins decisively for the usual case of a large vocabulary and a small k, such as the top ten words in a corpus. It is also the only viable option if the counts arrive as a stream and cannot all be sorted at once."
+   }
   ]
  },
  {
