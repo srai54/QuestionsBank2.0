@@ -10634,16 +10634,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Given a set of coins, count the number of ways to make a target amount.",
-  "answer": "Iterate coins in the outer loop and amounts in the inner, accumulating dp[amount] += dp[amount - coin]. The loop order matters: coins outside counts combinations, amounts outside counts permutations - which is the difference between the two classic coin problems.",
+  "answer": "**Approach**\n\nOne-dimensional DP where the *outer* loop is over coins and the inner over amounts. That loop order is the entire difference between counting combinations and counting permutations.\n\n**Logic**\n\nWith coins outside, each coin is introduced once and every way built afterwards uses coins in a fixed order, so {1,2} and {2,1} are counted once. Swapping the loops counts ordered sequences instead, which answers a different question.\n\nThe base case is one way to make zero — by choosing nothing. Seeding it as zero makes every total unreachable.\n\nO(coins × amount) time, O(amount) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Combinations: {1,2} and {2,1} count once.\n    public static int CountCombinations(int amount, int[] coins)\n    {\n        var ways = new int[amount + 1];\n        ways[0] = 1;   // one way to make nothing: take nothing\n\n        foreach (int coin in coins)              // coins OUTSIDE\n            for (int total = coin; total <= amount; total++)\n                ways[total] += ways[total - coin];\n\n        return ways[amount];\n    }\n\n    // Permutations: {1,2} and {2,1} count separately.\n    public static int CountPermutations(int amount, int[] coins)\n    {\n        var ways = new int[amount + 1];\n        ways[0] = 1;\n\n        for (int total = 1; total <= amount; total++)   // totals OUTSIDE\n            foreach (int coin in coins)\n                if (coin <= total) ways[total] += ways[total - coin];\n\n        return ways[amount];\n    }\n\n    public static void Main()\n    {\n        var coins = new[] { 1, 2, 5 };\n\n        Console.WriteLine(CountCombinations(5, coins));\n        Console.WriteLine(CountPermutations(5, coins));   // strictly larger\n\n        Console.WriteLine(CountCombinations(3, new[] { 2 }));     // impossible\n        Console.WriteLine(CountCombinations(0, coins));           // the empty selection\n        Console.WriteLine(CountCombinations(10, new[] { 10 }));\n        Console.WriteLine(CountCombinations(4, new[] { 1, 2 }));\n        Console.WriteLine(CountPermutations(4, new[] { 1, 2 }));\n    }\n}\n```\n\n**Output**\n\n```\n4\n9\n0\n1\n1\n3\n5\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
    "counting",
+   "loop-order",
    "combinations",
-   "knapsack"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the loop order decide combinations versus permutations?",
+    "a": "Because with coins on the outside, a coin is only ever added after all ways using earlier coins are settled, so each multiset is built in one canonical coin order and counted once. With totals outside, every coin is offered at every total, so the same multiset is reached by different orderings and each is counted. Same three lines, two different questions - which is why the answer for amount 5 is 4 one way and 9 the other."
+   },
+   {
+    "q": "Why is ways[0] one rather than zero?",
+    "a": "Because there is exactly one way to make zero, namely selecting no coins, and that empty selection is the base every other count builds on. Seeding it to zero makes every addition add nothing and the whole table stays zero. It is the same multiplicative-identity reasoning as the empty subtree counting as one shape in the BST enumeration - the empty case is a valid case, not an absence."
+   },
+   {
+    "q": "How does this relate to minimum coin change?",
+    "a": "The table shape is identical; only the combining operation differs - sum for counting, minimum-plus-one for the fewest coins. Notably the minimum version is insensitive to loop order, because the minimum over a set does not care how the set was ordered, whereas the counting version is highly sensitive. That asymmetry is a good thing to notice: it tells you exactly when loop order is a correctness issue rather than a style choice."
+   }
   ]
  },
  {
@@ -10651,16 +10666,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Hard",
   "question": "Find the number of distinct subsequences of one string equal to another.",
-  "answer": "dp[i][j] is the count using the first i of the source and first j of the target; always inherit dp[i-1][j], and add dp[i-1][j-1] when the characters match. Time O(mn), space O(n) with a reverse-iterated rolling row.",
+  "answer": "**Approach**\n\nTwo-dimensional DP over prefixes, collapsed to one row iterated *backwards*.\n\n**Logic**\n\nAt each pair of positions there are two contributions: always the count that skips the current source character, plus, when the characters match, the count from both prefixes shortened by one.\n\nThe backwards inner loop is what keeps the rolling row correct — writing forwards would overwrite the diagonal value before it is read.\n\nThe base case is one way to form an empty target from any prefix: delete everything.\n\nCounts grow fast, so the accumulator is long to avoid silent overflow.\n\nO(m × n) time, O(n) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static long NumDistinct(string source, string target)\n    {\n        source ??= \"\"; target ??= \"\";\n\n        var ways = new long[target.Length + 1];\n        ways[0] = 1;   // one way to form the empty target: delete everything\n\n        foreach (char c in source)\n            // Backwards, so ways[j-1] is still the PREVIOUS row's value.\n            for (int j = target.Length; j >= 1; j--)\n                if (target[j - 1] == c) ways[j] += ways[j - 1];\n\n        return ways[target.Length];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(NumDistinct(\"rabbbit\", \"rabbit\"));\n        Console.WriteLine(NumDistinct(\"babgbag\", \"bag\"));\n        Console.WriteLine(NumDistinct(\"abc\", \"\"));        // the empty target\n        Console.WriteLine(NumDistinct(\"\", \"abc\"));\n        Console.WriteLine(NumDistinct(\"aaa\", \"a\"));\n        Console.WriteLine(NumDistinct(\"aaa\", \"aa\"));      // choose 2 of 3\n        Console.WriteLine(NumDistinct(\"abc\", \"abc\"));\n    }\n}\n```\n\n**Output**\n\n```\n3\n5\n1\n0\n3\n3\n1\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
    "strings",
-   "counting",
-   "subsequences"
+   "subsequences",
+   "rolling-row",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why must the inner loop run backwards?",
+    "a": "Because ways[j] needs the previous row's ways[j-1] - the diagonal - and iterating forwards would already have overwritten that index with the current row's value, double-counting the current character. Running from high to low means every index still holds the previous generation when it is read. It is the same direction rule as the 0/1 knapsack, and reversing it turns the problem into the unbounded variant, which here means reusing one source character many times."
+   },
+   {
+    "q": "Why does the skip case need no explicit line?",
+    "a": "Because skipping the current source character leaves the count unchanged, and in the rolling formulation ways[j] already holds that value from the previous row - so 'do nothing' is literally doing nothing. Only the match case adds. In the full two-dimensional table it appears as an explicit copy from the row above, which is the version worth writing first if the collapsed form is hard to justify on the spot."
+   },
+   {
+    "q": "Why accumulate in long?",
+    "a": "Because the count is combinatorial - a source of n identical characters against a target of k gives n choose k, which exceeds int range for quite modest strings. Overflow would wrap silently to a plausible-looking wrong number rather than failing. The usual problem statement promises the answer fits in a 32-bit integer, but relying on that is how a solution passes the judge and breaks in production; long costs nothing here."
+   }
   ]
  },
  {
@@ -10668,16 +10698,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Hard",
   "question": "Cherry pickup: two traversals of a grid collecting maximum value without double counting.",
-  "answer": "Model both walkers moving simultaneously so they share a step count, giving a state of step plus the two row positions - the columns follow. When both are on the same cell, count its value once. Time O(n^3), space O(n^2).",
+  "answer": "**Approach**\n\nMove both walkers simultaneously rather than sequentially. Because every move goes down or right, after k steps both are on the anti-diagonal row + col = k, so one index is implied and the state is (step, rowA, rowB).\n\n**Logic**\n\nTwo sequential greedy passes fail — the best first path can strand the second. Moving in lockstep lets the DP consider both together.\n\nThe simultaneity also solves double counting: when both walkers occupy the same cell, its value is added once. Sequential traversal would need to mutate the grid between passes to express that.\n\nO(n³) states with four transitions each.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int CherryPickup(int[][] grid)\n    {\n        int n = grid.Length;\n        const int Blocked = int.MinValue / 2;\n\n        // best[rowA, rowB] at the current step; the columns are implied.\n        var best = new int[n, n];\n        for (int a = 0; a < n; a++)\n            for (int b = 0; b < n; b++) best[a, b] = Blocked;\n\n        best[0, 0] = grid[0][0];\n\n        for (int step = 1; step <= 2 * (n - 1); step++)\n        {\n            var next = new int[n, n];\n            for (int a = 0; a < n; a++)\n                for (int b = 0; b < n; b++) next[a, b] = Blocked;\n\n            for (int rowA = Math.Max(0, step - n + 1); rowA <= Math.Min(n - 1, step); rowA++)\n                for (int rowB = Math.Max(0, step - n + 1); rowB <= Math.Min(n - 1, step); rowB++)\n                {\n                    int colA = step - rowA, colB = step - rowB;\n\n                    if (grid[rowA][colA] == -1 || grid[rowB][colB] == -1) continue;\n\n                    int from = Blocked;\n                    for (int da = 0; da <= 1; da++)\n                        for (int db = 0; db <= 1; db++)\n                        {\n                            int prevA = rowA - da, prevB = rowB - db;\n                            if (prevA < 0 || prevB < 0) continue;\n                            from = Math.Max(from, best[prevA, prevB]);\n                        }\n\n                    if (from == Blocked) continue;\n\n                    // Same cell: count it once.\n                    int gained = grid[rowA][colA] + (rowA == rowB ? 0 : grid[rowB][colB]);\n                    next[rowA, rowB] = from + gained;\n                }\n\n            best = next;\n        }\n\n        return Math.Max(0, best[n - 1, n - 1]);\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(CherryPickup(Grid(\n            new[] { 0, 1, -1 }, new[] { 1, 0, -1 }, new[] { 1, 1, 1 })));\n\n        Console.WriteLine(CherryPickup(Grid(\n            new[] { 1, 1, -1 }, new[] { 1, -1, 1 }, new[] { -1, 1, 1 })));   // unreachable\n\n        Console.WriteLine(CherryPickup(Grid(new[] { 1 })));\n        Console.WriteLine(CherryPickup(Grid(new[] { 1, 1 }, new[] { 1, 1 })));\n        Console.WriteLine(CherryPickup(Grid(new[] { 0, 0 }, new[] { 0, 0 })));\n    }\n}\n```\n\n**Output**\n\n```\n5\n0\n1\n4\n0\n```",
   "tags": [
-   "dynamic-programming",
-   "matrix",
-   "multi-state",
-   "hard"
+   "dp",
+   "grid",
+   "two-walkers",
+   "anti-diagonal",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why move both walkers together rather than running two passes?",
+    "a": "Because the greedy best first path can consume cherries that the second path needed and leave it stranded behind a wall, so the two passes are not independent. Moving in lockstep lets the DP evaluate joint states and pick the best pair of paths. It also makes double counting trivial to express - when the two positions coincide, add the cell once - whereas a sequential version would have to zero out the grid between passes and still would not be optimal."
+   },
+   {
+    "q": "Why does one index suffice per walker?",
+    "a": "Because every legal move increases row + col by exactly one, so after k steps both walkers satisfy row + col = k and the column is determined by the row. That collapses a four-dimensional state to three, which is the difference between n to the fourth and n cubed. Recognising that a conserved quantity removes a dimension is the reusable idea - the same trick applies to the two-robot and the down-then-up variants of this problem."
+   },
+   {
+    "q": "Why is the answer clamped at zero?",
+    "a": "Because when the bottom-right is unreachable - fully walled off - the final state stays at the blocked sentinel, which is a large negative number rather than a meaningful score. The problem defines an unreachable grid as collecting nothing, so clamping expresses that. It also documents that the sentinel is an in-band value: using MinValue/2 rather than MinValue keeps the additions from overflowing before the clamp ever runs."
+   }
   ]
  },
  {
@@ -10685,16 +10730,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Determine whether the first player can win a stone game with optimal play.",
-  "answer": "Interval dynamic programming where dp[i][j] is the best score difference the current player can achieve on that range, taking the maximum of choosing either end minus the opponent's best on the remainder. A positive value at the full range means the first player wins. Time O(n^2).",
+  "answer": "**Approach**\n\nInterval DP on the *score difference*. Each state holds how far ahead the player to move can get from that range, assuming both play optimally.\n\n**Logic**\n\nTracking the difference rather than two separate scores is what makes the recursion uniform: the opponent's best play from the remaining range is subtracted, because their gain is the current player's loss.\n\nA positive difference over the whole array means the first player wins.\n\nFor the classic even-length, odd-total version the answer is always true by a parity argument, which the DP confirms rather than assumes — so the code also runs the general case where it genuinely varies.\n\nO(n²) time and space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Best score difference the player to move can achieve from [lo, hi].\n    public static int BestDifference(int[] piles)\n    {\n        int n = piles.Length;\n        if (n == 0) return 0;\n\n        var diff = new int[n, n];\n        for (int i = 0; i < n; i++) diff[i, i] = piles[i];\n\n        for (int width = 1; width < n; width++)\n            for (int lo = 0; lo + width < n; lo++)\n            {\n                int hi = lo + width;\n\n                // Taking an end gives its value minus whatever the opponent then achieves.\n                diff[lo, hi] = Math.Max(piles[lo] - diff[lo + 1, hi],\n                                        piles[hi] - diff[lo, hi - 1]);\n            }\n\n        return diff[0, n - 1];\n    }\n\n    public static bool FirstPlayerWins(int[] piles) => BestDifference(piles) > 0;\n\n    public static void Main()\n    {\n        Console.WriteLine(FirstPlayerWins(new[] { 5, 3, 4, 5 }));\n        Console.WriteLine(BestDifference(new[] { 5, 3, 4, 5 }));\n\n        // Odd length, so the parity argument does not apply and it can be lost.\n        Console.WriteLine(FirstPlayerWins(new[] { 1, 5, 2 }));\n        Console.WriteLine(BestDifference(new[] { 1, 5, 2 }));\n\n        Console.WriteLine(BestDifference(new[] { 1, 5, 233, 7 }));\n        Console.WriteLine(BestDifference(new[] { 7 }));\n        Console.WriteLine(BestDifference(Array.Empty<int>()));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\n1\nFalse\n-2\n222\n7\n0\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
    "game-theory",
-   "intervals"
+   "interval-dp",
+   "minimax",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why track the score difference rather than both scores?",
+    "a": "Because the game is zero-sum from the mover's point of view, so one number captures the whole position - and the recursion becomes uniform, since whoever moves next faces the same kind of subproblem. The subtraction encodes the turn change: the opponent's best difference from the remaining range is exactly what the current player loses. Two separate scores would need the state to record whose turn it is, doubling the table for no extra information."
+   },
+   {
+    "q": "Why is the classic even-length version always a first-player win?",
+    "a": "Because with an even number of piles the first player can commit to taking all the odd-indexed piles or all the even-indexed ones - the structure of the game lets them force either colour - and since the total is odd one of those two groups must be larger. So the answer is true without any computation. The DP is still worth writing because it answers the general version, which the odd-length [1,5,2] case shows can genuinely be a loss."
+   },
+   {
+    "q": "How would the recurrence change if a player could take one or two piles from either end?",
+    "a": "The state stays the same but each move branches into four options instead of two, each subtracting the opponent's best from the correspondingly shortened range. The table is still O(n squared) with a constant-factor increase in transitions. That generalisation is the usual follow-up, and the point it makes is that the minimax-on-difference formulation is the reusable part while the move set is a detail that plugs into it."
+   }
   ]
  },
  {
@@ -10702,15 +10763,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Find the length of the longest arithmetic subsequence with a given difference.",
-  "answer": "A hash map from value to the best length ending at that value: for each element, its length is one plus the length recorded for the value minus the difference. Time O(n), space O(n). The general arithmetic subsequence without a fixed difference needs a map per index and O(n^2).",
+  "answer": "**Approach**\n\nA single hash map from value to the best chain length ending at that value. Because the difference is fixed, each element's predecessor is known exactly.\n\n**Logic**\n\nThe fixed difference is what collapses this from the general O(n²) longest-arithmetic-subsequence problem to O(n). There is only one candidate predecessor per element, so no search is needed.\n\nOverwriting the map entry rather than maximising is correct: a later occurrence of the same value can only extend a chain at least as long as an earlier one, since it has strictly more elements before it.\n\nO(n) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int LongestSubsequence(int[] nums, int difference)\n    {\n        // value -> longest chain ending at that value\n        var best = new Dictionary<int, int>();\n        int longest = 0;\n\n        foreach (int n in nums)\n        {\n            // Fixed difference means exactly one possible predecessor.\n            best[n] = best.GetValueOrDefault(n - difference) + 1;\n            longest = Math.Max(longest, best[n]);\n        }\n\n        return longest;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestSubsequence(new[] { 1, 2, 3, 4 }, 1));\n        Console.WriteLine(LongestSubsequence(new[] { 1, 3, 5, 7 }, 1));      // no chain\n        Console.WriteLine(LongestSubsequence(new[] { 1, 5, 7, 8, 5, 3, 4, 2, 1 }, -2));\n        Console.WriteLine(LongestSubsequence(new[] { 4, 4, 4, 4 }, 0));      // zero difference\n        Console.WriteLine(LongestSubsequence(new[] { 7 }, 3));\n        Console.WriteLine(LongestSubsequence(Array.Empty<int>(), 1));\n    }\n}\n```\n\n**Output**\n\n```\n4\n1\n4\n4\n1\n0\n```",
   "tags": [
-   "dynamic-programming",
-   "hashmap",
-   "subsequences"
+   "dp",
+   "hash-map",
+   "subsequence",
+   "arithmetic",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is this linear when the general arithmetic-subsequence problem is quadratic?",
+    "a": "Because fixing the difference means each element has exactly one possible predecessor value, so the chain length is one map lookup rather than a scan over all earlier elements and all possible differences. The general version has to key on (index, difference), which is O(n squared) states. The constraint that looks like a minor detail in the problem statement is the entire reason for the complexity gap."
+   },
+   {
+    "q": "Why is overwriting the map entry safe rather than taking a maximum?",
+    "a": "Because a later occurrence of the same value sees a superset of the elements the earlier one saw, so its computed chain is at least as long - overwriting can only improve or tie. Taking a maximum would be harmless but redundant. The reasoning matters more than the line of code, because the same overwrite is wrong in variants where the chain must end at a particular index."
+   },
+   {
+    "q": "What does a difference of zero mean here?",
+    "a": "It asks for the longest run of equal values as a subsequence, which is simply the count of the most frequent value - and the code handles it without a special case, since the predecessor of n is n itself and each occurrence extends the previous one. It is worth testing precisely because a solution that assumed a strictly increasing chain, or that used a set rather than counts, would report 1 instead of 4."
+   }
   ]
  },
  {
@@ -10718,17 +10795,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Hard",
   "question": "Find the minimum number of refuelling stops to reach a target.",
-  "answer": "Greedy with a max-heap: drive as far as fuel allows, and whenever you cannot proceed, retrospectively take fuel from the largest station already passed, counting a stop. Time O(n log n). The dynamic programming alternative over stops and distance is O(n^2).",
+  "answer": "**Approach**\n\nGreedy with a max-heap. Drive past stations without stopping, banking their fuel as *options*; when you run short, retroactively take the largest banked option.\n\n**Logic**\n\nThe retroactive choice is what makes the greedy optimal. You never need to decide at a station whether to stop — deferring costs nothing, because taking the largest available tank later is always at least as good as any earlier commitment.\n\nEach refuel is forced only when the current range falls short of the next station, so the number of stops is minimal by construction.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int MinRefuelStops(int target, int startFuel, int[][] stations)\n    {\n        // Max-heap of fuel amounts passed but not yet taken.\n        var banked = new PriorityQueue<int, int>();\n\n        int reach = startFuel, stops = 0, index = 0;\n\n        while (reach < target)\n        {\n            // Bank every station we can currently reach.\n            while (index < stations.Length && stations[index][0] <= reach)\n            {\n                banked.Enqueue(stations[index][1], -stations[index][1]);\n                index++;\n            }\n\n            if (banked.Count == 0) return -1;   // stranded\n\n            // Retroactively take the biggest tank we drove past.\n            reach += banked.Dequeue();\n            stops++;\n        }\n\n        return stops;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinRefuelStops(1, 1, Array.Empty<int[]>()));      // already there\n        Console.WriteLine(MinRefuelStops(100, 1, new[] { new[] { 10, 100 } }));  // cannot start\n\n        Console.WriteLine(MinRefuelStops(100, 10, new[] {\n            new[] { 10, 60 }, new[] { 20, 30 }, new[] { 30, 30 }, new[] { 60, 40 } }));\n\n        Console.WriteLine(MinRefuelStops(1000, 299, new[] {\n            new[] { 13, 21 }, new[] { 26, 115 }, new[] { 100, 47 },\n            new[] { 225, 99 }, new[] { 299, 141 }, new[] { 444, 198 },\n            new[] { 608, 190 }, new[] { 636, 157 }, new[] { 647, 255 },\n            new[] { 841, 123 } }));\n\n        Console.WriteLine(MinRefuelStops(100, 50, new[] { new[] { 25, 25 }, new[] { 50, 25 } }));\n    }\n}\n```\n\n**Output**\n\n```\n0\n-1\n2\n4\n2\n```",
   "tags": [
    "greedy",
    "heap",
-   "dynamic-programming",
-   "optimisation"
+   "retroactive",
+   "optimisation",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why is deferring the refuelling decision optimal?",
+    "a": "Because a station's fuel is worth the same whenever it is taken - there is no penalty for driving past and claiming it later - so committing early can only restrict your options. By the time you are forced to stop, you know every station within range and can take the largest, which dominates any earlier choice. That exchange argument is what upgrades this from a plausible heuristic to a proof, and it is the part an interviewer is listening for."
+   },
+   {
+    "q": "Why count each heap extraction as a stop even though it happened in the past?",
+    "a": "Because the physical trip would have included that stop; the heap is a bookkeeping device for choosing WHICH stops, not a claim that they happen at the moment of extraction. The count is still exact, because each extraction corresponds to one real refuelling. It is a nice illustration that an algorithm's execution order need not match the timeline of the thing it models, as long as the accounting is faithful."
+   },
+   {
+    "q": "How would this change with a limited tank capacity?",
+    "a": "The greedy breaks, because fuel taken early can be wasted by overflowing the tank, so a station's value now depends on when you stop there. That turns it into a DP over position and fuel level, or a shortest-path search on (station, fuel) states. The unlimited-tank assumption is doing real work here, which is worth stating explicitly rather than leaving implicit in the model."
+   }
   ]
  },
  {
@@ -10736,17 +10828,32 @@
   "subcategory": "Heap",
   "difficulty": "Easy",
   "question": "Design a data structure returning the kth largest element in a stream.",
-  "answer": "A min-heap capped at size k: push each new value and pop when the size exceeds k, so the root is always the kth largest. Insertion is O(log k) and query O(1), which beats sorting the whole stream on every query.",
+  "answer": "**Approach**\n\nA min-heap capped at size k. Its root is the kth largest, because exactly k-1 larger elements sit above it.\n\n**Logic**\n\nUsing a *min*-heap for a *largest* query is the counter-intuitive part. The heap holds the k biggest values seen; its smallest member is therefore the kth largest overall, and anything below it can be discarded immediately.\n\nCapping the size is what keeps memory at O(k) rather than O(n), which matters for a genuine stream.\n\nAdd is O(log k); the query is O(1).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class KthLargest\n{\n    private readonly int _k;\n    private readonly PriorityQueue<int, int> _smallestOfTheBiggest = new();   // min-heap\n\n    public KthLargest(int k, int[] initial)\n    {\n        _k = k;\n        foreach (int n in initial ?? Array.Empty<int>()) Add(n);\n    }\n\n    public int Add(int value)\n    {\n        _smallestOfTheBiggest.Enqueue(value, value);\n\n        // Keep only the k largest; the root is then the kth largest.\n        if (_smallestOfTheBiggest.Count > _k) _smallestOfTheBiggest.Dequeue();\n\n        return _smallestOfTheBiggest.Peek();\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var tracker = new KthLargest(3, new[] { 4, 5, 8, 2 });\n\n        foreach (int v in new[] { 3, 5, 10, 9, 4 })\n            Console.Write(tracker.Add(v) + \" \");\n        Console.WriteLine();\n\n        var fromEmpty = new KthLargest(1, Array.Empty<int>());\n        Console.WriteLine(fromEmpty.Add(-3));\n        Console.WriteLine(fromEmpty.Add(-2));\n        Console.WriteLine(fromEmpty.Add(-4));   // smaller: no change\n\n        var dupes = new KthLargest(2, new[] { 7, 7 });\n        Console.WriteLine(dupes.Add(7));        // duplicates each count\n    }\n}\n```\n\n**Output**\n\n```\n4 5 5 8 8 \n-3\n-2\n-2\n7\n```",
   "tags": [
    "heap",
    "streaming",
    "design",
-   "data-structures"
+   "top-k",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why a min-heap for a largest-element query?",
+    "a": "Because the structure holds the k biggest values seen so far, and the one to report is the smallest of those - which is exactly what a min-heap's root gives in O(1). A max-heap would put the single biggest on top, which is the wrong end, and finding the kth would mean popping k-1 items. The inversion feels backwards the first time and is the core of every top-k design question."
+   },
+   {
+    "q": "Why cap the heap rather than keeping everything?",
+    "a": "Because the stream is unbounded and memory is not - keeping all n values costs O(n) space and makes each insertion more expensive, while only k of them can ever be the answer. Anything smaller than the current root is permanently irrelevant, since later additions can only push the threshold up. So discarding is safe, not merely a heuristic, which is the property that makes the bounded heap correct rather than approximate."
+   },
+   {
+    "q": "How do duplicates behave?",
+    "a": "They occupy separate slots and each counts towards k, so with k of 2 and values 7, 7, 7 the answer stays 7 - the problem treats the kth largest by position, not by distinct value. If distinct values were wanted, the heap would need a companion set to reject repeats, and the semantics of 'kth' would change meaningfully. Asking which of the two is intended is a reasonable clarifying question in the interview itself."
+   }
   ]
  },
  {
@@ -10754,17 +10861,32 @@
   "subcategory": "Heap",
   "difficulty": "Hard",
   "question": "Find the smallest range that includes at least one number from each of k sorted lists.",
-  "answer": "A min-heap holding the current element of each list plus a tracked maximum. Repeatedly pop the minimum, update the best range against the current maximum, and push the next element from that list - stopping when any list is exhausted. Time O(n log k).",
+  "answer": "**Approach**\n\nA min-heap holding one candidate per list. The heap root is the window's minimum and a separately tracked maximum gives the other end; advancing the list that owns the minimum is the only move that can shrink the range.\n\n**Logic**\n\nThe window always contains exactly one element from each list, so it is always a valid answer — the search is only for the smallest.\n\nAdvancing the minimum's list is the right move because the range is bounded below by that value; moving any other list can only keep the minimum where it is or raise the maximum.\n\nWhen a list is exhausted no further improvement is possible, so the search stops.\n\nO(n log k).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[] SmallestRange(IList<IList<int>> lists)\n    {\n        // (value, which list, position in that list), ordered by value.\n        var heap = new PriorityQueue<(int Value, int List, int Index), int>();\n        int currentMax = int.MinValue;\n\n        for (int i = 0; i < lists.Count; i++)\n        {\n            heap.Enqueue((lists[i][0], i, 0), lists[i][0]);\n            currentMax = Math.Max(currentMax, lists[i][0]);\n        }\n\n        int bestLow = 0, bestHigh = 0;\n        bool found = false;\n\n        while (true)\n        {\n            var (value, list, index) = heap.Dequeue();\n\n            if (!found || currentMax - value < bestHigh - bestLow)\n            {\n                bestLow = value; bestHigh = currentMax; found = true;\n            }\n\n            // A list is exhausted: no window can still cover every list.\n            if (index + 1 == lists[list].Count) break;\n\n            int next = lists[list][index + 1];\n            currentMax = Math.Max(currentMax, next);\n            heap.Enqueue((next, list, index + 1), next);\n        }\n\n        return new[] { bestLow, bestHigh };\n    }\n\n    private static IList<IList<int>> Lists(params int[][] rows)\n    {\n        var result = new List<IList<int>>();\n        foreach (var r in rows) result.Add(new List<int>(r));\n        return result;\n    }\n\n    private static void Show(int[] range) => Console.WriteLine($\"[{range[0]},{range[1]}]\");\n\n    public static void Main()\n    {\n        Show(SmallestRange(Lists(\n            new[] { 4, 10, 15, 24, 26 },\n            new[] { 0, 9, 12, 20 },\n            new[] { 5, 18, 22, 30 })));\n\n        Show(SmallestRange(Lists(new[] { 1, 2, 3 }, new[] { 1, 2, 3 }, new[] { 1, 2, 3 })));\n        Show(SmallestRange(Lists(new[] { 1 }, new[] { 2 }, new[] { 3 })));\n        Show(SmallestRange(Lists(new[] { 5, 5, 5 })));           // one list only\n        Show(SmallestRange(Lists(new[] { 1, 5 }, new[] { 4 })));\n    }\n}\n```\n\n**Output**\n\n```\n[20,24]\n[1,1]\n[1,3]\n[5,5]\n[4,5]\n```",
   "tags": [
    "heap",
-   "k-way-merge",
+   "k-way",
    "sliding-window",
-   "intervals"
+   "greedy",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why advance the list holding the minimum?",
+    "a": "Because the current range's lower end is pinned by that value, so the only way to narrow it is to replace that element with the next one in its own list. Advancing any other list leaves the minimum unchanged and can only push the maximum higher, strictly worsening the window. So the minimum's list is the only productive move, which is what makes the greedy exhaustive rather than a guess."
+   },
+   {
+    "q": "Why does exhausting one list end the search?",
+    "a": "Because every valid window needs an element from every list, and once one is past its end there are no further candidates from it - any later window would be missing that list entirely. Continuing would produce ranges that do not satisfy the requirement. The break is a correctness condition, not an optimisation, which is worth saying because it looks like an early exit."
+   },
+   {
+    "q": "Why track the maximum separately rather than reading it from a second heap?",
+    "a": "Because the maximum only ever increases as lists advance, so a single variable updated on each insertion is exact and costs nothing. A max-heap would need removals synchronised with the min-heap, doubling the bookkeeping for information a monotone variable already gives. Noticing that a quantity is monotone and therefore does not need a full data structure is a small but repeatedly useful observation."
+   }
   ]
  },
  {
@@ -10772,17 +10894,32 @@
   "subcategory": "Heap",
   "difficulty": "Medium",
   "question": "Given tasks with durations and a single-threaded CPU, return the processing order.",
-  "answer": "Sort tasks by enqueue time, then use a min-heap keyed on duration then index for those available at the current time, advancing the clock to the next enqueue time when the heap is empty. Time O(n log n).",
+  "answer": "**Approach**\n\nSimulate the clock. Sort tasks by availability, release everything available into a heap ordered by duration then index, and run the heap's best.\n\n**Logic**\n\nThe two-level ordering is the specification: shortest processing time first, with the original index as the tie-break so the result is deterministic.\n\nThe clock must be able to jump forward. When nothing is available the CPU idles until the next task's enqueue time — advancing by one tick would still be correct but is far too slow when the gaps are large.\n\nSorting by availability while remembering the original index is what lets the answer be reported in the caller's terms.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[] GetOrder(int[][] tasks)\n    {\n        // (enqueueTime, duration, originalIndex), sorted by availability.\n        var byArrival = tasks\n            .Select((t, i) => (Arrival: (long)t[0], Duration: (long)t[1], Index: i))\n            .OrderBy(t => t.Arrival)\n            .ToArray();\n\n        // Shortest duration first, original index as the tie-break.\n        var ready = new PriorityQueue<int, (long Duration, int Index)>();\n\n        var order = new int[tasks.Length];\n        int placed = 0, next = 0;\n        long clock = 0;\n\n        while (placed < tasks.Length)\n        {\n            while (next < byArrival.Length && byArrival[next].Arrival <= clock)\n            {\n                ready.Enqueue(byArrival[next].Index,\n                              (byArrival[next].Duration, byArrival[next].Index));\n                next++;\n            }\n\n            if (ready.Count == 0)\n            {\n                clock = byArrival[next].Arrival;   // idle: jump, do not tick\n                continue;\n            }\n\n            int chosen = ready.Dequeue();\n            clock += tasks[chosen][1];\n            order[placed++] = chosen;\n        }\n\n        return order;\n    }\n\n    private static void Show(int[] order) => Console.WriteLine(string.Join(\",\", order));\n\n    public static void Main()\n    {\n        Show(GetOrder(new[] {\n            new[] { 1, 2 }, new[] { 2, 4 }, new[] { 3, 2 }, new[] { 4, 1 } }));\n\n        Show(GetOrder(new[] {\n            new[] { 7, 10 }, new[] { 7, 12 }, new[] { 7, 5 },\n            new[] { 7, 4 }, new[] { 7, 2 } }));          // all arrive together\n\n        Show(GetOrder(new[] { new[] { 1, 2 } }));\n\n        // A gap: the CPU idles from 2 until 100.\n        Show(GetOrder(new[] { new[] { 0, 2 }, new[] { 100, 1 }, new[] { 100, 3 } }));\n\n        // Equal durations: the smaller index wins.\n        Show(GetOrder(new[] { new[] { 0, 5 }, new[] { 0, 5 }, new[] { 0, 5 } }));\n    }\n}\n```\n\n**Output**\n\n```\n0,2,3,1\n4,3,2,0,1\n0\n0,1,2\n0,1,2\n```",
   "tags": [
    "heap",
-   "scheduling",
    "simulation",
-   "greedy"
+   "scheduling",
+   "tie-break",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why jump the clock rather than advancing it one unit at a time?",
+    "a": "Because enqueue times can be in the billions, so ticking would run for billions of iterations doing nothing. Jumping straight to the next arrival is equivalent - no decision can be made during an idle gap since nothing is available - and turns the idle handling into O(1). It is a simulation that only visits the instants where the state can change, which is the general technique behind discrete-event simulation."
+   },
+   {
+    "q": "Why is the original index part of the priority rather than only the duration?",
+    "a": "Because the problem requires ties on duration to be broken by the smaller index, and a heap gives no ordering guarantee among equal priorities - the result would be unstable and could differ between runs or .NET versions. Making the index part of the comparison key encodes the rule explicitly. The all-equal-duration test exists to catch exactly that, since it is otherwise invisible on data without ties."
+   },
+   {
+    "q": "Why does the heap store the index rather than the whole task?",
+    "a": "Because the index is what the answer reports and everything else can be looked up from the original array, so the heap entries stay small and no data is duplicated. The priority tuple carries the duration needed for ordering. It is a minor point, but keeping heap elements to a single identifier and putting the sort key in the priority is a habit that pays off when the payload is large."
+   }
   ]
  },
  {
@@ -10790,16 +10927,32 @@
   "subcategory": "Heap",
   "difficulty": "Hard",
   "question": "Merge k sorted arrays into one sorted array.",
-  "answer": "A min-heap of size k holding the head of each array with its source index; pop the smallest, append it, and push the next element from the same array. Time O(n log k) versus O(nk) for repeated linear scans, where n is the total element count.",
+  "answer": "**Approach**\n\nA min-heap holding one candidate per array. Pop the smallest, append it, and push that array's next element.\n\n**Logic**\n\nThe heap holds at most k entries, so each of the n total elements costs O(log k) rather than O(log n) — that is the difference from dumping everything into one array and sorting.\n\nSequential pairwise merging is the trap: merging array 2 into the accumulated result, then 3, and so on, rescans the growing accumulator each time and ends up O(n·k).\n\nO(n log k) time, O(k) extra space beyond the output.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[] MergeSorted(int[][] arrays)\n    {\n        int total = arrays.Sum(a => a.Length);\n        var merged = new int[total];\n\n        // (which array, position in it), ordered by the value at that position.\n        var heap = new PriorityQueue<(int Array, int Index), int>();\n\n        for (int i = 0; i < arrays.Length; i++)\n            if (arrays[i].Length > 0) heap.Enqueue((i, 0), arrays[i][0]);\n\n        int written = 0;\n\n        while (heap.Count > 0)\n        {\n            var (array, index) = heap.Dequeue();\n            merged[written++] = arrays[array][index];\n\n            // Refill from the same array only: at most k entries at any time.\n            if (index + 1 < arrays[array].Length)\n                heap.Enqueue((array, index + 1), arrays[array][index + 1]);\n        }\n\n        return merged;\n    }\n\n    private static void Show(int[] values) =>\n        Console.WriteLine(values.Length == 0 ? \"(empty)\" : string.Join(\",\", values));\n\n    public static void Main()\n    {\n        Show(MergeSorted(new[] {\n            new[] { 1, 4, 5 }, new[] { 1, 3, 4 }, new[] { 2, 6 } }));\n\n        Show(MergeSorted(new[] { Array.Empty<int>(), new[] { 1 }, Array.Empty<int>() }));\n        Show(MergeSorted(Array.Empty<int[]>()));\n        Show(MergeSorted(new[] { new[] { -5, -1 }, new[] { -3, 0 } }));\n        Show(MergeSorted(new[] { new[] { 2, 2 }, new[] { 2, 2 } }));      // all duplicates\n        Show(MergeSorted(new[] { new[] { 1, 2, 3, 4, 5 } }));             // single array\n    }\n}\n```\n\n**Output**\n\n```\n1,1,2,3,4,4,5,6\n1\n(empty)\n-5,-3,-1,0\n2,2,2,2\n1,2,3,4,5\n```",
   "tags": [
    "heap",
    "k-way-merge",
-   "sorting"
+   "sorting",
+   "complexity",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is this better than concatenating everything and sorting?",
+    "a": "Concatenating and sorting is O(n log n) and discards the fact that each input is already ordered; the heap merge is O(n log k), and k is usually far smaller than n. It also streams - the output is produced in order, so it can be written to a file or network without holding everything in memory, which matters for external sorting where the arrays are disk-backed runs. That streaming property is the real reason this algorithm exists."
+   },
+   {
+    "q": "Why not merge the arrays one at a time?",
+    "a": "Because merging into a growing accumulator rescans everything already merged on each step, giving O(n k) - with a thousand arrays that is a thousandfold worse than the heap. If you want to avoid a heap, merge them pairwise in a tournament, halving the number of arrays each round, which recovers O(n log k). The naive sequential version is the trap this question is usually set to expose."
+   },
+   {
+    "q": "Why does the heap hold indices rather than values?",
+    "a": "Because after popping you need to know which array to refill from, and a bare value does not say. Storing the array and position makes the refill O(1) and keeps entries small. It is the same design point as the CPU-scheduling heap: keep the element a lightweight identifier and put the ordering key in the priority, so the structure stays cheap regardless of payload size."
+   }
   ]
  },
  {
@@ -10807,17 +10960,32 @@
   "subcategory": "Tries",
   "difficulty": "Medium",
   "question": "Design a data structure supporting word search with a single-character wildcard.",
-  "answer": "A trie where search recurses: on a literal character follow that child, on a wildcard try every child. Time is O(m) for a literal query and up to O(26^k times m) with k wildcards, which is why wildcard-heavy queries need a bound.",
+  "answer": "**Approach**\n\nA trie with DFS matching. A literal character follows one child; a dot must try all of them.\n\n**Logic**\n\nThe branching on the wildcard is what forces a search rather than a walk. A plain loop down the trie works for exact lookup but cannot backtrack, and a dot may match several children of which only some lead to a complete word.\n\nThe terminal flag is essential: reaching a node is not the same as having matched a word, since the node may be an interior prefix.\n\nExact search is O(length). A query of all dots degrades to scanning the whole trie.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class WordDictionary\n{\n    private class Node\n    {\n        public readonly Node[] Children = new Node[26];\n        public bool IsWord;   // reaching a node is not the same as matching a word\n    }\n\n    private readonly Node _root = new();\n\n    public void AddWord(string word)\n    {\n        var node = _root;\n\n        foreach (char c in word)\n        {\n            int i = c - 'a';\n            node.Children[i] ??= new Node();\n            node = node.Children[i];\n        }\n\n        node.IsWord = true;\n    }\n\n    public bool Search(string pattern) => Match(pattern, 0, _root);\n\n    private bool Match(string pattern, int at, Node node)\n    {\n        if (node == null) return false;\n        if (at == pattern.Length) return node.IsWord;\n\n        char c = pattern[at];\n\n        if (c != '.') return Match(pattern, at + 1, node.Children[c - 'a']);\n\n        // A dot branches: any child may lead to a match.\n        foreach (var child in node.Children)\n            if (child != null && Match(pattern, at + 1, child)) return true;\n\n        return false;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var dictionary = new WordDictionary();\n        foreach (string w in new[] { \"bad\", \"dad\", \"mad\" }) dictionary.AddWord(w);\n\n        Console.WriteLine(dictionary.Search(\"pad\"));\n        Console.WriteLine(dictionary.Search(\"bad\"));\n        Console.WriteLine(dictionary.Search(\".ad\"));\n        Console.WriteLine(dictionary.Search(\"b..\"));\n        Console.WriteLine(dictionary.Search(\"...\"));\n        Console.WriteLine(dictionary.Search(\"....\"));   // wrong length\n        Console.WriteLine(dictionary.Search(\"ba\"));     // a prefix, not a word\n\n        var empty = new WordDictionary();\n        Console.WriteLine(empty.Search(\".\"));\n    }\n}\n```\n\n**Output**\n\n```\nFalse\nTrue\nTrue\nTrue\nTrue\nFalse\nFalse\nFalse\n```",
   "tags": [
    "trie",
-   "search",
+   "design",
+   "dfs",
    "wildcard",
-   "design"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does the wildcard force recursion rather than a loop?",
+    "a": "Because a dot can match several children and only some of them may lead to a complete word of the right length, so the search must try one, and on failure back up and try another. A loop walking a single path has nowhere to back up to. Exact lookup needs no recursion at all, which is why adding one wildcard character changes the structure of the algorithm rather than just a comparison."
+   },
+   {
+    "q": "Why is the terminal flag necessary?",
+    "a": "Because a trie node can be an interior prefix of longer words without being a word itself - searching 'ba' reaches a real node in a trie containing 'bad', but 'ba' was never added. Without the flag every prefix would report as a match. The flag also lets a word be a prefix of another, such as 'car' and 'card', which a structure relying on leaf-ness alone cannot represent."
+   },
+   {
+    "q": "What is the worst case, and how would you improve it?",
+    "a": "A query of all dots visits every node of matching depth, so it degenerates to a full scan of that level - the trie gives no help when nothing is pinned down. A practical mitigation is bucketing words by length so a pattern only searches its own bucket, and for many-dot patterns falling back to a scan of that bucket. If wildcards were common and long, an inverted index on (position, character) would beat the trie outright, which is worth naming as the point where the data structure stops being the right one."
+   }
   ]
  },
  {
@@ -10825,17 +10993,32 @@
   "subcategory": "Tries",
   "difficulty": "Medium",
   "question": "Find the maximum XOR of two numbers in an array.",
-  "answer": "Insert the binary representations into a bitwise trie from the most significant bit, then for each number walk the trie preferring the opposite bit at each level to maximise the XOR. Time O(32n), which is linear in practice, versus O(n^2) for all pairs.",
+  "answer": "**Approach**\n\nBuild the answer bit by bit from the top. At each bit, assume it can be 1 and check whether any pair of prefixes actually achieves it.\n\n**Logic**\n\nThe check uses the identity that a XOR b = c implies a XOR c = b. So after fixing a target prefix, the question becomes whether some prefix in the set has its complement also in the set — a hash lookup rather than a search.\n\nGreedy from the high bit is correct because a 1 in a higher position outweighs every lower bit combined, so securing it is always right.\n\nO(32n) — linear — versus O(n²) for checking all pairs.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int FindMaximumXor(int[] nums)\n    {\n        if (nums == null || nums.Length < 2) return 0;\n\n        int best = 0;\n\n        for (int bit = 31; bit >= 0; bit--)\n        {\n            int mask = best | (1 << bit);       // the prefix we hope to achieve\n            int prefixMask = ~((1 << bit) - 1);\n\n            var prefixes = new HashSet<int>();\n            foreach (int n in nums) prefixes.Add(n & prefixMask);\n\n            // a ^ b == mask  <=>  a ^ mask == b, so one lookup settles it.\n            foreach (int prefix in prefixes)\n                if (prefixes.Contains(prefix ^ mask)) { best = mask; break; }\n        }\n\n        return best;\n    }\n\n    // Quadratic reference, used only to confirm the fast version.\n    private static int BruteForce(int[] nums)\n    {\n        int best = 0;\n        for (int i = 0; i < nums.Length; i++)\n            for (int j = i + 1; j < nums.Length; j++)\n                best = Math.Max(best, nums[i] ^ nums[j]);\n        return best;\n    }\n\n    public static void Main()\n    {\n        int[][] cases =\n        {\n            new[] { 3, 10, 5, 25, 2, 8 },\n            new[] { 0 },\n            new[] { 2, 4 },\n            new[] { 8, 10, 2 },\n            new[] { 14, 70, 53, 83, 49, 91, 36, 80, 92, 51, 66, 70 },\n            new[] { 0, 0, 0 }\n        };\n\n        foreach (var c in cases)\n            Console.WriteLine($\"{FindMaximumXor(c)} (brute {BruteForce(c)})\");\n    }\n}\n```\n\n**Output**\n\n```\n28 (brute 28)\n0 (brute 0)\n6 (brute 6)\n10 (brute 10)\n127 (brute 127)\n0 (brute 0)\n```",
   "tags": [
-   "trie",
    "bit-manipulation",
-   "xor",
-   "optimisation"
+   "hash-set",
+   "greedy",
+   "prefix",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is greedy from the highest bit correct?",
+    "a": "Because a 1 in bit position k contributes more than every lower bit combined - 2 to the k exceeds the sum of all smaller powers of two. So any result with that bit set beats any result without it, regardless of what follows, and securing the highest achievable bit first can never be regretted. That strict dominance is what licenses the greedy; without it you would have to consider trading a high bit for several lower ones."
+   },
+   {
+    "q": "Explain the a XOR b equals c trick.",
+    "a": "XOR is its own inverse, so from a XOR b = c it follows that a XOR c = b. Having fixed the candidate result c, instead of searching for pairs you take each prefix a and ask whether a XOR c is also present - a single hash lookup. That converts a quadratic pair search into a linear scan per bit. It is the same rearrangement that turns the two-sum problem from nested loops into one pass with a map."
+   },
+   {
+    "q": "How does the trie solution compare?",
+    "a": "A binary trie of the numbers' bits lets you walk each number down the trie taking the opposite branch wherever possible, which greedily maximises that number's best partner - also O(32n) but with one pass instead of thirty-two, and without rebuilding a set per bit. It is faster in practice and extends naturally to queries such as 'maximum XOR with a given value under a constraint'. The hash version is quicker to write correctly under pressure, which is the trade-off worth stating."
+   }
   ]
  },
  {
