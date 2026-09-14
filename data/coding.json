@@ -1175,18 +1175,33 @@
   "subcategory": "Strings",
   "difficulty": "Hard",
   "question": "Regular expression matching with '.' and '*'.",
-  "answer": "Dynamic programming: dp[i][j] = does s[0..i) match p[0..j). '.' matches any char; '*' matches zero or more of the preceding element (dp[i][j] = dp[i][j-2] for zero, or match preceding and dp[i-1][j]). Fill the table bottom-up. O(n*m) time and space.",
+  "answer": "**Approach**\n\nThe `*` is what makes this hard: it binds to the character before it and can match zero or more occurrences, so a greedy scan cannot work. Dynamic programming over both strings handles it cleanly.\n\n**Logic**\n\n`match[i][j]` means the first i characters of the input match the first j of the pattern.\n\nFor a plain character or `.`, the answer is the diagonal, provided the current characters agree. For `*`, there are two cases: use it zero times, which skips the pair and looks two columns back; or use it once more, which requires the preceding pattern character to match the current input character and then looks one row up.\n\nThe base row needs care: an empty input matches a pattern like `a*b*` because every starred pair can contribute nothing.\n\nO(n·m) time and space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsMatch(string s, string p)\n    {\n        int n = s.Length, m = p.Length;\n        var match = new bool[n + 1, m + 1];\n        match[0, 0] = true;\n\n        // Empty input can still match a pattern made of x* pairs.\n        for (int j = 1; j <= m; j++)\n            if (p[j - 1] == '*') match[0, j] = match[0, j - 2];\n\n        for (int i = 1; i <= n; i++)\n            for (int j = 1; j <= m; j++)\n            {\n                if (p[j - 1] == '*')\n                {\n                    // zero occurrences: skip the pair entirely\n                    match[i, j] = match[i, j - 2];\n\n                    // one more occurrence: the char before * must match s[i-1]\n                    if (p[j - 2] == '.' || p[j - 2] == s[i - 1])\n                        match[i, j] = match[i, j] || match[i - 1, j];\n                }\n                else if (p[j - 1] == '.' || p[j - 1] == s[i - 1])\n                {\n                    match[i, j] = match[i - 1, j - 1];\n                }\n            }\n\n        return match[n, m];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsMatch(\"aa\", \"a\"));\n        Console.WriteLine(IsMatch(\"aa\", \"a*\"));\n        Console.WriteLine(IsMatch(\"ab\", \".*\"));\n        Console.WriteLine(IsMatch(\"mississippi\", \"mis*is*p*.\"));\n        Console.WriteLine(IsMatch(\"\", \"a*b*\"));      // empty matches optional pairs\n        Console.WriteLine(IsMatch(\"aab\", \"c*a*b\"));  // c* contributes nothing\n    }\n}\n```\n\n**Output**\n\n```\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\n```",
   "tags": [
    "strings",
    "dp",
    "regex",
-   "hard"
+   "two-dimensional",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Facebook",
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does the zero-occurrence case look two columns back rather than one?",
+    "a": "Because `*` and the character it binds to are a single unit in the pattern, occupying two positions. Dropping the unit means skipping both, hence `j - 2`. Looking back one column would leave the bare character in play and produce nonsense. That two-position coupling is also why the base row is computed with a stride of two, and why a pattern starting with `*` is invalid and would index out of bounds."
+   },
+   {
+    "q": "How does wildcard matching with ? and * differ?",
+    "a": "There `*` stands alone and matches any sequence, so it is not bound to a preceding character and the recurrence is simpler: either the star consumes one more input character, looking one row up, or it matches nothing, looking one column back. That version also admits a clean O(n) greedy two-pointer solution with backtracking on the last star, which regex matching does not, because the star's meaning depends on what precedes it."
+   },
+   {
+    "q": "Would you implement a regex engine this way in production?",
+    "a": "No. A real engine compiles the pattern to an NFA and optionally to a DFA, which matches in time linear in the input regardless of pattern complexity, and supports far more syntax. The DP here is quadratic in both and handles only two metacharacters. It is also worth knowing that backtracking engines, which .NET's Regex uses, can go exponential on adversarial patterns, which is the ReDoS vulnerability class, and why `RegexOptions.NonBacktracking` was added in .NET 7."
+   }
   ]
  },
  {
@@ -2748,17 +2763,32 @@
   "subcategory": "Queue",
   "difficulty": "Easy",
   "question": "Moving average from a data stream.",
-  "answer": "Use a fixed-size sliding window (circular buffer or queue) and a running sum. On each new value, add it and subtract the value leaving the window (if full), then divide the sum by the current count. O(1) per query, O(window) space.",
+  "answer": "**Approach**\n\nKeep a fixed-size circular buffer and a running sum. Each arrival overwrites the oldest slot, adjusting the sum by the difference rather than recomputing it.\n\n**Logic**\n\nRecomputing the sum over the window on every call is O(k). Maintaining a running total makes each call O(1): add the entering value, subtract the leaving one. The circular buffer avoids shifting elements and allocates once.\n\nThe only subtlety is the warm-up period, where fewer than k values have arrived and the average must divide by the count so far rather than by k.\n\nO(1) per call, O(k) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class MovingAverage\n{\n    private readonly double[] _window;\n    private double _sum;\n    private int _index;\n    private int _count;\n\n    public MovingAverage(int size)\n    {\n        if (size <= 0) throw new ArgumentOutOfRangeException(nameof(size));\n        _window = new double[size];\n    }\n\n    public double Next(int value)\n    {\n        // Subtract whatever occupied this slot before overwriting it.\n        _sum -= _window[_index];\n        _window[_index] = value;\n        _sum += value;\n\n        _index = (_index + 1) % _window.Length;\n        if (_count < _window.Length) _count++;   // still warming up\n\n        return _sum / _count;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var m = new MovingAverage(3);\n\n        Console.WriteLine(m.Next(1));      // 1 / 1\n        Console.WriteLine(m.Next(10));     // 11 / 2\n        Console.WriteLine(m.Next(3));      // 14 / 3\n        Console.WriteLine(m.Next(5));      // window full: 1 drops out\n\n        var single = new MovingAverage(1);\n        Console.WriteLine(single.Next(4));\n        Console.WriteLine(single.Next(9));\n    }\n}\n```\n\n**Output**\n\n```\n1\n5.5\n4.666666666666667\n6\n4\n9\n```",
   "tags": [
    "queue",
-   "sliding-window",
+   "circular-buffer",
    "streaming",
-   "average"
+   "running-sum",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does the running sum drift with floating point, and does it matter?",
+    "a": "Because each addition and subtraction introduces a small rounding error that accumulates over millions of updates, so the running sum slowly diverges from the true sum of the window. For a monitoring dashboard the drift is irrelevant; for financial calculations it is not. The fixes are to recompute from the window periodically, to use Kahan summation which tracks the lost low-order bits, or to use decimal if the values are exact quantities. It is worth raising because the bug is invisible until it is large."
+   },
+   {
+    "q": "How would you extend this to a time-based window rather than a count?",
+    "a": "The fixed array no longer works, because the number of events in the last five minutes is unbounded. You need a queue of value-and-timestamp pairs, evicting from the front while the head is older than the window. That makes the amortised cost O(1) but the memory proportional to the event rate, so a burst can blow it up. The bounded alternative is bucketing by time, as a hit counter does, which trades exactness for a fixed memory footprint."
+   },
+   {
+    "q": "How would you make this thread-safe for concurrent producers?",
+    "a": "A lock around Next is the simple answer, and for a moving average the critical section is tiny so contention is manageable. Lock-free is awkward here because the sum and the buffer slot must update atomically together, which no single interlocked operation covers. The usual high-throughput approach is per-thread accumulators combined on read, accepting that the combined view is slightly stale, which is exactly what most metrics libraries do."
+   }
   ]
  },
  {
@@ -2766,16 +2796,32 @@
   "subcategory": "Stack",
   "difficulty": "Easy",
   "question": "Valid parentheses with multiple bracket types.",
-  "answer": "Stack of opening brackets; on a closing bracket, verify the top is the matching opener (pop) else invalid. A map from closing→opening simplifies checks. Empty stack at the end means valid. O(n) time, O(n) space.",
+  "answer": "**Approach**\n\nA stack, because a closing bracket must match the most recently opened one, which is last-in-first-out by definition.\n\n**Logic**\n\nPush every opening bracket. On a closing bracket, the stack must be non-empty and its top must be the matching opener, so pop and compare. At the end the stack must be empty, otherwise something was never closed.\n\nCounting brackets instead of stacking them fails, because `([)]` has balanced counts but interleaved pairs. That case is the whole point of the question.\n\nO(n) time, O(n) space in the worst case of all openers.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool IsValid(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return true;\n\n        var closers = new Dictionary<char, char> { [')'] = '(', [']'] = '[', ['}'] = '{' };\n        var stack = new Stack<char>();\n\n        foreach (char c in s)\n        {\n            if (c == '(' || c == '[' || c == '{')\n            {\n                stack.Push(c);\n            }\n            else if (closers.TryGetValue(c, out char opener))\n            {\n                // A closer with nothing open, or the wrong thing open, is invalid.\n                if (stack.Count == 0 || stack.Pop() != opener) return false;\n            }\n            // anything else is ordinary text and is ignored\n        }\n\n        return stack.Count == 0;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsValid(\"()[]{}\"));\n        Console.WriteLine(IsValid(\"([{}])\"));\n        Console.WriteLine(IsValid(\"([)]\"));      // balanced counts, wrong nesting\n        Console.WriteLine(IsValid(\"(\"));\n        Console.WriteLine(IsValid(\"]\"));\n        Console.WriteLine(IsValid(\"a(b)c[d]\"));  // text is ignored\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nFalse\nFalse\nTrue\n```",
   "tags": [
    "stack",
    "parentheses",
-   "brackets"
+   "validation",
+   "nesting",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why can counting not replace the stack once there are several bracket types?",
+    "a": "Because a counter loses the ordering. With one bracket type a counter is sufficient, incrementing on open and decrementing on close, failing if it goes negative. With several types, `([)]` keeps every counter balanced while the pairs cross, which is invalid. The stack preserves which opener is innermost, which is exactly the information the counter discards. That contrast is a neat way to show why the problem genuinely needs a stack."
+   },
+   {
+    "q": "How would you report where the error is, as an editor does?",
+    "a": "Push the index alongside the character so the stack holds positions. On a mismatch you can then report both the offending closer's position and the opener it failed to match; on leftovers you report the position of each unclosed opener. Same complexity, and it is what real parsers do, because a message saying 'unbalanced' with no location is nearly useless in a large file."
+   },
+   {
+    "q": "The question ignores non-bracket characters. Is that the right contract?",
+    "a": "It depends on the caller, and it is worth confirming rather than assuming. Ignoring them makes the function usable on real expressions, which is usually what is wanted. If the input is meant to consist only of brackets, silently accepting other characters hides malformed input. The dangerous middle ground is code that rejects unknown characters by accident, via an unconditional else, which then fails on any real text."
+   }
   ]
  },
  {
@@ -3399,17 +3445,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Count the number of nodes in a complete binary tree efficiently.",
-  "answer": "Use the complete-tree property: compute left height (leftmost path) and right height (rightmost path). If equal, the subtree is perfect with 2^h - 1 nodes; else recurse on both children. O(log^2 n) time instead of O(n).",
+  "answer": "**Approach**\n\nCounting every node is O(n). A complete tree has enough structure to do better: compare the left and right spine depths, and one subtree is guaranteed perfect, whose size is a formula rather than a traversal.\n\n**Logic**\n\nWalk the leftmost path and the rightmost path. If their depths are equal, the tree is perfect and holds `2^depth - 1` nodes, computed directly with no recursion.\n\nIf they differ, the tree is complete but not perfect, so recurse into both subtrees. The key fact is that at most one side can be imperfect at each level, so one of the two recursive calls terminates immediately with the formula.\n\nEach level costs O(log n) to measure the spines, and there are O(log n) levels, giving O(log²n) rather than O(n).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static int CountNodes(TreeNode root)\n    {\n        if (root == null) return 0;\n\n        int left = LeftDepth(root);\n        int right = RightDepth(root);\n\n        // Equal spines means a PERFECT subtree: no traversal needed.\n        if (left == right) return (1 << left) - 1;\n\n        // Otherwise exactly one side is imperfect; the other returns immediately.\n        return 1 + CountNodes(root.Left) + CountNodes(root.Right);\n    }\n\n    private static int LeftDepth(TreeNode node)\n    {\n        int d = 0;\n        for (; node != null; node = node.Left) d++;\n        return d;\n    }\n\n    private static int RightDepth(TreeNode node)\n    {\n        int d = 0;\n        for (; node != null; node = node.Right) d++;\n        return d;\n    }\n\n    // Builds a complete tree holding 1..n in level order.\n    private static TreeNode Build(int n)\n    {\n        if (n == 0) return null;\n        var nodes = new TreeNode[n + 1];\n        for (int i = 1; i <= n; i++) nodes[i] = new TreeNode(i);\n        for (int i = 1; i <= n; i++)\n        {\n            if (2 * i <= n) nodes[i].Left = nodes[2 * i];\n            if (2 * i + 1 <= n) nodes[i].Right = nodes[2 * i + 1];\n        }\n        return nodes[1];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CountNodes(Build(6)));\n        Console.WriteLine(CountNodes(Build(7)));    // perfect\n        Console.WriteLine(CountNodes(Build(1)));\n        Console.WriteLine(CountNodes(Build(0)));\n        Console.WriteLine(CountNodes(Build(15)));   // perfect\n        Console.WriteLine(CountNodes(Build(1000)));\n    }\n}\n```\n\n**Output**\n\n```\n6\n7\n1\n0\n15\n1000\n```",
   "tags": [
    "trees",
    "complete-tree",
-   "count",
-   "binary-search"
+   "binary-search",
+   "logarithmic",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is the complexity O(log squared n) rather than O(log n)?",
+    "a": "Because the recursion descends O(log n) levels, and at each level it measures a spine which itself costs O(log n). The two multiply. It is not O(n) because at every level one of the two subtrees is perfect and returns in constant time after its spine measurement, so the recursion follows a single path down rather than branching. Recognising that only one side can be imperfect is what collapses the branching."
+   },
+   {
+    "q": "What exactly does 'complete' mean, and why does the trick fail without it?",
+    "a": "Complete means every level is full except possibly the last, which is filled left to right. That guarantee is what makes equal spine depths imply a perfect subtree. In an arbitrary tree the left and right spines can be equal while the interior is full of holes, so the formula would massively overcount. The algorithm is therefore specific to a structural precondition, and applying it to a general binary tree gives a confidently wrong answer rather than a slow one."
+   },
+   {
+    "q": "Is there a way to think of this as binary search?",
+    "a": "Yes, and it is the more elegant framing. In a complete tree the nodes on the last level occupy a contiguous prefix, so you binary search for the index of the last present node, testing each candidate by walking down from the root using the bits of the index to choose left or right. That is O(log n) tests each costing O(log n), the same bound, but it makes the logarithmic nature obvious rather than emergent."
+   }
   ]
  },
  {
@@ -3582,17 +3643,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Populate next right pointers in each node (perfect binary tree).",
-  "answer": "Use established next pointers to traverse each level and link the next level: for each node, connect left.next = right, and right.next = node.next.left (if node.next exists). Move down leftmost each level. O(n) time, O(1) space (using the tree's own pointers).",
+  "answer": "**Approach**\n\nA level-order traversal would work but costs O(w) space for the queue. In a *perfect* tree the already-established next pointers on one level provide a free linked list for traversing it, making O(1) space possible.\n\n**Logic**\n\nWalk the leftmost spine one level at a time. For each node on the current level, connect its left child to its right child, and connect its right child to the left child of the node's own next sibling. Then follow the next pointer to move along the level.\n\nBecause the tree is perfect, every node either has both children or none, so the two connection rules cover every case with no null checks beyond the loop conditions.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Node\n{\n    public int Val;\n    public Node Left, Right, Next;\n    public Node(int val) { Val = val; }\n}\n\npublic class Solution\n{\n    public static Node Connect(Node root)\n    {\n        var leftmost = root;\n\n        while (leftmost?.Left != null)          // stop once a level has no children\n        {\n            for (var node = leftmost; node != null; node = node.Next)\n            {\n                node.Left.Next = node.Right;                       // within one parent\n                if (node.Next != null)\n                    node.Right.Next = node.Next.Left;              // across parents\n            }\n\n            leftmost = leftmost.Left;           // descend using the spine\n        }\n\n        return root;\n    }\n\n    private static Node Build(int depth, ref int counter)\n    {\n        if (depth == 0) return null;\n        var node = new Node(counter++);\n        node.Left = Build(depth - 1, ref counter);\n        node.Right = Build(depth - 1, ref counter);\n        return node;\n    }\n\n    // Reads each level by following Next, which proves the wiring is right.\n    private static string Levels(Node root)\n    {\n        var sb = new StringBuilder();\n        for (var level = root; level != null; level = level.Left)\n        {\n            var parts = new List<string>();\n            for (var n = level; n != null; n = n.Next) parts.Add(n.Val.ToString());\n            sb.Append('[').Append(string.Join(\",\", parts)).Append(']');\n        }\n        return sb.Length == 0 ? \"(empty)\" : sb.ToString();\n    }\n\n    public static void Main()\n    {\n        int c = 1;\n        var root = Build(3, ref c);      // a perfect tree of depth 3, values in preorder\n        Connect(root);\n        Console.WriteLine(Levels(root));\n\n        int c2 = 1;\n        var single = Build(1, ref c2);\n        Connect(single);\n        Console.WriteLine(Levels(single));\n\n        Console.WriteLine(Levels(Connect(null)));\n\n        int c3 = 1;\n        var two = Build(2, ref c3);\n        Connect(two);\n        Console.WriteLine(Levels(two));\n    }\n}\n```\n\n**Output**\n\n```\n[1][2,5][3,4,6,7]\n[1]\n(empty)\n[1][2,3]\n```",
   "tags": [
    "trees",
    "next-pointers",
-   "level",
-   "constant-space"
+   "constant-space",
+   "level-order",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does this need the tree to be perfect?",
+    "a": "Because both connection rules assume every node has two children and that the next sibling also has children. In a merely complete or arbitrary tree, a node's right neighbour on the next level may be several nodes along, or absent, so you must scan forward through the parent level looking for the next node that has any child. That variant exists as 'populate next right pointers II' and needs a dummy head plus a running tail pointer to build each level, which is noticeably more code."
+   },
+   {
+    "q": "How does the O(1) space claim survive if the traversal needs to reach every level?",
+    "a": "Because the next pointers being built on the current level serve as the traversal structure for that level, so no queue is needed. The only state is two references: the leftmost node of the current level and the cursor moving along it. That is the trick: the output structure doubles as the working structure, which is why the algorithm cannot be applied before any next pointers exist on the level above."
+   },
+   {
+    "q": "Where is this pattern useful outside the puzzle?",
+    "a": "It is the shape of a threaded tree, where unused child pointers are repurposed to give in-order traversal without a stack, and of skip lists, where forward pointers at each level accelerate search. More practically, it shows the general idea of building a level-linked structure to make sibling access O(1), which is what makes some tree-based indexes efficient for range scans: reaching the next leaf does not require walking back up to a common ancestor."
+   }
   ]
  },
  {
@@ -3936,18 +4012,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Network delay time / single-source shortest path with weights.",
-  "answer": "Dijkstra from the source with a min-heap; the answer is the maximum finalized distance (time for the signal to reach all nodes), or -1 if some node is unreachable. O((V+E) log V) time. Bellman-Ford (O(VE)) handles negative weights.",
+  "answer": "**Approach**\n\nThe time for a signal to reach every node is the maximum of the shortest path distances from the source. So run Dijkstra and take the largest finite distance, reporting failure if any node is unreachable.\n\n**Logic**\n\nDijkstra settles nodes in order of distance using a min-heap. Since .NET's PriorityQueue has no decrease-key, push improved distances as new entries and skip stale pops using a settled flag.\n\nThe answer is the maximum over all nodes, not the sum, because the signal propagates in parallel: every node receives it at its own shortest-path time, and the network is fully covered when the last one does.\n\nO((V + E) log V).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    // times[i] = [from, to, weight], nodes numbered 1..n\n    public static int NetworkDelayTime(int[][] times, int n, int source)\n    {\n        var graph = new List<(int To, int Weight)>[n + 1];\n        for (int i = 1; i <= n; i++) graph[i] = new List<(int, int)>();\n        foreach (var t in times) graph[t[0]].Add((t[1], t[2]));\n\n        var dist = new int[n + 1];\n        Array.Fill(dist, int.MaxValue);\n        dist[source] = 0;\n\n        var settled = new bool[n + 1];\n        var heap = new PriorityQueue<int, int>();\n        heap.Enqueue(source, 0);\n\n        while (heap.Count > 0)\n        {\n            int node = heap.Dequeue();\n            if (settled[node]) continue;      // a stale duplicate entry\n            settled[node] = true;\n\n            foreach (var (next, weight) in graph[node])\n            {\n                int candidate = dist[node] + weight;\n                if (candidate < dist[next])\n                {\n                    dist[next] = candidate;\n                    heap.Enqueue(next, candidate);\n                }\n            }\n        }\n\n        // The network is covered when the LAST node receives the signal.\n        int slowest = 0;\n        for (int i = 1; i <= n; i++)\n        {\n            if (dist[i] == int.MaxValue) return -1;   // unreachable\n            slowest = Math.Max(slowest, dist[i]);\n        }\n\n        return slowest;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(NetworkDelayTime(new[] {\n            new[] { 2, 1, 1 }, new[] { 2, 3, 1 }, new[] { 3, 4, 1 } }, 4, 2));\n\n        Console.WriteLine(NetworkDelayTime(new[] { new[] { 1, 2, 1 } }, 2, 1));\n        Console.WriteLine(NetworkDelayTime(new[] { new[] { 1, 2, 1 } }, 2, 2));   // 1 unreachable\n        Console.WriteLine(NetworkDelayTime(Array.Empty<int[]>(), 1, 1));          // single node\n        Console.WriteLine(NetworkDelayTime(new[] {\n            new[] { 1, 2, 1 }, new[] { 1, 3, 4 }, new[] { 2, 3, 1 } }, 3, 1));    // 1-2-3 beats 1-3\n    }\n}\n```\n\n**Output**\n\n```\n2\n1\n-1\n0\n2\n```",
   "tags": [
    "graphs",
    "dijkstra",
    "shortest-path",
-   "bellman-ford",
-   "hard"
+   "priority-queue",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why the maximum rather than the sum of distances?",
+    "a": "Because the signal propagates concurrently along every path, so each node receives it at its own shortest-path time and nothing waits for anything else. The network is fully informed the moment the last node receives it, which is the maximum. Summing would model a single messenger visiting nodes in sequence, which is a different and much harder problem, closer to the travelling salesman. The distinction is worth stating because the word 'time' invites the wrong intuition."
+   },
+   {
+    "q": "Why is the settled check needed rather than decrease-key?",
+    "a": "Because .NET's PriorityQueue, like most standard-library heaps, cannot update the priority of an element already inside it. The lazy alternative is to push a new entry whenever a shorter distance is found and ignore any pop for an already-settled node. The heap can then hold up to E entries rather than V, which costs memory but performs well in practice. A Fibonacci heap offers true decrease-key and the better theoretical bound, but its constants make it slower on real graphs."
+   },
+   {
+    "q": "Suppose some edge weights could be negative.",
+    "a": "Dijkstra becomes incorrect, because settling a node assumes no cheaper route can appear later, which a negative edge can violate. You would use Bellman-Ford, relaxing every edge V-1 times at O(VE), which also detects a negative cycle with one further pass. In a network-delay context negative weights are physically meaningless, so the constraint is natural, but it is exactly the sort of assumption worth stating rather than leaving implicit."
+   }
   ]
  },
  {
@@ -4053,18 +4143,31 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Minimum spanning tree (Kruskal's or Prim's).",
-  "answer": "Kruskal's: sort edges by weight, add each edge if it connects two different components (Union-Find), until n-1 edges. Prim's: grow the MST from a start node using a min-heap of crossing edges. Both O(E log E) / O(E log V). MST connects all nodes with minimum total edge weight.",
+  "answer": "**Approach**\n\nKruskal's: sort every edge by weight and add each one whose endpoints are not already connected, using union-find to test connectivity. The greedy is provably optimal by the cut property.\n\n**Logic**\n\nSorting puts the cheapest edges first. An edge whose endpoints already share a component would create a cycle, so it is skipped. After V-1 accepted edges the tree is complete; if the edges run out first, the graph was disconnected and no spanning tree exists.\n\nO(E log E) for the sort, then effectively linear for the union-find operations with path compression and union by rank.\n\nPrim's is the alternative: grow one tree from a starting vertex, always taking the cheapest edge leaving it, at O(E log V) with a heap. Kruskal's suits sparse graphs, Prim's suits dense ones.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    // edges[i] = [u, v, weight]; returns total weight, or -1 if disconnected.\n    public static int MinimumSpanningTree(int n, int[][] edges)\n    {\n        var parent = new int[n];\n        var rank = new int[n];\n        for (int i = 0; i < n; i++) parent[i] = i;\n\n        int Find(int x)\n        {\n            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n            return x;\n        }\n\n        bool Union(int a, int b)\n        {\n            int ra = Find(a), rb = Find(b);\n            if (ra == rb) return false;                 // already connected: a cycle\n\n            if (rank[ra] < rank[rb]) (ra, rb) = (rb, ra);\n            parent[rb] = ra;\n            if (rank[ra] == rank[rb]) rank[ra]++;\n            return true;\n        }\n\n        int total = 0, accepted = 0;\n\n        foreach (var e in edges.OrderBy(e => e[2]))     // cheapest first\n        {\n            if (!Union(e[0], e[1])) continue;\n\n            total += e[2];\n            if (++accepted == n - 1) break;             // a tree on n nodes has n-1 edges\n        }\n\n        return accepted == n - 1 ? total : -1;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinimumSpanningTree(4, new[] {\n            new[] { 0, 1, 10 }, new[] { 0, 2, 6 }, new[] { 0, 3, 5 },\n            new[] { 1, 3, 15 }, new[] { 2, 3, 4 } }));\n\n        Console.WriteLine(MinimumSpanningTree(2, new[] { new[] { 0, 1, 7 } }));\n        Console.WriteLine(MinimumSpanningTree(1, Array.Empty<int[]>()));   // single node\n        Console.WriteLine(MinimumSpanningTree(3, new[] { new[] { 0, 1, 1 } }));  // disconnected\n        Console.WriteLine(MinimumSpanningTree(3, new[] {\n            new[] { 0, 1, 1 }, new[] { 1, 2, 2 }, new[] { 0, 2, 5 } }));\n    }\n}\n```\n\n**Output**\n\n```\n19\n7\n0\n-1\n3\n```",
   "tags": [
    "graphs",
-   "mst",
    "kruskal",
-   "prim",
    "union-find",
-   "hard"
+   "greedy",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is the greedy provably optimal?",
+    "a": "By the cut property: for any partition of the vertices into two sets, the lightest edge crossing that cut belongs to some minimum spanning tree. Kruskal's always adds the cheapest edge joining two currently separate components, which is exactly the lightest edge across that cut, so every accepted edge is safe. That is an exchange argument, and it is what distinguishes this greedy from the many that look plausible and fail. Prim's is optimal by the same property applied to a different cut."
+   },
+   {
+    "q": "When would you choose Prim's over Kruskal's?",
+    "a": "On dense graphs, where E approaches V squared. Kruskal's pays O(E log E) to sort every edge, which dominates, while Prim's with an adjacency matrix and no heap is O(V squared), which is better when E is near that. Kruskal's wins on sparse graphs and is simpler to write given a union-find. Kruskal's also handles a disconnected graph naturally by producing a spanning forest, which Prim's does not without restarting from each component."
+   },
+   {
+    "q": "Is the minimum spanning tree unique?",
+    "a": "Only if all edge weights are distinct. With ties there can be several trees of equal total weight, so a test asserting one specific edge set is fragile. Asserting the total weight is the stable check, which is why this implementation returns the weight rather than the edges. If the edges are needed and determinism matters, breaking ties by edge index gives a reproducible result, which is the same reasoning as sorting for deterministic output elsewhere."
+   }
   ]
  },
  {
@@ -4167,18 +4270,33 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Alien dictionary: derive character order from sorted words.",
-  "answer": "Build a graph from adjacent word pairs: the first differing character gives an ordering edge. Topologically sort the characters (Kahn's). Detect invalid input (a longer word before its prefix) and cycles. The topological order is the alien alphabet. O(total characters) time.",
+  "answer": "**Approach**\n\nThe sorted word list encodes pairwise ordering constraints between characters. Extract those constraints into a directed graph and topologically sort it.\n\n**Logic**\n\nComparing two adjacent words, the first position where they differ tells you that the character in the earlier word precedes the character in the later one. That is one edge. Everything after the first difference tells you nothing.\n\nTwo failure cases must be detected. A cycle means the constraints contradict each other, so no ordering exists. And a word followed by a strict prefix of itself, such as `abc` then `ab`, is invalid input because a prefix must sort first.\n\nO(total characters) to build the graph, then O(V + E) for the sort.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    public static string AlienOrder(string[] words)\n    {\n        var dependents = new Dictionary<char, List<char>>();\n        var indegree = new Dictionary<char, int>();\n\n        // Every character that appears must end up in the answer.\n        foreach (string w in words)\n            foreach (char c in w)\n            {\n                dependents.TryAdd(c, new List<char>());\n                indegree.TryAdd(c, 0);\n            }\n\n        for (int i = 0; i + 1 < words.Length; i++)\n        {\n            string a = words[i], b = words[i + 1];\n\n            // \"abc\" before \"ab\" is impossible in any ordering.\n            if (a.Length > b.Length && a.StartsWith(b, StringComparison.Ordinal))\n                return \"\";\n\n            int limit = Math.Min(a.Length, b.Length);\n            for (int k = 0; k < limit; k++)\n            {\n                if (a[k] == b[k]) continue;\n\n                dependents[a[k]].Add(b[k]);   // a[k] comes before b[k]\n                indegree[b[k]]++;\n                break;                         // only the FIRST difference informs us\n            }\n        }\n\n        var ready = new Queue<char>();\n        foreach (var (c, degree) in indegree)\n            if (degree == 0) ready.Enqueue(c);\n\n        var order = new StringBuilder();\n\n        while (ready.Count > 0)\n        {\n            char c = ready.Dequeue();\n            order.Append(c);\n\n            foreach (char next in dependents[c])\n                if (--indegree[next] == 0) ready.Enqueue(next);\n        }\n\n        // Short result means a cycle blocked the rest.\n        return order.Length == indegree.Count ? order.ToString() : \"\";\n    }\n\n    private static string Show(string s) => s.Length == 0 ? \"(invalid)\" : s;\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(AlienOrder(new[] { \"wrt\", \"wrf\", \"er\", \"ett\", \"rftt\" })));\n        Console.WriteLine(Show(AlienOrder(new[] { \"z\", \"x\" })));\n        Console.WriteLine(Show(AlienOrder(new[] { \"z\", \"x\", \"z\" })));      // cycle\n        Console.WriteLine(Show(AlienOrder(new[] { \"abc\", \"ab\" })));        // invalid prefix\n        Console.WriteLine(Show(AlienOrder(new[] { \"ab\", \"abc\" })));        // valid prefix\n        Console.WriteLine(Show(AlienOrder(new[] { \"a\" })));\n    }\n}\n```\n\n**Output**\n\n```\nwertf\nzx\n(invalid)\n(invalid)\nabc\na\n```",
   "tags": [
    "graphs",
    "topological-sort",
-   "alien-dictionary",
-   "hard"
+   "kahn",
+   "constraints",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google",
    "Airbnb"
+  ],
+  "followups": [
+   {
+    "q": "Why does only the first differing character produce an edge?",
+    "a": "Because lexicographic comparison stops there. Once two words differ at position k, the ordering is decided by that position alone and the remaining characters are unconstrained by this pair. Adding edges for later positions would invent constraints that the input does not imply, producing an ordering that is more specific than the data supports and possibly reporting a false cycle. The `break` is therefore load-bearing, not an optimisation."
+   },
+   {
+    "q": "Why is a word followed by its own prefix invalid?",
+    "a": "Because in any lexicographic ordering a prefix sorts before the longer string, so 'abc' appearing before 'ab' contradicts the premise that the list is sorted. There is no character ordering that could produce it, so the correct response is to report invalid input rather than to return a partial answer. It is a distinct failure from a cycle and needs its own check, and candidates who only detect cycles miss it."
+   },
+   {
+    "q": "The answer may not be unique. How does that affect testing?",
+    "a": "Several valid orderings can exist when characters are unconstrained relative to each other, so asserting one exact string is fragile and would break if the queue were replaced by a stack. The robust assertion is a property check: every derived constraint must be satisfied by the returned order. If a deterministic result is needed, use a min-heap instead of a queue to produce the lexicographically smallest valid ordering, which is what build tools do for reproducibility."
+   }
   ]
  },
  {
@@ -4588,19 +4706,33 @@
   "subcategory": "DP",
   "difficulty": "Hard",
   "question": "Word break II: return all sentences from segmenting a string.",
-  "answer": "DFS with memoization: for each start index, try each dictionary word prefix, recurse on the remainder, and prepend the word to each returned sentence. Cache results per start index. Exponential outputs but memoization avoids recomputation. Combine with a word-break feasibility check to prune.",
+  "answer": "**Approach**\n\nBacktracking with memoisation. The number of valid sentences can be exponential, so no polynomial algorithm exists for producing all of them, but memoising by suffix avoids recomputing shared work.\n\n**Logic**\n\nFor each starting position, try every prefix that is a dictionary word, recurse on the remainder, and prepend the prefix to each sentence the remainder produces. Cache the list of sentences per starting index, since the same suffix is reached along many different paths.\n\nThe critical practical step is a feasibility check first: run the boolean word-break DP, which is polynomial, and return immediately if no segmentation exists. Without it, an input like a long run of `a` with a dictionary lacking the needed word explores exponentially before concluding nothing works.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static IList<string> WordBreak(string s, IList<string> wordDict)\n    {\n        var words = new HashSet<string>(wordDict);\n\n        // Polynomial feasibility check first: refuse hopeless input cheaply.\n        if (!CanBreak(s, words)) return new List<string>();\n\n        return Solve(s, 0, words, new Dictionary<int, IList<string>>());\n    }\n\n    private static bool CanBreak(string s, HashSet<string> words)\n    {\n        var reachable = new bool[s.Length + 1];\n        reachable[0] = true;\n\n        for (int i = 1; i <= s.Length; i++)\n            for (int j = 0; j < i && !reachable[i]; j++)\n                if (reachable[j] && words.Contains(s[j..i])) reachable[i] = true;\n\n        return reachable[s.Length];\n    }\n\n    private static IList<string> Solve(string s, int start, HashSet<string> words,\n                                       Dictionary<int, IList<string>> memo)\n    {\n        if (memo.TryGetValue(start, out var cached)) return cached;\n\n        var result = new List<string>();\n\n        if (start == s.Length) { result.Add(\"\"); return memo[start] = result; }\n\n        for (int end = start + 1; end <= s.Length; end++)\n        {\n            string prefix = s[start..end];\n            if (!words.Contains(prefix)) continue;\n\n            foreach (string rest in Solve(s, end, words, memo))\n                result.Add(rest.Length == 0 ? prefix : prefix + \" \" + rest);\n        }\n\n        return memo[start] = result;\n    }\n\n    private static string Show(IList<string> r)\n    {\n        if (r.Count == 0) return \"(none)\";\n        var copy = new List<string>(r);\n        copy.Sort(StringComparer.Ordinal);\n        return string.Join(\" | \", copy);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(WordBreak(\"catsanddog\",\n            new List<string> { \"cat\", \"cats\", \"and\", \"sand\", \"dog\" })));\n\n        Console.WriteLine(Show(WordBreak(\"pineapplepenapple\",\n            new List<string> { \"apple\", \"pen\", \"applepen\", \"pine\", \"pineapple\" })));\n\n        Console.WriteLine(Show(WordBreak(\"catsandog\",\n            new List<string> { \"cats\", \"dog\", \"sand\", \"and\", \"cat\" })));\n\n        Console.WriteLine(Show(WordBreak(\"aaa\", new List<string> { \"a\", \"aa\" })));\n    }\n}\n```\n\n**Output**\n\n```\ncat sand dog | cats and dog\npine apple pen apple | pine applepen apple | pineapple pen apple\n(none)\na a a | a aa | aa a\n```",
   "tags": [
-   "dp",
+   "strings",
    "backtracking",
-   "word-break",
-   "memoization",
-   "hard"
+   "memoisation",
+   "exponential-output",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Facebook",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why run the boolean feasibility check when the memoised search would also return empty?",
+    "a": "Because the memoised search still has to explore before concluding nothing works, and on an adversarial input such as a long run of a single character with a dictionary that cannot cover it, that exploration is exponential even though the answer is empty. The boolean DP answers the same question in O(n squared) and short-circuits it. It is a good illustration that memoisation bounds repeated work but not the size of the search space, so a cheap precondition can still matter enormously."
+   },
+   {
+    "q": "Can this problem ever be polynomial?",
+    "a": "No, because the output itself can be exponential: a string of n identical characters with a dictionary containing every prefix produces a number of segmentations growing exponentially in n. Any algorithm that must enumerate them is bounded below by the output size. That is why the counting version and the boolean version are polynomial while the enumeration version cannot be, and saying so explicitly is a stronger answer than trying to optimise it further."
+   },
+   {
+    "q": "Why memoise by index rather than by the remaining substring?",
+    "a": "Because the index uniquely identifies the suffix and is a cheap integer key, whereas keying on the substring allocates a new string per lookup and hashes its whole length. For a long input that is a substantial constant-factor cost on every recursive call. Keying on position is the standard technique whenever the state is a suffix or prefix of a fixed input, and it applies equally to edit distance and longest common subsequence."
+   }
   ]
  },
  {
@@ -4608,18 +4740,32 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Longest palindromic subsequence.",
-  "answer": "dp[i][j] = LPS in s[i..j]. If s[i]==s[j], dp[i][j] = dp[i+1][j-1] + 2, else max(dp[i+1][j], dp[i][j-1]). Fill by increasing substring length. O(n^2) time and space. Equivalent to LCS of s and its reverse.",
+  "answer": "**Approach**\n\nA subsequence need not be contiguous, so centre expansion does not apply. This is an interval DP over the string.\n\n**Logic**\n\n`best[i][j]` is the longest palindromic subsequence within the range i to j inclusive.\n\nIf the characters at both ends match, they can both join the palindrome, so the answer is two plus the best of the interior. If they do not match, one end must be excluded, so take the better of dropping the left or dropping the right.\n\nEvery single character is a palindrome of length one, which is the base case. The loops must run so that shorter ranges are computed before longer ones, which means iterating the start index downward.\n\nO(n²) time and space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int LongestPalindromeSubseq(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        int n = s.Length;\n        var best = new int[n, n];\n\n        // Start from the end so that best[i+1, ...] is always already computed.\n        for (int i = n - 1; i >= 0; i--)\n        {\n            best[i, i] = 1;                       // a single character\n\n            for (int j = i + 1; j < n; j++)\n            {\n                best[i, j] = s[i] == s[j]\n                    ? best[i + 1, j - 1] + 2      // both ends join the palindrome\n                    : Math.Max(best[i + 1, j], best[i, j - 1]);   // drop one end\n            }\n        }\n\n        return best[0, n - 1];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestPalindromeSubseq(\"bbbab\"));    // bbbb\n        Console.WriteLine(LongestPalindromeSubseq(\"cbbd\"));      // bb\n        Console.WriteLine(LongestPalindromeSubseq(\"a\"));\n        Console.WriteLine(LongestPalindromeSubseq(\"\"));\n        Console.WriteLine(LongestPalindromeSubseq(\"abcde\"));     // no repeats\n        Console.WriteLine(LongestPalindromeSubseq(\"agbdba\"));\n    }\n}\n```\n\n**Output**\n\n```\n4\n2\n1\n0\n1\n5\n```",
   "tags": [
    "dp",
+   "interval-dp",
    "palindrome",
    "subsequence",
-   "2d-dp",
-   "hard"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why must the outer loop count downward?",
+    "a": "Because the recurrence reads `best[i + 1][...]`, a range starting one position later, so that value must already be computed. Iterating i upward would read uninitialised zeros and silently produce answers that are too small. Whenever a DP recurrence refers to a larger index, that loop runs in the opposite direction, which is the same rule that governs the palindrome-partitioning precomputation and the 0/1 knapsack capacity loop."
+   },
+   {
+    "q": "How does this relate to the longest common subsequence?",
+    "a": "It is exactly the LCS of the string and its reverse, which is a satisfying equivalence: a palindromic subsequence reads the same forwards and backwards, so it is common to both. That gives an alternative implementation reusing an LCS routine, at the same O(n squared) cost. The direct interval DP is marginally cheaper since it needs one triangle rather than a full table, but the equivalence is worth knowing because it means improvements to one transfer to the other."
+   },
+   {
+    "q": "What is the minimum number of insertions to make a string a palindrome?",
+    "a": "The length minus the longest palindromic subsequence. Every character not part of the longest palindromic subsequence needs a matching partner inserted, and that count is exactly the difference. It is a neat corollary that turns a second problem into a one-line derivation from this one, and the same subtraction gives the minimum deletions, since deleting the non-participating characters leaves a palindrome."
+   }
   ]
  },
  {
@@ -4677,17 +4823,32 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Target sum: count ways to assign +/- to reach a target.",
-  "answer": "Transform to subset-sum: find a subset with sum (total + target)/2 (must be a non-negative integer). Count subsets reaching that sum with a 1D DP (dp[s] += dp[s-num]). O(n * sum) time. Handle impossible parity/overflow cases.",
+  "answer": "**Approach**\n\nEnumerating all 2^n sign assignments is exponential. Reframing it as a subset-sum problem makes it a polynomial DP.\n\n**Logic**\n\nSplit the numbers into a positive set P and a negative set N. Then `sum(P) - sum(N) = target` and `sum(P) + sum(N) = total`. Adding the two gives `sum(P) = (target + total) / 2`.\n\nSo the answer is the number of subsets summing to that value, which is a counting knapsack. Two guards are needed first: if `target + total` is odd the equation has no integer solution, and if the absolute target exceeds the total it is unreachable.\n\nO(n × subsetSum) time, O(subsetSum) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int FindTargetSumWays(int[] nums, int target)\n    {\n        int total = 0;\n        foreach (int n in nums) total += n;\n\n        // Unreachable, or the split would not be a whole number.\n        if (Math.Abs(target) > total) return 0;\n        if ((target + total) % 2 != 0) return 0;\n\n        int subsetSum = (target + total) / 2;\n\n        var ways = new int[subsetSum + 1];\n        ways[0] = 1;                       // one way to make zero: take nothing\n\n        foreach (int n in nums)\n            for (int s = subsetSum; s >= n; s--)   // descending: each number used once\n                ways[s] += ways[s - n];\n\n        return ways[subsetSum];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindTargetSumWays(new[] { 1, 1, 1, 1, 1 }, 3));\n        Console.WriteLine(FindTargetSumWays(new[] { 1 }, 1));\n        Console.WriteLine(FindTargetSumWays(new[] { 1 }, 2));       // unreachable\n        Console.WriteLine(FindTargetSumWays(new[] { 1, 2, 3 }, 0));\n        Console.WriteLine(FindTargetSumWays(new[] { 0, 0, 1 }, 1));  // zeros double the count\n        Console.WriteLine(FindTargetSumWays(new[] { 1, 2, 1 }, 2));\n    }\n}\n```\n\n**Output**\n\n```\n5\n1\n0\n2\n4\n2\n```",
   "tags": [
    "dp",
    "subset-sum",
-   "target-sum",
-   "counting"
+   "knapsack",
+   "counting",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does a zero in the input double the number of ways?",
+    "a": "Because a zero can take either sign without changing the sum, so every valid assignment of the other numbers yields two assignments overall. The DP handles it naturally, since adding zero to a reachable sum leaves it reachable and the count accumulates. It is worth testing explicitly because a solution that deduplicates subsets by value rather than by position would collapse those cases and undercount, which is the difference between counting subsets and counting assignments."
+   },
+   {
+    "q": "Why must the loop over sums descend?",
+    "a": "So each number is used at most once. Descending, `ways[s - n]` still reflects counts built without the current number, because that lower index has not been updated in this pass. Ascending would let the same number contribute repeatedly, which answers the unbounded version of the problem instead. It is the identical loop-direction distinction as 0/1 versus unbounded knapsack, and it is a one-character change with completely different semantics."
+   },
+   {
+    "q": "What if the numbers could be negative?",
+    "a": "The derivation breaks, because the subset sum could then be negative and an array indexed from zero cannot represent it. You would shift the index by the total to allow negative sums, doubling the table width, or use a dictionary keyed on the running sum. The problem statement usually restricts to non-negative values precisely so the clean transformation works, and noticing that the restriction is what enables the trick is the point of the follow-up."
+   }
   ]
  },
  {
@@ -4714,16 +4875,31 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Number of longest increasing subsequences (count of LIS).",
-  "answer": "Two DP arrays: length[i] = LIS ending at i, count[i] = number of such LIS. When extending from j to i, if it forms a longer LIS update length and copy count; if equal length, add counts. Sum counts of the max length. O(n^2) time.",
+  "answer": "**Approach**\n\nThe O(n²) LIS dynamic programme, extended to carry a count alongside each length.\n\n**Logic**\n\nFor each index keep two values: the length of the longest increasing subsequence ending there, and how many such subsequences exist.\n\nScanning earlier indices with a smaller value, if extending gives a strictly longer subsequence than previously recorded, the length improves and the count is *replaced* by that predecessor's count. If it ties the best length found so far, the counts *accumulate*, because both routes are equally long.\n\nThat replace-versus-accumulate distinction is the entire difficulty. Getting it backwards produces counts that look plausible and are wrong.\n\nO(n²) time, O(n) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int FindNumberOfLis(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        int n = nums.Length;\n        var length = new int[n];   // longest subsequence ending at i\n        var count = new int[n];    // how many of that length\n\n        for (int i = 0; i < n; i++) { length[i] = 1; count[i] = 1; }\n\n        int longest = 1;\n\n        for (int i = 1; i < n; i++)\n        {\n            for (int j = 0; j < i; j++)\n            {\n                if (nums[j] >= nums[i]) continue;\n\n                if (length[j] + 1 > length[i])\n                {\n                    length[i] = length[j] + 1;\n                    count[i] = count[j];        // strictly better: REPLACE\n                }\n                else if (length[j] + 1 == length[i])\n                {\n                    count[i] += count[j];       // equally good: ACCUMULATE\n                }\n            }\n\n            longest = Math.Max(longest, length[i]);\n        }\n\n        int total = 0;\n        for (int i = 0; i < n; i++) if (length[i] == longest) total += count[i];\n\n        return total;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindNumberOfLis(new[] { 1, 3, 5, 4, 7 }));   // two of length 4\n        Console.WriteLine(FindNumberOfLis(new[] { 2, 2, 2, 2, 2 }));   // five of length 1\n        Console.WriteLine(FindNumberOfLis(new[] { 1, 2, 3 }));\n        Console.WriteLine(FindNumberOfLis(new[] { 3, 2, 1 }));\n        Console.WriteLine(FindNumberOfLis(new[] { 5 }));\n        Console.WriteLine(FindNumberOfLis(new[] { 1, 3, 2, 4 }));\n    }\n}\n```\n\n**Output**\n\n```\n2\n5\n1\n3\n1\n2\n```",
   "tags": [
    "dp",
    "lis",
    "counting",
-   "subsequence"
+   "replace-vs-accumulate",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why replace the count on a strict improvement but add on a tie?",
+    "a": "Because a strictly longer subsequence invalidates everything recorded so far for that index: those shorter routes are no longer of maximal length, so their counts are irrelevant. A tie means another equally long route has been found, so both contribute and the counts sum. Reversing the two produces answers that are too large or too small in ways that pass on simple inputs, which is why [1,3,5,4,7] is the test to use: it has exactly two maximal subsequences and a wrong implementation typically reports one or three."
+   },
+   {
+    "q": "Why does an array of equal values give a count equal to its length?",
+    "a": "Because the subsequence must be strictly increasing, so no two equal elements can both appear, and every maximal subsequence has length one. There are five positions, hence five distinct subsequences of that length. It is a useful test because it exercises the case where the longest length is the initial value and no inner loop iteration ever fires, which a solution that only accumulates during extension would get wrong."
+   },
+   {
+    "q": "Can this be done in O(n log n) like plain LIS?",
+    "a": "Yes, but it is considerably harder. The patience-sorting approach keeps piles of tails; counting requires each pile to store prefix sums of counts so that the number of ways to reach a given length can be queried by binary search. The result is O(n log n) with substantially more code and more room for error. For interview purposes the quadratic version with a correct replace-versus-accumulate rule is the expected answer, and naming the faster one shows you know the ceiling."
+   }
   ]
  },
  {
@@ -4830,16 +5006,32 @@
   "subcategory": "Backtracking",
   "difficulty": "Medium",
   "question": "Combinations: choose k numbers from 1..n.",
-  "answer": "Backtracking from a start value: pick a number, recurse increasing the start, and stop when k are chosen. Prune when not enough numbers remain to complete a combination. C(n,k) results. Depth k, branching bounded by remaining numbers.",
+  "answer": "**Approach**\n\nBacktracking over an increasing sequence, so each combination is generated exactly once rather than in every permutation.\n\n**Logic**\n\nAt each level choose the next number strictly greater than the previous one. That ordering is what distinguishes a combination from a permutation: `[1,2]` is produced but `[2,1]` never is.\n\nThe useful prune is to stop the loop early when not enough numbers remain to complete the combination. If k-c more are needed and only n-i+1 remain, the branch cannot succeed and exploring it is wasted. Without that prune the search explores a large number of dead ends for k close to n.\n\nOutput size is n choose k, which is optimal.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<IList<int>> Combine(int n, int k)\n    {\n        var result = new List<IList<int>>();\n        if (k <= 0 || k > n) return result;\n\n        Backtrack(1, n, k, new List<int>(), result);\n        return result;\n    }\n\n    private static void Backtrack(int start, int n, int k,\n                                  List<int> current, IList<IList<int>> result)\n    {\n        if (current.Count == k) { result.Add(new List<int>(current)); return; }\n\n        int needed = k - current.Count;\n\n        // Stop when too few numbers remain to finish: n - i + 1 < needed.\n        for (int i = start; i <= n - needed + 1; i++)\n        {\n            current.Add(i);\n            Backtrack(i + 1, n, k, current, result);   // i + 1 keeps it increasing\n            current.RemoveAt(current.Count - 1);\n        }\n    }\n\n    private static string Render(IList<IList<int>> r) =>\n        r.Count == 0 ? \"(none)\" : string.Join(\" \", r.Select(c => \"[\" + string.Join(\",\", c) + \"]\"));\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(Combine(4, 2)));\n        Console.WriteLine(Render(Combine(3, 3)));\n        Console.WriteLine(Render(Combine(3, 1)));\n        Console.WriteLine(Render(Combine(3, 0)));      // k of zero\n        Console.WriteLine(Render(Combine(2, 5)));      // k larger than n\n        Console.WriteLine(Combine(20, 10).Count);      // 20 choose 10\n    }\n}\n```\n\n**Output**\n\n```\n[1,2] [1,3] [1,4] [2,3] [2,4] [3,4]\n[1,2,3]\n[1] [2] [3]\n(none)\n(none)\n184756\n```",
   "tags": [
    "backtracking",
    "combinations",
-   "pruning"
+   "pruning",
+   "enumeration",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Explain the pruning bound n - needed + 1.",
+    "a": "If `needed` more numbers must be chosen and all must be strictly greater than the current one, the largest possible starting value is n - needed + 1, because anything higher leaves fewer than needed values above it. Looping past that point explores branches guaranteed to fail. For n of 20 and k of 10 it removes a substantial fraction of the search. It is the same class of bound as breaking out of a sorted candidate loop in combination sum: cheap arithmetic that eliminates provably dead subtrees."
+   },
+   {
+    "q": "How does this differ from generating permutations?",
+    "a": "Permutations recurse from index zero every time with a used-flags array, so order matters and [1,2] and [2,1] are distinct. Combinations recurse from i+1, which enforces strictly increasing order and makes each set appear once. That single difference in the recursive call is what separates n! outputs from n choose k, and being able to point at the exact line is a better answer than describing the concepts."
+   },
+   {
+    "q": "Suppose you needed the combinations of an arbitrary list rather than 1..n, with duplicates.",
+    "a": "Sort the list first, then use index-based recursion as here, adding a skip for a value equal to the previous one at the same level: `if (i > start && items[i] == items[i-1]) continue;`. Sorting makes equal values adjacent so the check is local, and the `i > start` guard permits a duplicate deeper in the tree while preventing a repeated sibling branch. It is the identical pruning condition as in subsets-with-duplicates."
+   }
   ]
  },
  {
@@ -5122,17 +5314,32 @@
   "subcategory": "DP",
   "difficulty": "Medium",
   "question": "Perfect squares: fewest perfect squares summing to n.",
-  "answer": "dp[i] = min(dp[i - k*k] + 1) for all k*k <= i, dp[0]=0. O(n * sqrt(n)) time, O(n) space. BFS from 0 adding square steps also finds the minimum count. Lagrange's theorem bounds the answer to at most 4.",
+  "answer": "**Approach**\n\nAn unbounded coin-change DP where the coin denominations are the perfect squares up to n.\n\n**Logic**\n\n`best[i]` is the fewest squares summing to i. For each value, try every square that fits and take one more than the best for the remainder.\n\nThe inner loop runs while `square * square <= i`, so the total work is the sum of square roots, giving O(n·√n). That is efficient enough for large n and is the expected answer.\n\nInitialising to `i` rather than to infinity is a small convenience: any number can always be made from that many ones, so it is a valid upper bound that also avoids overflow when adding one.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int NumSquares(int n)\n    {\n        if (n <= 0) return 0;\n\n        var best = new int[n + 1];\n\n        for (int i = 1; i <= n; i++)\n        {\n            best[i] = i;   // upper bound: i ones. Also avoids an infinity sentinel.\n\n            for (int root = 1; root * root <= i; root++)\n                best[i] = Math.Min(best[i], best[i - root * root] + 1);\n        }\n\n        return best[n];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(NumSquares(12));    // 4 + 4 + 4\n        Console.WriteLine(NumSquares(13));    // 4 + 9\n        Console.WriteLine(NumSquares(1));\n        Console.WriteLine(NumSquares(0));\n        Console.WriteLine(NumSquares(16));    // itself a square\n        Console.WriteLine(NumSquares(7));     // 4 + 1 + 1 + 1\n    }\n}\n```\n\n**Output**\n\n```\n3\n2\n1\n0\n1\n4\n```",
   "tags": [
    "dp",
-   "perfect-squares",
-   "bfs",
-   "math"
+   "coin-change",
+   "squares",
+   "number-theory",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Is there a mathematical shortcut?",
+    "a": "Yes. Lagrange's four-square theorem guarantees the answer is at most four. Legendre's three-square theorem says it is exactly four precisely when n has the form 4^a times (8b + 7). So you can test for a perfect square, then for a sum of two squares in O(sqrt n), then apply the Legendre test, and otherwise answer three. That is O(sqrt n) overall, far better than the DP. It is a legitimate answer but relies on number theory rather than algorithm design, which is why the DP remains the expected one."
+   },
+   {
+    "q": "Why initialise to i rather than to int.MaxValue?",
+    "a": "Because i is a genuine upper bound, being i copies of one, so the minimum is always correct. It also avoids the overflow hazard of adding one to int.MaxValue, which would wrap to a large negative and win every comparison. That is the same trap as in coin change, where a MaxValue sentinel must be guarded explicitly. Choosing a real achievable bound rather than an infinity sentinel removes the problem rather than working around it."
+   },
+   {
+    "q": "Could BFS solve this?",
+    "a": "Yes, and it is a nice alternative framing: treat each remaining value as a node, with an edge for subtracting each square, and find the shortest path from n to zero. BFS levels correspond to the number of squares used, so the first time zero is reached gives the answer. It has the advantage of stopping early rather than filling a whole table, which matters when the answer is small, and since the theorems above guarantee at most four levels, BFS terminates very quickly in practice."
+   }
   ]
  },
  {

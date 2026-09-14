@@ -16,7 +16,7 @@ const { SOURCE, load } = require('./lib');
 // Each run gets its own Program.cs path guard: two concurrent runs sharing one
 // scratch project overwrite each other's source and produce nonsense diffs.
 const proj = process.argv[2];
-if (!proj) { console.error('usage: node tools/runcode.js <project-dir> [--only text]'); process.exit(2); }
+if (!proj) { console.error('usage: node tools/runcode.js <project-dir> [--only text] [--batch file.json]'); process.exit(2); }
 const onlyIdx = process.argv.indexOf('--only');
 const only = onlyIdx > -1 ? process.argv[onlyIdx + 1] : null;
 
@@ -24,7 +24,13 @@ const only = onlyIdx > -1 ? process.argv[onlyIdx + 1] : null;
 const CODE = /```csharp\n([\s\S]*?)```/;
 const OUT = /\*\*Output\*\*\n+```\n([\s\S]*?)```/;
 
-const rows = load(SOURCE).filter(r => String(r.answer).includes('```csharp'));
+// --batch verifies a patch file directly, BEFORE it is applied. Far faster
+// than re-running the whole bank, and it catches a bad answer before it lands.
+const batchIndex = process.argv.indexOf('--batch');
+const rows = batchIndex > -1
+  ? JSON.parse(fs.readFileSync(process.argv[batchIndex + 1], 'utf8'))
+      .filter(r => String(r.answer || '').includes('```csharp'))
+  : load(SOURCE).filter(r => String(r.answer).includes('```csharp'));
 const targets = only ? rows.filter(r => r.question.toLowerCase().includes(only.toLowerCase())) : rows;
 
 let pass = 0; const fails = [];
