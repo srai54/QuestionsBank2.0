@@ -9818,16 +9818,32 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Compare two version number strings.",
-  "answer": "Split on dots and compare component by component as integers, treating missing components as zero so 1.0 equals 1.0.0. Avoid comparing as strings or floats, both of which get 1.10 versus 1.9 wrong. Time O(n), space O(n) or O(1) with in-place parsing.",
+  "answer": "**Approach**\n\nWalk both versions segment by segment, treating a missing segment as zero. Parse each segment as a number rather than comparing text.\n\n**Logic**\n\nString comparison is wrong because \"10\" sorts before \"9\" lexicographically. Numeric parsing also collapses leading zeros, so \"1.01\" equals \"1.001\".\n\nTreating a missing segment as zero is what makes \"1.0\" equal \"1\" — the shorter version is padded conceptually rather than being declared smaller.\n\nO(n + m) time with a single scan and no allocation for the splits.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int CompareVersion(string a, string b)\n    {\n        int i = 0, j = 0;\n\n        while (i < a.Length || j < b.Length)\n        {\n            // A missing segment reads as zero, so \"1.0\" equals \"1\".\n            long left = ReadSegment(a, ref i);\n            long right = ReadSegment(b, ref j);\n\n            if (left != right) return left < right ? -1 : 1;\n        }\n\n        return 0;\n    }\n\n    private static long ReadSegment(string version, ref int index)\n    {\n        long value = 0;\n\n        while (index < version.Length && version[index] != '.')\n        {\n            value = value * 10 + (version[index] - '0');   // leading zeros collapse\n            index++;\n        }\n\n        if (index < version.Length) index++;   // step over the dot\n        return value;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CompareVersion(\"1.2\", \"1.10\"));      // 10 > 2 numerically\n        Console.WriteLine(CompareVersion(\"1.01\", \"1.001\"));    // leading zeros\n        Console.WriteLine(CompareVersion(\"1.0\", \"1.0.0\"));     // trailing zeros\n        Console.WriteLine(CompareVersion(\"0.1\", \"1.1\"));\n        Console.WriteLine(CompareVersion(\"1.0.1\", \"1\"));\n        Console.WriteLine(CompareVersion(\"7.5.2.4\", \"7.5.3\"));\n        Console.WriteLine(CompareVersion(\"1\", \"1\"));\n    }\n}\n```\n\n**Output**\n\n```\n-1\n0\n0\n-1\n1\n-1\n0\n```",
   "tags": [
    "strings",
    "parsing",
-   "comparison"
+   "comparison",
+   "two-pointers",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Apple"
+  ],
+  "followups": [
+   {
+    "q": "Why does the loop use OR rather than AND on the bounds?",
+    "a": "Because the versions may have different segment counts and the shorter one must keep yielding zeros until the longer is exhausted. With AND, comparing '1.0.1' against '1' would stop after the first segment and report equality, missing the trailing 1. The OR keeps going, and ReadSegment returns 0 once its index is past the end, which is exactly the padding semantics the problem wants."
+   },
+   {
+    "q": "Why not just split on dots and compare the parts?",
+    "a": "It works and is more readable, and for most codebases that is what I would ship. The manual scan avoids allocating two string arrays plus a substring per segment, which matters if this runs on every request in a version-negotiation path. The important part is the same either way: parse each part as a number, since string comparison puts '10' before '9' and would order versions wrongly."
+   },
+   {
+    "q": "How would you extend this to semantic versioning with pre-release tags?",
+    "a": "SemVer adds rules this code does not model: a pre-release version like 1.0.0-alpha sorts BEFORE 1.0.0, pre-release identifiers compare by dot-separated parts with numeric ones ordered below alphanumeric, and build metadata after a plus sign is ignored entirely for ordering. That is enough special-casing that I would reach for a tested SemVer library rather than extend this - the value of writing it by hand here is demonstrating the numeric-versus-lexical point, not shipping a version comparator."
+   }
   ]
  },
  {
@@ -9835,17 +9851,32 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Given a string, find the first non-repeating character after each insertion in a stream.",
-  "answer": "Maintain a count map plus a queue of candidate characters; after each insertion, pop from the queue while its front has a count above one. The front is then the answer or the queue is empty. Amortised O(1) per insertion.",
+  "answer": "**Approach**\n\nA queue of candidates plus a frequency table. Push each new character onto the queue, then discard from the front while the front character has been seen more than once.\n\n**Logic**\n\nThe queue preserves arrival order, so its front is always the earliest character that has not yet been disqualified. A character is only ever removed once, when it becomes repeated, so the total work across the stream is linear.\n\nDiscarding lazily — at query time rather than when the duplicate arrives — is what keeps each insertion O(1) amortised. Searching the counts array on every query would be O(26) per character, which is fine here but does not generalise to a large alphabet.\n\nO(n) total.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class FirstNonRepeatingStream\n{\n    private readonly Dictionary<char, int> _counts = new();\n    private readonly Queue<char> _candidates = new();\n\n    public char Add(char c)\n    {\n        _counts[c] = _counts.GetValueOrDefault(c) + 1;\n        _candidates.Enqueue(c);\n\n        // Lazily discard anything that has since become repeated.\n        while (_candidates.Count > 0 && _counts[_candidates.Peek()] > 1)\n            _candidates.Dequeue();\n\n        return _candidates.Count > 0 ? _candidates.Peek() : '#';\n    }\n}\n\npublic class Solution\n{\n    public static string Stream(string input)\n    {\n        var tracker = new FirstNonRepeatingStream();\n        var output = new StringBuilder();\n\n        foreach (char c in input) output.Append(tracker.Add(c));\n        return output.ToString();\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Stream(\"aabc\"));\n        Console.WriteLine(Stream(\"aaaa\"));       // never any candidate after the first\n        Console.WriteLine(Stream(\"abcabc\"));\n        Console.WriteLine(Stream(\"zz\"));\n        Console.WriteLine(Stream(\"a\"));\n        Console.WriteLine(Stream(\"geeksforgeeks\"));\n    }\n}\n```\n\n**Output**\n\n```\na#bb\na###\naaabc#\nz#\na\nggggggggkkksf\n```",
   "tags": [
-   "strings",
    "queue",
    "streaming",
-   "hashmap"
+   "hash-map",
+   "amortised",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why is the amortised cost O(1) per insertion despite the inner while loop?",
+    "a": "Because each character is enqueued exactly once and dequeued at most once, so across n insertions the loop body runs at most n times in total. A single insertion can trigger several dequeues, but only by doing work that other insertions then do not have to do. The same amortised argument underlies the monotonic stack and the sliding-window deque - it is worth naming because the nested loop otherwise reads as quadratic."
+   },
+   {
+    "q": "Why discard lazily rather than removing the character when its duplicate arrives?",
+    "a": "Because eager removal would need to find the character inside the queue, which is O(n) for a plain queue, or a doubly linked list plus a map from character to node to make it O(1). The lazy version gets the same amortised bound with a fraction of the machinery. The trade is that the queue can temporarily hold stale entries, which costs memory bounded by the stream length - if that mattered, the linked-list version is the alternative."
+   },
+   {
+    "q": "How does this change if the stream is unbounded?",
+    "a": "The counts map grows only with the alphabet size, so it is fine, but the queue can grow with the stream since a character that never repeats stays forever and stale entries behind it accumulate. For a bounded alphabet the queue can hold at most one live entry per distinct character plus stale ones, so switching to the map-of-nodes linked list caps memory at the alphabet size exactly. That is the version I would run in production against a real stream."
+   }
   ]
  },
  {
@@ -9853,17 +9884,32 @@
   "subcategory": "Strings",
   "difficulty": "Hard",
   "question": "Implement wildcard pattern matching with question mark and asterisk.",
-  "answer": "Dynamic programming over pattern and text indices where asterisk either consumes a character or matches empty. A greedy two-pointer variant with backtracking on the last asterisk runs in O(n) space and is often faster in practice. Time O(mn) for the DP.",
+  "answer": "**Approach**\n\nTwo pointers with backtracking, remembering the last asterisk seen. The DP is O(m·n) in both time and space; this is O(m·n) worst case but O(1) space and linear in practice.\n\n**Logic**\n\nWalk the string and pattern together. On a literal or question-mark match, advance both. On an asterisk, record its position and the string position it was assumed to match zero characters at, then advance only the pattern.\n\nOn a mismatch, if an asterisk was seen, backtrack: let it absorb one more character and retry. That is what makes the greedy correct — the asterisk starts minimal and grows only when forced.\n\nTrailing asterisks in the pattern must be consumed at the end, since they may match nothing.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsMatch(string s, string p)\n    {\n        int i = 0, j = 0;\n        int starPattern = -1, starString = 0;\n\n        while (i < s.Length)\n        {\n            if (j < p.Length && (p[j] == '?' || p[j] == s[i])) { i++; j++; }\n            else if (j < p.Length && p[j] == '*')\n            {\n                // Assume it matches nothing for now; remember where to grow it.\n                starPattern = j++;\n                starString = i;\n            }\n            else if (starPattern >= 0)\n            {\n                // Mismatch: let the last star absorb one more character and retry.\n                j = starPattern + 1;\n                i = ++starString;\n            }\n            else return false;\n        }\n\n        // Trailing stars may match nothing, so consume them.\n        while (j < p.Length && p[j] == '*') j++;\n\n        return j == p.Length;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsMatch(\"aa\", \"a\"));\n        Console.WriteLine(IsMatch(\"aa\", \"*\"));\n        Console.WriteLine(IsMatch(\"cb\", \"?a\"));\n        Console.WriteLine(IsMatch(\"adceb\", \"*a*b\"));\n        Console.WriteLine(IsMatch(\"acdcb\", \"a*c?b\"));\n        Console.WriteLine(IsMatch(\"\", \"*\"));\n        Console.WriteLine(IsMatch(\"\", \"\"));\n        Console.WriteLine(IsMatch(\"abc\", \"abc**\"));\n    }\n}\n```\n\n**Output**\n\n```\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nTrue\nTrue\n```",
   "tags": [
    "strings",
-   "dynamic-programming",
-   "pattern-matching",
-   "greedy"
+   "two-pointers",
+   "backtracking",
+   "greedy",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Facebook",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why is the greedy with backtracking correct?",
+    "a": "Because an asterisk is monotone: if matching it against k characters fails, the only remaining possibilities absorb more, never fewer. So starting at zero and growing by one on each failure explores the candidates in order without skipping any. The subtlety is that only the MOST RECENT asterisk needs a saved position - an earlier one can always delegate extra characters to a later one, so a single pair of saved indices suffices rather than a stack."
+   },
+   {
+    "q": "Why must trailing asterisks be consumed after the loop?",
+    "a": "Because the loop exits when the string is exhausted, but the pattern may still have asterisks left, and an asterisk can match the empty string. Returning j equal to p.Length without the drain loop would reject 'abc' against 'abc**', which should match. Nothing else in the pattern may remain - a trailing literal or question mark has nothing to match against, which is why the drain only skips asterisks."
+   },
+   {
+    "q": "How does this differ from regex matching with dot and star?",
+    "a": "There the star binds to the preceding character rather than standing alone, so 'a*' means zero or more a's rather than any sequence. That destroys the monotone property this solution relies on, because different stars are tied to different characters and a local greedy choice can be wrong in ways a single saved position cannot recover from. Regex matching genuinely needs the two-dimensional DP or a proper NFA simulation - the two problems look alike and have different shapes underneath."
+   }
   ]
  },
  {
@@ -9871,15 +9917,31 @@
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "Find the longest common prefix of an array of strings using divide and conquer.",
-  "answer": "Split the array, compute the prefix of each half, then the prefix of those two results. Alternatively binary search the prefix length and check all strings share it. Both are O(total characters) but structure the work differently from the straightforward vertical scan.",
+  "answer": "**Approach**\n\nSplit the array in half, solve each half, then take the common prefix of the two results. The merge step is a character-by-character comparison of two strings.\n\n**Logic**\n\nThe correctness rests on associativity: the common prefix of a set is the common prefix of the prefixes of any partition of it. That is what licenses solving the halves independently.\n\nThe recursion bottoms out at a single string, whose common prefix is itself.\n\nSame O(total characters) as the straightforward vertical scan, but the divide-and-conquer form parallelises and is the shape the question asks for.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static string LongestCommonPrefix(string[] words)\n    {\n        if (words == null || words.Length == 0) return \"\";\n        return Solve(words, 0, words.Length - 1);\n    }\n\n    private static string Solve(string[] words, int lo, int hi)\n    {\n        if (lo == hi) return words[lo];\n\n        int mid = lo + (hi - lo) / 2;\n\n        // The common prefix of a set is the common prefix of any partition's prefixes.\n        return CommonPrefix(Solve(words, lo, mid), Solve(words, mid + 1, hi));\n    }\n\n    private static string CommonPrefix(string a, string b)\n    {\n        int limit = Math.Min(a.Length, b.Length), i = 0;\n\n        while (i < limit && a[i] == b[i]) i++;\n\n        return a.Substring(0, i);\n    }\n\n    private static void Show(string s) => Console.WriteLine(s.Length == 0 ? \"(empty)\" : s);\n\n    public static void Main()\n    {\n        Show(LongestCommonPrefix(new[] { \"flower\", \"flow\", \"flight\" }));\n        Show(LongestCommonPrefix(new[] { \"dog\", \"racecar\", \"car\" }));\n        Show(LongestCommonPrefix(new[] { \"alone\" }));\n        Show(LongestCommonPrefix(new[] { \"\", \"abc\" }));\n        Show(LongestCommonPrefix(Array.Empty<string>()));\n        Show(LongestCommonPrefix(new[] { \"same\", \"same\", \"same\" }));\n        Show(LongestCommonPrefix(new[] { \"ab\", \"abc\", \"abcd\" }));\n    }\n}\n```\n\n**Output**\n\n```\nfl\n(empty)\nalone\n(empty)\n(empty)\nsame\nab\n```",
   "tags": [
-   "strings",
    "divide-and-conquer",
-   "binary-search"
+   "strings",
+   "recursion",
+   "associativity",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is divide and conquer valid here?",
+    "a": "Because the common-prefix operation is associative and commutative, so grouping the strings any way you like gives the same result. That is the property that lets each half be solved independently and merged. Not every aggregate has it - 'longest common subsequence of a set' does not decompose this way - so stating the property rather than assuming it is the substance of the answer."
+   },
+   {
+    "q": "Is this actually faster than scanning column by column?",
+    "a": "No - both are O(total characters) in the worst case, and the vertical scan often does less work because it stops as soon as one column disagrees, whereas the recursion computes full prefixes of subgroups first. The real advantage is parallelism: independent subproblems can run on separate threads, which matters for a very large corpus. For a handful of strings the simple scan is the better answer, and saying so is worth more than defending the fancier one."
+   },
+   {
+    "q": "What if you had to answer prefix queries repeatedly over a changing set?",
+    "a": "Then a trie is the right structure: insert every word once, and the longest common prefix is the path from the root down to the first node that either branches or terminates a word. Insertions and deletions update it incrementally, so a changing set does not force a full recomputation. The divide-and-conquer version is a one-shot computation, which is the distinction that decides which to reach for."
+   }
   ]
  },
  {
@@ -9919,17 +9981,32 @@
   "subcategory": "Strings",
   "difficulty": "Hard",
   "question": "Implement the Rabin-Karp rolling hash search.",
-  "answer": "Hash the pattern and each text window, sliding the hash in constant time by removing the leading character and adding the trailing one, verifying candidates on hash match to handle collisions. Average O(n+m), worst case O(nm). It generalises well to searching many patterns at once.",
+  "answer": "**Approach**\n\nHash the pattern once, then roll a hash of the same width across the text. On a hash match, verify the characters — hashes collide, so verification is mandatory.\n\n**Logic**\n\nThe rolling step is what makes it linear: removing the leading character's contribution and adding the trailing one is O(1), so each window costs constant time rather than O(m).\n\nRemoving the leading character requires the base raised to the power m-1 modulo the prime, precomputed once.\n\nModular arithmetic can go negative in C# after the subtraction, so the result is normalised back into range before use.\n\nO(n + m) expected, O(n·m) worst case if every window collides.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private const long Base = 256;\n    private const long Prime = 1_000_000_007;\n\n    public static IList<int> RabinKarp(string text, string pattern)\n    {\n        var found = new List<int>();\n\n        if (string.IsNullOrEmpty(pattern) || pattern.Length > text.Length) return found;\n\n        int m = pattern.Length;\n\n        // Base^(m-1) mod Prime, needed to remove the leading character.\n        long highOrder = 1;\n        for (int i = 0; i < m - 1; i++) highOrder = highOrder * Base % Prime;\n\n        long patternHash = 0, windowHash = 0;\n\n        for (int i = 0; i < m; i++)\n        {\n            patternHash = (patternHash * Base + pattern[i]) % Prime;\n            windowHash = (windowHash * Base + text[i]) % Prime;\n        }\n\n        for (int start = 0; start + m <= text.Length; start++)\n        {\n            // Hashes collide, so a match must always be verified.\n            if (windowHash == patternHash &&\n                string.CompareOrdinal(text, start, pattern, 0, m) == 0)\n                found.Add(start);\n\n            if (start + m < text.Length)\n            {\n                windowHash = (windowHash - text[start] * highOrder % Prime) % Prime;\n                windowHash = (windowHash * Base + text[start + m]) % Prime;\n\n                if (windowHash < 0) windowHash += Prime;   // C# modulo can go negative\n            }\n        }\n\n        return found;\n    }\n\n    private static void Show(IList<int> v) =>\n        Console.WriteLine(v.Count == 0 ? \"none\" : string.Join(\",\", v));\n\n    public static void Main()\n    {\n        Show(RabinKarp(\"abracadabra\", \"abra\"));\n        Show(RabinKarp(\"aaaaa\", \"aa\"));            // overlapping matches\n        Show(RabinKarp(\"hello\", \"world\"));\n        Show(RabinKarp(\"abc\", \"abc\"));\n        Show(RabinKarp(\"abc\", \"abcd\"));            // pattern longer than text\n        Show(RabinKarp(\"mississippi\", \"issi\"));\n        Show(RabinKarp(\"aaa\", \"\"));\n    }\n}\n```\n\n**Output**\n\n```\n0,7\n0,1,2,3\nnone\n0\nnone\n1,4\nnone\n```",
   "tags": [
    "strings",
    "rolling-hash",
    "pattern-matching",
-   "algorithms"
+   "modular-arithmetic",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why must a hash match still be verified character by character?",
+    "a": "Because the hash maps an arbitrarily long window onto a fixed range, so collisions are inevitable by pigeonhole - two different substrings can share a hash. Skipping verification turns the algorithm from correct-with-good-expected-time into probabilistic, which is unacceptable for a search primitive. A large prime makes collisions rare enough that verification almost never runs, which is why the expected time stays linear even though the check is O(m)."
+   },
+   {
+    "q": "Why can the modulo go negative, and why does that matter?",
+    "a": "Because C#'s % follows the sign of the dividend, so subtracting the leading character's contribution can leave a negative intermediate, and a negative hash will never equal the pattern's non-negative hash - every subsequent match is silently missed. Adding Prime back normalises it into range. It is a language-specific trap: in a language where modulo is always non-negative the line is unnecessary, which is why ported implementations often carry this bug."
+   },
+   {
+    "q": "When would you use this over KMP?",
+    "a": "KMP is worst-case linear with no collision risk, so for a single pattern it is the stronger choice. Rabin-Karp wins when searching for MANY patterns of the same length at once - hash all of them into a set and each window costs one lookup, which KMP cannot match without an automaton per pattern. It also extends naturally to two-dimensional pattern search. The single-pattern case is really a teaching example for the rolling-hash technique, which then shows up in substring deduplication and plagiarism detection."
+   }
   ]
  },
  {
@@ -9937,16 +10014,32 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Given a linked list, group all odd-indexed nodes followed by even-indexed nodes.",
-  "answer": "Maintain two pointers building the odd and even chains simultaneously by relinking alternate nodes, then attach the head of the even chain to the tail of the odd chain. Time O(n), space O(1) - no new nodes are created.",
+  "answer": "**Approach**\n\nWeave two sublists in one pass, keeping a head for each, then join the odd tail to the even head.\n\n**Logic**\n\nThe loop condition checks the even pointer and its next, because the odd pointer always runs one ahead. Checking the odd pointer instead reads a node that may already be null.\n\nThe even head must be captured before any relinking, since it is lost as soon as the first odd node's next is rewritten.\n\nRelative order within each group is preserved because nodes are appended in traversal order.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int val;\n    public ListNode next;\n    public ListNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static ListNode OddEvenList(ListNode head)\n    {\n        if (head == null || head.next == null) return head;\n\n        ListNode odd = head, even = head.next;\n        ListNode evenHead = even;   // captured before any relinking loses it\n\n        // Odd runs one ahead, so the even pointer drives the condition.\n        while (even != null && even.next != null)\n        {\n            odd.next = even.next;\n            odd = odd.next;\n\n            even.next = odd.next;\n            even = even.next;\n        }\n\n        odd.next = evenHead;\n        return head;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        var dummy = new ListNode(0);\n        var tail = dummy;\n        foreach (int v in values) { tail.next = new ListNode(v); tail = tail.next; }\n        return dummy.next;\n    }\n\n    private static void Show(ListNode head)\n    {\n        var parts = new List<string>();\n        for (var n = head; n != null; n = n.next) parts.Add(n.val.ToString());\n        Console.WriteLine(parts.Count == 0 ? \"(empty)\" : string.Join(\",\", parts));\n    }\n\n    public static void Main()\n    {\n        Show(OddEvenList(Build(1, 2, 3, 4, 5)));\n        Show(OddEvenList(Build(2, 1, 3, 5, 6, 4, 7)));\n        Show(OddEvenList(Build(1)));\n        Show(OddEvenList(Build(1, 2)));\n        Show(OddEvenList(null));\n        Show(OddEvenList(Build(1, 2, 3, 4)));\n    }\n}\n```\n\n**Output**\n\n```\n1,3,5,2,4\n2,3,6,7,1,5,4\n1\n1,2\n(empty)\n1,3,2,4\n```",
   "tags": [
    "linked-list",
    "pointers",
-   "in-place"
+   "in-place",
+   "two-lists",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why does the loop test the even pointer rather than the odd one?",
+    "a": "Because odd always advances first and so sits one node ahead; after its advance, odd.next may already be null while even is still valid. Testing even and even.next guarantees both relinking steps inside the body have a node to work with. Testing odd instead passes on odd-length lists and dereferences null on even-length ones, which is why both parities appear in the tests."
+   },
+   {
+    "q": "Why must evenHead be captured before the loop?",
+    "a": "Because the very first assignment, odd.next = even.next, overwrites the only reference the head held to the second node - the start of the even chain. Without saving it, there is no way to attach the even half at the end. It is the general linked-list discipline: save any pointer you are about to overwrite before you overwrite it, which is the same reason reversal keeps a 'next' temporary."
+   },
+   {
+    "q": "Is this stable, and could it be done with an auxiliary list instead?",
+    "a": "It is stable - nodes are appended in traversal order, so relative order within each group is preserved, which the problem requires. Building two new lists and concatenating would be equally stable and arguably clearer, at the cost of extra nodes. The in-place version's value is O(1) space, which is the usual reason this is asked; if the constraint were lifted I would write the simpler one."
+   }
   ]
  },
  {
@@ -9954,15 +10047,31 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Remove all nodes from a linked list whose consecutive values sum to zero.",
-  "answer": "Use a dummy head and a map from running prefix sum to node. When a prefix sum repeats, the nodes between the two occurrences sum to zero, so relink past them and clear the intervening map entries. Time O(n), space O(n).",
+  "answer": "**Approach**\n\nPrefix sums with a map from running sum to node. If the same running sum appears twice, everything between those two points sums to zero and is removed.\n\n**Logic**\n\nThe map must store the *last* node seen at each prefix sum, and a second pass is needed. Recording the first occurrence and splicing greedily fails when removals nest or overlap.\n\nThe standard two-pass form: the first pass records the final node at each prefix sum, the second walks again and jumps straight to that node, skipping everything in between.\n\nA dummy head is essential because the removal may include the original head.\n\nO(n) time, O(n) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int val;\n    public ListNode next;\n    public ListNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static ListNode RemoveZeroSumSublists(ListNode head)\n    {\n        var dummy = new ListNode(0) { next = head };   // the head itself may be removed\n\n        // Pass 1: record the LAST node reaching each prefix sum.\n        var lastAt = new Dictionary<int, ListNode>();\n        int sum = 0;\n\n        for (var node = dummy; node != null; node = node.next)\n        {\n            sum += node.val;\n            lastAt[sum] = node;\n        }\n\n        // Pass 2: jump straight to that last node, dropping everything between.\n        sum = 0;\n\n        for (var node = dummy; node != null; node = node.next)\n        {\n            sum += node.val;\n            node.next = lastAt[sum].next;\n        }\n\n        return dummy.next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        var dummy = new ListNode(0);\n        var tail = dummy;\n        foreach (int v in values) { tail.next = new ListNode(v); tail = tail.next; }\n        return dummy.next;\n    }\n\n    private static void Show(ListNode head)\n    {\n        var parts = new List<string>();\n        for (var n = head; n != null; n = n.next) parts.Add(n.val.ToString());\n        Console.WriteLine(parts.Count == 0 ? \"(empty)\" : string.Join(\",\", parts));\n    }\n\n    public static void Main()\n    {\n        Show(RemoveZeroSumSublists(Build(1, 2, -3, 3, 1)));\n        Show(RemoveZeroSumSublists(Build(1, 2, 3, -3, 4)));\n        Show(RemoveZeroSumSublists(Build(1, 2, 3, -3, -2)));\n        Show(RemoveZeroSumSublists(Build(1, -1)));            // everything goes\n        Show(RemoveZeroSumSublists(Build(0)));\n        Show(RemoveZeroSumSublists(Build(5)));\n        Show(RemoveZeroSumSublists(Build(1, 3, 2, -3, -2, 5, 5, -5, 1)));\n    }\n}\n```\n\n**Output**\n\n```\n3,1\n1,2,4\n1\n(empty)\n(empty)\n5\n1,5,1\n```",
   "tags": [
    "linked-list",
    "prefix-sum",
-   "hashmap"
+   "hash-map",
+   "two-pass",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why must the map hold the LAST node at each prefix sum rather than the first?",
+    "a": "Because removals can nest: if a prefix sum recurs three times, splicing to the second occurrence leaves a zero-sum run between the second and third that a single pass will not revisit. Jumping to the last occurrence removes the whole span at once and is idempotent. A one-pass version recording the first occurrence needs to erase intermediate map entries as it splices, which is easy to get subtly wrong - the two-pass form avoids the issue by construction."
+   },
+   {
+    "q": "Why start the prefix sums at the dummy node?",
+    "a": "Because a zero-sum run starting at the original head has no preceding node to splice from, and the prefix sum before the head is zero - which must be in the map for that case to be detected. The dummy provides both: it is the node holding prefix sum zero and the anchor whose next pointer gets rewritten. The [1,-1] test, where the entire list vanishes, only works because of it."
+   },
+   {
+    "q": "Does the second pass ever read a stale map entry?",
+    "a": "No, and the reason is worth stating: the second pass only ever visits nodes that survive, since it jumps past removed spans, and for a surviving node its recorded last occurrence is itself or a later surviving node. Removed nodes are never dereferenced. The nodes themselves are garbage once unreachable, so no explicit cleanup is needed in C# - in a manually managed language you would have to free the spliced-out span."
+   }
   ]
  },
  {
@@ -9970,15 +10079,31 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Split a linked list into k consecutive parts of as equal size as possible.",
-  "answer": "Count the length, compute the base size and remainder, then walk the list cutting after the appropriate number of nodes, giving one extra node to the first remainder parts. Time O(n), space O(k) for the output array of heads.",
+  "answer": "**Approach**\n\nCount the nodes, compute the base part size and the remainder, then walk once cutting off parts. The first `remainder` parts get one extra node.\n\n**Logic**\n\nThe distribution rule is the specification: parts must differ in size by at most one, and earlier parts must be no smaller than later ones. Integer division gives the base size and the modulo gives how many parts are oversized.\n\nWhen k exceeds the node count the base size is zero, so the trailing parts are legitimately null rather than an error.\n\nCutting means saving the next node before setting `next` to null, otherwise the rest of the list is unreachable.\n\nO(n + k) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int val;\n    public ListNode next;\n    public ListNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static ListNode[] SplitListToParts(ListNode head, int k)\n    {\n        int count = 0;\n        for (var n = head; n != null; n = n.next) count++;\n\n        int baseSize = count / k, extra = count % k;   // first 'extra' parts get one more\n\n        var parts = new ListNode[k];\n        var current = head;\n\n        for (int i = 0; i < k && current != null; i++)\n        {\n            parts[i] = current;\n\n            int size = baseSize + (i < extra ? 1 : 0);\n\n            for (int step = 1; step < size; step++) current = current.next;\n\n            var rest = current.next;   // save before cutting, or the rest is lost\n            current.next = null;\n            current = rest;\n        }\n\n        return parts;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        var dummy = new ListNode(0);\n        var tail = dummy;\n        foreach (int v in values) { tail.next = new ListNode(v); tail = tail.next; }\n        return dummy.next;\n    }\n\n    private static void Show(ListNode[] parts)\n    {\n        var rendered = new List<string>();\n\n        foreach (var part in parts)\n        {\n            var values = new List<string>();\n            for (var n = part; n != null; n = n.next) values.Add(n.val.ToString());\n            rendered.Add(values.Count == 0 ? \"[]\" : \"[\" + string.Join(\" \", values) + \"]\");\n        }\n\n        Console.WriteLine(string.Join(\" \", rendered));\n    }\n\n    public static void Main()\n    {\n        Show(SplitListToParts(Build(1, 2, 3), 5));            // more parts than nodes\n        Show(SplitListToParts(Build(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 3));\n        Show(SplitListToParts(Build(1, 2, 3, 4), 2));         // exact division\n        Show(SplitListToParts(null, 3));\n        Show(SplitListToParts(Build(1), 1));\n    }\n}\n```\n\n**Output**\n\n```\n[1] [2] [3] [] []\n[1 2 3 4] [5 6 7] [8 9 10]\n[1 2] [3 4]\n[] [] []\n[1]\n```",
   "tags": [
    "linked-list",
    "partitioning",
-   "implementation"
+   "integer-division",
+   "edge-cases",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why do the first parts get the extra nodes rather than the last?",
+    "a": "Because the specification says sizes may differ by at most one AND earlier parts must be no smaller than later ones. Giving the remainder to the front satisfies both; giving it to the back satisfies the first rule but violates the second, so a ten-node list split three ways would come out as 3,3,4 instead of the required 4,3,3. It is a specification detail rather than an algorithmic one, and it is where most wrong answers on this question land."
+   },
+   {
+    "q": "Why does the loop stop early when current becomes null?",
+    "a": "Because when k exceeds the node count, baseSize is zero and extra equals the count, so the first 'count' parts take one node each and the rest must be null. Continuing would dereference a null current. The array is already initialised to nulls, so simply stopping leaves exactly the right result - the trailing empty parts are the correct answer, not a truncation."
+   },
+   {
+    "q": "Why save the next node before setting next to null?",
+    "a": "Because setting current.next to null severs the only link to the remainder of the list; without the saved reference the remaining nodes are unreachable and every later part comes out empty. It is the same save-before-overwrite discipline as in list reversal. Ordering the two lines the other way compiles fine and produces a list that is silently truncated after the first part, which is a bug you only see by running it."
+   }
   ]
  },
  {
@@ -9986,16 +10111,32 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Insert a value into a sorted circular linked list.",
-  "answer": "Walk the list looking for a position where the current value is at most the new value and the next is at least it, or for the pivot where the list wraps - which handles values outside the current range. Handle the empty list and all-equal-values cases separately. Time O(n).",
+  "answer": "**Approach**\n\nWalk the ring once looking for the insertion point. Three cases: a normal ordered slot, the pivot where the list wraps, and a full loop with no slot found.\n\n**Logic**\n\nThe pivot is the one place where the next value is smaller than the current — the maximum-to-minimum wrap. A value above the maximum or below the minimum belongs exactly there, which is why that single check covers both extremes.\n\nThe third case is a list of all-equal values, where no slot ever satisfies either condition. Detecting a completed loop and inserting anywhere is what stops an infinite walk.\n\nAn empty list must become a self-referencing single node.\n\nO(n) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Node\n{\n    public int val;\n    public Node next;\n    public Node(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static Node Insert(Node head, int value)\n    {\n        var inserted = new Node(value);\n\n        if (head == null) { inserted.next = inserted; return inserted; }   // self-loop\n\n        var current = head;\n\n        while (true)\n        {\n            if (current.val <= value && value <= current.next.val) break;        // ordered slot\n\n            if (current.val > current.next.val &&                                 // the pivot\n                (value >= current.val || value <= current.next.val)) break;\n\n            current = current.next;\n\n            if (current == head) break;   // all values equal: anywhere is correct\n        }\n\n        inserted.next = current.next;\n        current.next = inserted;\n        return head;\n    }\n\n    private static Node BuildRing(params int[] values)\n    {\n        if (values.Length == 0) return null;\n\n        var head = new Node(values[0]);\n        var tail = head;\n\n        for (int i = 1; i < values.Length; i++) { tail.next = new Node(values[i]); tail = tail.next; }\n        tail.next = head;\n        return head;\n    }\n\n    private static void Show(Node head)\n    {\n        if (head == null) { Console.WriteLine(\"(empty)\"); return; }\n\n        var parts = new List<string>();\n        var n = head;\n        do { parts.Add(n.val.ToString()); n = n.next; } while (n != head);\n\n        Console.WriteLine(string.Join(\",\", parts));\n    }\n\n    public static void Main()\n    {\n        Show(Insert(BuildRing(3, 4, 1), 2));\n        Show(Insert(null, 1));\n        Show(Insert(BuildRing(1), 0));\n        Show(Insert(BuildRing(3, 4, 1), 5));    // above the maximum: at the pivot\n        Show(Insert(BuildRing(3, 4, 1), 0));    // below the minimum: same place\n        Show(Insert(BuildRing(2, 2, 2), 3));    // all equal\n    }\n}\n```\n\n**Output**\n\n```\n3,4,1,2\n1\n1,0\n3,4,5,1\n3,4,0,1\n2,3,2,2\n```",
   "tags": [
    "linked-list",
    "circular",
-   "edge-cases"
+   "edge-cases",
+   "insertion",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does one pivot check handle both a new maximum and a new minimum?",
+    "a": "Because the pivot is the single boundary between the largest and smallest values in the ring, and a value outside the existing range belongs there in both directions - above the maximum it goes after the pivot node, below the minimum it goes before the wrap target, and those are the same gap. That is why the condition is an OR of two comparisons against one node pair rather than two separate searches. It is the observation that collapses the case analysis from four branches to three."
+   },
+   {
+    "q": "Why is the completed-loop check necessary?",
+    "a": "Because when every value in the ring is identical, no gap satisfies either ordering condition - there is no pivot and no strictly ordered slot - so the walk would circle forever. Detecting a return to the head and inserting there is correct, since in a uniform ring any position preserves sortedness. It is the termination guarantee for the loop, and omitting it produces a hang rather than a wrong answer, which is harder to diagnose."
+   },
+   {
+    "q": "Why return the original head rather than the new node?",
+    "a": "Because a circular list has no meaningful first element - any node is a valid entry point - and the caller's existing reference should stay valid. Returning the inserted node would still be a correct ring but would surprise a caller holding the old head. The empty case is the exception, since there is no prior head to preserve, and it must also self-link rather than leave next as null, which would silently turn the structure into a non-circular list."
+   }
   ]
  },
  {
@@ -10003,16 +10144,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Find the maximum width of a binary tree including nulls between nodes.",
-  "answer": "BFS assigning each node a positional index - left child is twice the parent, right is twice plus one - and take the difference between the first and last index at each level. Normalise indices per level to avoid overflow on deep trees. Time O(n).",
+  "answer": "**Approach**\n\nLevel-order traversal carrying a heap-style index with each node: a node at index i has children at 2i and 2i+1. The width of a level is the last index minus the first plus one.\n\n**Logic**\n\nThe indices encode the positions the missing nodes would occupy, which is what \"including nulls\" means — you never materialise them.\n\nThe indices double every level, so on a deep skewed tree they overflow. Normalising each level by subtracting its first index keeps them small, and using long gives extra headroom. Both are applied here.\n\nO(n) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static int WidthOfBinaryTree(TreeNode root)\n    {\n        if (root == null) return 0;\n\n        var queue = new Queue<(TreeNode Node, long Index)>();\n        queue.Enqueue((root, 0L));\n\n        long widest = 0;\n\n        while (queue.Count > 0)\n        {\n            int levelSize = queue.Count;\n            long first = 0, last = 0;\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                var (node, index) = queue.Dequeue();\n\n                if (i == 0) first = index;\n                last = index;\n\n                // Normalise by the level's first index so the numbers stay small.\n                long normalised = index - first;\n\n                if (node.left != null) queue.Enqueue((node.left, normalised * 2));\n                if (node.right != null) queue.Enqueue((node.right, normalised * 2 + 1));\n            }\n\n            widest = Math.Max(widest, last - first + 1);\n        }\n\n        return (int)widest;\n    }\n\n    private static TreeNode Build(params int?[] level)\n    {\n        if (level.Length == 0 || level[0] == null) return null;\n\n        var root = new TreeNode(level[0].Value);\n        var queue = new Queue<TreeNode>();\n        queue.Enqueue(root);\n\n        int i = 1;\n        while (queue.Count > 0 && i < level.Length)\n        {\n            var node = queue.Dequeue();\n\n            if (i < level.Length && level[i] != null) { node.left = new TreeNode(level[i].Value); queue.Enqueue(node.left); }\n            i++;\n            if (i < level.Length && level[i] != null) { node.right = new TreeNode(level[i].Value); queue.Enqueue(node.right); }\n            i++;\n        }\n\n        return root;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(WidthOfBinaryTree(Build(1, 3, 2, 5, 3, null, 9)));\n        Console.WriteLine(WidthOfBinaryTree(Build(1, 3, 2, 5, null, null, 9, 6, null, 7)));\n        Console.WriteLine(WidthOfBinaryTree(Build(1, 3, 2, 5)));\n        Console.WriteLine(WidthOfBinaryTree(Build(1)));\n        Console.WriteLine(WidthOfBinaryTree(null));\n    }\n}\n```\n\n**Output**\n\n```\n4\n7\n2\n1\n0\n```",
   "tags": [
    "trees",
    "bfs",
-   "indexing"
+   "indexing",
+   "overflow",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why does normalising each level by its first index matter?",
+    "a": "Because heap indices double every level, so a tree of depth 60 produces indices beyond what a long can hold even though the tree has only a handful of nodes - a left-skewed and a right-skewed branch of the same depth. Subtracting the level's first index resets the range to start at zero each level while preserving the differences, which is all the width calculation needs. Without it the code is correct on shallow tests and overflows on exactly the adversarial input the problem is designed around."
+   },
+   {
+    "q": "Why not just count the nodes on each level?",
+    "a": "Because the width is defined to include the null positions between the leftmost and rightmost real nodes, so a level with two nodes at opposite ends of a wide gap has a large width, not two. Counting nodes answers a different question and gives a smaller number on every sparse tree. The index encoding is what represents those absent positions without allocating them."
+   },
+   {
+    "q": "Why a queue of tuples rather than parallel queues?",
+    "a": "Because the node and its index must stay paired, and two queues can drift apart if any code path enqueues to one and not the other. Tuples make the invariant structural rather than something to maintain by hand. In C# a ValueTuple also avoids an allocation per entry, which for a large tree is real - a class wrapper would allocate once per node on top of the queue's own storage."
+   }
   ]
  },
  {
@@ -10020,16 +10177,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Find the sum of all root-to-leaf numbers formed by tree paths.",
-  "answer": "DFS carrying the accumulated number - multiply by ten and add the node value at each step - and add to the total at each leaf. Time O(n), space O(h). Building strings and parsing them works but allocates unnecessarily.",
+  "answer": "**Approach**\n\nDFS carrying the number built so far. At each node the running value becomes ten times the parent's value plus this node's digit; at a leaf that value is added to the total.\n\n**Logic**\n\nBuilding the number on the way down rather than collecting digits and reconstructing avoids any string work and keeps the state a single integer.\n\nThe leaf test is both children null — not one child null. A node with exactly one child is not a leaf, and treating it as one would count an incomplete number and then count the full path again.\n\nO(n) time, O(height) stack.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static int SumNumbers(TreeNode root) => Walk(root, 0);\n\n    private static int Walk(TreeNode node, int running)\n    {\n        if (node == null) return 0;\n\n        running = running * 10 + node.val;   // extend the number on the way down\n\n        // A leaf has BOTH children null; one-child nodes are not leaves.\n        if (node.left == null && node.right == null) return running;\n\n        return Walk(node.left, running) + Walk(node.right, running);\n    }\n\n    public static void Main()\n    {\n        var a = new TreeNode(1) { left = new TreeNode(2), right = new TreeNode(3) };\n        Console.WriteLine(SumNumbers(a));    // 12 + 13\n\n        var b = new TreeNode(4)\n        {\n            left = new TreeNode(9) { left = new TreeNode(5), right = new TreeNode(1) },\n            right = new TreeNode(0)\n        };\n        Console.WriteLine(SumNumbers(b));    // 495 + 491 + 40\n\n        Console.WriteLine(SumNumbers(new TreeNode(7)));\n        Console.WriteLine(SumNumbers(null));\n\n        // A chain: one number only, not one per node.\n        var chain = new TreeNode(1) { left = new TreeNode(2) { left = new TreeNode(3) } };\n        Console.WriteLine(SumNumbers(chain));\n\n        var zeros = new TreeNode(0) { left = new TreeNode(0), right = new TreeNode(1) };\n        Console.WriteLine(SumNumbers(zeros));\n    }\n}\n```\n\n**Output**\n\n```\n25\n1026\n7\n0\n123\n1\n```",
   "tags": [
    "trees",
    "dfs",
-   "recursion"
+   "recursion",
+   "accumulator",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why must a leaf have both children null?",
+    "a": "Because a node with one child is an interior node on a longer path, and treating it as a leaf would add a partial number and then add the complete one too, double-counting the prefix. The chain test checks this: 1 to 2 to 3 must contribute 123 alone, not 1 plus 12 plus 123. The single-null check is the most common bug on every root-to-leaf problem, including path sum, and it only shows up on trees with a one-child node."
+   },
+   {
+    "q": "Why build the number on the way down rather than the way up?",
+    "a": "Because on the way down the digit's place value is known implicitly - each step multiplies by ten - whereas on the way up you would need the remaining depth to know what power of ten each digit carries. The downward accumulator turns it into one multiply-add per node with no extra state. It is the general shape of root-to-leaf problems: pass context down, return aggregates up."
+   },
+   {
+    "q": "Could the sum overflow?",
+    "a": "Yes in principle - a deep tree of nines builds numbers far beyond int range, and the running value would wrap silently. The usual problem statement bounds the depth to about ten and the digits to 0-9, which keeps everything inside int. If those bounds were lifted I would accumulate in long, or in a BigInteger if the depth were unbounded, and the recursion would need converting to an explicit stack to avoid overflowing the call stack first."
+   }
   ]
  },
  {
@@ -10037,17 +10210,32 @@
   "subcategory": "Trees",
   "difficulty": "Hard",
   "question": "Serialise and deserialise an n-ary tree.",
-  "answer": "Preorder with an explicit child count per node, or with a sentinel marking the end of each child list. The child count version parses in one pass with an index cursor and no ambiguity. Time O(n) both ways, and the format must be self-delimiting to be decodable.",
+  "answer": "**Approach**\n\nPreorder with an explicit child count after each value. Unlike a binary tree, arity is not fixed, so the structure must be recorded rather than inferred.\n\n**Logic**\n\nWriting the number of children immediately after each value makes the format self-delimiting: the reader knows exactly how many subtrees to consume before returning, so no sentinel or lookahead is needed.\n\nThe alternative — null markers closing each child list — also works but produces a longer string and needs the reader to distinguish a marker from a value, which means the marker cannot be a legal value.\n\nBoth directions are O(n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class NaryNode\n{\n    public int val;\n    public IList<NaryNode> children = new List<NaryNode>();\n    public NaryNode(int v) { val = v; }\n}\n\npublic class Codec\n{\n    public string Serialise(NaryNode root)\n    {\n        var sb = new StringBuilder();\n        Write(root, sb);\n        return sb.ToString();\n    }\n\n    private void Write(NaryNode node, StringBuilder sb)\n    {\n        if (node == null) return;\n\n        // Value then child count: self-delimiting, so no sentinel is needed.\n        if (sb.Length > 0) sb.Append(' ');\n        sb.Append(node.val).Append(' ').Append(node.children.Count);\n\n        foreach (var child in node.children) Write(child, sb);\n    }\n\n    public NaryNode Deserialise(string data)\n    {\n        if (string.IsNullOrEmpty(data)) return null;\n\n        var tokens = data.Split(' ');\n        int index = 0;\n        return Read(tokens, ref index);\n    }\n\n    private NaryNode Read(string[] tokens, ref int index)\n    {\n        var node = new NaryNode(int.Parse(tokens[index++]));\n        int childCount = int.Parse(tokens[index++]);\n\n        for (int i = 0; i < childCount; i++) node.children.Add(Read(tokens, ref index));\n\n        return node;\n    }\n}\n\npublic class Solution\n{\n    // Compare structure and values, not object identity.\n    private static bool Same(NaryNode a, NaryNode b)\n    {\n        if (a == null || b == null) return a == null && b == null;\n        if (a.val != b.val || a.children.Count != b.children.Count) return false;\n\n        for (int i = 0; i < a.children.Count; i++)\n            if (!Same(a.children[i], b.children[i])) return false;\n\n        return true;\n    }\n\n    private static NaryNode Node(int v, params NaryNode[] children)\n    {\n        var n = new NaryNode(v);\n        foreach (var c in children) n.children.Add(c);\n        return n;\n    }\n\n    public static void Main()\n    {\n        var codec = new Codec();\n\n        var tree = Node(1,\n            Node(3, Node(5), Node(6)),\n            Node(2),\n            Node(4));\n\n        string encoded = codec.Serialise(tree);\n        Console.WriteLine(encoded);\n        Console.WriteLine(Same(tree, codec.Deserialise(encoded)));\n\n        var single = Node(7);\n        Console.WriteLine(codec.Serialise(single));\n        Console.WriteLine(Same(single, codec.Deserialise(codec.Serialise(single))));\n\n        Console.WriteLine(codec.Serialise(null) == \"\");\n        Console.WriteLine(codec.Deserialise(\"\") == null);\n\n        var deep = Node(1, Node(2, Node(3, Node(4))));\n        Console.WriteLine(Same(deep, codec.Deserialise(codec.Serialise(deep))));\n    }\n}\n```\n\n**Output**\n\n```\n1 3 3 2 5 0 6 0 2 0 4 0\nTrue\n7 0\nTrue\nTrue\nTrue\nTrue\n```",
   "tags": [
    "trees",
-   "serialisation",
    "n-ary",
-   "design"
+   "serialisation",
+   "preorder",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why record the child count rather than using null markers?",
+    "a": "Because with variable arity the reader otherwise cannot tell where a child list ends, and a marker approach needs a token that can never be a legal value - which fails as soon as values are arbitrary integers or strings. The count makes the format self-delimiting: read a value, read a count, recurse exactly that many times. It is also shorter, since one number replaces a closing marker per node."
+   },
+   {
+    "q": "Why does the test compare structure rather than checking the round-tripped string?",
+    "a": "Because comparing serialised strings only proves the encoder is deterministic, not that the decoder rebuilt the right tree - a decoder that dropped a subtree and an encoder that skipped it would agree with each other. Walking both trees and comparing values and child counts tests the actual invariant, that deserialise inverts serialise. It is the difference between asserting on appearance and asserting on the property you care about."
+   },
+   {
+    "q": "What breaks if the values can be negative or multi-digit?",
+    "a": "Nothing here - splitting on spaces and using int.Parse handles both, since the delimiter is not part of the number. What would break the format is a value containing a space, which is why a string-valued tree needs quoting or a length prefix per token. That is the general lesson about hand-rolled serialisation: the format is only safe while the delimiter cannot appear in the data, and the moment it can, you need escaping or a length-prefixed encoding."
+   }
   ]
  },
  {
