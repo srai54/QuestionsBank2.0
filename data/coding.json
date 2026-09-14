@@ -2895,17 +2895,32 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Flatten a multilevel doubly linked list.",
-  "answer": "Iterate; when a node has a child, splice the child list between the node and its next (connect prev/next pointers), and continue. Use a stack to remember 'next' pointers when descending into children. O(n) time. Result is a single-level doubly linked list.",
+  "answer": "**Approach**\n\nDepth-first. When a node has a child list, splice that whole list in between the node and its successor, then continue. A stack holds the deferred successors.\n\n**Logic**\n\nWalk the list. On reaching a node with a child, push its `next` onto a stack so it is not lost, wire the child in as the new `next`, fix the `prev` pointer, and clear the child pointer. When the walk reaches a null `next`, pop a deferred successor and continue from there.\n\nThe three pointers that must all be updated on a splice — `next`, `prev` and `child` — are where this goes wrong. Forgetting `child = null` leaves the flattened list still claiming to have levels.\n\nO(n) time, O(depth) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Node\n{\n    public int Val;\n    public Node Prev, Next, Child;\n    public Node(int val) => Val = val;\n}\n\npublic class Solution\n{\n    public static Node Flatten(Node head)\n    {\n        if (head == null) return null;\n\n        var deferred = new Stack<Node>();\n        var current = head;\n\n        while (current != null)\n        {\n            if (current.Child != null)\n            {\n                if (current.Next != null) deferred.Push(current.Next);\n\n                current.Next = current.Child;\n                current.Child.Prev = current;\n                current.Child = null;          // the level is gone once spliced\n            }\n            else if (current.Next == null && deferred.Count > 0)\n            {\n                var resume = deferred.Pop();\n                current.Next = resume;\n                resume.Prev = current;\n            }\n\n            current = current.Next;\n        }\n\n        return head;\n    }\n\n    private static string Render(Node head)\n    {\n        var parts = new List<string>();\n        Node last = null;\n\n        for (var n = head; n != null; n = n.Next)\n        {\n            if (n.Child != null) return \"BROKEN: a child pointer survived\";\n            if (!ReferenceEquals(n.Prev, last)) return \"BROKEN: prev pointer wrong\";\n            parts.Add(n.Val.ToString());\n            last = n;\n        }\n\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    private static Node Chain(params int[] values)\n    {\n        Node head = null, tail = null;\n        foreach (int v in values)\n        {\n            var node = new Node(v);\n            if (head == null) head = tail = node;\n            else { tail.Next = node; node.Prev = tail; tail = node; }\n        }\n        return head;\n    }\n\n    private static Node NodeAt(Node head, int index)\n    {\n        for (int i = 0; i < index; i++) head = head.Next;\n        return head;\n    }\n\n    public static void Main()\n    {\n        // 1-2-3 with a child list 7-8 hanging off node 2, and 11 off node 8.\n        var top = Chain(1, 2, 3);\n        var mid = Chain(7, 8);\n        var low = Chain(11, 12);\n\n        NodeAt(top, 1).Child = mid;\n        NodeAt(mid, 1).Child = low;\n\n        Console.WriteLine(Render(Flatten(top)));\n\n        Console.WriteLine(Render(Flatten(null)));\n        Console.WriteLine(Render(Flatten(Chain(1))));\n\n        // A child on the LAST node: nothing deferred.\n        var tail = Chain(1, 2);\n        NodeAt(tail, 1).Child = Chain(9);\n        Console.WriteLine(Render(Flatten(tail)));\n\n        // A child on the FIRST node.\n        var first = Chain(1, 2);\n        first.Child = Chain(5, 6);\n        Console.WriteLine(Render(Flatten(first)));\n    }\n}\n```\n\n**Output**\n\n```\n1->2->7->8->11->12->3\n(empty)\n1\n1->2->9\n1->5->6->2\n```",
   "tags": [
    "linkedlist",
-   "flatten",
-   "doubly-linked",
-   "stack"
+   "dfs",
+   "stack",
+   "pointers",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does the render helper check the prev pointers?",
+    "a": "Because a flatten that gets next right and prev wrong produces a list that reads correctly forwards and is corrupt backwards, which no forward-only test would catch. A doubly linked list has an invariant that every node's prev points at its predecessor, and splicing breaks it in three places unless each is fixed. Asserting the invariant in the test rather than only the values is what makes the test meaningful, and it is the same reasoning as checking that copy-with-random-pointers restored the original list."
+   },
+   {
+    "q": "Could this be done recursively?",
+    "a": "Yes, and it reads more naturally: flatten the child, find its tail, splice, then continue. The cost is O(depth) stack, which for an adversarially deep structure overflows, and finding each child's tail is an extra traversal unless the recursion returns it. The iterative version with an explicit stack has the same complexity and no depth limit. For a structure whose nesting you do not control, the iterative form is the responsible choice."
+   },
+   {
+    "q": "Where does this shape appear outside the puzzle?",
+    "a": "Anywhere a nested structure must be presented linearly: flattening a tree of comments into a display order, walking a nested directory listing, or serialising a document outline. The general pattern is depth-first traversal with deferred continuations on a stack, which is exactly what the nested-list iterator problem does with a different data type. Recognising it as one pattern rather than several is what makes the next variant quick."
+   }
   ]
  },
  {
@@ -2913,16 +2928,32 @@
   "subcategory": "LinkedList",
   "difficulty": "Medium",
   "question": "Partition a linked list around a value x.",
-  "answer": "Build two separate lists (nodes < x and nodes >= x) using dummy heads, preserving order, then connect the first list's tail to the second's head. O(n) time, O(1) extra space. Keeps stable relative order within each partition.",
+  "answer": "**Approach**\n\nBuild two separate lists — one for nodes strictly less than x, one for the rest — then join them. Two dummy heads make the appends unconditional.\n\n**Logic**\n\nA single pass appends each node to whichever list it belongs in, preserving the order of arrival within each. Joining the two at the end gives the answer.\n\nThe step that is easy to forget is terminating the second list. Its last node still points at whatever followed it in the original, so without setting it to null the result contains a cycle or trailing garbage.\n\nThis preserves relative order, which the stable version of the problem requires. A version that swaps values in place would be shorter and would not.\n\nO(n) time, O(1) extra space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int Val;\n    public ListNode Next;\n    public ListNode(int val = 0, ListNode next = null) { Val = val; Next = next; }\n}\n\npublic class Solution\n{\n    public static ListNode Partition(ListNode head, int x)\n    {\n        var lessHead = new ListNode();\n        var greaterHead = new ListNode();\n        var less = lessHead;\n        var greater = greaterHead;\n\n        for (var node = head; node != null; node = node.Next)\n        {\n            if (node.Val < x) { less.Next = node; less = node; }\n            else { greater.Next = node; greater = node; }\n        }\n\n        greater.Next = null;          // essential: cuts the tail loose\n        less.Next = greaterHead.Next; // join the two lists\n\n        return lessHead.Next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        ListNode head = null;\n        for (int i = values.Length - 1; i >= 0; i--) head = new ListNode(values[i], head);\n        return head;\n    }\n\n    private static string Render(ListNode n)\n    {\n        var parts = new List<string>();\n        int guard = 0;\n        for (; n != null; n = n.Next)\n        {\n            if (++guard > 100) return \"BROKEN: cycle detected\";\n            parts.Add(n.Val.ToString());\n        }\n        return parts.Count == 0 ? \"(empty)\" : string.Join(\"->\", parts);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Render(Partition(Build(1, 4, 3, 2, 5, 2), 3)));\n        Console.WriteLine(Render(Partition(Build(2, 1), 2)));\n        Console.WriteLine(Render(Partition(Build(1, 2, 3), 0)));   // all go right\n        Console.WriteLine(Render(Partition(Build(1, 2, 3), 9)));   // all go left\n        Console.WriteLine(Render(Partition(null, 5)));\n        Console.WriteLine(Render(Partition(Build(3, 3, 3), 3)));   // all equal\n    }\n}\n```\n\n**Output**\n\n```\n1->2->2->4->3->5\n1->2\n1->2->3\n1->2->3\n(empty)\n3->3->3\n```",
   "tags": [
    "linkedlist",
    "partition",
-   "dummy-node"
+   "dummy-node",
+   "stability",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "What happens without greater.Next = null?",
+    "a": "The last node of the greater list still points at whatever followed it originally, which is usually a node already in the less list, producing a cycle. Rendering then loops forever, which is why the helper has a guard rather than trusting the list. It is the same omission as forgetting to null the tail when merging k sorted lists, and it fails as a hang rather than a wrong answer, which is considerably harder to diagnose."
+   },
+   {
+    "q": "Why preserve relative order rather than swapping values?",
+    "a": "Because the problem specifies stability, and because swapping values is a different operation: it moves data between nodes rather than moving nodes, so any other reference to a specific node now sees different data. That matters whenever nodes carry identity, which they do in most real uses. The relinking version is also O(1) space regardless of payload size, whereas swapping large payloads is expensive."
+   },
+   {
+    "q": "How does this relate to quicksort?",
+    "a": "It is the partition step, which is why the problem is worth knowing beyond itself. Quicksort on a linked list uses exactly this to split around a pivot, and because relinking is O(1) the list version needs no auxiliary array. The three-way variant, splitting into less, equal and greater, is the Dutch national flag partition and is what makes quicksort handle many duplicates without degrading."
+   }
   ]
  },
  {
@@ -2963,17 +2994,32 @@
   "subcategory": "Queue",
   "difficulty": "Hard",
   "question": "Design a max/min queue with O(1) amortized max query.",
-  "answer": "Maintain a regular queue plus a monotonic deque holding candidates for the max in decreasing order. On enqueue, pop smaller values from the deque's back; on dequeue, if the front equals the deque's front, pop it. getMax returns the deque's front. Amortized O(1).",
+  "answer": "**Approach**\n\nA monotonic deque alongside the queue. The deque holds candidates for the maximum in decreasing order, so its front is always the current maximum.\n\n**Logic**\n\nOn enqueue, pop from the back of the deque every value smaller than the incoming one: a smaller value that arrived earlier can never be the maximum again, because the new value outlives it and is larger. Then append.\n\nOn dequeue, if the departing value equals the deque's front, remove it too.\n\nEach element is pushed and popped from the deque at most once, so the amortised cost per operation is O(1) even though a single enqueue can pop many entries.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class MaxQueue\n{\n    private readonly Queue<int> _items = new();\n    private readonly LinkedList<int> _maxima = new();   // decreasing front to back\n\n    public void Enqueue(int value)\n    {\n        _items.Enqueue(value);\n\n        // A smaller earlier value can never be the max while this one is present.\n        while (_maxima.Count > 0 && _maxima.Last.Value < value) _maxima.RemoveLast();\n\n        _maxima.AddLast(value);\n    }\n\n    public int Dequeue()\n    {\n        if (_items.Count == 0) throw new InvalidOperationException(\"queue is empty\");\n\n        int value = _items.Dequeue();\n        if (_maxima.Count > 0 && _maxima.First.Value == value) _maxima.RemoveFirst();\n\n        return value;\n    }\n\n    public int Max => _maxima.Count > 0\n        ? _maxima.First.Value\n        : throw new InvalidOperationException(\"queue is empty\");\n\n    public int Count => _items.Count;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var q = new MaxQueue();\n\n        q.Enqueue(1); q.Enqueue(3); q.Enqueue(2);\n        Console.WriteLine(q.Max);          // 3\n\n        Console.WriteLine(q.Dequeue());    // 1, max unchanged\n        Console.WriteLine(q.Max);\n\n        Console.WriteLine(q.Dequeue());    // 3 leaves, so the max drops\n        Console.WriteLine(q.Max);\n\n        // Duplicated maximum: both must be tracked.\n        var d = new MaxQueue();\n        d.Enqueue(5); d.Enqueue(5); d.Enqueue(1);\n        Console.WriteLine(d.Max);\n        d.Dequeue();\n        Console.WriteLine(d.Max);          // still 5\n\n        try { new MaxQueue().Max.ToString(); }\n        catch (InvalidOperationException e) { Console.WriteLine(e.Message); }\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n3\n3\n2\n5\n5\nqueue is empty\n```",
   "tags": [
    "queue",
    "monotonic-deque",
+   "amortised",
    "design",
-   "max-queue"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why does the pop condition use strictly less-than rather than less-or-equal?",
+    "a": "So that duplicate maxima are each retained. With two 5s and `<`, both stay in the deque, so dequeuing the first leaves the second and the maximum is still correctly 5. With `<=` the earlier 5 would be evicted, and dequeuing it would remove the front, reporting a smaller maximum while a 5 is still in the queue. The duplicate test is what distinguishes the two, and it is the same equality subtlety as in the min-stack."
+   },
+   {
+    "q": "Why is this amortised O(1) rather than worst-case?",
+    "a": "Because a single enqueue can pop many deque entries, so that one operation is O(n). But each element enters the deque exactly once and leaves at most once, so across any sequence of n operations the total deque work is bounded by 2n. Averaged over the sequence that is constant. Stating the bound as amortised rather than worst-case is the precise answer, and it is the same accounting as for the two-stack queue and monotonic-stack problems."
+   },
+   {
+    "q": "How does this relate to sliding window maximum?",
+    "a": "It is the same monotonic deque with a different eviction trigger. Here an element leaves when it is dequeued; there it leaves when it falls outside the window, which is detected by index. That is why the window version stores indices while this one can store values. Recognising them as one structure means writing the second takes minutes once you have written the first."
+   }
   ]
  },
  {
@@ -5076,18 +5122,37 @@
   "subcategory": "Backtracking",
   "difficulty": "Hard",
   "question": "Sudoku solver.",
-  "answer": "Backtracking: find an empty cell, try digits 1-9 that don't violate row/column/box constraints (track with sets or boolean arrays), place and recurse; undo on failure. Return true when the board is filled. Constraint propagation / choosing the most-constrained cell speeds it up.",
+  "answer": "**Approach**\n\nBacktracking with constraint tracking. Try each digit in the first empty cell, recurse, and undo on failure. The difference between a solution that finishes instantly and one that takes minutes is how cheaply legality is checked.\n\n**Logic**\n\nKeep three bitmask arrays — one per row, column and 3×3 box — so validity is a single bitwise test rather than a scan of 27 cells. The box index is `(row / 3) * 3 + col / 3`.\n\nOn placing a digit, set the bit in all three masks; on backtracking, clear it. The incremental maintenance is what makes the search fast.\n\nWorst case is exponential, but real puzzles are solved in milliseconds because the constraints prune almost everything.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool Solve(char[][] board)\n    {\n        var rows = new int[9];\n        var cols = new int[9];\n        var boxes = new int[9];\n\n        // Seed the masks from the given digits.\n        for (int r = 0; r < 9; r++)\n            for (int c = 0; c < 9; c++)\n            {\n                if (board[r][c] == '.') continue;\n\n                int bit = 1 << (board[r][c] - '1');\n                int box = (r / 3) * 3 + c / 3;\n\n                // The givens themselves must be legal. Without this check a board\n                // with two 5s in one row looks fine and the search never terminates.\n                if ((rows[r] & bit) != 0 || (cols[c] & bit) != 0 || (boxes[box] & bit) != 0)\n                    return false;\n\n                rows[r] |= bit;\n                cols[c] |= bit;\n                boxes[box] |= bit;\n            }\n\n        return Fill(board, 0, rows, cols, boxes);\n    }\n\n    private static bool Fill(char[][] board, int position, int[] rows, int[] cols, int[] boxes)\n    {\n        if (position == 81) return true;               // every cell filled\n\n        int r = position / 9, c = position % 9;\n        if (board[r][c] != '.') return Fill(board, position + 1, rows, cols, boxes);\n\n        int box = (r / 3) * 3 + c / 3;\n\n        for (char digit = '1'; digit <= '9'; digit++)\n        {\n            int bit = 1 << (digit - '1');\n\n            // One test against three masks: no scanning.\n            if ((rows[r] & bit) != 0 || (cols[c] & bit) != 0 || (boxes[box] & bit) != 0) continue;\n\n            board[r][c] = digit;\n            rows[r] |= bit; cols[c] |= bit; boxes[box] |= bit;\n\n            if (Fill(board, position + 1, rows, cols, boxes)) return true;\n\n            board[r][c] = '.';                          // undo\n            rows[r] &= ~bit; cols[c] &= ~bit; boxes[box] &= ~bit;\n        }\n\n        return false;\n    }\n\n    private static char[][] Parse(params string[] rows)\n    {\n        var b = new char[9][];\n        for (int i = 0; i < 9; i++) b[i] = rows[i].ToCharArray();\n        return b;\n    }\n\n    private static bool IsValidSolution(char[][] b)\n    {\n        for (int i = 0; i < 9; i++)\n        {\n            int row = 0, col = 0, box = 0;\n            for (int j = 0; j < 9; j++)\n            {\n                row |= 1 << (b[i][j] - '1');\n                col |= 1 << (b[j][i] - '1');\n                int br = (i / 3) * 3 + j / 3, bc = (i % 3) * 3 + j % 3;\n                box |= 1 << (b[br][bc] - '1');\n            }\n            if (row != 0x1FF || col != 0x1FF || box != 0x1FF) return false;\n        }\n        return true;\n    }\n\n    public static void Main()\n    {\n        var puzzle = Parse(\n            \"53..7....\", \"6..195...\", \".98....6.\",\n            \"8...6...3\", \"4..8.3..1\", \"7...2...6\",\n            \".6....28.\", \"...419..5\", \"....8..79\");\n\n        Console.WriteLine(Solve(puzzle));\n        Console.WriteLine(IsValidSolution(puzzle));\n        Console.WriteLine(new string(puzzle[0]));\n        Console.WriteLine(new string(puzzle[8]));\n\n        // Contradictory givens: two 5s in the first row. Detected before searching.\n        var broken = Parse(\n            \"55.......\", \".........\", \".........\",\n            \".........\", \".........\", \".........\",\n            \".........\", \".........\", \".........\");\n        Console.WriteLine(Solve(broken));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\n534678912\n345286179\nFalse\n```",
   "tags": [
    "backtracking",
-   "sudoku",
+   "bitmask",
    "constraints",
-   "hard"
+   "sudoku",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber",
    "Apple"
+  ],
+  "followups": [
+   {
+    "q": "Why bitmasks rather than scanning the row, column and box?",
+    "a": "Because scanning costs 27 comparisons per candidate digit per cell, and the search tries many candidates at many cells, so that constant multiplies through the whole exponential search. A bitmask makes the test three AND operations and the update three ORs, all constant. On a hard puzzle that difference is seconds versus milliseconds. It is a good example of an optimisation that does not change the complexity class but changes whether the program is usable."
+   },
+   {
+    "q": "What is the single biggest further speedup?",
+    "a": "Choosing the most constrained cell rather than the next empty one - the minimum-remaining-values heuristic. Filling a cell with only one legal digit first prunes enormously, whereas filling in scan order explores branches that a later constraint would have eliminated. It costs a scan to find the best cell but typically reduces the search tree by orders of magnitude on hard puzzles. Constraint propagation, deducing forced digits before branching at all, is the next step and is what makes solvers instantaneous."
+   },
+   {
+    "q": "Why does the test verify the solution rather than comparing to a known answer?",
+    "a": "Because a puzzle can have more than one solution unless it is well-formed, so asserting one exact grid would be fragile. Checking that every row, column and box contains all nine digits - which is what comparing against 0x1FF does - validates any correct answer. It is the same property-assertion approach used for reorganize-string and find-peak, and it also catches a solver that fills the grid without respecting the original givens."
+   },
+   {
+    "q": "Why must the givens be validated before searching?",
+    "a": "Because the mask seeding is idempotent: setting the same bit twice looks identical to setting it once, so a board with two 5s in a row produces exactly the mask a legal board would. The solver then treats the position as valid and searches the remaining empty cells, which for a nearly empty board is an enormous space it may never exhaust. The symptom is not a wrong answer but a hang, which is far worse. Checking each given against the masks as they are seeded turns it into an immediate false."
+   }
   ]
  },
  {
@@ -5213,16 +5278,32 @@
   "subcategory": "Backtracking",
   "difficulty": "Medium",
   "question": "Restore IP addresses from a digit string.",
-  "answer": "Backtracking: partition the string into 4 segments, each a valid octet (0-255, no leading zeros unless '0'). Prune segments longer than 3 digits or out of range. Record valid 4-part splits. Bounded search (at most 3 choices per of 4 segments).",
+  "answer": "**Approach**\n\nBacktracking over three cut positions, with the validity rules pruning aggressively.\n\n**Logic**\n\nAn IPv4 address has exactly four segments, each 1 to 3 digits, each between 0 and 255, and none with a leading zero unless the segment is exactly \"0\".\n\nThe leading-zero rule is the one people miss: \"01\" is invalid even though it parses to 1. Without it, \"0000\" produces several spurious answers.\n\nLength pruning helps: with `parts` segments already placed and `remaining` digits left, the remainder must fit in the remaining segments, so anything outside 1 to 3 digits per segment can be rejected immediately.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static IList<string> RestoreIpAddresses(string s)\n    {\n        var result = new List<string>();\n        if (s == null || s.Length < 4 || s.Length > 12) return result;   // impossible lengths\n\n        Backtrack(s, 0, new List<string>(), result);\n        return result;\n    }\n\n    private static void Backtrack(string s, int start, List<string> parts, IList<string> result)\n    {\n        if (parts.Count == 4)\n        {\n            if (start == s.Length) result.Add(string.Join(\".\", parts));\n            return;\n        }\n\n        for (int length = 1; length <= 3 && start + length <= s.Length; length++)\n        {\n            string segment = s.Substring(start, length);\n\n            if (!IsValidSegment(segment)) continue;\n\n            // Prune: the rest must fit in the remaining segments.\n            int remainingSegments = 3 - parts.Count;\n            int remainingDigits = s.Length - start - length;\n            if (remainingDigits > remainingSegments * 3) continue;\n            if (remainingDigits < remainingSegments) continue;\n\n            parts.Add(segment);\n            Backtrack(s, start + length, parts, result);\n            parts.RemoveAt(parts.Count - 1);\n        }\n    }\n\n    private static bool IsValidSegment(string segment)\n    {\n        // \"01\" is invalid even though it parses to 1.\n        if (segment.Length > 1 && segment[0] == '0') return false;\n        return int.Parse(segment) <= 255;\n    }\n\n    private static string Show(IList<string> r)\n    {\n        if (r.Count == 0) return \"(none)\";\n        var copy = new List<string>(r);\n        copy.Sort(StringComparer.Ordinal);\n        return string.Join(\" \", copy);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(RestoreIpAddresses(\"25525511135\")));\n        Console.WriteLine(Show(RestoreIpAddresses(\"0000\")));       // only one valid form\n        Console.WriteLine(Show(RestoreIpAddresses(\"101023\")));\n        Console.WriteLine(Show(RestoreIpAddresses(\"1111\")));\n        Console.WriteLine(Show(RestoreIpAddresses(\"1\")));          // too short\n        Console.WriteLine(Show(RestoreIpAddresses(\"1111111111111\")));  // too long\n    }\n}\n```\n\n**Output**\n\n```\n255.255.11.135 255.255.111.35\n0.0.0.0\n1.0.10.23 1.0.102.3 10.1.0.23 10.10.2.3 101.0.2.3\n1.1.1.1\n(none)\n(none)\n```",
   "tags": [
    "backtracking",
-   "ip-address",
-   "partitioning"
+   "strings",
+   "validation",
+   "pruning",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why is the leading-zero rule necessary?",
+    "a": "Because IPv4 notation is not merely numeric: '01' and '1' are different strings and only the second is a valid segment. Historically some parsers treated a leading zero as octal, so '010' meant 8, which is a genuine source of security bugs where a blocklist and a resolver disagree about what an address means. The test with '0000' pins it down: without the rule it would produce several answers, and with it exactly one."
+   },
+   {
+    "q": "What do the length checks actually save?",
+    "a": "They eliminate whole branches before recursing. A string of twelve digits with one segment placed leaves eleven digits for three segments, which cannot fit, so that branch is dead and worth rejecting immediately rather than discovering it four levels down. The outer check on total length rejects impossible inputs in constant time. Neither changes correctness, and on longer inputs they remove most of the search tree, which is the usual value of arithmetic pruning in backtracking."
+   },
+   {
+    "q": "How would this change for IPv6?",
+    "a": "Eight groups of up to four hexadecimal digits, so the segment rules change and the search widens considerably. The harder part is the double-colon abbreviation, which represents a run of zero groups and may appear at most once, so the number of groups is no longer fixed and the parser must infer how many zeros the abbreviation stands for. That ambiguity is why IPv6 parsing is substantially harder than IPv4 and why it is usually left to a library."
+   }
   ]
  },
  {
@@ -5230,17 +5311,32 @@
   "subcategory": "DP",
   "difficulty": "Hard",
   "question": "Burst balloons (interval DP).",
-  "answer": "dp[i][j] = max coins from bursting all balloons strictly between i and j. Consider each k as the last balloon burst in the range: dp[i][j] = max(dp[i][k] + nums[i]*nums[k]*nums[j] + dp[k][j]). Fill by increasing interval length. O(n^3) time. Add boundary 1s.",
+  "answer": "**Approach**\n\nThe natural framing — which balloon to burst first — fails, because bursting changes the neighbours of everything else, so subproblems overlap in a way that cannot be decomposed.\n\nInvert it: decide which balloon is burst **last** within a range. That balloon's neighbours are then fixed, being the boundaries of the range, so the left and right parts become independent subproblems.\n\n**Logic**\n\nPad the array with a 1 at each end so every balloon has neighbours. `best[i][j]` is the most coins obtainable from bursting everything strictly between i and j.\n\nFor each `k` in that open range, if k is burst last, it earns `nums[i] * nums[k] * nums[j]` because i and j are still standing by definition, plus the best of the two independent halves.\n\nIterate by increasing range width so the halves are always already computed. O(n³) time, O(n²) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxCoins(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        int n = nums.Length;\n\n        // Pad with 1s so every balloon has a neighbour.\n        var padded = new int[n + 2];\n        padded[0] = padded[n + 1] = 1;\n        for (int i = 0; i < n; i++) padded[i + 1] = nums[i];\n\n        var best = new int[n + 2, n + 2];\n\n        // Widening ranges, so the two halves are always solved first.\n        for (int width = 2; width <= n + 1; width++)\n            for (int left = 0; left + width <= n + 1; left++)\n            {\n                int right = left + width;\n\n                for (int last = left + 1; last < right; last++)\n                {\n                    // 'last' burst last: its neighbours are still left and right.\n                    int coins = padded[left] * padded[last] * padded[right]\n                              + best[left, last] + best[last, right];\n\n                    best[left, right] = Math.Max(best[left, right], coins);\n                }\n            }\n\n        return best[0, n + 1];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxCoins(new[] { 3, 1, 5, 8 }));\n        Console.WriteLine(MaxCoins(new[] { 1, 5 }));\n        Console.WriteLine(MaxCoins(new[] { 5 }));\n        Console.WriteLine(MaxCoins(new int[0]));\n        Console.WriteLine(MaxCoins(new[] { 1, 1, 1 }));\n        Console.WriteLine(MaxCoins(new[] { 9, 76, 64, 21 }));\n    }\n}\n```\n\n**Output**\n\n```\n167\n10\n5\n0\n3\n116718\n```",
   "tags": [
    "dp",
    "interval-dp",
+   "reverse-thinking",
    "burst-balloons",
-   "hard"
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why does thinking about the first balloon fail?",
+    "a": "Because bursting a balloon joins its two neighbours, so the remaining array is not a simple subarray of the original and the left and right parts are no longer independent - a later burst on the left can be adjacent to something that was originally on the right. Subproblems must be independent for DP to apply. Choosing the last balloon instead fixes its neighbours as the untouched range boundaries, which restores independence. That inversion is the entire insight of the problem."
+   },
+   {
+    "q": "Why pad the array with 1s?",
+    "a": "So that balloons at the ends have neighbours and the multiplication needs no special case. A missing neighbour is treated as 1, which is the multiplicative identity and therefore exactly the right value. It is the same technique as a dummy head node in a linked list or a sentinel row in a DP table: add an artificial element so the general rule covers the boundary. Without it every coin calculation would need two conditionals."
+   },
+   {
+    "q": "Why iterate by increasing width rather than by index?",
+    "a": "Because the recurrence reads best[left, last] and best[last, right], both of which are strictly narrower ranges. Solving by widening width guarantees they are computed before they are read. Iterating by left and right directly in the obvious nested order would read uninitialised zeros and silently produce answers that are too small. Whenever an interval DP composes from sub-intervals, width is the loop that must be outermost."
+   }
   ]
  },
  {
@@ -5364,17 +5460,32 @@
   "subcategory": "DP",
   "difficulty": "Hard",
   "question": "Distinct subsequences: count subsequences of s equal to t.",
-  "answer": "dp[i][j] = number of subsequences of s[0..i) equal to t[0..j). dp[i][j] = dp[i-1][j] + (s[i-1]==t[j-1] ? dp[i-1][j-1] : 0). Base: dp[i][0]=1 (empty t). O(m*n) time, reducible to O(n) space. Answer dp[m][n].",
+  "answer": "**Approach**\n\nA two-dimensional DP counting, for each prefix pair, how many ways the prefix of t can be formed as a subsequence of the prefix of s.\n\n**Logic**\n\n`ways[i][j]` is the number of ways to form the first j characters of t from the first i of s.\n\nIf the current characters differ, the character of s cannot be used, so the count carries over from `ways[i-1][j]`. If they match, you may either use it, adding `ways[i-1][j-1]`, or skip it, adding `ways[i-1][j]`. Both options are counted because they produce distinct subsequences.\n\nThe base case is that an empty t can be formed exactly one way from any prefix of s: take nothing.\n\nO(n·m) time, reducible to O(m) space with a single row iterated backwards.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static long NumDistinct(string s, string t)\n    {\n        if (string.IsNullOrEmpty(t)) return 1;              // one way: take nothing\n        if (string.IsNullOrEmpty(s) || s.Length < t.Length) return 0;\n\n        // One row over t, iterated BACKWARDS so ways[j-1] is still the previous row.\n        var ways = new long[t.Length + 1];\n        ways[0] = 1;\n\n        foreach (char c in s)\n            for (int j = t.Length; j >= 1; j--)\n                if (t[j - 1] == c) ways[j] += ways[j - 1];\n\n        return ways[t.Length];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(NumDistinct(\"rabbbit\", \"rabbit\"));\n        Console.WriteLine(NumDistinct(\"babgbag\", \"bag\"));\n        Console.WriteLine(NumDistinct(\"abc\", \"\"));          // empty target\n        Console.WriteLine(NumDistinct(\"\", \"a\"));\n        Console.WriteLine(NumDistinct(\"aaa\", \"a\"));         // three positions\n        Console.WriteLine(NumDistinct(\"aaaa\", \"aa\"));       // choose 2 of 4\n    }\n}\n```\n\n**Output**\n\n```\n3\n5\n1\n0\n3\n6\n```",
   "tags": [
    "dp",
-   "distinct-subsequences",
    "counting",
-   "hard"
+   "subsequence",
+   "rolling-row",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why must the inner loop run backwards?",
+    "a": "Because with a single row, `ways[j - 1]` must still hold the previous row's value when it is read. Iterating forwards would have already updated it for the current character, so a single character of s could be counted twice in one pass. It is the same loop-direction rule as 0/1 versus unbounded knapsack: descending means each item contributes once. Getting it wrong gives counts that are too large on inputs with repeated characters, which is exactly what 'aaaa' against 'aa' exposes."
+   },
+   {
+    "q": "Why does aaaa against aa give 6?",
+    "a": "Because it is choosing 2 positions from 4, which is 6 combinations, and every choice yields the same string but a distinct subsequence by position. That is the definition the problem uses: subsequences are counted by the positions selected, not by the resulting text. If distinct strings were wanted, the answer would be 1. Clarifying which definition applies is worth doing before writing anything, since the two produce wildly different numbers."
+   },
+   {
+    "q": "Why return long?",
+    "a": "Because the count grows combinatorially and overflows a 32-bit int quickly: a string of thirty identical characters with a target of fifteen already exceeds int range. The problem statements that keep it in int do so by constraining the input, which is a habit worth not absorbing. Where the count can be enormous, the usual real-world answer is to compute it modulo a large prime, which is what competitive problems specify for exactly this reason."
+   }
   ]
  },
  {
@@ -5831,18 +5942,37 @@
   "subcategory": "Hashing",
   "difficulty": "Medium",
   "question": "Design a hash set / hash map from scratch.",
-  "answer": "Use an array of buckets; hash the key to a bucket index (key % size). Handle collisions with chaining (linked list per bucket) or open addressing (probing). Resize/rehash when the load factor is high. Average O(1) get/put/remove; O(n) worst case with many collisions.",
+  "answer": "**Approach**\n\nAn array of buckets with separate chaining. A key hashes to a bucket index; collisions form a small list within that bucket. Resize when the load factor gets too high, or lookups degrade toward linear.\n\n**Logic**\n\nThe index is `hash % capacity`, normalised to be non-negative since a hash code may be negative. Each bucket holds entries; lookup scans that bucket only.\n\nResizing is the part that matters. Once the entry count exceeds roughly the bucket count, chains lengthen and O(1) stops being true, so the table doubles and every entry is rehashed into the new, larger array. That rehash is O(n) but happens rarely enough that insertion stays O(1) amortised.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class SimpleHashMap<TKey, TValue>\n{\n    private sealed class Entry\n    {\n        public TKey Key;\n        public TValue Value;\n        public Entry Next;\n    }\n\n    private Entry[] _buckets;\n    private int _count;\n\n    public SimpleHashMap(int capacity = 8) => _buckets = new Entry[capacity];\n\n    public int Count => _count;\n\n    private int IndexOf(TKey key, int capacity)\n    {\n        // A hash code may be negative, so mask off the sign rather than using %.\n        int hash = key.GetHashCode() & 0x7FFFFFFF;\n        return hash % capacity;\n    }\n\n    public void Put(TKey key, TValue value)\n    {\n        int index = IndexOf(key, _buckets.Length);\n\n        for (var e = _buckets[index]; e != null; e = e.Next)\n            if (EqualityComparer<TKey>.Default.Equals(e.Key, key)) { e.Value = value; return; }\n\n        _buckets[index] = new Entry { Key = key, Value = value, Next = _buckets[index] };\n        _count++;\n\n        // Load factor above 1 means chains are lengthening: grow.\n        if (_count > _buckets.Length) Resize();\n    }\n\n    public bool TryGet(TKey key, out TValue value)\n    {\n        for (var e = _buckets[IndexOf(key, _buckets.Length)]; e != null; e = e.Next)\n            if (EqualityComparer<TKey>.Default.Equals(e.Key, key)) { value = e.Value; return true; }\n\n        value = default;\n        return false;\n    }\n\n    public bool Remove(TKey key)\n    {\n        int index = IndexOf(key, _buckets.Length);\n        Entry previous = null;\n\n        for (var e = _buckets[index]; e != null; previous = e, e = e.Next)\n        {\n            if (!EqualityComparer<TKey>.Default.Equals(e.Key, key)) continue;\n\n            if (previous == null) _buckets[index] = e.Next;\n            else previous.Next = e.Next;\n\n            _count--;\n            return true;\n        }\n\n        return false;\n    }\n\n    private void Resize()\n    {\n        var larger = new Entry[_buckets.Length * 2];\n\n        foreach (var bucket in _buckets)\n            for (var e = bucket; e != null; )\n            {\n                var next = e.Next;                        // capture before relinking\n                int index = IndexOf(e.Key, larger.Length);\n                e.Next = larger[index];\n                larger[index] = e;\n                e = next;\n            }\n\n        _buckets = larger;\n    }\n\n    public int BucketCount => _buckets.Length;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var map = new SimpleHashMap<string, int>(4);\n\n        map.Put(\"one\", 1);\n        map.Put(\"two\", 2);\n        Console.WriteLine(map.TryGet(\"one\", out int v) + \" \" + v);\n        Console.WriteLine(map.TryGet(\"missing\", out _));\n\n        map.Put(\"one\", 11);                 // overwrite, not a second entry\n        map.TryGet(\"one\", out v);\n        Console.WriteLine($\"{v} {map.Count}\");\n\n        Console.WriteLine(map.Remove(\"two\"));\n        Console.WriteLine(map.Remove(\"two\"));   // already gone\n        Console.WriteLine(map.Count);\n\n        // Force a resize and confirm nothing is lost.\n        for (int i = 0; i < 20; i++) map.Put(\"k\" + i, i);\n        Console.WriteLine($\"{map.Count} {map.BucketCount}\");\n\n        bool allPresent = true;\n        for (int i = 0; i < 20; i++) if (!map.TryGet(\"k\" + i, out _)) allPresent = false;\n        Console.WriteLine(allPresent);\n    }\n}\n```\n\n**Output**\n\n```\nTrue 1\nFalse\n11 2\nTrue\nFalse\n1\n21 32\nTrue\n```",
   "tags": [
    "hashing",
    "design",
-   "hashmap",
-   "collisions"
+   "chaining",
+   "resizing",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why mask the hash code rather than taking the absolute value?",
+    "a": "Because Math.Abs(int.MinValue) throws, since its negation does not fit in an int. Masking off the sign bit with 0x7FFFFFFF maps any hash into the non-negative range with no special case and no branch. It does mean two hash codes differing only in the sign bit collide, which is harmless given they were already going to be reduced modulo the capacity. It is the same two's-complement asymmetry that bites in reverse-integer and in Pow."
+   },
+   {
+    "q": "Separate chaining or open addressing?",
+    "a": "Chaining is simpler, degrades gracefully under a high load factor, and handles deletion cleanly. Open addressing stores entries directly in the array, which gives far better cache locality and no per-entry allocation, so it is usually faster in practice - but deletion needs tombstones and the table degrades badly as it fills. .NET's Dictionary uses chaining with entries in a flat array, which gets much of the locality benefit while keeping chaining's simplicity."
+   },
+   {
+    "q": "Why does resizing need to capture next before relinking?",
+    "a": "Because moving an entry into the new array overwrites its Next pointer, and the old chain is traversed through that same field. Capturing the successor first is the same discipline as reversing a linked list. Losing it silently truncates every chain, so most entries disappear - which the test detects by checking all twenty keys are still present after the resize rather than just checking the count."
+   },
+   {
+    "q": "What makes a hash function good, and what happens with a bad one?",
+    "a": "It should distribute keys uniformly and be cheap to compute. A poor one that maps many keys to the same bucket turns every operation into a linear scan of one long chain, so the map degrades to a list. That is exploitable: hash-flooding attacks deliberately collide keys to make a server's dictionary quadratic, which is why .NET randomises string hashing per process. It is worth knowing that the O(1) guarantee is an average over a good hash, not a worst case."
+   }
   ]
  },
  {
@@ -5883,17 +6013,32 @@
   "subcategory": "Hashing",
   "difficulty": "Medium",
   "question": "Find all pairs with a given difference k.",
-  "answer": "Use a hash set of seen numbers; for each number check if num+k or num-k exists (or use a set and iterate). For counting unique pairs, sort and use two pointers, or store numbers in a set and check num+k for each distinct number. O(n) time.",
+  "answer": "**Approach**\n\nA hash set. For each value, check whether `value + k` is present. The awkward case is k equal to zero, which asks for duplicates rather than distinct pairs.\n\n**Logic**\n\nWith k positive, put every value in a set and count values whose partner at `value + k` also exists. Iterating the set rather than the array handles duplicates naturally, since each distinct value is considered once.\n\nWith k zero, the question changes: a pair needs two copies of the same value, so you need counts rather than membership.\n\nA negative k is either invalid or equivalent to its absolute value, depending on the problem statement, and is worth clarifying rather than assuming.\n\nO(n) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<int[]> FindPairs(int[] nums, int k)\n    {\n        var result = new List<int[]>();\n        if (nums == null || nums.Length < 2 || k < 0) return result;\n\n        var counts = new Dictionary<int, int>();\n        foreach (int n in nums)\n            counts[n] = counts.TryGetValue(n, out int c) ? c + 1 : 1;\n\n        foreach (var (value, count) in counts)\n        {\n            if (k == 0)\n            {\n                // A difference of zero needs two copies of the same value.\n                if (count >= 2) result.Add(new[] { value, value });\n            }\n            else if (counts.ContainsKey(value + k))\n            {\n                result.Add(new[] { value, value + k });\n            }\n        }\n\n        return result;\n    }\n\n    private static string Show(IList<int[]> pairs)\n    {\n        if (pairs.Count == 0) return \"(none)\";\n        return string.Join(\" \", pairs.Select(p => $\"[{p[0]},{p[1]}]\")\n                                     .OrderBy(s => s, StringComparer.Ordinal));\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(FindPairs(new[] { 3, 1, 4, 1, 5 }, 2)));\n        Console.WriteLine(Show(FindPairs(new[] { 1, 2, 3, 4, 5 }, 1)));\n        Console.WriteLine(Show(FindPairs(new[] { 1, 3, 1, 5, 4 }, 0)));   // duplicates\n        Console.WriteLine(Show(FindPairs(new[] { 1, 2, 3 }, 0)));         // no duplicates\n        Console.WriteLine(Show(FindPairs(new[] { 1, 1, 1 }, 0)));         // counted once\n        Console.WriteLine(Show(FindPairs(new[] { 1 }, 1)));\n    }\n}\n```\n\n**Output**\n\n```\n[1,3] [3,5]\n[1,2] [2,3] [3,4] [4,5]\n[1,1]\n(none)\n[1,1]\n(none)\n```",
   "tags": [
    "hashing",
-   "two-pointer",
    "pairs",
-   "difference"
+   "edge-cases",
+   "duplicates",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is k equal to zero a genuinely different question?",
+    "a": "Because every value trivially satisfies value minus value equals zero, so a membership test would report every element as a pair with itself. What is actually being asked is whether the value appears at least twice, which needs counts rather than a set. Solutions that only use a HashSet return every distinct value as a pair when k is zero, which is the standard failure. It is the same self-pairing trap as the two-sum variant where the target is double a stored value."
+   },
+   {
+    "q": "Why iterate the dictionary rather than the array?",
+    "a": "Because iterating the array would emit a pair once per occurrence of the smaller value, so an array with five 1s and one 3 would report the pair [1,3] five times. Iterating distinct values produces each pair once, which is what the problem wants. It also makes the work proportional to distinct values rather than to the array length, which matters when duplication is heavy. The trade is that you must have built the counts first, which you need anyway for the k-equals-zero case."
+   },
+   {
+    "q": "How would the sorted-input version differ?",
+    "a": "Two pointers with no extra space: advance the fast pointer while the difference is too small and the slow one while it is too large, which is O(n) after the sort and O(1) space. If the input arrives sorted, that is strictly better. If it does not, sorting costs O(n log n), so the hash approach wins. It is the same trade as two-sum versus two-sum-on-sorted-input: a precondition in the problem statement points directly at the intended technique."
+   }
   ]
  },
  {
@@ -6033,17 +6178,32 @@
   "subcategory": "Bits",
   "difficulty": "Medium",
   "question": "Find the two numbers that appear once (others twice).",
-  "answer": "XOR all → gives a^b for the two unique numbers. Find any set bit in the result (e.g., the lowest via x & -x), which differs between a and b. Partition numbers by that bit and XOR each group to isolate a and b. O(n) time, O(1) space.",
+  "answer": "**Approach**\n\nXOR everything to get the XOR of the two singles, then use any bit where they differ to split the array into two groups, each containing exactly one of them.\n\n**Logic**\n\nXORing the whole array cancels every paired value and leaves `a ^ b`. That result is non-zero, since a and b differ, so it has at least one set bit — and any such bit is a position where a and b disagree.\n\nIsolate the lowest set bit with `x & -x`. Partition every element by whether it has that bit: a and b land in different groups, and every duplicate pair lands together in one group since both copies share all bits. XOR each group independently and the two answers fall out.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int[] SingleNumbers(int[] nums)\n    {\n        int xorOfBoth = 0;\n        foreach (int n in nums) xorOfBoth ^= n;\n\n        // Any set bit here is a position where the two answers differ.\n        // x & -x isolates the lowest one.\n        int differingBit = xorOfBoth & -xorOfBoth;\n\n        int a = 0, b = 0;\n\n        foreach (int n in nums)\n        {\n            if ((n & differingBit) != 0) a ^= n;   // duplicates always land together\n            else b ^= n;\n        }\n\n        return a < b ? new[] { a, b } : new[] { b, a };\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", SingleNumbers(new[] { 1, 2, 1, 3, 2, 5 })));\n        Console.WriteLine(string.Join(\",\", SingleNumbers(new[] { -1, 0 })));\n        Console.WriteLine(string.Join(\",\", SingleNumbers(new[] { 0, 1 })));\n        Console.WriteLine(string.Join(\",\", SingleNumbers(new[] { 9, 9, 4, 7 })));\n        Console.WriteLine(string.Join(\",\", SingleNumbers(new[] { 2, 2, 100, -100 })));\n        Console.WriteLine(string.Join(\",\", SingleNumbers(new[] { int.MinValue, 5, 5, 3 })));\n    }\n}\n```\n\n**Output**\n\n```\n3,5\n-1,0\n0,1\n4,7\n-100,100\n-2147483648,3\n```",
   "tags": [
    "bits",
    "xor",
-   "single-number",
-   "partition"
+   "partitioning",
+   "lowest-set-bit",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does partitioning on one differing bit work?",
+    "a": "Because two equal numbers agree on every bit, so both copies of any duplicate fall into the same group whatever bit you choose. The two singles disagree on the chosen bit by construction, so they fall into different groups. Each group therefore contains one single and some complete pairs, and XORing it cancels the pairs and leaves the single. The choice of which differing bit is arbitrary; the lowest is simply the cheapest to isolate."
+   },
+   {
+    "q": "Does x & -x work for int.MinValue?",
+    "a": "Yes, and it is worth checking rather than assuming. int.MinValue is a single set bit in the sign position, and its two's-complement negation is itself, so the AND returns the same value. The partition still works because that bit genuinely distinguishes the two singles. The last test case includes it deliberately, since a solution using Math.Abs somewhere in the bit isolation would throw on exactly that input."
+   },
+   {
+    "q": "What if three numbers appeared once?",
+    "a": "The technique does not extend directly, because the XOR of three values gives no clean partition - a bit where all three differ does not exist in general, and splitting on one bit can leave two singles in the same group. The standard approach is more involved, using the fact that at least one group must contain exactly one single and recursing, or counting set bits per position modulo the repetition factor. The two-single case is special precisely because one differing bit is enough."
+   }
   ]
  },
  {
@@ -6928,17 +7088,33 @@
   "subcategory": "Strings",
   "difficulty": "Hard",
   "question": "Text justification: format words into lines of exactly maxWidth with even space distribution.",
-  "answer": "Greedily pack words until the next would overflow, then distribute spaces: extra spaces go to the leftmost gaps first, and the last line plus any single-word line is left-justified with trailing padding. Time O(n) over total characters. The difficulty is entirely in the edge cases.",
+  "answer": "**Approach**\n\nGreedy line packing, then a separate distribution pass. Fit as many words on a line as possible, then spread the leftover spaces between them.\n\n**Logic**\n\nA word fits if the current length plus one space plus the word does not exceed the width. Once the line is full, distribute.\n\nThe distribution rule is where this is won or lost. With `gaps` gaps and `spaces` characters to distribute, each gap gets `spaces / gaps`, and the first `spaces % gaps` gaps get one extra. That puts the wider gaps on the left, which is what the specification requires.\n\nTwo lines are special: the last line is left-justified with single spaces, and a line holding one word is left-justified with the padding on the right.\n\nO(total characters) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    public static IList<string> FullJustify(string[] words, int maxWidth)\n    {\n        var result = new List<string>();\n        int i = 0;\n\n        while (i < words.Length)\n        {\n            // Greedily pack: length so far + a space + the next word must fit.\n            int last = i, lineLength = words[i].Length;\n            while (last + 1 < words.Length && lineLength + 1 + words[last + 1].Length <= maxWidth)\n            {\n                lineLength += 1 + words[last + 1].Length;\n                last++;\n            }\n\n            int wordCount = last - i + 1;\n            int letters = 0;\n            for (int w = i; w <= last; w++) letters += words[w].Length;\n\n            var sb = new StringBuilder();\n            bool isLastLine = last == words.Length - 1;\n\n            if (isLastLine || wordCount == 1)\n            {\n                // Left-justified, single spaces, pad the right.\n                for (int w = i; w <= last; w++)\n                {\n                    if (w > i) sb.Append(' ');\n                    sb.Append(words[w]);\n                }\n                sb.Append(new string(' ', maxWidth - sb.Length));\n            }\n            else\n            {\n                int gaps = wordCount - 1;\n                int spaces = maxWidth - letters;\n                int even = spaces / gaps;\n                int extra = spaces % gaps;      // the leftmost gaps take the remainder\n\n                for (int w = i; w <= last; w++)\n                {\n                    sb.Append(words[w]);\n                    if (w == last) break;\n\n                    sb.Append(new string(' ', even + (w - i < extra ? 1 : 0)));\n                }\n            }\n\n            result.Add(sb.ToString());\n            i = last + 1;\n        }\n\n        return result;\n    }\n\n    private static string Show(IList<string> lines, int width)\n    {\n        foreach (string l in lines)\n            if (l.Length != width) return $\"BROKEN: line is {l.Length}, expected {width}\";\n\n        return string.Join(\"|\", lines);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Show(FullJustify(\n            new[] { \"This\", \"is\", \"an\", \"example\", \"of\", \"text\", \"justification.\" }, 16), 16));\n\n        Console.WriteLine(Show(FullJustify(\n            new[] { \"What\", \"must\", \"be\", \"acknowledgment\", \"shall\", \"be\" }, 16), 16));\n\n        Console.WriteLine(Show(FullJustify(new[] { \"single\" }, 10), 10));\n        Console.WriteLine(Show(FullJustify(new[] { \"a\", \"b\", \"c\" }, 3), 3));\n    }\n}\n```\n\n**Output**\n\n```\nThis    is    an|example  of text|justification.  \nWhat   must   be|acknowledgment  |shall be        \nsingle    \na b|c  \n```",
   "tags": [
    "strings",
    "greedy",
-   "implementation"
+   "formatting",
+   "edge-cases",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Airbnb",
    "LinkedIn"
+  ],
+  "followups": [
+   {
+    "q": "Why do the extra spaces go on the left?",
+    "a": "Because the specification says so, and typographically it reads better than distributing them arbitrarily or on the right. It is enforced by `w - i < extra`, which gives one additional space to the first `extra` gaps. Getting this backwards produces lines of the correct length that differ from the expected output, which is why it is a common source of a solution that looks right and fails. The 'What must be' case exercises it: 3 gaps and 8 spaces gives 3,3,2 rather than 2,3,3."
+   },
+   {
+    "q": "Why are the last line and single-word lines special?",
+    "a": "Because stretching them would look absurd. A last line with two short words justified to full width would have an enormous gap in the middle, and a single word has no gaps to distribute into at all - dividing by zero gaps would throw. Both are therefore left-justified with the padding on the right. Every real typesetting system does the same, which is why a justified paragraph's final line is always ragged."
+   },
+   {
+    "q": "Why does the test assert every line's length?",
+    "a": "Because the defining property of justification is that every line is exactly maxWidth, and a solution can produce plausible-looking output with a line one character short. Checking the visible text alone would not catch it, since trailing spaces are invisible. Asserting the invariant rather than the appearance is what makes the test meaningful, and it is the same reasoning as checking prev pointers when flattening a doubly linked list."
+   }
   ]
  },
  {
