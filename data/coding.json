@@ -8966,17 +8966,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Hard",
   "question": "Russian doll envelopes: maximum number of nested envelopes.",
-  "answer": "Sort by width ascending and, for equal widths, by height descending so equal widths cannot nest, then run the O(n log n) longest increasing subsequence over heights using patience sorting with binary search. Total time O(n log n).",
+  "answer": "**Approach**\n\nSort by width ascending, and by height *descending* within equal widths. Then the answer is the longest strictly increasing subsequence of the heights, computed in O(n log n) with patience sorting.\n\n**Logic**\n\nThe descending height tie-break is the entire trick. Envelopes of equal width can never nest in each other, so they must never both be picked. Sorting their heights descending makes them a decreasing run, and a strictly increasing subsequence can take at most one element from a decreasing run — the constraint enforces itself.\n\nWith ascending heights instead, two envelopes of the same width would look nestable and the answer comes out too large.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int MaxEnvelopes(int[][] envelopes)\n    {\n        if (envelopes == null || envelopes.Length == 0) return 0;\n\n        // Width ascending; height DESCENDING within equal widths so that\n        // same-width envelopes form a decreasing run and at most one is taken.\n        Array.Sort(envelopes, (a, b) =>\n            a[0] != b[0] ? a[0].CompareTo(b[0]) : b[1].CompareTo(a[1]));\n\n        var tails = new List<int>();   // tails[i] = smallest tail of an LIS of length i+1\n\n        foreach (var envelope in envelopes)\n        {\n            int height = envelope[1];\n\n            int lo = 0, hi = tails.Count;\n            while (lo < hi)\n            {\n                int mid = lo + (hi - lo) / 2;\n                if (tails[mid] < height) lo = mid + 1; else hi = mid;\n            }\n\n            if (lo == tails.Count) tails.Add(height);\n            else tails[lo] = height;\n        }\n\n        return tails.Count;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxEnvelopes(new[] {\n            new[] { 5, 4 }, new[] { 6, 4 }, new[] { 6, 7 }, new[] { 2, 3 } }));\n\n        Console.WriteLine(MaxEnvelopes(new[] { new[] { 1, 1 }, new[] { 1, 1 }, new[] { 1, 1 } }));\n\n        Console.WriteLine(MaxEnvelopes(new[] {\n            new[] { 4, 5 }, new[] { 4, 6 }, new[] { 6, 7 }, new[] { 2, 3 }, new[] { 1, 1 } }));\n\n        Console.WriteLine(MaxEnvelopes(new[] { new[] { 1, 1 } }));\n        Console.WriteLine(MaxEnvelopes(Array.Empty<int[]>()));\n\n        // Same width, ascending heights would wrongly report 2 here.\n        Console.WriteLine(MaxEnvelopes(new[] { new[] { 3, 1 }, new[] { 3, 9 } }));\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n4\n1\n0\n1\n```",
   "tags": [
-   "dynamic-programming",
    "sorting",
+   "lis",
    "binary-search",
-   "lis"
+   "tie-break",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why must heights be sorted descending within equal widths?",
+    "a": "Because envelopes of equal width cannot nest, so at most one of them may appear in the answer. Descending heights make them a strictly decreasing run, and a strictly increasing subsequence can take only one element from such a run - the sort enforces the constraint for free. With ascending heights, [3,1] and [3,9] look like an increasing pair and the answer comes out as 2 instead of 1, which is exactly what the last test checks."
+   },
+   {
+    "q": "What does the tails array actually hold?",
+    "a": "tails[i] is the smallest possible tail value among all increasing subsequences of length i+1 seen so far. It is not itself a valid subsequence - the values may come from positions that do not form one - but its length is always the LIS length, and keeping the tails minimal is what lets a longer subsequence be extended later. Confusing the array with the answer subsequence is the usual misunderstanding; reconstructing the actual envelopes needs a separate predecessor array."
+   },
+   {
+    "q": "Why binary search for the first element not less than the height?",
+    "a": "Because we want strictly increasing nesting, so a tail equal to the current height must be replaced rather than extended past. Searching for the first element greater than or equal to the height, and overwriting it, gives strict increase. If the problem allowed equal dimensions to nest, the search would move to the first strictly greater element instead. That one comparison boundary is the difference between the strict and non-strict variants of every LIS problem."
+   }
   ]
  },
  {
@@ -8984,16 +8999,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Interleaving string: is s3 formed by interleaving s1 and s2?",
-  "answer": "Two-dimensional dp where dp[i][j] means the first i of s1 and first j of s2 interleave into the first i+j of s3, extending from either source when the character matches. Time O(mn), space O(n) with a rolling row. Greedy character matching is incorrect.",
+  "answer": "**Approach**\n\nTwo-dimensional DP over prefix lengths. `can[i][j]` is true when the first i characters of s1 and the first j of s2 can interleave into the first i+j of s3.\n\n**Logic**\n\nGreedy matching fails: when the next character of s3 matches both s1 and s2, taking either one may be the only path that works, and you cannot tell which without looking ahead. The DP explores both.\n\nA state is reachable if it can be entered by consuming one more character from s1, or one more from s2, with that character matching s3 at the combined position.\n\nThe length check is the cheap early exit and also guards the indexing.\n\nO(m × n) time, reducible to O(n) space with a rolling row.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsInterleave(string s1, string s2, string s3)\n    {\n        s1 ??= \"\"; s2 ??= \"\"; s3 ??= \"\";\n\n        if (s1.Length + s2.Length != s3.Length) return false;\n\n        // row[j] = can the first i of s1 and first j of s2 make the first i+j of s3?\n        var row = new bool[s2.Length + 1];\n        row[0] = true;\n\n        for (int j = 1; j <= s2.Length; j++)\n            row[j] = row[j - 1] && s2[j - 1] == s3[j - 1];\n\n        for (int i = 1; i <= s1.Length; i++)\n        {\n            row[0] = row[0] && s1[i - 1] == s3[i - 1];\n\n            for (int j = 1; j <= s2.Length; j++)\n            {\n                bool fromS1 = row[j] && s1[i - 1] == s3[i + j - 1];       // row[j] is still i-1\n                bool fromS2 = row[j - 1] && s2[j - 1] == s3[i + j - 1];    // row[j-1] is already i\n\n                row[j] = fromS1 || fromS2;\n            }\n        }\n\n        return row[s2.Length];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsInterleave(\"aabcc\", \"dbbca\", \"aadbbcbcac\"));\n        Console.WriteLine(IsInterleave(\"aabcc\", \"dbbca\", \"aadbbbaccc\"));\n        Console.WriteLine(IsInterleave(\"\", \"\", \"\"));\n        Console.WriteLine(IsInterleave(\"\", \"b\", \"b\"));\n        Console.WriteLine(IsInterleave(\"a\", \"b\", \"ab\"));\n        Console.WriteLine(IsInterleave(\"a\", \"b\", \"ba\"));\n        Console.WriteLine(IsInterleave(\"abc\", \"de\", \"abcd\"));   // wrong total length\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nTrue\nTrue\nFalse\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
    "strings",
-   "two-dimensional"
+   "two-dimensional",
+   "rolling-row",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does a greedy two-pointer approach fail?",
+    "a": "Because when s3's next character matches the head of both s1 and s2, the choice is not locally decidable - one branch may dead-end many characters later. Greedy would have to backtrack, which is exponential in the worst case. The DP records reachability for every prefix pair, so both branches are explored once and shared. It is the same reason greedy fails on wildcard matching and succeeds on jump game: the difference is whether a local choice can be proved safe."
+   },
+   {
+    "q": "In the rolling row, why is row[j] the previous row while row[j-1] is the current one?",
+    "a": "Because the inner loop writes left to right, so by the time index j is computed, index j-1 has already been overwritten with the current row's value while index j still holds the previous row's. That is exactly what the recurrence needs - coming from s1 uses the cell above, coming from s2 uses the cell to the left. Getting the iteration direction wrong silently reads the wrong generation, which is the classic rolling-array bug."
+   },
+   {
+    "q": "Why check the lengths first?",
+    "a": "Because an interleaving uses every character of both strings exactly once, so the combined length is forced - if it does not match, no arrangement can work and the answer is false regardless of content. It is also a safety property: without it, s3[i + j - 1] could index past the end. So the check is both an O(1) early exit on a common failing input and the guard that makes the indexing provably in range."
+   }
   ]
  },
  {
@@ -9001,16 +9032,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Hard",
   "question": "Minimum insertions to make a string a palindrome.",
-  "answer": "The answer is the length minus the longest palindromic subsequence, which is the longest common subsequence of the string and its reverse. Time O(n^2), space O(n) with a rolling array.",
+  "answer": "**Approach**\n\nThe answer is the length minus the longest palindromic subsequence — and that subsequence is the longest common subsequence of the string with its reverse.\n\n**Logic**\n\nEvery character not in the longest palindromic subsequence needs exactly one insertion to give it a partner. Characters already in it are paired. So the insertions needed is n minus that length.\n\nThe reduction to LCS against the reverse works because a palindromic subsequence reads the same forwards and backwards, so it appears in both the string and its reverse.\n\nO(n²) time, O(n) space with a rolling row.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MinInsertions(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return 0;\n\n        int n = s.Length;\n        var reversed = new string(Reverse(s));\n\n        // Longest common subsequence of s and its reverse = longest palindromic subsequence.\n        var previous = new int[n + 1];\n        var current = new int[n + 1];\n\n        for (int i = 1; i <= n; i++)\n        {\n            for (int j = 1; j <= n; j++)\n                current[j] = s[i - 1] == reversed[j - 1]\n                    ? previous[j - 1] + 1\n                    : Math.Max(previous[j], current[j - 1]);\n\n            (previous, current) = (current, previous);\n        }\n\n        return n - previous[n];   // unpaired characters each need one insertion\n    }\n\n    private static char[] Reverse(string s)\n    {\n        var c = s.ToCharArray();\n        Array.Reverse(c);\n        return c;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MinInsertions(\"zzazz\"));      // already a palindrome\n        Console.WriteLine(MinInsertions(\"mbadm\"));\n        Console.WriteLine(MinInsertions(\"leetcode\"));\n        Console.WriteLine(MinInsertions(\"\"));\n        Console.WriteLine(MinInsertions(\"a\"));\n        Console.WriteLine(MinInsertions(\"abcd\"));       // nothing pairs\n    }\n}\n```\n\n**Output**\n\n```\n0\n2\n5\n0\n0\n3\n```",
   "tags": [
-   "dynamic-programming",
-   "strings",
+   "dp",
+   "lcs",
    "palindrome",
-   "lcs"
+   "reduction",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is the answer n minus the longest palindromic subsequence?",
+    "a": "Because the characters in that subsequence are already correctly paired around the centre and need nothing added, while every other character is unpaired and needs exactly one insertion to mirror it. No insertion can fix two unpaired characters at once, and no fewer insertions can work, so the count is exactly the number of characters outside the subsequence. That both-directions argument is what makes it a proof rather than an observation."
+   },
+   {
+    "q": "Why does LCS with the reverse give the longest palindromic subsequence?",
+    "a": "Because a palindromic subsequence of s reads identically forwards and backwards, so it is also a subsequence of the reversed string - hence a common subsequence. Conversely any common subsequence of s and its reverse can be shown to be palindromic. The two quantities coincide, which lets you reuse the standard LCS table instead of deriving a separate recurrence. It is a good reduction to know because it also solves 'minimum deletions to make a palindrome', which is the same number."
+   },
+   {
+    "q": "Why do the two rows get swapped rather than copied?",
+    "a": "Because copying an array of n+1 integers every iteration adds an O(n squared) memory traffic cost for no benefit, whereas swapping the references is constant time. The tuple swap makes the intent obvious in one line. The subtlety is that the array that becomes 'current' still holds stale values from two rows back, which is safe here only because every entry is written before it is read - if the inner loop ever skipped an index, it would read garbage."
+   }
   ]
  },
  {
@@ -9018,16 +9064,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Paint house: minimum cost to paint houses so no two adjacent share a colour.",
-  "answer": "For each house, the cost of choosing a colour is its own cost plus the minimum of the other two colours at the previous house. Time O(n) for three colours, O(nk) generally, space O(1). With many colours, tracking the two smallest previous values keeps it linear.",
+  "answer": "**Approach**\n\nDP carrying one running total per colour. The cost of painting a house a colour is that colour's cost plus the cheapest total ending in a *different* colour on the previous house.\n\n**Logic**\n\nThe state cannot be a single number, because the cheapest total so far may end in the very colour you now want to use. Keeping one total per colour is what makes the adjacency constraint checkable.\n\nWith three colours the \"minimum of the other two\" is written out directly. For k colours you would track the best and second-best totals instead, which keeps it linear rather than O(n·k²).\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MinCost(int[][] costs)\n    {\n        if (costs == null || costs.Length == 0) return 0;\n\n        // Cheapest total for all houses so far, ending in each colour.\n        int red = costs[0][0], blue = costs[0][1], green = costs[0][2];\n\n        for (int house = 1; house < costs.Length; house++)\n        {\n            int nextRed   = costs[house][0] + Math.Min(blue, green);\n            int nextBlue  = costs[house][1] + Math.Min(red, green);\n            int nextGreen = costs[house][2] + Math.Min(red, blue);\n\n            red = nextRed; blue = nextBlue; green = nextGreen;\n        }\n\n        return Math.Min(red, Math.Min(blue, green));\n    }\n\n    private static int[][] Costs(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(MinCost(Costs(\n            new[] { 17, 2, 17 }, new[] { 16, 16, 5 }, new[] { 14, 3, 19 })));\n\n        Console.WriteLine(MinCost(Costs(new[] { 7, 6, 2 })));\n        Console.WriteLine(MinCost(Costs()));\n\n        Console.WriteLine(MinCost(Costs(new[] { 1, 100, 100 }, new[] { 1, 100, 100 })));\n\n        Console.WriteLine(MinCost(Costs(\n            new[] { 5, 8, 6 }, new[] { 19, 14, 13 }, new[] { 7, 5, 12 }, new[] { 14, 15, 17 })));\n    }\n}\n```\n\n**Output**\n\n```\n10\n2\n0\n101\n37\n```",
   "tags": [
-   "dynamic-programming",
-   "arrays",
-   "optimisation"
+   "dp",
+   "rolling-state",
+   "constraints",
+   "adjacent",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "LinkedIn"
+  ],
+  "followups": [
+   {
+    "q": "Why keep three totals rather than one running minimum?",
+    "a": "Because the adjacency rule is about which colour the previous house used, so the cheapest total overall is useless if it happens to end in the colour you now want. Keeping the best total per ending colour lets you exclude exactly the forbidden one. The [1,100,100] twice case shows it: the cheapest first house is red at 1, but the second house cannot also be red, so the answer is 101 rather than 2."
+   },
+   {
+    "q": "Why compute all three before assigning any?",
+    "a": "Because each new total reads all three old totals, so assigning red first would make blue and green read the already-updated value and silently allow two adjacent reds. The three temporaries enforce that the whole row is computed from the previous generation. It is the same simultaneity requirement as in Conway's life or any in-place DP over a fixed-size state, and overwriting early is the bug that hides until a specific cost pattern exposes it."
+   },
+   {
+    "q": "How would you extend this to k colours?",
+    "a": "Naively you would take the minimum over the other k-1 colours for each of k colours, which is O(n k squared). The fix is to track the smallest and second-smallest totals from the previous house along with which colour achieved the smallest: for any colour, the best other total is the smallest unless that smallest is this very colour, in which case it is the second smallest. That makes it O(n k), and it is exactly what the paint-house-II follow-up asks for."
+   }
   ]
  },
  {
@@ -9035,15 +9097,31 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Integer break: maximise the product of integers summing to n.",
-  "answer": "Dynamic programming over dp[i] as the best product for i, trying every split. The mathematical shortcut is that breaking into as many threes as possible is optimal, using twos for the remainder. Time O(n^2) for the DP, O(1) for the closed form.",
+  "answer": "**Approach**\n\nDP over every smaller n, or the closed-form observation that threes dominate. Both are shown; the DP is the safe interview answer and the maths explains why it works.\n\n**Logic**\n\nFor each n, try every first part i and multiply by either i's remainder taken whole, or the best product of breaking that remainder further. Both options matter, because the remainder is sometimes better left intact.\n\nThe mathematical reason threes win: 3·3 = 9 beats 2·2·2 = 8 for the same sum of 6, so you should use as many 3s as possible. A remainder of 1 must be merged, since 3+1 gives 3 but 2+2 gives 4.\n\nO(n²) time for the DP.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int IntegerBreak(int n)\n    {\n        if (n < 2) return 0;\n\n        var best = new int[n + 1];\n        best[1] = 1;\n\n        for (int total = 2; total <= n; total++)\n            for (int part = 1; part < total; part++)\n                // Either leave the remainder whole, or break it further.\n                best[total] = Math.Max(best[total],\n                                  part * Math.Max(total - part, best[total - part]));\n\n        return best[n];\n    }\n\n    // Why it works: 3*3 = 9 beats 2*2*2 = 8 for the same sum, so use as many 3s as possible.\n    public static int IntegerBreakMath(int n)\n    {\n        if (n <= 3) return n - 1;                 // must split into at least two parts\n\n        int result = 1;\n        while (n > 4) { result *= 3; n -= 3; }    // a remainder of 4 is left as 2*2\n        return result * n;\n    }\n\n    public static void Main()\n    {\n        foreach (int n in new[] { 2, 3, 4, 7, 8, 10, 12 })\n            Console.WriteLine($\"{n}: dp={IntegerBreak(n)} math={IntegerBreakMath(n)}\");\n    }\n}\n```\n\n**Output**\n\n```\n2: dp=1 math=1\n3: dp=2 math=2\n4: dp=4 math=4\n7: dp=12 math=12\n8: dp=18 math=18\n10: dp=36 math=36\n12: dp=81 math=81\n```",
   "tags": [
-   "dynamic-programming",
-   "math",
-   "optimisation"
+   "dp",
+   "number-theory",
+   "greedy",
+   "optimisation",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the recurrence need both total - part and best[total - part]?",
+    "a": "Because the remainder is sometimes better left as a single number than split further. For n of 4 the answer is 2 times 2, but for n of 3 the best is 3 itself taken whole - and best[3] is 2, since the DP definition forces at least one split. Taking only best[total - part] would apply that forced split to the remainder too and undercount. The maximum of the two covers both readings of the subproblem."
+   },
+   {
+    "q": "Why are threes optimal, and why is a remainder of 1 special?",
+    "a": "Because for a fixed sum, 3 times 3 is 9 while 2 times 2 times 2 is 8, so threes pack more product per unit of sum than twos, and anything 5 or larger beats itself by splitting off a 3. A remainder of 1 is wasteful because multiplying by 1 adds nothing: 3 plus 1 gives a product of 3, whereas regrouping as 2 plus 2 gives 4. The loop stopping at n greater than 4 handles that by leaving 4 as two 2s rather than 3 and 1."
+   },
+   {
+    "q": "Why does the maths version return n - 1 for n up to 3?",
+    "a": "Because the problem requires at least two parts, so 2 must become 1 plus 1 with a product of 1, and 3 must become 1 plus 2 with a product of 2 - both n - 1. Without that forced split the answer would trivially be n itself. It is the base case where the greedy formula would otherwise return the number unbroken, and it is the case most people get wrong when they jump straight to the closed form."
+   }
   ]
  },
  {
@@ -9051,16 +9129,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Minimum cost for tickets given travel days and daily, weekly and monthly passes.",
-  "answer": "dp over days of the year where a travel day takes the minimum of buying each pass and looking back one, seven or thirty days; non-travel days inherit the previous value. Time O(365), space O(365).",
+  "answer": "**Approach**\n\nDP over the calendar rather than over the travel list. `best[day]` is the cheapest way to cover every travel day up to and including that day.\n\n**Logic**\n\nOn a day with no travel, nothing new is needed, so the cost carries forward unchanged. On a travel day, choose the cheapest of three purchases: a 1-day pass added to yesterday's cost, a 7-day pass added to the cost eight days back, or a 30-day pass added to the cost 31 days back.\n\nIndexing the calendar rather than the travel array is what makes the pass durations expressible — a 7-day pass covers seven *calendar* days, not seven travel days.\n\nO(lastDay) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MincostTickets(int[] days, int[] costs)\n    {\n        if (days == null || days.Length == 0) return 0;\n\n        int last = days[days.Length - 1];\n\n        var travels = new bool[last + 1];\n        foreach (int d in days) travels[d] = true;\n\n        var best = new int[last + 1];\n\n        for (int day = 1; day <= last; day++)\n        {\n            if (!travels[day]) { best[day] = best[day - 1]; continue; }\n\n            best[day] = Math.Min(best[day - 1] + costs[0],\n                       Math.Min(best[Math.Max(0, day - 7)] + costs[1],\n                                best[Math.Max(0, day - 30)] + costs[2]));\n        }\n\n        return best[last];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MincostTickets(new[] { 1, 4, 6, 7, 8, 20 }, new[] { 2, 7, 15 }));\n\n        Console.WriteLine(MincostTickets(\n            new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 30, 31 }, new[] { 2, 7, 15 }));\n\n        Console.WriteLine(MincostTickets(new[] { 1 }, new[] { 2, 7, 15 }));\n        Console.WriteLine(MincostTickets(Array.Empty<int>(), new[] { 2, 7, 15 }));\n        Console.WriteLine(MincostTickets(new[] { 1, 2, 3 }, new[] { 5, 7, 15 }));   // weekly wins\n    }\n}\n```\n\n**Output**\n\n```\n11\n17\n2\n0\n7\n```",
   "tags": [
-   "dynamic-programming",
-   "arrays",
-   "optimisation"
+   "dp",
+   "calendar",
+   "intervals",
+   "greedy-vs-dp",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why index the calendar rather than the travel days?",
+    "a": "Because a 7-day pass covers seven consecutive calendar days regardless of how many of them involve travel, so the lookback must be in days. Indexing by travel position would make the pass duration depend on how spread out the trips are, which is not expressible as a fixed offset. The cost is an array as long as the last travel day rather than as long as the trip list - acceptable for a year, and if the days were huge you would switch to a map keyed by travel day with a binary search for the lookback."
+   },
+   {
+    "q": "Why clamp the lookback with Math.Max(0, ...)?",
+    "a": "Because a 30-day pass bought on day 5 covers everything from before the calendar began, so the correct predecessor is day 0 with cost zero, not a negative index. The clamp expresses 'nothing was needed before the start'. Without it you get an index-out-of-range on any trip in the first 29 days, which is most small test cases - it is the first thing that breaks if you write the recurrence without thinking about the boundary."
+   },
+   {
+    "q": "Why can a greedy rule not solve this?",
+    "a": "Because buying the pass that covers the most upcoming travel days is not always right - a cheap 7-day pass may cover three trips where a 30-day pass covering eight trips is better value per trip, and which wins depends on what comes after. The DP tries all three at every travel day and lets the accumulated cost decide. It is the same reason coin change needs DP for arbitrary denominations: local best-value does not compose into a global optimum."
+   }
   ]
  },
  {
@@ -9399,16 +9493,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find the k closest elements to a target value in a sorted array.",
-  "answer": "Binary search for the insertion point, then expand two pointers outward choosing the closer side each step until k are collected. Alternatively binary search the left boundary of the window directly by comparing the distance of the window ends. Time O(log n + k), space O(1).",
+  "answer": "**Approach**\n\nBinary search for the *left edge of the answer window* rather than for the target. The answer is always k contiguous elements, so you only need where the window starts.\n\n**Logic**\n\nThe key insight is that the result is contiguous: because the array is sorted, the k closest values form a window. So the search space is the possible left indices, from 0 to n-k.\n\nThe comparison asks whether the element just past the window is closer than the element at the left edge. If so, the window must slide right. Using subtraction rather than absolute values is safe because the array is sorted.\n\nO(log(n-k) + k).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static IList<int> FindClosestElements(int[] arr, int k, int target)\n    {\n        int lo = 0, hi = arr.Length - k;   // possible LEFT edges of the window\n\n        while (lo < hi)\n        {\n            int mid = lo + (hi - lo) / 2;\n\n            // Is the element just past the window closer than the one at the left edge?\n            // Sorted order makes plain subtraction safe here.\n            if (target - arr[mid] > arr[mid + k] - target) lo = mid + 1;\n            else hi = mid;\n        }\n\n        var result = new List<int>(k);\n        for (int i = lo; i < lo + k; i++) result.Add(arr[i]);\n        return result;\n    }\n\n    private static void Show(IList<int> values) => Console.WriteLine(string.Join(\",\", values));\n\n    public static void Main()\n    {\n        Show(FindClosestElements(new[] { 1, 2, 3, 4, 5 }, 4, 3));\n        Show(FindClosestElements(new[] { 1, 2, 3, 4, 5 }, 4, -1));\n        Show(FindClosestElements(new[] { 1, 2, 3, 4, 5 }, 4, 9));\n        Show(FindClosestElements(new[] { 1, 1, 1, 10, 10, 10 }, 1, 9));\n        Show(FindClosestElements(new[] { 1, 2, 3, 4, 5 }, 5, 3));   // whole array\n\n        // A tie prefers the SMALLER value, so 2 wins over 4.\n        Show(FindClosestElements(new[] { 1, 2, 3, 4, 5 }, 1, 3));\n        Show(FindClosestElements(new[] { 2, 4 }, 1, 3));\n    }\n}\n```\n\n**Output**\n\n```\n1,2,3,4\n1,2,3,4\n2,3,4,5\n10\n1,2,3,4,5\n3\n2\n```",
   "tags": [
-   "arrays",
    "binary-search",
-   "two-pointers"
+   "sliding-window",
+   "sorted-array",
+   "tie-break",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why binary search the window's left edge rather than the target?",
+    "a": "Because the answer is always k contiguous elements - the array is sorted, so the closest values cannot be scattered. That reduces the problem from 'find the target then expand' to 'find one index', and the expansion step with its two-pointer tie-handling disappears entirely. The search space is 0 to n-k, and each comparison decides whether the window should slide right. It is a good example of searching over answers rather than over data."
+   },
+   {
+    "q": "Why does a strict greater-than in the comparison give the smaller value on a tie?",
+    "a": "Because when the distances are equal, the condition is false, so hi moves to mid and the window stays as far left as possible. The problem specifies that a tie prefers the smaller value, and this is exactly where that rule is encoded. Using greater-than-or-equal would slide right on ties and return 4 instead of 2 for the [2,4] case with target 3, which is the standard off-by-one on this question."
+   },
+   {
+    "q": "Why is plain subtraction safe instead of absolute difference?",
+    "a": "Because the array is sorted and the two elements compared straddle the window, so arr[mid] is at or left of arr[mid+k]. The expression target - arr[mid] versus arr[mid+k] - target compares the left distance with the right distance correctly even when one side is negative, because a negative left distance means the target is already past arr[mid] and the window should slide right - which the arithmetic gives. The one real risk is overflow on extreme values, which absolute differences would not avoid either."
+   }
   ]
  },
  {
@@ -9416,17 +9526,32 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Split an array into k subarrays minimising the largest subarray sum.",
-  "answer": "Binary search the answer between the maximum element and the total sum, and for each candidate greedily count how many subarrays are needed without exceeding it. Feasible candidates shrink the upper bound. Time O(n log sum), space O(1).",
+  "answer": "**Approach**\n\nBinary search on the answer. Guess a maximum allowed subarray sum, then greedily check whether k or fewer subarrays suffice under that cap.\n\n**Logic**\n\nThe feasibility check is monotonic: if a cap works, every larger cap works too. That monotonicity is what makes binary search valid — you are searching over answers, not over the array.\n\nThe search range is bounded below by the largest single element, since no split can make a subarray smaller than its biggest member, and above by the total sum, which is the one-subarray case.\n\nThe greedy check is optimal: extending the current subarray until it would exceed the cap always leaves the fewest pieces.\n\nO(n log(sum)).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int SplitArray(int[] nums, int k)\n    {\n        long lo = 0, hi = 0;\n\n        foreach (int n in nums) { lo = Math.Max(lo, n); hi += n; }\n\n        // lo: no subarray can be smaller than the largest element.\n        // hi: one subarray holding everything.\n        while (lo < hi)\n        {\n            long cap = lo + (hi - lo) / 2;\n\n            if (PiecesNeeded(nums, cap) <= k) hi = cap;   // feasible: try smaller\n            else lo = cap + 1;\n        }\n\n        return (int)lo;\n    }\n\n    // Greedy: extend the current piece while it fits. This minimises the piece count.\n    private static int PiecesNeeded(int[] nums, long cap)\n    {\n        int pieces = 1;\n        long running = 0;\n\n        foreach (int n in nums)\n        {\n            if (running + n > cap) { pieces++; running = n; }\n            else running += n;\n        }\n\n        return pieces;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(SplitArray(new[] { 7, 2, 5, 10, 8 }, 2));\n        Console.WriteLine(SplitArray(new[] { 1, 2, 3, 4, 5 }, 2));\n        Console.WriteLine(SplitArray(new[] { 1, 4, 4 }, 3));\n        Console.WriteLine(SplitArray(new[] { 1, 2, 3, 4, 5 }, 1));   // everything together\n        Console.WriteLine(SplitArray(new[] { 1, 2, 3, 4, 5 }, 5));   // largest element\n        Console.WriteLine(SplitArray(new[] { 10 }, 1));\n    }\n}\n```\n\n**Output**\n\n```\n18\n9\n4\n15\n5\n10\n```",
   "tags": [
-   "arrays",
    "binary-search",
+   "search-the-answer",
    "greedy",
-   "optimisation"
+   "monotonic",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is binary search valid here?",
+    "a": "Because feasibility is monotonic in the cap: if you can split within a maximum of X, you can certainly split within anything larger, since the same split still satisfies the looser bound. That gives a single boundary between infeasible and feasible caps, which is precisely what binary search locates. Without monotonicity the search would be meaningless - it is the property to state first, because it is what turns an optimisation problem into a search problem."
+   },
+   {
+    "q": "Why is the greedy feasibility check optimal?",
+    "a": "Because closing a piece earlier than necessary can never reduce the total count - it leaves strictly more elements for the remaining pieces to absorb under the same cap. An exchange argument makes it formal: take any valid split and repeatedly extend its first piece as far as the cap allows; the count never rises. So greedy achieves the minimum piece count, which is exactly what the feasibility test needs."
+   },
+   {
+    "q": "Why start the lower bound at the largest element rather than zero?",
+    "a": "Because every element must live in some subarray, so no subarray sum can be below the largest single element no matter how finely you split. Starting at zero is not wrong - the search would converge to the same answer - but the greedy check would loop without progress on a cap below some element, since a single element already exceeds it and the piece count grows without bound. Setting the bound correctly makes the check's precondition hold rather than relying on the search to step past it."
+   }
   ]
  },
  {
@@ -9434,16 +9559,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Find the longest subarray with at most two distinct values.",
-  "answer": "Sliding window with a count map; when the map exceeds two keys, advance the left pointer decrementing counts and removing keys that reach zero. Track the maximum window length. Time O(n), space O(1) for a bounded number of distinct keys.",
+  "answer": "**Approach**\n\nSliding window with a count map. Grow the right edge; whenever a third distinct value appears, shrink from the left until one value's count reaches zero and it is removed.\n\n**Logic**\n\nThe window is always valid after the shrink loop, so its width at every step is a candidate answer. Each index enters and leaves the window at most once, giving linear time despite the nested loop.\n\nRemoving the key when its count hits zero is essential — leaving a zero-count entry keeps the map's size at three and the loop shrinks forever.\n\nO(n) time, O(1) space since the map holds at most three entries.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int LongestWithTwoDistinct(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        var counts = new Dictionary<int, int>();\n        int left = 0, best = 0;\n\n        for (int right = 0; right < nums.Length; right++)\n        {\n            counts[nums[right]] = counts.GetValueOrDefault(nums[right]) + 1;\n\n            while (counts.Count > 2)\n            {\n                int leaving = nums[left++];\n\n                // Removing at zero is what actually shrinks the distinct count.\n                if (--counts[leaving] == 0) counts.Remove(leaving);\n            }\n\n            best = Math.Max(best, right - left + 1);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestWithTwoDistinct(new[] { 1, 2, 1 }));\n        Console.WriteLine(LongestWithTwoDistinct(new[] { 0, 1, 2, 2 }));\n        Console.WriteLine(LongestWithTwoDistinct(new[] { 1, 2, 3, 2, 2 }));\n        Console.WriteLine(LongestWithTwoDistinct(new[] { 3, 3, 3, 1, 2, 1, 1, 2, 3, 3, 4 }));\n        Console.WriteLine(LongestWithTwoDistinct(new[] { 5 }));\n        Console.WriteLine(LongestWithTwoDistinct(Array.Empty<int>()));\n        Console.WriteLine(LongestWithTwoDistinct(new[] { 1, 2, 3, 4, 5 }));\n    }\n}\n```\n\n**Output**\n\n```\n3\n3\n4\n5\n1\n0\n2\n```",
   "tags": [
-   "arrays",
    "sliding-window",
-   "hashmap"
+   "hash-map",
+   "two-pointers",
+   "linear",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is this linear when there is a loop inside a loop?",
+    "a": "Because left only ever moves forward and never past right, so across the whole run the inner loop performs at most n iterations in total. The right pointer contributes another n. Amortised, each index is added once and removed once, giving O(n) regardless of how the shrinks cluster. Counting the nested loop as multiplicative is the usual misreading, and the amortised argument is what an interviewer wants to hear stated explicitly."
+   },
+   {
+    "q": "What breaks if the key is not removed at zero?",
+    "a": "The dictionary's Count stays at three even though one value is no longer in the window, so the while condition never becomes false and left runs off the end - either an index-out-of-range or a window of negative width. The count and the key's presence must agree for Count to mean 'distinct values currently in the window'. An alternative is to track the distinct count in a separate variable and decrement it when a count hits zero, which is equivalent and sometimes faster."
+   },
+   {
+    "q": "How would you generalise to at most k distinct values?",
+    "a": "Change the condition from greater than 2 to greater than k; nothing else moves. That generality is the point of writing it with a map rather than two tracked values - a version with two explicit variables is faster by a constant but does not extend. The same template with the condition inverted also solves 'shortest subarray containing all distinct values', which is why this window pattern is worth having as a reflex."
+   }
   ]
  },
  {
@@ -9483,15 +9624,31 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Find the maximum sum of a subarray of size at most k after removing one element.",
-  "answer": "Dynamic programming with two states per index - the best subarray ending here with no deletion and with one deletion - where the deletion state takes the better of deleting the current element or extending a previous deletion. Time O(n), space O(1).",
+  "answer": "**Approach**\n\nTwo parallel Kadane runs: one tracking the best subarray ending here with no deletion, and one with exactly one deletion used.\n\n**Logic**\n\nThe deleted-state recurrence is the interesting one. A best-ending-here subarray that has used its deletion either deleted the current element — leaving the no-deletion best from the previous position — or deleted something earlier and now extends by the current element.\n\nThe subarray must remain non-empty after the deletion, which is why the deleted state starts as impossible rather than zero, and why an all-negative array returns its largest element rather than zero.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaximumSum(int[] arr)\n    {\n        if (arr == null || arr.Length == 0) return 0;\n\n        int keepAll = arr[0];              // best ending here, nothing deleted\n        int deletedOne = int.MinValue;     // best ending here, one deletion used\n        int best = arr[0];\n\n        for (int i = 1; i < arr.Length; i++)\n        {\n            // Either delete arr[i] (take the previous undeleted best),\n            // or extend a run that already used its deletion.\n            int nextDeleted = Math.Max(keepAll,\n                deletedOne == int.MinValue ? int.MinValue : deletedOne + arr[i]);\n\n            keepAll = Math.Max(arr[i], keepAll + arr[i]);\n            deletedOne = nextDeleted;\n\n            best = Math.Max(best, keepAll);\n            if (deletedOne != int.MinValue) best = Math.Max(best, deletedOne);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaximumSum(new[] { 1, -2, 0, 3 }));\n        Console.WriteLine(MaximumSum(new[] { 1, -2, -2, 3 }));\n        Console.WriteLine(MaximumSum(new[] { -1, -1, -1, -1 }));   // must stay non-empty\n        Console.WriteLine(MaximumSum(new[] { 5 }));\n        Console.WriteLine(MaximumSum(new[] { 2, 1, -2, -5, -2 }));\n        Console.WriteLine(MaximumSum(new[] { -1, 1, 1, -1, -1, 1, 1, 1 }));\n    }\n}\n```\n\n**Output**\n\n```\n4\n3\n-1\n5\n3\n4\n```",
   "tags": [
-   "arrays",
-   "dynamic-programming",
-   "kadane"
+   "kadane",
+   "dp",
+   "state-machine",
+   "subarray",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the deleted state start at int.MinValue rather than zero?",
+    "a": "Because after one element there is no way to have deleted an element and still hold a non-empty subarray, so that state is genuinely unreachable rather than worth zero. Seeding it at zero would let an all-negative array return 0, which the problem forbids since the result must be non-empty. The [-1,-1,-1,-1] case checks exactly this and must return -1. The guarded additions exist so the sentinel never participates in arithmetic."
+   },
+   {
+    "q": "Explain the deleted-state recurrence in words.",
+    "a": "A subarray ending at i that has used its one deletion arose one of two ways: the deleted element is arr[i] itself, so the value is the best undeleted subarray ending at i-1; or the deletion happened earlier and arr[i] simply extends that run, so the value is the previous deleted state plus arr[i]. Taking the maximum covers both. The order of assignment matters - the deleted state must read the old keepAll, which is why it is computed into a temporary first."
+   },
+   {
+    "q": "How does this generalise to at most m deletions?",
+    "a": "Carry an array of m+1 states, where state j is the best subarray ending here having used j deletions, with the recurrence state[j] = max(state[j-1] from the previous position, state[j] from the previous position plus arr[i]). That is O(n m) time and O(m) space, and the two-variable version here is just m equal to one written out. Recognising it as a layered Kadane rather than a one-off trick is what makes the generalisation obvious."
+   }
   ]
  },
  {
@@ -9595,17 +9752,32 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Best time to buy and sell stock with at most k transactions.",
-  "answer": "Dynamic programming over transactions and days, tracking the best balance after buying and after selling for each transaction count. When k exceeds half the number of days it degenerates to the unlimited case, which avoids an unnecessarily large table. Time O(nk), space O(k).",
+  "answer": "**Approach**\n\nDP over transaction counts, with two states per count: currently holding a stock, or currently free. When k is large enough to be unconstrained, fall back to the unlimited-transaction greedy.\n\n**Logic**\n\nThe large-k shortcut matters for more than speed. A transaction needs at least two days, so k above n/2 is no constraint at all, and the DP table would be needlessly enormous.\n\nFor the constrained case, holding after j transactions is either still holding from yesterday, or buying today from the free state. Being free is either still free, or selling today — and selling is what completes a transaction and advances j.\n\nO(n·k) time, O(k) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxProfit(int k, int[] prices)\n    {\n        if (prices == null || prices.Length < 2 || k == 0) return 0;\n\n        // A transaction needs two days, so beyond n/2 the limit binds nothing.\n        if (k >= prices.Length / 2)\n        {\n            int total = 0;\n            for (int i = 1; i < prices.Length; i++)\n                if (prices[i] > prices[i - 1]) total += prices[i] - prices[i - 1];\n            return total;\n        }\n\n        var holding = new int[k + 1];\n        var free = new int[k + 1];\n        for (int j = 0; j <= k; j++) holding[j] = int.MinValue / 2;\n\n        foreach (int price in prices)\n            for (int j = 1; j <= k; j++)\n            {\n                // Selling is what completes a transaction, so it reads holding[j].\n                free[j] = Math.Max(free[j], holding[j] + price);\n                holding[j] = Math.Max(holding[j], free[j - 1] - price);\n            }\n\n        return free[k];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxProfit(2, new[] { 2, 4, 1 }));\n        Console.WriteLine(MaxProfit(2, new[] { 3, 2, 6, 5, 0, 3 }));\n        Console.WriteLine(MaxProfit(0, new[] { 1, 3 }));\n        Console.WriteLine(MaxProfit(1, new[] { 7, 6, 4, 3, 1 }));       // never profitable\n        Console.WriteLine(MaxProfit(100, new[] { 1, 2, 3, 4, 5 }));     // unconstrained\n        Console.WriteLine(MaxProfit(2, new[] { 1, 2, 4, 2, 5, 7, 2, 4, 9, 0 }));\n    }\n}\n```\n\n**Output**\n\n```\n2\n7\n0\n0\n4\n13\n```",
   "tags": [
-   "arrays",
-   "dynamic-programming",
-   "stocks",
-   "optimisation"
+   "dp",
+   "state-machine",
+   "stock",
+   "transactions",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Goldman Sachs",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does k at or above n/2 mean unlimited transactions?",
+    "a": "Because every transaction consumes at least two days - one to buy and one to sell - so at most n/2 disjoint transactions can fit in n days. Any k at or above that imposes no restriction, and the answer is the sum of every upward price move, which is the unlimited greedy. Without the shortcut, a k of a billion would allocate a billion-entry array for a short price series, so the check is a correctness-preserving guard against a pathological input rather than a micro-optimisation."
+   },
+   {
+    "q": "Why is the sentinel int.MinValue / 2 rather than int.MinValue?",
+    "a": "Because holding[j] + price is evaluated directly, and adding a positive price to int.MinValue is fine but adding it to a value that has already been combined elsewhere can overflow and wrap to a large positive number, which would then win a maximum and corrupt the answer. Halving leaves enough headroom that no realistic price sequence can reach zero from below. The alternative is an explicit reachability check as in the delete-one-element Kadane, which is more verbose but has no magic constant."
+   },
+   {
+    "q": "Why does the inner loop update free before holding?",
+    "a": "Because free[j] must read the holding value from before today's buy - selling today uses a position opened on an earlier day. Updating holding first would let a same-day buy and sell contribute, inflating the profit. The order encodes the rule that a transaction spans at least two days. It is worth tracing one iteration aloud in an interview, because the two lines look symmetric and their dependency is the only thing distinguishing a correct solution from a subtly wrong one."
+   }
   ]
  },
  {
@@ -9613,16 +9785,32 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Given two strings, determine whether they are one edit apart.",
-  "answer": "If lengths differ by more than one, return false. Walk both with two pointers; on the first mismatch, advance the pointer of the longer string for an insertion or both for a substitution, and require no further mismatch. Time O(n), space O(1).",
+  "answer": "**Approach**\n\nSingle pass with a length check first. If the lengths differ by more than one the answer is immediately false; otherwise walk both strings and allow exactly one divergence.\n\n**Logic**\n\nNormalising so the shorter string is first removes the symmetric cases. Then there are only two situations at the first mismatch: equal lengths means a replacement, so skip one character in each; different lengths means an insertion, so skip one character in the longer only.\n\nAfter the divergence the remainders must match exactly, which the loop enforces by continuing without allowing a second difference.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsOneEditDistance(string a, string b)\n    {\n        a ??= \"\"; b ??= \"\";\n\n        if (a.Length > b.Length) (a, b) = (b, a);   // normalise: a is the shorter\n\n        if (b.Length - a.Length > 1) return false;\n        if (a.Length == b.Length && a == b) return false;   // identical is zero edits\n\n        int i = 0, j = 0;\n        bool used = false;\n\n        while (i < a.Length && j < b.Length)\n        {\n            if (a[i] == b[j]) { i++; j++; continue; }\n\n            if (used) return false;\n            used = true;\n\n            // Equal lengths: a replacement. Different: an insertion into the longer.\n            if (a.Length == b.Length) i++;\n            j++;\n        }\n\n        return true;   // any leftover is at most the single trailing insertion\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsOneEditDistance(\"ab\", \"acb\"));\n        Console.WriteLine(IsOneEditDistance(\"cab\", \"ad\"));\n        Console.WriteLine(IsOneEditDistance(\"\", \"\"));          // zero edits, not one\n        Console.WriteLine(IsOneEditDistance(\"\", \"a\"));\n        Console.WriteLine(IsOneEditDistance(\"abc\", \"abc\"));\n        Console.WriteLine(IsOneEditDistance(\"abc\", \"abd\"));\n        Console.WriteLine(IsOneEditDistance(\"abc\", \"abcde\"));\n        Console.WriteLine(IsOneEditDistance(\"teacher\", \"teaher\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\n```",
   "tags": [
    "strings",
    "two-pointers",
-   "edit-distance"
+   "edit-distance",
+   "normalisation",
+   "csharp"
   ],
   "companies": [
    "Facebook",
    "Amazon",
    "Snapchat"
+  ],
+  "followups": [
+   {
+    "q": "Why check that equal-length identical strings return false?",
+    "a": "Because the question asks for exactly one edit, not at most one - two identical strings are zero edits apart. Without the check the loop finds no mismatch and returns true, which is wrong for 'abc' against 'abc'. The differing-length case needs no such guard, since a length difference of one is itself the edit. It is a small asymmetry and it is the most common miss on this question."
+   },
+   {
+    "q": "Why normalise so the shorter string comes first?",
+    "a": "Because it halves the number of cases: without it you would need separate branches for 'a is longer' and 'b is longer' at the mismatch, doubling the code and the chances of an error in one copy. After the swap the insertion always means advancing in b. Normalising inputs so only one orientation needs handling is worth reaching for generally - it is the same instinct as sorting an interval list before merging."
+   },
+   {
+    "q": "Why does returning true after the loop not need a final check?",
+    "a": "Because the length difference is at most one and at most one divergence was consumed, so whatever remains unconsumed is at most a single trailing character in the longer string - which is the permitted insertion. If more remained, the lengths would have had to differ by more than one, which the early check already rejected. Spelling out that argument matters, because 'return true at the end' looks like a missing case until you see why it cannot be."
+   }
   ]
  },
  {
