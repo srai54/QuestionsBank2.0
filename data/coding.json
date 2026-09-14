@@ -11026,16 +11026,31 @@
   "subcategory": "Tries",
   "difficulty": "Medium",
   "question": "Replace words in a sentence with the shortest root from a dictionary.",
-  "answer": "Build a trie of roots, then for each word walk the trie and stop at the first node marked as a root, substituting it. Time O(total characters), which beats checking every prefix against a hash set for long words.",
+  "answer": "**Approach**\n\nA trie of the roots. For each word, walk down and stop at the first node marked as a root — that is the shortest one by construction.\n\n**Logic**\n\nWalking the trie finds the shortest root for free: roots are reached in increasing length order as you descend, so the first terminal node hit is the answer. No sorting or length comparison is needed.\n\nThe alternative — generating every prefix of every word and looking it up in a set — is also correct but does O(L²) string work per word building substrings; the trie walks each character once.\n\nO(total characters).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private class Node\n    {\n        public readonly Node[] Children = new Node[26];\n        public bool IsRoot;\n    }\n\n    public static string ReplaceWords(string[] roots, string sentence)\n    {\n        var trie = new Node();\n\n        foreach (string root in roots)\n        {\n            var node = trie;\n            foreach (char c in root)\n            {\n                int i = c - 'a';\n                node.Children[i] ??= new Node();\n                node = node.Children[i];\n            }\n            node.IsRoot = true;\n        }\n\n        var words = sentence.Split(' ');\n\n        for (int w = 0; w < words.Length; w++)\n        {\n            var node = trie;\n\n            for (int i = 0; i < words[w].Length; i++)\n            {\n                node = node.Children[words[w][i] - 'a'];\n\n                if (node == null) break;\n\n                // Descending hits roots shortest-first, so the first one wins.\n                if (node.IsRoot) { words[w] = words[w].Substring(0, i + 1); break; }\n            }\n        }\n\n        return string.Join(\" \", words);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ReplaceWords(new[] { \"cat\", \"bat\", \"rat\" },\n                                       \"the cattle was rattled by the battery\"));\n\n        Console.WriteLine(ReplaceWords(new[] { \"a\", \"b\", \"c\" }, \"aadsfasf absbs bbab cadsfafs\"));\n\n        // Both \"a\" and \"aa\" are roots: the shorter must win.\n        Console.WriteLine(ReplaceWords(new[] { \"aa\", \"a\" }, \"aaa aab\"));\n\n        Console.WriteLine(ReplaceWords(new[] { \"xyz\" }, \"abc def\"));       // no root applies\n        Console.WriteLine(ReplaceWords(Array.Empty<string>(), \"hello world\"));\n        Console.WriteLine(ReplaceWords(new[] { \"cat\" }, \"cat\"));           // exact match\n    }\n}\n```\n\n**Output**\n\n```\nthe cat was rat by the bat\na a b c\na a\nabc def\nhello world\ncat\n```",
   "tags": [
    "trie",
    "strings",
    "prefix",
-   "dictionary"
+   "shortest-match",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the trie give the shortest root without any comparison?",
+    "a": "Because descending one character at a time visits prefixes in increasing length, so the first node marked as a root is necessarily the shortest matching one. Breaking there is the whole rule. A set-based version would have to try prefixes from length one upward to get the same ordering, and a version that collected all matches would then need a minimum - the trie makes the ordering structural rather than something you maintain."
+   },
+   {
+    "q": "Why is the trie better than a HashSet of roots?",
+    "a": "Because the set version builds a fresh substring for each prefix length, which is O(L squared) character copying per word plus the hashing of each. The trie walks each character once with no allocation. For a sentence of ordinary words the difference is invisible, but for long tokens or a large corpus it is real. The set version is genuinely simpler, so I would only reach for the trie when the input size justifies it."
+   },
+   {
+    "q": "What if roots could contain characters outside a to z?",
+    "a": "The fixed 26-slot child array breaks - either an index out of range or a silent wrong bucket. The fix is a dictionary from character to node per node, which costs more memory and a hash per step but accepts any alphabet. That is the usual trade in trie implementations: a dense array for a known small alphabet, a map for anything else, and choosing it based on the actual input domain rather than habit."
+   }
   ]
  },
  {
@@ -11043,17 +11058,32 @@
   "subcategory": "Tries",
   "difficulty": "Hard",
   "question": "Find all concatenated words in a dictionary - words formed entirely of other words.",
-  "answer": "Sort by length so shorter words are inserted first, then for each word run a word-break check against the trie of already-inserted words, adding it afterwards. Time O(n times L^2) in the worst case with memoisation per word.",
+  "answer": "**Approach**\n\nSort by length, then for each word run a word-break DP against a set containing only the *shorter* words seen so far.\n\n**Logic**\n\nProcessing shortest-first is what prevents a word from being built out of itself, which would make every word trivially concatenated.\n\nThe DP is standard word break: a position is reachable if some earlier reachable position has a dictionary word bridging the gap.\n\nThe empty-string entry must be excluded, or every word becomes concatenated by prepending nothing repeatedly.\n\nO(n · L²) with set lookups.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<string> FindAllConcatenatedWords(string[] words)\n    {\n        var shorter = new HashSet<string>();\n        var result = new List<string>();\n\n        // Shortest first, so a word is never built out of itself.\n        foreach (string word in words.Where(w => w.Length > 0).OrderBy(w => w.Length))\n        {\n            if (CanBuild(word, shorter)) result.Add(word);\n            shorter.Add(word);\n        }\n\n        return result;\n    }\n\n    private static bool CanBuild(string word, HashSet<string> pieces)\n    {\n        if (pieces.Count == 0) return false;\n\n        var reachable = new bool[word.Length + 1];\n        reachable[0] = true;\n\n        for (int end = 1; end <= word.Length; end++)\n            for (int start = 0; start < end; start++)\n            {\n                if (!reachable[start]) continue;\n\n                if (pieces.Contains(word.Substring(start, end - start)))\n                { reachable[end] = true; break; }\n            }\n\n        return reachable[word.Length];\n    }\n\n    private static void Show(IList<string> words) =>\n        Console.WriteLine(words.Count == 0 ? \"none\" : string.Join(\",\", words.OrderBy(w => w)));\n\n    public static void Main()\n    {\n        Show(FindAllConcatenatedWords(new[] {\n            \"cat\", \"cats\", \"catsdogcats\", \"dog\", \"dogcatsdog\",\n            \"hippopotamuses\", \"rat\", \"ratcatdogcat\" }));\n\n        Show(FindAllConcatenatedWords(new[] { \"cat\", \"dog\", \"catdog\" }));\n        Show(FindAllConcatenatedWords(new[] { \"cat\", \"dog\" }));           // nothing combines\n        Show(FindAllConcatenatedWords(new[] { \"\", \"a\", \"aa\" }));          // empty ignored\n        Show(FindAllConcatenatedWords(Array.Empty<string>()));\n        Show(FindAllConcatenatedWords(new[] { \"a\", \"aa\", \"aaa\" }));\n    }\n}\n```\n\n**Output**\n\n```\ncatsdogcats,dogcatsdog,ratcatdogcat\ncatdog\nnone\naa\nnone\naa,aaa\n```",
   "tags": [
-   "trie",
-   "dynamic-programming",
+   "dp",
    "word-break",
-   "strings"
+   "trie-alternative",
+   "sorting",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why sort by length before checking?",
+    "a": "Because a concatenated word must be built from strictly shorter words, and processing shortest-first means the set only ever contains valid candidate pieces when a word is tested. Checking against the full dictionary would let every word match itself in one piece, so everything would be reported. The sort is what encodes 'built from OTHER words' without a special-case exclusion, which would be fiddly when duplicates exist."
+   },
+   {
+    "q": "Why must the empty string be excluded?",
+    "a": "Because if the empty string is in the set, every position bridges to itself and the DP marks everything reachable, so every word is reported as concatenated. It is a degenerate piece that satisfies the recurrence vacuously. Filtering it out up front is cleaner than guarding inside the loop, and the test with an empty entry exists to pin that behaviour down."
+   },
+   {
+    "q": "How would a trie change the complexity?",
+    "a": "Walking a trie from each start position finds all dictionary words beginning there in one pass over the suffix, replacing the inner loop's repeated substring construction and hashing. That removes the O(L) substring allocation per candidate split, so the practical constant drops sharply even though the worst-case bound stays O(L squared) per word. For a large dictionary with long words, the trie version is the one I would ship."
+   }
   ]
  },
  {
@@ -11061,16 +11091,32 @@
   "subcategory": "Bits",
   "difficulty": "Medium",
   "question": "Find the single number where every other element appears three times.",
-  "answer": "Count bits at each of the 32 positions modulo three, or use two accumulator variables representing bits seen once and twice with bitwise logic. Time O(n), space O(1). The XOR trick alone does not work because it cancels only pairs.",
+  "answer": "**Approach**\n\nBitwise state machine. Two accumulators count each bit position modulo three, so triples cancel and only the unique number survives.\n\n**Logic**\n\nXOR alone works for pairs because two of anything cancels. For triples it does not, so the counting must be explicit: `ones` holds bits seen once so far modulo three, `twos` holds bits seen twice.\n\nThe update order matters — `ones` is computed first and `twos` uses the updated value, which is what makes the third occurrence clear both.\n\nA counting alternative sums each bit position modulo three, which is easier to explain and also O(32n).\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // ones/twos hold bits seen once/twice so far, modulo three.\n    public static int SingleNumber(int[] nums)\n    {\n        int ones = 0, twos = 0;\n\n        foreach (int n in nums)\n        {\n            ones = (ones ^ n) & ~twos;\n            twos = (twos ^ n) & ~ones;   // uses the UPDATED ones\n        }\n\n        return ones;\n    }\n\n    // Easier to justify: count each bit position modulo three.\n    public static int SingleNumberByBitCount(int[] nums)\n    {\n        int result = 0;\n\n        for (int bit = 0; bit < 32; bit++)\n        {\n            int count = 0;\n            foreach (int n in nums) count += (n >> bit) & 1;\n\n            if (count % 3 != 0) result |= 1 << bit;\n        }\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        int[][] cases =\n        {\n            new[] { 2, 2, 3, 2 },\n            new[] { 0, 1, 0, 1, 0, 1, 99 },\n            new[] { 7 },\n            new[] { -2, -2, 1, -2 },        // negatives: the sign bit must work\n            new[] { 30000, 500, 100, 30000, 100, 30000, 100 }\n        };\n\n        foreach (var c in cases)\n            Console.WriteLine($\"{SingleNumber(c)} (bitcount {SingleNumberByBitCount(c)})\");\n    }\n}\n```\n\n**Output**\n\n```\n3 (bitcount 3)\n99 (bitcount 99)\n7 (bitcount 7)\n1 (bitcount 1)\n500 (bitcount 500)\n```",
   "tags": [
    "bit-manipulation",
-   "xor",
-   "counting"
+   "state-machine",
+   "modular",
+   "constant-space",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does plain XOR not work here?",
+    "a": "Because XOR cancels pairs, not triples - three copies of a value XOR to the value itself, so the triples do not vanish and the result is meaningless. The modulo-three structure has to be built explicitly, either with the two-register state machine or by counting each bit position and taking the remainder. Recognising that the classic trick is tied to the multiplicity two is the actual insight this variant tests."
+   },
+   {
+    "q": "Why does the assignment order of ones and twos matter?",
+    "a": "Because twos is deliberately computed from the just-updated ones, which is what makes the third occurrence of a bit clear both registers and return the state to zero. Swapping the lines, or computing both from the old values with temporaries, breaks the cycle and leaves residue. It is a two-state machine written in bitwise arithmetic, and like any state machine the transition order is part of the definition."
+   },
+   {
+    "q": "Why test negative numbers?",
+    "a": "Because the sign bit is bit 31 and any solution that iterates bits with a signed shift, or that sums counts into a value it later reconstructs arithmetically, can mishandle it - in C# the arithmetic right shift fills with the sign, which is why the bit-count version masks with & 1 rather than comparing to zero. Both versions here are sign-safe, and the [-2,-2,1,-2] case is what proves it rather than assumes it."
+   }
   ]
  },
  {
@@ -11078,16 +11124,32 @@
   "subcategory": "Bits",
   "difficulty": "Medium",
   "question": "Generate gray code of n bits.",
-  "answer": "Each value is the index XORed with the index shifted right by one, which produces a sequence where consecutive entries differ by one bit. Alternatively build recursively by mirroring the previous sequence with a leading bit set. Time O(2^n), which is the output size.",
+  "answer": "**Approach**\n\nThe closed form: the ith gray code is `i XOR (i >> 1)`. The reflective construction is shown alongside, since that is what explains why the formula works.\n\n**Logic**\n\nThe defining property is that consecutive codes differ in exactly one bit, and the first and last do too — it is a Hamiltonian cycle on the hypercube.\n\nThe reflective construction builds it inductively: take the n-1 bit sequence, mirror it, and prefix the second half with a 1. The mirror point is where the single-bit-change property is preserved across the join.\n\nO(2ⁿ) — the output size.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<int> GrayCode(int n) =>\n        Enumerable.Range(0, 1 << n).Select(i => i ^ (i >> 1)).ToList();\n\n    // Reflect and prefix: the construction the formula encodes.\n    public static IList<int> GrayCodeReflective(int n)\n    {\n        var codes = new List<int> { 0 };\n\n        for (int bit = 0; bit < n; bit++)\n            for (int i = codes.Count - 1; i >= 0; i--)   // mirrored order\n                codes.Add(codes[i] | (1 << bit));\n\n        return codes;\n    }\n\n    // The real invariant: consecutive codes differ in exactly one bit, and it wraps.\n    private static bool IsValidGray(IList<int> codes, int n)\n    {\n        if (codes.Count != 1 << n) return false;\n        if (codes.Distinct().Count() != codes.Count) return false;\n        if (codes.Count == 1) return true;   // n=0: one code, nothing to differ from\n\n        for (int i = 0; i < codes.Count; i++)\n        {\n            int next = codes[(i + 1) % codes.Count];\n            int diff = codes[i] ^ next;\n\n            if (diff == 0 || (diff & (diff - 1)) != 0) return false;   // not a single bit\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", GrayCode(2)));\n        Console.WriteLine(string.Join(\",\", GrayCode(3)));\n        Console.WriteLine(string.Join(\",\", GrayCodeReflective(3)));\n\n        for (int n = 0; n <= 5; n++)\n            Console.WriteLine($\"n={n}: formula {IsValidGray(GrayCode(n), n)}, \" +\n                              $\"reflective {IsValidGray(GrayCodeReflective(n), n)}\");\n    }\n}\n```\n\n**Output**\n\n```\n0,1,3,2\n0,1,3,2,6,7,5,4\n0,1,3,2,6,7,5,4\nn=0: formula True, reflective True\nn=1: formula True, reflective True\nn=2: formula True, reflective True\nn=3: formula True, reflective True\nn=4: formula True, reflective True\nn=5: formula True, reflective True\n```",
   "tags": [
    "bit-manipulation",
    "gray-code",
-   "generation"
+   "construction",
+   "invariants",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does i XOR (i >> 1) produce a gray code?",
+    "a": "Because incrementing i flips a trailing run of ones to zeros and one zero to a one; XORing with the shifted copy cancels all but one of those changes, leaving exactly a single bit different between consecutive outputs. Equivalently it is the closed form of the reflective construction, where each mirroring step corresponds to one more bit position. Both explanations are acceptable, but being able to give at least the reflective one shows it is understood rather than memorised."
+   },
+   {
+    "q": "Why does the test check a property rather than a fixed list?",
+    "a": "Because many valid gray code sequences exist - any starting point and any bit permutation gives another - so comparing against one expected array tests an incidental choice rather than correctness. Checking that all codes are distinct, that there are 2 to the n of them, and that consecutive ones including the wraparound differ in exactly one bit is the actual definition. That is the same reasoning as testing the sudoku solver by validating the board rather than matching a grid."
+   },
+   {
+    "q": "Where are gray codes actually used?",
+    "a": "In rotary encoders and any sampled parallel bus, because when only one bit changes at a time a reading taken mid-transition can only be off by one position rather than arbitrarily wrong - with plain binary, 0111 to 1000 changes four bits and a skewed sample could read anything. They also appear in Karnaugh maps and in some genetic-algorithm encodings for the same adjacency reason. The engineering motivation is worth knowing, since it explains why the single-bit property is the point rather than a curiosity."
+   }
   ]
  },
  {
@@ -11095,16 +11157,31 @@
   "subcategory": "Bits",
   "difficulty": "Medium",
   "question": "Find the maximum product of the lengths of two words with no common letters.",
-  "answer": "Represent each word as a 26-bit mask of the letters it contains, then two words are disjoint when the AND of their masks is zero. Compare all pairs on integers rather than sets. Time O(n^2 + total characters), space O(n).",
+  "answer": "**Approach**\n\nEncode each word's letter set as a 26-bit mask. Two words share no letter exactly when the AND of their masks is zero.\n\n**Logic**\n\nThe bitmask replaces a character-by-character comparison with a single AND, so the pair check drops from O(L) to O(1). Building the masks is one pass over all characters.\n\nThe pair loop remains quadratic in the word count, which dominates — the masks remove the string-length factor, not the pairing.\n\nO(total characters + n²).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxProduct(string[] words)\n    {\n        if (words == null || words.Length < 2) return 0;\n\n        var masks = new int[words.Length];\n\n        for (int i = 0; i < words.Length; i++)\n            foreach (char c in words[i]) masks[i] |= 1 << (c - 'a');\n\n        int best = 0;\n\n        for (int i = 0; i < words.Length; i++)\n            for (int j = i + 1; j < words.Length; j++)\n                // No shared letter iff the masks have no common bit.\n                if ((masks[i] & masks[j]) == 0)\n                    best = Math.Max(best, words[i].Length * words[j].Length);\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxProduct(new[] {\n            \"abcw\", \"baz\", \"foo\", \"bar\", \"xtfn\", \"abcdef\" }));\n\n        Console.WriteLine(MaxProduct(new[] { \"a\", \"ab\", \"abc\", \"d\", \"cd\", \"bcd\", \"abcd\" }));\n        Console.WriteLine(MaxProduct(new[] { \"a\", \"aa\", \"aaa\", \"aaaa\" }));   // all overlap\n        Console.WriteLine(MaxProduct(new[] { \"abc\" }));\n        Console.WriteLine(MaxProduct(Array.Empty<string>()));\n        Console.WriteLine(MaxProduct(new[] { \"\", \"abc\" }));                  // empty word\n    }\n}\n```\n\n**Output**\n\n```\n16\n4\n0\n0\n0\n0\n```",
   "tags": [
    "bit-manipulation",
    "bitmask",
-   "strings",
-   "optimisation"
+   "pairwise",
+   "encoding",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the bitmask help when the loop is still quadratic?",
+    "a": "Because it removes the word-length factor from the inner comparison: without it, checking one pair means comparing letter sets, which is O(L) or a set intersection with allocation. With masks it is a single AND. So the cost goes from O(n squared times L) to O(n squared) plus a linear preprocessing pass. The pairing itself is unchanged, and saying so honestly is better than implying the masks made the algorithm asymptotically better overall."
+   },
+   {
+    "q": "Why does an empty word give a product of zero rather than being excluded?",
+    "a": "Because its mask is zero, so it shares no letter with anything and always passes the check - but its length is zero, so the product is zero and it can never win. The formulation handles it without a special case. It is worth testing precisely because an implementation that assumed at least one letter, for instance by taking the first character to seed the mask, would fail on it."
+   },
+   {
+    "q": "Could the quadratic pairing be avoided?",
+    "a": "Somewhat: keep a map from mask to the longest word with that mask, which collapses anagrams and any repeated letter set into one entry, so the loop runs over distinct masks rather than words. That helps a lot on a real dictionary where many words share a letter set, though the worst case with all-distinct masks is unchanged. A full subset-sum over masks is possible but 2 to the 26 is far worse than n squared for any realistic n."
+   }
   ]
  },
  {
@@ -11112,17 +11189,32 @@
   "subcategory": "Bits",
   "difficulty": "Medium",
   "question": "Divide two integers without using multiplication, division or modulo.",
-  "answer": "Repeatedly subtract the largest doubled multiple of the divisor that fits, accumulating the corresponding doubled quotient - effectively long division in binary. Handle the sign separately and the overflow case where the minimum integer is divided by minus one. Time O(log n).",
+  "answer": "**Approach**\n\nRepeated doubling. Subtract the largest shifted multiple of the divisor that still fits, accumulating the corresponding power of two.\n\n**Logic**\n\nNaive repeated subtraction is O(quotient), which is catastrophic for a large dividend and a divisor of one. Doubling makes it O(log quotient) — it is binary long division.\n\nThe whole calculation runs on negatives rather than positives. That is deliberate: int.MinValue has no positive counterpart, so negating to positive overflows, while every positive negates safely.\n\nThe one genuinely unrepresentable result, MinValue divided by -1, is clamped to MaxValue as the standard convention.\n\nO(log n).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Divide(int dividend, int divisor)\n    {\n        if (divisor == 0) throw new DivideByZeroException();\n\n        // The only result that does not fit; the usual convention clamps it.\n        if (dividend == int.MinValue && divisor == -1) return int.MaxValue;\n\n        bool negative = (dividend < 0) != (divisor < 0);\n\n        // Work in NEGATIVES: int.MinValue has no positive counterpart.\n        int a = dividend > 0 ? -dividend : dividend;\n        int b = divisor > 0 ? -divisor : divisor;\n\n        int quotient = 0;\n\n        while (a <= b)\n        {\n            int chunk = b, multiple = 1;\n\n            // Double while it still fits (guarding against overflow on the doubling).\n            while (chunk >= a - chunk) { chunk += chunk; multiple += multiple; }\n\n            a -= chunk;\n            quotient += multiple;\n        }\n\n        return negative ? -quotient : quotient;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Divide(10, 3));\n        Console.WriteLine(Divide(7, -3));               // truncates toward zero\n        Console.WriteLine(Divide(-2147483648, -1));     // clamped\n        Console.WriteLine(Divide(-2147483648, 1));\n        Console.WriteLine(Divide(0, 5));\n        Console.WriteLine(Divide(1, 1));\n        Console.WriteLine(Divide(2147483647, 1));\n        Console.WriteLine(Divide(-7, 2));\n    }\n}\n```\n\n**Output**\n\n```\n3\n-2\n2147483647\n-2147483648\n0\n1\n2147483647\n-3\n```",
   "tags": [
    "bit-manipulation",
-   "math",
+   "arithmetic",
+   "overflow",
    "edge-cases",
-   "division"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why work in negatives rather than taking absolute values?",
+    "a": "Because int.MinValue has no positive counterpart in two's complement - negating it overflows back to itself - so converting both operands to positive silently corrupts that one input. Every positive int, by contrast, negates safely. So the negative domain is the one where the conversion is total. It is a genuinely non-obvious inversion and it is the main thing this question tests beyond the doubling."
+   },
+   {
+    "q": "Why is repeated subtraction unacceptable?",
+    "a": "Because it runs once per unit of quotient, so dividing int.MaxValue by 1 performs two billion iterations - correct in principle and unusable in practice. Doubling the divisor turns it into binary long division at about 31 iterations. The complexity difference is between O(quotient) and O(log quotient), which is the difference between a timeout and an instant answer."
+   },
+   {
+    "q": "Why does the doubling loop compare chunk against a - chunk?",
+    "a": "Because it is checking whether doubling would overshoot the remaining dividend, written so the doubling itself cannot overflow - in the negative domain, chunk + chunk could pass int.MinValue if tested naively. Rearranging the comparison keeps every intermediate in range. It is the same defensive rewriting as using lo + (hi - lo) / 2 in binary search: algebraically equivalent, but one form cannot overflow and the other can."
+   }
   ]
  },
  {
@@ -11130,15 +11222,31 @@
   "subcategory": "Bits",
   "difficulty": "Medium",
   "question": "Find the bitwise AND of all numbers in an inclusive range.",
-  "answer": "The result is the common binary prefix of the two endpoints, because any differing bit position takes both values somewhere in the range. Shift both right until they are equal, then shift back. Time O(log n), space O(1).",
+  "answer": "**Approach**\n\nThe answer is the common binary prefix of the two endpoints, with every lower bit zero. Shift both right until they agree, then shift back.\n\n**Logic**\n\nThe reason is that any bit position where the endpoints differ must flip somewhere inside the range, and a flip means some number has a zero there — so the AND has a zero there. Only the shared high prefix can survive.\n\nIterating over the range is hopeless for large ranges; this is O(log n) — at most 31 shifts.\n\nBrian Kernighan's trick gives the same answer by clearing the low set bits of the upper endpoint until it drops to or below the lower.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // The AND of a range is the endpoints' common prefix, zero-padded.\n    public static int RangeBitwiseAnd(int left, int right)\n    {\n        int shifts = 0;\n\n        while (left != right) { left >>= 1; right >>= 1; shifts++; }\n\n        return left << shifts;\n    }\n\n    // Same answer: clear the lowest set bit of right until it fits under left.\n    public static int RangeBitwiseAndKernighan(int left, int right)\n    {\n        while (right > left) right &= right - 1;\n        return right;\n    }\n\n    private static int BruteForce(int left, int right)\n    {\n        int result = left;\n        for (int i = left + 1; i <= right; i++) result &= i;\n        return result;\n    }\n\n    public static void Main()\n    {\n        (int Left, int Right)[] cases =\n        {\n            (5, 7), (0, 0), (1, 2147483647), (10, 10), (600000000, 2147483645), (12, 15)\n        };\n\n        foreach (var (l, r) in cases)\n            Console.WriteLine($\"[{l},{r}] -> {RangeBitwiseAnd(l, r)} \" +\n                              $\"(kernighan {RangeBitwiseAndKernighan(l, r)})\");\n\n        // Small ranges only: brute force is O(range).\n        Console.WriteLine($\"Brute force agrees: {BruteForce(5, 7) == RangeBitwiseAnd(5, 7)}\");\n        Console.WriteLine($\"Brute force agrees: {BruteForce(12, 15) == RangeBitwiseAnd(12, 15)}\");\n    }\n}\n```\n\n**Output**\n\n```\n[5,7] -> 4 (kernighan 4)\n[0,0] -> 0 (kernighan 0)\n[1,2147483647] -> 0 (kernighan 0)\n[10,10] -> 10 (kernighan 10)\n[600000000,2147483645] -> 0 (kernighan 0)\n[12,15] -> 12 (kernighan 12)\nBrute force agrees: True\nBrute force agrees: True\n```",
   "tags": [
    "bit-manipulation",
-   "math",
-   "ranges"
+   "common-prefix",
+   "kernighan",
+   "range",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is the answer the common prefix of the endpoints?",
+    "a": "Because at any bit position where the endpoints differ, that bit must change somewhere inside the range, which means at least one number has a zero there - and a single zero forces the AND to zero at that position. Positions where both endpoints agree on a 1 stay 1 throughout the range, since the range is contiguous. So exactly the shared high prefix survives, and everything below it is zero."
+   },
+   {
+    "q": "How does the Kernighan version work?",
+    "a": "Clearing the lowest set bit of the upper endpoint repeatedly walks it down through values that are increasingly rounded-down powers-of-two sums, and the loop stops as soon as it is no longer above the lower endpoint - at which point what remains is exactly the common prefix. It is the same result reached from the other direction, and it is usually a couple of iterations rather than a fixed 31. Which one to write is taste; having both shows the equivalence is understood."
+   },
+   {
+    "q": "Why does the brute-force check only run on small ranges?",
+    "a": "Because it is O(range), so on [1, 2147483647] it would take two billion iterations - the exact thing the clever solution exists to avoid. Using it as an oracle on small inputs still has value: it independently confirms the prefix argument on cases where both are cheap. Knowing to include a reference implementation but bound where it runs is the practical compromise."
+   }
   ]
  },
  {
@@ -11146,17 +11254,32 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Convert a fraction to a recurring decimal string.",
-  "answer": "Perform long division tracking each remainder in a map to its output position; when a remainder repeats, the repeating cycle starts at the recorded position and brackets are inserted there. Handle sign and exact division separately. Time proportional to the cycle length.",
+  "answer": "**Approach**\n\nLong division with a map from remainder to its position in the output. A repeated remainder marks where the cycle began.\n\n**Logic**\n\nThe key fact is that the decimal digits are determined entirely by the remainder, so the moment a remainder recurs the whole digit sequence from that point repeats forever. Recording each remainder's output position lets the bracket be inserted exactly there.\n\nThe sign is handled before the division, and the arithmetic runs in long because negating int.MinValue overflows.\n\nO(denominator) digits in the worst case, since there are only that many possible remainders.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    public static string FractionToDecimal(int numerator, int denominator)\n    {\n        if (numerator == 0) return \"0\";\n\n        var sb = new StringBuilder();\n\n        if ((numerator < 0) != (denominator < 0)) sb.Append('-');\n\n        // long throughout: negating int.MinValue overflows.\n        long n = Math.Abs((long)numerator), d = Math.Abs((long)denominator);\n\n        sb.Append(n / d);\n        long remainder = n % d;\n\n        if (remainder == 0) return sb.ToString();\n\n        sb.Append('.');\n\n        // The digits depend only on the remainder, so a repeat means a cycle.\n        var seenAt = new Dictionary<long, int>();\n\n        while (remainder != 0)\n        {\n            if (seenAt.TryGetValue(remainder, out int position))\n            {\n                sb.Insert(position, '(');\n                sb.Append(')');\n                break;\n            }\n\n            seenAt[remainder] = sb.Length;\n\n            remainder *= 10;\n            sb.Append(remainder / d);\n            remainder %= d;\n        }\n\n        return sb.ToString();\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FractionToDecimal(1, 2));\n        Console.WriteLine(FractionToDecimal(2, 1));\n        Console.WriteLine(FractionToDecimal(4, 333));\n        Console.WriteLine(FractionToDecimal(1, 6));        // cycle starts after one digit\n        Console.WriteLine(FractionToDecimal(-50, 8));\n        Console.WriteLine(FractionToDecimal(0, 5));\n        Console.WriteLine(FractionToDecimal(-2147483648, -1));\n        Console.WriteLine(FractionToDecimal(1, 333));\n    }\n}\n```\n\n**Output**\n\n```\n0.5\n2\n0.(012)\n0.1(6)\n-6.25\n0\n2147483648\n0.(003)\n```",
   "tags": [
    "math",
-   "simulation",
-   "hashmap",
-   "strings"
+   "long-division",
+   "hash-map",
+   "cycle-detection",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does a repeated remainder mean a repeating decimal?",
+    "a": "Because long division is deterministic in the remainder alone - the same remainder produces the same next digit and the same following remainder - so once one recurs, the entire sequence from that point repeats forever. Recording where in the output each remainder first appeared gives the exact position for the opening bracket. It is cycle detection on a deterministic state machine, the same idea as Floyd's algorithm on a linked list."
+   },
+   {
+    "q": "Why compute in long?",
+    "a": "Because Math.Abs of int.MinValue overflows - there is no positive counterpart - so the negation must happen after widening. The multiply by ten inside the loop also exceeds int range for large denominators. Casting once at the top makes every subsequent operation safe. The MinValue over -1 test exists to prove it, and it is the case that breaks most first attempts."
+   },
+   {
+    "q": "How long can the repeating part be?",
+    "a": "Up to denominator minus one digits, because there are only that many possible non-zero remainders and one must repeat by pigeonhole once you have that many. For a denominator like 7 the cycle is 6 digits, which is the maximum for that value. That bound is also why the map cannot grow unboundedly and the loop always terminates - worth stating, because the loop otherwise looks like it might not."
+   }
   ]
  },
  {
@@ -11164,17 +11287,32 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Implement a random pick with weights.",
-  "answer": "Build a prefix sum of weights once, then for each pick generate a uniform value in the total range and binary search for the first prefix exceeding it. Construction O(n), each pick O(log n). Alias tables give O(1) picks at higher build cost.",
+  "answer": "**Approach**\n\nPrefix sums plus binary search. Build the cumulative totals once, then pick a uniform value in the total range and find which bucket it lands in.\n\n**Logic**\n\nThe cumulative array turns weights into contiguous intervals on a line, so a uniform point picks a bucket with probability proportional to its interval's length — which is its weight.\n\nThe binary search must find the *first* prefix strictly greater than the drawn value, so a weight of zero gets an empty interval and is never selected.\n\nConstruction is O(n); each pick is O(log n).\n\nThe test asserts distributional properties, not a seeded sequence, because seeded `Random` output is not stable across .NET versions.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class WeightedPicker\n{\n    private readonly int[] _cumulative;\n    private readonly Random _random;\n\n    public WeightedPicker(int[] weights, Random random)\n    {\n        _random = random;\n        _cumulative = new int[weights.Length];\n\n        int running = 0;\n        for (int i = 0; i < weights.Length; i++)\n        {\n            running += weights[i];\n            _cumulative[i] = running;\n        }\n    }\n\n    public int PickIndex()\n    {\n        int target = _random.Next(_cumulative[^1]);   // 0 .. total-1\n\n        // First prefix STRICTLY greater than target, so zero weights never win.\n        int lo = 0, hi = _cumulative.Length - 1;\n\n        while (lo < hi)\n        {\n            int mid = lo + (hi - lo) / 2;\n            if (_cumulative[mid] <= target) lo = mid + 1; else hi = mid;\n        }\n\n        return lo;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var weights = new[] { 1, 3, 0, 6 };\n        var picker = new WeightedPicker(weights, new Random(12345));\n\n        var counts = new int[weights.Length];\n        const int draws = 200000;\n\n        for (int i = 0; i < draws; i++) counts[picker.PickIndex()]++;\n\n        int total = 0;\n        foreach (int w in weights) total += w;\n\n        // Assert the DISTRIBUTION, not a seeded sequence.\n        Console.WriteLine($\"zero-weight index never picked: {counts[2] == 0}\");\n\n        for (int i = 0; i < weights.Length; i++)\n        {\n            double expected = (double)weights[i] / total;\n            double actual = (double)counts[i] / draws;\n            Console.WriteLine($\"index {i}: within 1% of expected {Math.Abs(actual - expected) < 0.01}\");\n        }\n\n        var single = new WeightedPicker(new[] { 5 }, new Random(1));\n        Console.WriteLine($\"single bucket always 0: {single.PickIndex() == 0 && single.PickIndex() == 0}\");\n    }\n}\n```\n\n**Output**\n\n```\nzero-weight index never picked: True\nindex 0: within 1% of expected True\nindex 1: within 1% of expected True\nindex 2: within 1% of expected True\nindex 3: within 1% of expected True\nsingle bucket always 0: True\n```",
   "tags": [
-   "math",
-   "randomisation",
+   "randomised",
+   "prefix-sum",
    "binary-search",
-   "prefix-sum"
+   "distribution",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does the binary search look for the first strictly greater prefix?",
+    "a": "Because each bucket owns the half-open interval between the previous cumulative total and its own, so a drawn value equal to a prefix belongs to the NEXT bucket. That boundary rule is also what makes a zero weight unselectable: its interval is empty, since its cumulative total equals its predecessor's, so no drawn value can land in it. Using less-than instead of less-than-or-equal in the comparison would hand zero-weight buckets a share."
+   },
+   {
+    "q": "Why does the test assert a distribution rather than a fixed sequence?",
+    "a": "Because seeded Random is not guaranteed stable across .NET versions - the algorithm behind it has changed - so a test pinned to a seeded sequence is testing the runtime, not the code, and will break on an upgrade. Asserting that each index's observed frequency is within a tolerance of its weight share tests the actual contract. It is the same principle as testing a shuffle by checking it produces a permutation rather than matching one seeded ordering."
+   },
+   {
+    "q": "Is there a faster alternative for very many picks?",
+    "a": "Yes - the alias method preprocesses the weights into a table in O(n) and then samples in O(1) per pick rather than O(log n), which pays off when the number of draws dwarfs the number of buckets. The cost is a more intricate build step and two random values per pick. Prefix sums are the right default because they are simple and support changing weights by rebuilding, while the alias table is the specialist choice for a hot sampling loop."
+   }
   ]
  },
  {
@@ -11182,17 +11320,32 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Implement reservoir sampling to pick a random element from a stream of unknown length.",
-  "answer": "Keep the first element, then for the i-th element replace the held value with probability one over i. Every element ends with equal probability, and only one value is stored regardless of stream length. Time O(n), space O(1) - or O(k) for the k-sample variant.",
+  "answer": "**Approach**\n\nKeep one candidate. On seeing the nth element, replace the candidate with probability 1/n.\n\n**Logic**\n\nThe induction: suppose after n-1 elements the candidate is uniform among them. The nth element is taken with probability 1/n, and each earlier one survives with probability (n-1)/n × 1/(n-1) = 1/n. So uniformity is preserved at every step.\n\nThe point is that no element is stored and the stream length is never needed — which is exactly the situation the algorithm exists for.\n\nO(1) memory, O(n) time.\n\nThe test runs the sampler many times and checks the empirical distribution is near-uniform, rather than pinning a seeded draw.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ReservoirSampler\n{\n    private readonly Random _random;\n    private int _seen;\n    private int _candidate;\n\n    public ReservoirSampler(Random random) { _random = random; }\n\n    public void Offer(int value)\n    {\n        _seen++;\n\n        // Replace with probability 1/n; no element is ever stored beyond the candidate.\n        if (_random.Next(_seen) == 0) _candidate = value;\n    }\n\n    public int Current => _candidate;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var random = new Random(98765);\n        const int streamLength = 10;\n        const int trials = 200000;\n\n        var counts = new int[streamLength];\n\n        for (int t = 0; t < trials; t++)\n        {\n            var sampler = new ReservoirSampler(random);\n            for (int v = 0; v < streamLength; v++) sampler.Offer(v);\n            counts[sampler.Current]++;\n        }\n\n        double expected = 1.0 / streamLength;\n        bool allUniform = true;\n\n        foreach (int c in counts)\n            if (Math.Abs((double)c / trials - expected) > 0.005) allUniform = false;\n\n        Console.WriteLine($\"every element within 0.5% of uniform: {allUniform}\");\n        Console.WriteLine($\"all elements selected at least once: {Array.TrueForAll(counts, c => c > 0)}\");\n\n        // A single-element stream must always return that element.\n        var one = new ReservoirSampler(new Random(1));\n        one.Offer(42);\n        Console.WriteLine($\"single element stream: {one.Current == 42}\");\n\n        // The stream length is never needed in advance.\n        var unknown = new ReservoirSampler(new Random(7));\n        var values = new List<int> { 3, 1, 4, 1, 5, 9, 2, 6 };\n        foreach (int v in values) unknown.Offer(v);\n        Console.WriteLine($\"candidate came from the stream: {values.Contains(unknown.Current)}\");\n    }\n}\n```\n\n**Output**\n\n```\nevery element within 0.5% of uniform: True\nall elements selected at least once: True\nsingle element stream: True\ncandidate came from the stream: True\n```",
   "tags": [
-   "math",
-   "randomisation",
+   "randomised",
    "streaming",
-   "sampling"
+   "reservoir-sampling",
+   "probability",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Prove that every element ends up equally likely.",
+    "a": "By induction. After one element it is trivially uniform. Assume after n-1 elements each is held with probability 1/(n-1). The nth element becomes the candidate with probability 1/n. Any earlier element is still held only if it was the candidate, probability 1/(n-1), AND was not replaced, probability (n-1)/n - multiplying gives 1/n. So all n elements are equally likely, and the invariant carries to the end of the stream whatever its length."
+   },
+   {
+    "q": "How does this extend to picking k elements?",
+    "a": "Keep a reservoir array of the first k elements, then for the nth element with n greater than k, pick a random index in [0, n) and if it falls inside the reservoir, overwrite that slot. The same induction shows every element ends up in the reservoir with probability k/n. That is the general algorithm, usually called Algorithm R; the single-element version here is the k equals one case."
+   },
+   {
+    "q": "Why is this needed when you could count the stream and then pick?",
+    "a": "Because that requires two passes or storing everything, and a stream may be unbounded, arrive over a network, or be too large for memory - log processing and telemetry sampling are the standard cases. Reservoir sampling gives a uniform sample in one pass with constant memory and without ever knowing the length. If the data is already an in-memory array with a known length, the simple approach is fine and this machinery is unnecessary."
+   }
   ]
  },
  {
@@ -11265,15 +11418,31 @@
   "subcategory": "Math",
   "difficulty": "Easy",
   "question": "Determine whether a large number is divisible by three without converting it.",
-  "answer": "Sum the digits and test that sum for divisibility by three, recursing if the sum is still large. It works because ten is congruent to one modulo three, so every positional weight contributes its digit directly. Time O(number of digits).",
+  "answer": "**Approach**\n\nSum the digits. A number is divisible by three exactly when its digit sum is, which allows a single pass over the string with no numeric conversion.\n\n**Logic**\n\nThe rule follows from ten being congruent to one modulo three: every power of ten is congruent to one, so a number is congruent to the sum of its digits.\n\nThat is why the same trick works for nine, ten also being congruent to one modulo nine, but not for seven.\n\nTracking the running sum modulo three rather than the raw sum keeps it bounded, so an arbitrarily long input cannot overflow.\n\nO(digits) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsDivisibleByThree(string number)\n    {\n        if (string.IsNullOrEmpty(number)) return false;\n\n        int start = number[0] == '-' || number[0] == '+' ? 1 : 0;\n        if (start == number.Length) return false;\n\n        int remainder = 0;\n\n        for (int i = start; i < number.Length; i++)\n        {\n            if (number[i] < '0' || number[i] > '9') return false;\n\n            // Modulo as we go: the running value never grows.\n            remainder = (remainder + number[i] - '0') % 3;\n        }\n\n        return remainder == 0;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsDivisibleByThree(\"123\"));\n        Console.WriteLine(IsDivisibleByThree(\"124\"));\n        Console.WriteLine(IsDivisibleByThree(\"0\"));\n        Console.WriteLine(IsDivisibleByThree(\"-333\"));\n\n        // Far beyond any integer type.\n        Console.WriteLine(IsDivisibleByThree(new string('9', 500)));\n        Console.WriteLine(IsDivisibleByThree(new string('1', 500)));   // 500 ones\n\n        Console.WriteLine(IsDivisibleByThree(\"12a\"));\n        Console.WriteLine(IsDivisibleByThree(\"\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nTrue\nFalse\nFalse\nFalse\n```",
   "tags": [
    "math",
-   "number-theory",
-   "digits"
+   "modular-arithmetic",
+   "strings",
+   "big-numbers",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does summing the digits work?",
+    "a": "Because ten is congruent to one modulo three, so every power of ten is too, and a number written as a sum of digits times powers of ten is therefore congruent to the plain sum of its digits. The same argument gives the rule for nine. It fails for seven because ten is congruent to three modulo seven, not one, so the powers cycle rather than collapsing - which is why there is no equally simple digit-sum test for it."
+   },
+   {
+    "q": "Why take the modulo inside the loop?",
+    "a": "Because the raw digit sum of a very long number grows without bound and would overflow an int somewhere past a couple of hundred million digits - unlikely, but the modulo costs nothing and removes the concern entirely. It also keeps the invariant explicit: the variable always holds the number's residue so far, which is easier to reason about than a sum you interpret at the end."
+   },
+   {
+    "q": "How would you test divisibility by seven this way?",
+    "a": "You process the digits left to right maintaining remainder = (remainder * 10 + digit) % 7, which is just long division carried out one digit at a time and works for any modulus. The digit-sum shortcut is a special case that exists only when the base is congruent to one modulo the divisor. So the general technique is the running-remainder scan, and the digit sum is a convenient accident for three and nine."
+   }
   ]
  },
  {
@@ -11281,17 +11450,32 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Add two numbers represented as strings without converting to integers.",
-  "answer": "Walk from the end with a carry, summing digit pairs and appending the remainder modulo ten, continuing while either string remains or the carry is non-zero, then reverse. Time O(max(m,n)). This is the standard approach for values beyond the native integer range.",
+  "answer": "**Approach**\n\nSchoolbook addition from the least significant end, carrying, then reverse the result.\n\n**Logic**\n\nOne loop handles both differing lengths and the final carry, by continuing while either index is valid or a carry remains and treating a past-the-end digit as zero.\n\nBuilding the result in reverse and reversing once at the end avoids inserting at the front of a growing buffer, which would be quadratic.\n\nThe final carry is the case that produces a result longer than either input, such as 99 plus 1.\n\nO(max length) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    public static string AddStrings(string a, string b)\n    {\n        a ??= \"0\"; b ??= \"0\";\n        if (a.Length == 0) a = \"0\";\n        if (b.Length == 0) b = \"0\";\n\n        var sb = new StringBuilder();\n        int i = a.Length - 1, j = b.Length - 1, carry = 0;\n\n        // One loop covers unequal lengths AND the trailing carry.\n        while (i >= 0 || j >= 0 || carry > 0)\n        {\n            int sum = carry;\n            if (i >= 0) sum += a[i--] - '0';\n            if (j >= 0) sum += b[j--] - '0';\n\n            sb.Append((char)('0' + sum % 10));   // append, reverse once at the end\n            carry = sum / 10;\n        }\n\n        var digits = sb.ToString().ToCharArray();\n        Array.Reverse(digits);\n        return new string(digits);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(AddStrings(\"11\", \"123\"));\n        Console.WriteLine(AddStrings(\"456\", \"77\"));\n        Console.WriteLine(AddStrings(\"0\", \"0\"));\n        Console.WriteLine(AddStrings(\"99\", \"1\"));          // grows a digit\n        Console.WriteLine(AddStrings(\"999\", \"999\"));\n        Console.WriteLine(AddStrings(\"\", \"5\"));\n\n        // Far past long range, so no conversion could have been used.\n        string big = new string('9', 60);\n        Console.WriteLine(AddStrings(big, \"1\"));\n    }\n}\n```\n\n**Output**\n\n```\n134\n533\n0\n100\n1998\n5\n1000000000000000000000000000000000000000000000000000000000000\n```",
   "tags": [
-   "math",
    "strings",
+   "arithmetic",
+   "carry",
    "big-numbers",
-   "implementation"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why include the carry in the loop condition?",
+    "a": "Because the result can be one digit longer than either input - 99 plus 1 is 100 - and that final digit comes from a carry after both strings are exhausted. A loop bounded only by the string lengths would drop it, producing 00. Folding all three termination conditions into one while is also what removes the need for separate tail loops for the longer string, so the whole addition is one pass with no duplicated logic."
+   },
+   {
+    "q": "Why append and reverse rather than inserting at the front?",
+    "a": "Because inserting at index zero of a StringBuilder shifts every existing character, making the whole thing O(n squared). Appending is amortised O(1) and the single reverse at the end is O(n). For short numbers it is invisible, but for thousand-digit values it is the difference between linear and quadratic - and the fix costs one line, so there is no reason to write the slow version."
+   },
+   {
+    "q": "How would you extend this to multiplication?",
+    "a": "Schoolbook multiplication uses a result array of length m + n, adding each digit product into position i + j + 1 and propagating carries at the end - O(m times n). For very large numbers that becomes the bottleneck and Karatsuba's divide-and-conquer brings it to about n to the 1.58, with FFT-based methods below that for the extreme cases. Knowing where the schoolbook method stops being acceptable is more useful than the implementation detail."
+   }
   ]
  },
  {
