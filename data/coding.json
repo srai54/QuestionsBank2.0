@@ -7618,16 +7618,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Wiggle subsequence: longest subsequence whose differences alternate in sign.",
-  "answer": "Track two running lengths, one ending on an up move and one on a down move, updating each from the other whenever the sign of the difference matches. Time O(n), space O(1). The greedy insight is that only direction changes matter, not magnitudes.",
+  "answer": "**Approach**\n\nGreedy in one pass. Track two running lengths: the longest wiggle ending on a rise, and the longest ending on a fall. Each new element extends one of them.\n\n**Logic**\n\nIf the next element is larger, the best sequence ending on a rise becomes one more than the best previously ending on a fall — because the sequence must alternate. If smaller, the mirror applies. If equal, neither changes, which is how plateaus are ignored without a special case.\n\nThe answer is the larger of the two counters. O(n) time, O(1) space.\n\nThe DP formulation with two arrays is the same recurrence; the rolling variables are just the space-optimised version.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int WiggleMaxLength(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return 0;\n\n        int up = 1, down = 1;   // longest ending on a rise / on a fall\n\n        for (int i = 1; i < nums.Length; i++)\n        {\n            if (nums[i] > nums[i - 1]) up = down + 1;\n            else if (nums[i] < nums[i - 1]) down = up + 1;\n            // equal: a plateau extends neither\n        }\n\n        return Math.Max(up, down);\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(WiggleMaxLength(new[] { 1, 7, 4, 9, 2, 5 }));      // all alternate\n        Console.WriteLine(WiggleMaxLength(new[] { 1, 17, 5, 10, 13, 15, 10, 5, 16, 8 }));\n        Console.WriteLine(WiggleMaxLength(new[] { 1, 2, 3, 4, 5 }));         // monotonic\n        Console.WriteLine(WiggleMaxLength(new[] { 3, 3, 3, 3 }));            // all equal\n        Console.WriteLine(WiggleMaxLength(new[] { 5 }));\n        Console.WriteLine(WiggleMaxLength(new[] { 1, 2, 2, 1 }));\n    }\n}\n```\n\n**Output**\n\n```\n6\n7\n2\n1\n1\n3\n```",
   "tags": [
-   "arrays",
    "greedy",
-   "dynamic-programming"
+   "arrays",
+   "wiggle",
+   "rolling-variables",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does a rise set up = down + 1 rather than up + 1?",
+    "a": "Because the sequence must alternate, so a rise can only follow a fall. Extending the sequence that already ended on a rise would put two rises together, which is not a wiggle. Taking down + 1 attaches the new rise to the best sequence that ended the opposite way. Writing up + 1 instead silently counts monotonic runs and returns the array length for a sorted input, which the [1,2,3,4,5] test catches immediately."
+   },
+   {
+    "q": "Why do equal adjacent values change nothing?",
+    "a": "Because a difference of zero is neither a rise nor a fall, so it cannot participate in an alternation and the element is simply skipped. Handling it by falling through both conditions is cleaner than an explicit branch, and it means a long plateau collapses to a single element naturally. The [3,3,3,3] test confirms the answer is 1 rather than 4, which a solution comparing with >= would get wrong."
+   },
+   {
+    "q": "Is the greedy provably optimal here?",
+    "a": "Yes. At each step the best sequence ending in a given direction is determined entirely by the best sequence ending in the opposite direction, so there is no choice to regret and no need to look ahead. That makes the recurrence exact rather than heuristic, which is why the O(1) rolling version is not an approximation of the DP but identical to it. Contrast longest increasing subsequence, where extending is a genuine choice and greedy alone fails."
+   }
   ]
  },
  {
@@ -7668,15 +7684,31 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Monotone increasing digits: largest number at most n whose digits are non-decreasing.",
-  "answer": "Scan for the first position where a digit exceeds the next, decrement it, and set everything after to nine - repeating the decrement leftwards while it breaks monotonicity. Time O(d) over digits, space O(d).",
+  "answer": "**Approach**\n\nScan for the first place the digits decrease, decrement the digit before it, and set everything after to nine.\n\n**Logic**\n\nWhen digit i is greater than digit i+1, the number cannot stay as it is. Reducing digit i by one and making everything after it nine gives the largest candidate below that prefix.\n\nThe subtlety is that decrementing can create a new violation further left: 332 becomes 3 2 9, but now 3 > 2. So the scan must continue backwards from the point of change, which is why the loop tracks the leftmost position that needs filling with nines.\n\nO(number of digits), which is O(log n).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MonotoneIncreasingDigits(int n)\n    {\n        if (n < 0) throw new ArgumentOutOfRangeException(nameof(n));\n\n        var digits = n.ToString().ToCharArray();\n        int fillFrom = digits.Length;   // everything from here becomes '9'\n\n        // Right to left: a decrement can create a new violation further left.\n        for (int i = digits.Length - 1; i > 0; i--)\n        {\n            if (digits[i - 1] <= digits[i]) continue;\n\n            digits[i - 1]--;\n            fillFrom = i;\n        }\n\n        for (int i = fillFrom; i < digits.Length; i++) digits[i] = '9';\n\n        return int.Parse(new string(digits));\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(MonotoneIncreasingDigits(10));\n        Console.WriteLine(MonotoneIncreasingDigits(1234));    // already monotone\n        Console.WriteLine(MonotoneIncreasingDigits(332));      // cascading decrement\n        Console.WriteLine(MonotoneIncreasingDigits(0));\n        Console.WriteLine(MonotoneIncreasingDigits(100));\n        Console.WriteLine(MonotoneIncreasingDigits(668841));\n    }\n}\n```\n\n**Output**\n\n```\n9\n1234\n299\n0\n99\n667999\n```",
   "tags": [
-   "arrays",
    "greedy",
-   "math"
+   "digits",
+   "backwards-scan",
+   "math",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why scan right to left rather than left to right?",
+    "a": "Because decrementing a digit can create a new violation with the digit before it. In 332, fixing the 3>2 at the end gives 3 2 9, which now violates at the front. A left-to-right scan would have already passed that position and would return 329, which is not monotone. Scanning backwards means every decrement is re-examined against its own left neighbour on the next iteration. The 332 case is the minimal example that separates the two."
+   },
+   {
+    "q": "Why record fillFrom rather than writing nines immediately?",
+    "a": "Because a later decrement further left moves the boundary, and nines already written would have to be rewritten. Tracking the leftmost position that needs filling and doing it in one pass afterwards is both simpler and correct. Writing eagerly also destroys the digit values the backwards scan still needs to compare, which would break the cascade detection entirely."
+   },
+   {
+    "q": "Why does 100 give 99 rather than 100?",
+    "a": "Because 1 > 0 violates the non-decreasing requirement, so the number must come down. Decrementing the 1 gives 0, and filling the rest with nines gives 099, which parses as 99. The leading zero disappearing is exactly right here, since the answer is a number rather than a digit string. It is worth noting that the same code returning a string would need explicit leading-zero handling, which is the kind of detail that differs between phrasings of the problem."
+   }
   ]
  },
  {
@@ -7684,16 +7716,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Two city scheduling: send n people to each of two cities minimising total cost.",
-  "answer": "Sort by the difference between the two costs, send the first half to the cheaper-relative city and the rest to the other. Sorting by the saving rather than by absolute cost is the key insight. Time O(n log n), space O(1).",
+  "answer": "**Approach**\n\nSort by the *difference* between the two costs, not by either cost alone. Send the first half to city A and the rest to city B.\n\n**Logic**\n\nThe cost of sending someone to A rather than B is `costA - costB`. A large negative difference means A is a bargain for them; a large positive means B is. Sorting by that difference puts the people who most benefit from A at the front.\n\nSince exactly half must go to each city, taking the first half for A is optimal: any swap would move someone with a smaller A-advantage into A and someone with a larger one out, which cannot improve the total.\n\nO(n log n) for the sort.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    // costs[i] = [costToCityA, costToCityB]\n    public static int TwoCitySchedCost(int[][] costs)\n    {\n        if (costs == null || costs.Length == 0) return 0;\n\n        // Sort by how much cheaper A is than B for each person.\n        var sorted = costs.OrderBy(c => c[0] - c[1]).ToArray();\n\n        int half = sorted.Length / 2;\n        int total = 0;\n\n        for (int i = 0; i < sorted.Length; i++)\n            total += i < half ? sorted[i][0] : sorted[i][1];\n\n        return total;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(TwoCitySchedCost(new[] {\n            new[] { 10, 20 }, new[] { 30, 200 }, new[] { 400, 50 }, new[] { 30, 20 } }));\n\n        Console.WriteLine(TwoCitySchedCost(new[] {\n            new[] { 259, 770 }, new[] { 448, 54 }, new[] { 926, 667 },\n            new[] { 184, 139 }, new[] { 840, 118 }, new[] { 577, 469 } }));\n\n        Console.WriteLine(TwoCitySchedCost(new[] { new[] { 1, 2 }, new[] { 3, 4 } }));\n        Console.WriteLine(TwoCitySchedCost(Array.Empty<int[]>()));\n\n        // Cheapest-first would pick wrongly here: both are cheap to A.\n        Console.WriteLine(TwoCitySchedCost(new[] {\n            new[] { 1, 100 }, new[] { 2, 3 }, new[] { 5, 6 }, new[] { 7, 8 } }));\n    }\n}\n```\n\n**Output**\n\n```\n110\n1859\n5\n0\n17\n```",
   "tags": [
-   "arrays",
    "greedy",
-   "sorting"
+   "sorting",
+   "exchange-argument",
+   "cost-difference",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why sort by the difference rather than by the cheaper cost?",
+    "a": "Because the constraint is that exactly half go to each city, so the question is not who is cheap but who gains most from one city over the other. Someone costing 1 to A and 2 to B is cheap but nearly indifferent; someone costing 1 to A and 100 to B must go to A. Sorting by cost alone would send the first person to A and possibly force the second to B at enormous expense. The last test is built so that cheapest-first picks wrongly."
+   },
+   {
+    "q": "Why is taking the first half provably optimal?",
+    "a": "By an exchange argument. Suppose an optimal solution sends someone with a larger A-advantage to B and someone with a smaller one to A. Swapping them changes the total by the difference of their differences, which is non-positive, so the swap cannot make things worse. Repeating the swap transforms any optimal solution into the sorted one, so the sorted assignment is optimal. That argument is what elevates this from a plausible heuristic to a proof."
+   },
+   {
+    "q": "How would this change for three cities?",
+    "a": "The difference ordering no longer exists, because each person now has three costs and no single scalar captures their preference. It becomes an assignment problem with capacity constraints, solvable in polynomial time with min-cost max-flow or the Hungarian algorithm, but not by sorting. That jump is worth naming: the two-city case is special because the difference reduces two numbers to one, and with three numbers there is nothing to sort by."
+   }
   ]
  },
  {
@@ -7734,16 +7782,32 @@
   "subcategory": "Matrix",
   "difficulty": "Medium",
   "question": "Diagonal traverse of a matrix.",
-  "answer": "Walk cells in order of index sum; for each diagonal, alternate direction and clamp the starting position to the matrix bounds. Time O(mn), space O(1) beyond output. The bug most people hit is handling the transition at the right edge versus the bottom edge.",
+  "answer": "**Approach**\n\nWalk each diagonal in turn, alternating direction. Cells on the same diagonal share `row + col`, so the traversal is grouped by that sum.\n\n**Logic**\n\nFor diagonal d, the cells are those where row + col equals d. Going up-right the row decreases; going down-left it increases. The direction flips on each diagonal.\n\nThe bounds are the fiddly part: for diagonal d the row ranges from `max(0, d - cols + 1)` to `min(d, rows - 1)`. Reversing the collected cells on alternate diagonals is simpler than deriving the start point for each direction, and costs nothing measurable.\n\nO(rows × cols) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int[] FindDiagonalOrder(int[][] matrix)\n    {\n        if (matrix == null || matrix.Length == 0) return Array.Empty<int>();\n\n        int rows = matrix.Length, cols = matrix[0].Length;\n        var result = new List<int>(rows * cols);\n        var diagonal = new List<int>();\n\n        // Cells on one diagonal share row + col.\n        for (int d = 0; d <= rows + cols - 2; d++)\n        {\n            diagonal.Clear();\n\n            int startRow = Math.Max(0, d - cols + 1);\n            int endRow = Math.Min(d, rows - 1);\n\n            for (int r = startRow; r <= endRow; r++) diagonal.Add(matrix[r][d - r]);\n\n            // Even diagonals run up-right, which is the reverse of collection order.\n            if (d % 2 == 0) diagonal.Reverse();\n\n            result.AddRange(diagonal);\n        }\n\n        return result.ToArray();\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", FindDiagonalOrder(new[] {\n            new[] { 1, 2, 3 }, new[] { 4, 5, 6 }, new[] { 7, 8, 9 } })));\n\n        Console.WriteLine(string.Join(\",\", FindDiagonalOrder(new[] {\n            new[] { 1, 2 }, new[] { 3, 4 } })));\n\n        Console.WriteLine(string.Join(\",\", FindDiagonalOrder(new[] { new[] { 1, 2, 3, 4 } })));\n        Console.WriteLine(string.Join(\",\", FindDiagonalOrder(new[] {\n            new[] { 1 }, new[] { 2 }, new[] { 3 } })));\n        Console.WriteLine(string.Join(\",\", FindDiagonalOrder(new[] { new[] { 7 } })));\n    }\n}\n```\n\n**Output**\n\n```\n1,2,4,7,5,3,6,8,9\n1,2,3,4\n1,2,3,4\n1,2,3\n7\n```",
   "tags": [
    "matrix",
-   "simulation",
-   "implementation"
+   "traversal",
+   "diagonals",
+   "bounds",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why do cells on a diagonal share row + col?",
+    "a": "Because moving one step up-right decreases the row by one and increases the column by one, leaving the sum unchanged. That makes row + col a natural identifier for the anti-diagonal, exactly as row - col identifies the main diagonal - which is the same pair of identities used in N-Queens to detect attacks. Recognising that one arithmetic expression names a whole diagonal is what turns a fiddly walk into a simple grouping."
+   },
+   {
+    "q": "Where do the startRow and endRow bounds come from?",
+    "a": "The column is d - row and must be within 0 to cols-1, which gives row at least d - cols + 1. The row itself must be within 0 to rows-1, giving row at most d and at least 0. Combining them produces the two clamps. Deriving them rather than guessing matters because an off-by-one here reads outside the matrix, and the failure only appears on non-square inputs, which is why the single-row and single-column tests are present."
+   },
+   {
+    "q": "Could you avoid the reverse by walking each direction directly?",
+    "a": "Yes, by computing the starting cell for each direction and stepping with the appropriate delta, which avoids building and reversing a list. It is marginally faster and noticeably harder to get right, since the start point differs depending on whether the diagonal has hit the right edge yet. Collecting then reversing keeps the bound logic in one place, and the reverse is O(length of that diagonal), so the total remains linear."
+   }
   ]
  },
  {
@@ -7850,16 +7914,32 @@
   "subcategory": "Matrix",
   "difficulty": "Medium",
   "question": "Shortest path in a binary matrix with eight-directional movement.",
-  "answer": "BFS from the top-left, expanding to all eight neighbours that are open and unvisited, returning the level at which the bottom-right is reached. BFS is required rather than DFS because it gives the shortest path in an unweighted grid. Time O(mn).",
+  "answer": "**Approach**\n\nBFS from the top-left cell. Every move costs the same, so the first time the destination is reached is by a shortest path.\n\n**Logic**\n\nEight directions rather than four, so diagonal moves count as one step. The path length counts *cells*, not moves, so the starting cell is length 1.\n\nTwo checks are easy to forget: the start cell itself may be blocked, in which case there is no path at all, and a single-cell grid is a path of length 1 provided it is clear.\n\nMarking cells on enqueue rather than on dequeue keeps each cell in the queue once.\n\nO(rows × cols) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private static readonly (int dr, int dc)[] Directions =\n    {\n        (-1, -1), (-1, 0), (-1, 1),\n        ( 0, -1),          ( 0, 1),\n        ( 1, -1), ( 1, 0), ( 1, 1),\n    };\n\n    public static int ShortestPathBinaryMatrix(int[][] grid)\n    {\n        if (grid == null || grid.Length == 0) return -1;\n\n        int n = grid.Length, m = grid[0].Length;\n\n        // A blocked start means there is no path at all.\n        if (grid[0][0] != 0 || grid[n - 1][m - 1] != 0) return -1;\n\n        var queue = new Queue<(int r, int c, int length)>();\n        queue.Enqueue((0, 0, 1));          // the path length counts CELLS\n        grid[0][0] = 1;                     // mark on enqueue\n\n        while (queue.Count > 0)\n        {\n            var (r, c, length) = queue.Dequeue();\n\n            if (r == n - 1 && c == m - 1) return length;\n\n            foreach (var (dr, dc) in Directions)\n            {\n                int nr = r + dr, nc = c + dc;\n                if (nr < 0 || nr >= n || nc < 0 || nc >= m) continue;\n                if (grid[nr][nc] != 0) continue;\n\n                grid[nr][nc] = 1;\n                queue.Enqueue((nr, nc, length + 1));\n            }\n        }\n\n        return -1;\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(ShortestPathBinaryMatrix(Grid(\n            new[] { 0, 1 }, new[] { 1, 0 })));            // diagonal, 2 cells\n\n        Console.WriteLine(ShortestPathBinaryMatrix(Grid(\n            new[] { 0, 0, 0 }, new[] { 1, 1, 0 }, new[] { 1, 1, 0 })));\n\n        Console.WriteLine(ShortestPathBinaryMatrix(Grid(\n            new[] { 1, 0, 0 }, new[] { 1, 1, 0 }, new[] { 1, 1, 0 })));   // start blocked\n\n        Console.WriteLine(ShortestPathBinaryMatrix(Grid(new[] { 0 })));    // single clear cell\n        Console.WriteLine(ShortestPathBinaryMatrix(Grid(new[] { 1 })));    // single blocked\n        Console.WriteLine(ShortestPathBinaryMatrix(Grid(\n            new[] { 0, 0 }, new[] { 1, 1 })));                             // no route\n    }\n}\n```\n\n**Output**\n\n```\n2\n4\n-1\n1\n-1\n-1\n```",
   "tags": [
-   "matrix",
+   "graphs",
    "bfs",
-   "shortest-path"
+   "grid",
+   "eight-directional",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does BFS give the shortest path here but not in general?",
+    "a": "Because every move costs exactly one, including diagonals, so the number of steps is the distance and BFS explores in distance order. If diagonal moves cost the square root of two, as they would for true Euclidean distance, the graph becomes weighted and BFS would no longer be correct - you would need Dijkstra. The problem's definition of a step as one cell regardless of direction is what makes the cheap algorithm valid, and that assumption is worth stating."
+   },
+   {
+    "q": "Why mark cells on enqueue rather than on dequeue?",
+    "a": "Because a cell can be reached from several neighbours, and marking only when it is processed lets it be enqueued multiple times before the first is handled. The queue then grows beyond the grid size and the algorithm does redundant work. Marking at enqueue guarantees each cell enters exactly once, which is what keeps it linear. It is the same correction as in number-of-islands and rotting-oranges."
+   },
+   {
+    "q": "The code mutates the caller's grid. Is that acceptable?",
+    "a": "It avoids allocating a visited array, which is the usual justification, but it is a real side effect: a caller reusing the grid afterwards sees every reachable cell marked as blocked. For an interview it is worth flagging as a deliberate trade. In production I would allocate a separate visited array, or restore the grid before returning, since a method named ShortestPath that destroys its input is a surprise the type signature does not communicate."
+   }
   ]
  },
  {
@@ -7867,18 +7947,33 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Implement a BST iterator with next and hasNext in average O(1).",
-  "answer": "Keep a stack seeded by pushing all left children from the root. next pops a node, pushes the left spine of its right child, and returns the value. Amortised O(1) per call, O(h) space - far better than materialising the whole in-order traversal.",
+  "answer": "**Approach**\n\nA stack holding the leftmost spine. Pushing all left children from a node gives the next in-order element at the top, and advancing means popping and pushing the spine of the right subtree.\n\n**Logic**\n\nMaterialising the whole in-order traversal in a list would be O(n) space and would have to be rebuilt if the tree changed. The stack holds only the current path, so space is O(h) — logarithmic for a balanced tree.\n\nEach node is pushed exactly once and popped exactly once across the whole traversal, so although a single `Next` can push a long spine, the amortised cost is O(1).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class BstIterator\n{\n    private readonly Stack<TreeNode> _stack = new();\n\n    public BstIterator(TreeNode root) => PushLeftSpine(root);\n\n    private void PushLeftSpine(TreeNode node)\n    {\n        for (; node != null; node = node.Left) _stack.Push(node);\n    }\n\n    public bool HasNext => _stack.Count > 0;\n\n    public int Next()\n    {\n        if (_stack.Count == 0) throw new InvalidOperationException(\"no more elements\");\n\n        var node = _stack.Pop();\n        PushLeftSpine(node.Right);    // the next in-order element lives in here\n\n        return node.Val;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        //     7\n        //    / \\\n        //   3   15\n        //      /  \\\n        //     9    20\n        var root = new TreeNode(7,\n            new TreeNode(3),\n            new TreeNode(15, new TreeNode(9), new TreeNode(20)));\n\n        var it = new BstIterator(root);\n        var visited = new List<int>();\n        while (it.HasNext) visited.Add(it.Next());\n        Console.WriteLine(string.Join(\",\", visited));\n\n        // Interleaving HasNext and Next behaves the same.\n        var it2 = new BstIterator(root);\n        Console.WriteLine($\"{it2.Next()} {it2.HasNext} {it2.Next()} {it2.Next()}\");\n\n        var empty = new BstIterator(null);\n        Console.WriteLine(empty.HasNext);\n\n        try { empty.Next(); }\n        catch (InvalidOperationException e) { Console.WriteLine(e.Message); }\n\n        // A left-leaning chain: the spine is the whole tree.\n        var chain = new TreeNode(3, new TreeNode(2, new TreeNode(1)));\n        var it3 = new BstIterator(chain);\n        var chainOrder = new List<int>();\n        while (it3.HasNext) chainOrder.Add(it3.Next());\n        Console.WriteLine(string.Join(\",\", chainOrder));\n    }\n}\n```\n\n**Output**\n\n```\n3,7,9,15,20\n3 True 7 9\nFalse\nno more elements\n1,2,3\n```",
   "tags": [
    "trees",
-   "bst",
    "iterator",
-   "stack"
+   "stack",
+   "amortised",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Microsoft",
    "LinkedIn"
+  ],
+  "followups": [
+   {
+    "q": "Why is this amortised O(1) when one Next can push many nodes?",
+    "a": "Because each node is pushed exactly once and popped exactly once over the entire traversal, so the total work across n calls is 2n stack operations. A single call that pushes a long spine has effectively prepaid for the subsequent calls that pop it without pushing. Averaged over the traversal that is constant. It is the same accounting as the two-stack queue, and stating it as amortised rather than worst-case is the precise answer."
+   },
+   {
+    "q": "Why O(h) space rather than materialising the traversal?",
+    "a": "Because the stack only ever holds the path from the root to the current node plus pending right subtrees, which is bounded by the height. For a balanced tree that is logarithmic, so a million-node tree needs about twenty stack entries instead of a million list entries. The materialised version is simpler and is the right choice if the traversal will be replayed, but for a single forward pass the stack is strictly better."
+   },
+   {
+    "q": "How would you add a Previous operation?",
+    "a": "The single stack cannot go backwards, because popping discards the path. You would keep a second stack of already-visited nodes, moving nodes between the two as the cursor advances and retreats, which is the same two-stack technique as a browser history. Alternatively, if the tree has parent pointers, the in-order predecessor is computable directly and no extra state is needed. Which applies depends on whether you control the node type."
+   }
   ]
  },
  {
@@ -7886,16 +7981,36 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Delete a node from a binary search tree.",
-  "answer": "Search for the node; with zero or one child, splice in the child. With two children, replace its value with the in-order successor - the leftmost node of the right subtree - then delete that successor recursively. Time O(h).",
+  "answer": "**Approach**\n\nSearch down to the node, then handle three cases by child count. The only interesting one is a node with two children.\n\n**Logic**\n\nA leaf is removed outright. A node with one child is replaced by that child. A node with two children cannot simply be removed, because its position must be filled by a value that preserves the BST ordering — and exactly two values qualify: the in-order predecessor, the largest in the left subtree, or the in-order successor, the smallest in the right.\n\nTaking the successor, copy its value into the node and then delete the successor from the right subtree. That recursive delete is guaranteed to hit an easier case, because the smallest node in a subtree has no left child.\n\nO(h) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static TreeNode DeleteNode(TreeNode root, int key)\n    {\n        if (root == null) return null;\n\n        if (key < root.Val) { root.Left = DeleteNode(root.Left, key); return root; }\n        if (key > root.Val) { root.Right = DeleteNode(root.Right, key); return root; }\n\n        // Found it.\n        if (root.Left == null) return root.Right;    // 0 or 1 child\n        if (root.Right == null) return root.Left;\n\n        // Two children: take the in-order successor, the smallest on the right.\n        var successor = root.Right;\n        while (successor.Left != null) successor = successor.Left;\n\n        root.Val = successor.Val;\n\n        // That successor has no left child, so this recursion hits an easy case.\n        root.Right = DeleteNode(root.Right, successor.Val);\n\n        return root;\n    }\n\n    private static string InOrder(TreeNode node)\n    {\n        var values = new List<int>();\n        void Walk(TreeNode n)\n        {\n            if (n == null) return;\n            Walk(n.Left); values.Add(n.Val); Walk(n.Right);\n        }\n        Walk(node);\n        return values.Count == 0 ? \"(empty)\" : string.Join(\",\", values);\n    }\n\n    private static TreeNode Build(params int[] values)\n    {\n        TreeNode root = null;\n        foreach (int v in values) root = Insert(root, v);\n        return root;\n    }\n\n    private static TreeNode Insert(TreeNode node, int value)\n    {\n        if (node == null) return new TreeNode(value);\n        if (value < node.Val) node.Left = Insert(node.Left, value);\n        else node.Right = Insert(node.Right, value);\n        return node;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(InOrder(DeleteNode(Build(5, 3, 6, 2, 4, 7), 3)));   // two children\n        Console.WriteLine(InOrder(DeleteNode(Build(5, 3, 6, 2, 4, 7), 2)));   // leaf\n        Console.WriteLine(InOrder(DeleteNode(Build(5, 3, 6, 7), 6)));         // one child\n        Console.WriteLine(InOrder(DeleteNode(Build(5), 5)));                  // the root\n        Console.WriteLine(InOrder(DeleteNode(Build(5, 3), 99)));              // absent\n        Console.WriteLine(InOrder(DeleteNode(null, 1)));\n    }\n}\n```\n\n**Output**\n\n```\n2,4,5,6,7\n3,4,5,6,7\n3,5,7\n(empty)\n3,5\n(empty)\n```",
   "tags": [
    "trees",
    "bst",
-   "recursion"
+   "deletion",
+   "successor",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why must the replacement be the predecessor or the successor specifically?",
+    "a": "Because the BST invariant requires everything in the left subtree to be smaller and everything in the right to be larger. Only two values in the tree sit immediately adjacent to the deleted one in sorted order, and either can occupy the position without violating that for any other node. Any other value would be on the wrong side of something. It is a nice example of a constraint that leaves exactly two valid choices rather than one."
+   },
+   {
+    "q": "Why is the recursive delete of the successor guaranteed to terminate quickly?",
+    "a": "Because the in-order successor is the leftmost node of the right subtree, so by construction it has no left child, which means the recursion lands in the zero-or-one-child case immediately. That makes the two-children case cost O(h) for the search plus O(1) for the fix-up rather than recursing indefinitely. Understanding that the hard case reduces to an easy one is the point of the design."
+   },
+   {
+    "q": "Copying the value rather than relinking the node - any downside?",
+    "a": "Yes. Any external reference to the successor node now sees a different value, and any reference to the deleted node sees the successor's value while believing it holds the old one. If nodes carry identity or are referenced elsewhere, such as from an index, that is a real bug. Relinking the successor node into position instead is more pointer work but preserves identity, which is what a production implementation would do."
+   },
+   {
+    "q": "Does repeated deletion unbalance the tree?",
+    "a": "Yes, and it is a known asymmetry: always taking the successor biases the tree toward becoming left-heavy over many deletions, because the right subtree is repeatedly shortened. Alternating between predecessor and successor mitigates it. A self-balancing tree such as AVL or red-black rebalances after deletion instead, which is why production ordered collections use them rather than a plain BST."
+   }
   ]
  },
  {
@@ -7903,17 +8018,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Path sum III: count paths summing to a target, starting and ending anywhere downward.",
-  "answer": "Prefix sums along the root-to-node path stored in a hash map of sum frequency. At each node, add the count of prefix equal to currentSum minus target, recurse, then remove the node's contribution on the way back up. Time O(n), space O(h).",
+  "answer": "**Approach**\n\nPrefix sums along the current root-to-node path, with a hash map of counts — exactly the subarray-sum-equals-k technique applied to a tree.\n\n**Logic**\n\nAs the traversal descends, maintain the running sum from the root. A path ending at the current node with the target sum exists wherever an ancestor's prefix equals `running - target`, so the count of such prefixes is added.\n\nThe step that makes it correct is removing the current node's prefix from the map as the recursion unwinds. Without it, sums leak across sibling branches and paths are counted that do not exist, since a path must be a single downward chain.\n\nO(n) time, O(h) space, against O(n²) for the naive per-node traversal.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static int PathSum(TreeNode root, int target)\n    {\n        // {0: 1} is the empty prefix: it makes a path starting at the root countable.\n        var prefixCounts = new Dictionary<long, int> { [0] = 1 };\n        return Count(root, 0, target, prefixCounts);\n    }\n\n    private static int Count(TreeNode node, long running, int target,\n                             Dictionary<long, int> prefixCounts)\n    {\n        if (node == null) return 0;\n\n        running += node.Val;\n\n        // Every ancestor prefix equal to running - target closes a qualifying path.\n        prefixCounts.TryGetValue(running - target, out int found);\n\n        prefixCounts[running] = prefixCounts.GetValueOrDefault(running) + 1;\n\n        found += Count(node.Left, running, target, prefixCounts);\n        found += Count(node.Right, running, target, prefixCounts);\n\n        // Unwind: this prefix is not an ancestor of a sibling branch.\n        prefixCounts[running]--;\n\n        return found;\n    }\n\n    public static void Main()\n    {\n        //        10\n        //       /  \\\n        //      5   -3\n        //     / \\    \\\n        //    3   2    11\n        //   / \\   \\\n        //  3  -2   1\n        var root = new TreeNode(10,\n            new TreeNode(5,\n                new TreeNode(3, new TreeNode(3), new TreeNode(-2)),\n                new TreeNode(2, null, new TreeNode(1))),\n            new TreeNode(-3, null, new TreeNode(11)));\n\n        Console.WriteLine(PathSum(root, 8));\n\n        Console.WriteLine(PathSum(new TreeNode(1), 1));\n        Console.WriteLine(PathSum(null, 0));\n        Console.WriteLine(PathSum(new TreeNode(0, new TreeNode(0)), 0));   // zeros\n        Console.WriteLine(PathSum(new TreeNode(1, new TreeNode(2)), 3));\n        Console.WriteLine(PathSum(new TreeNode(5, new TreeNode(-3)), 2));\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n0\n3\n1\n1\n```",
   "tags": [
    "trees",
    "prefix-sum",
-   "dfs",
-   "hashmap"
+   "hashmap",
+   "backtracking",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why must the prefix be removed as the recursion unwinds?",
+    "a": "Because a valid path is a single downward chain, so a prefix recorded while descending the left subtree must not be visible while descending the right. Leaving it in the map would count paths that jump between branches, which do not exist. The decrement restores the map to exactly the ancestors of the current node, which is the invariant the algorithm depends on. Omitting it produces counts that are too high and only on trees with branching, so a linear test tree would not catch it."
+   },
+   {
+    "q": "Why seed the map with {0: 1}?",
+    "a": "Because a path starting at the root has no ancestor prefix to subtract, and the conceptual empty prefix before the root has sum zero. Without the seed, any path beginning at the root is missed entirely. It is the same seeding as in subarray-sum-equals-k, and forgetting it is the most common error in both. The single-node test with target equal to its value pins it down."
+   },
+   {
+    "q": "Why accumulate the running sum in a long?",
+    "a": "Because the path sum can exceed int range even when individual node values do not, on a deep tree with large values. An overflowed prefix wraps and can coincidentally match a lookup, producing a wrong count with no error. Widening the accumulator costs nothing and removes a failure mode that only appears at scale. The map key is widened to match, since the two must compare consistently."
+   }
   ]
  },
  {
@@ -7921,16 +8051,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "House robber III: maximum sum from a binary tree with no two directly connected nodes.",
-  "answer": "Post-order recursion returning a pair per node - best if this node is robbed, best if it is not. Robbed equals node value plus children's not-robbed values; not-robbed is the sum of each child's better option. Time O(n), space O(h).",
+  "answer": "**Approach**\n\nPost-order traversal returning two values per node: the best total if this node is taken, and the best if it is not. The parent combines them.\n\n**Logic**\n\nIf a node is robbed, its children cannot be, so the total is its value plus both children's not-robbed totals. If it is not robbed, each child is independently free to be robbed or not, so take the better of each child's two options.\n\nReturning a pair rather than a single number is what avoids recomputation. A version returning only the best would need to re-examine grandchildren, making it exponential.\n\nO(n) time, O(h) stack space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static int Rob(TreeNode root)\n    {\n        var (robbed, skipped) = Best(root);\n        return Math.Max(robbed, skipped);\n    }\n\n    // Returns (best if this node IS robbed, best if it is NOT).\n    private static (int Robbed, int Skipped) Best(TreeNode node)\n    {\n        if (node == null) return (0, 0);\n\n        var left = Best(node.Left);\n        var right = Best(node.Right);\n\n        // Robbing here forbids both children.\n        int robbed = node.Val + left.Skipped + right.Skipped;\n\n        // Skipping here leaves each child free to choose independently.\n        int skipped = Math.Max(left.Robbed, left.Skipped)\n                    + Math.Max(right.Robbed, right.Skipped);\n\n        return (robbed, skipped);\n    }\n\n    public static void Main()\n    {\n        //    3\n        //   / \\\n        //  2   3\n        //   \\    \\\n        //    3    1        best is 3 + 3 + 1 = 7\n        Console.WriteLine(Rob(new TreeNode(3,\n            new TreeNode(2, null, new TreeNode(3)),\n            new TreeNode(3, null, new TreeNode(1)))));\n\n        //      3\n        //     / \\\n        //    4   5\n        //   / \\   \\\n        //  1   3   1      best is 4 + 5 = 9\n        Console.WriteLine(Rob(new TreeNode(3,\n            new TreeNode(4, new TreeNode(1), new TreeNode(3)),\n            new TreeNode(5, null, new TreeNode(1)))));\n\n        Console.WriteLine(Rob(new TreeNode(1)));\n        Console.WriteLine(Rob(null));\n        Console.WriteLine(Rob(new TreeNode(0, new TreeNode(0))));\n        Console.WriteLine(Rob(new TreeNode(2, new TreeNode(1), new TreeNode(3))));\n    }\n}\n```\n\n**Output**\n\n```\n7\n9\n1\n0\n0\n4\n```",
   "tags": [
    "trees",
-   "dynamic-programming",
-   "dfs"
+   "dp",
+   "post-order",
+   "state-pair",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Uber"
+  ],
+  "followups": [
+   {
+    "q": "Why return a pair rather than the single best value?",
+    "a": "Because a parent cannot decide from its child's best alone - it needs to know the best under the constraint that the child was not taken. Returning only the maximum loses that, so the parent would have to descend to the grandchildren to recompute it, which makes the algorithm exponential through repeated work. Carrying both states upward keeps each node visited once. It is the same return-a-richer-value technique as in tree diameter and maximum path sum."
+   },
+   {
+    "q": "How is this the same as the array version of house robber?",
+    "a": "Identical recurrence, different traversal. The array version keeps two rolling values, the best including the current house and the best excluding it, and each new house combines them. Here the two values are returned up from children rather than carried along a line, because the structure branches. Recognising that the array, circular and tree variants are one recurrence over three shapes is what makes the third one quick to write."
+   },
+   {
+    "q": "Why does the second example give 9 rather than taking the root?",
+    "a": "Because taking the root at 3 forbids both children, leaving only the grandchildren 1, 3 and 1 for a total of 8. Skipping the root allows both children, 4 and 5, for 9. It is the case that proves greedy fails: the root is not the largest value but the choice still propagates two levels. Including an example where the obvious local choice loses is what makes a test meaningful rather than confirmatory."
+   }
   ]
  },
  {
@@ -7938,17 +8084,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Find all nodes at distance k from a target node in a binary tree.",
-  "answer": "Build a parent map with one traversal so the tree becomes an undirected graph, then BFS from the target k levels with a visited set. Time O(n), space O(n). The alternative is a single recursion returning the distance found, which is shorter but harder to reason about.",
+  "answer": "**Approach**\n\nA binary tree has no parent pointers, so distance can only travel downward. Build a parent map first, which turns the tree into an undirected graph, then BFS from the target.\n\n**Logic**\n\nOne pass records each node's parent. After that, every node has up to three neighbours: left child, right child and parent. BFS outward level by level, and the nodes at level k are the answer.\n\nA visited set is essential, since with parent links the graph has cycles in the traversal sense — stepping to a parent and back would loop forever.\n\nO(n) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static IList<int> DistanceK(TreeNode root, TreeNode target, int k)\n    {\n        var parents = new Dictionary<TreeNode, TreeNode>();\n        MapParents(root, null, parents);\n\n        var visited = new HashSet<TreeNode>();\n        var queue = new Queue<TreeNode>();\n\n        queue.Enqueue(target);\n        visited.Add(target);\n\n        int distance = 0;\n\n        while (queue.Count > 0)\n        {\n            if (distance == k)\n                return queue.Select(n => n.Val).ToList();\n\n            int levelSize = queue.Count;\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                var node = queue.Dequeue();\n\n                // Three possible neighbours now that parents are known.\n                foreach (var next in new[] { node.Left, node.Right, parents.GetValueOrDefault(node) })\n                    if (next != null && visited.Add(next)) queue.Enqueue(next);\n            }\n\n            distance++;\n        }\n\n        return new List<int>();\n    }\n\n    private static void MapParents(TreeNode node, TreeNode parent,\n                                   Dictionary<TreeNode, TreeNode> parents)\n    {\n        if (node == null) return;\n\n        parents[node] = parent;\n        MapParents(node.Left, node, parents);\n        MapParents(node.Right, node, parents);\n    }\n\n    private static string Show(IList<int> r)\n    {\n        if (r.Count == 0) return \"(none)\";\n        var copy = new List<int>(r);\n        copy.Sort();\n        return string.Join(\",\", copy);\n    }\n\n    public static void Main()\n    {\n        //        3\n        //       / \\\n        //      5   1\n        //     / \\  / \\\n        //    6  2 0   8\n        //      / \\\n        //     7   4\n        var seven = new TreeNode(7);\n        var four = new TreeNode(4);\n        var two = new TreeNode(2, seven, four);\n        var five = new TreeNode(5, new TreeNode(6), two);\n        var one = new TreeNode(1, new TreeNode(0), new TreeNode(8));\n        var root = new TreeNode(3, five, one);\n\n        Console.WriteLine(Show(DistanceK(root, five, 2)));   // upward and downward\n        Console.WriteLine(Show(DistanceK(root, five, 0)));   // the node itself\n        Console.WriteLine(Show(DistanceK(root, five, 1)));\n        Console.WriteLine(Show(DistanceK(root, seven, 3)));\n        Console.WriteLine(Show(DistanceK(root, root, 99)));  // beyond the tree\n        Console.WriteLine(Show(DistanceK(root, root, 1)));\n    }\n}\n```\n\n**Output**\n\n```\n1,4,7\n5\n2,3,6\n3,6\n(none)\n1,5\n```",
   "tags": [
    "trees",
    "bfs",
-   "graph",
-   "traversal"
+   "parent-map",
+   "graph-conversion",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why build a parent map rather than searching downward?",
+    "a": "Because nodes at distance k can be above the target, or in a sibling subtree reached by going up and then down again. In the example, distance 2 from node 5 includes node 1, which is reached by going up to the root and down the other side. A downward-only search finds 7 and 4 and misses it entirely. The parent map converts the tree into an undirected graph, at which point distance means what it normally means."
+   },
+   {
+    "q": "Why is the visited set essential rather than merely an optimisation?",
+    "a": "Because once parent links exist, stepping from a node to its parent and back to the same node is a legal two-step walk, so the traversal would oscillate forever. In a plain tree BFS there are no cycles and the set can be omitted. Adding parent edges introduces them, which is the price of making the tree undirected. It is a good illustration that a data structure's guarantees change when you add edges to it."
+   },
+   {
+    "q": "Could you avoid the parent map?",
+    "a": "Yes, with a single recursion that returns the distance from each node to the target and handles the case where the target is in the other subtree, adding nodes at the appropriate depth as the recursion unwinds. It is O(n) with O(h) space rather than O(n) space, so it is genuinely better, but the logic is considerably more delicate. The parent-map version is the one to write first because its correctness is obvious, and the recursive version is the optimisation to mention."
+   }
   ]
  },
  {
@@ -7956,17 +8117,32 @@
   "subcategory": "Trees",
   "difficulty": "Hard",
   "question": "Vertical order traversal of a binary tree.",
-  "answer": "DFS or BFS carrying a column index - left is minus one, right is plus one - collecting nodes per column with their row, then sort each column by row and, for ties, by value. Time O(n log n) because of the tie-breaking sort, space O(n).",
+  "answer": "**Approach**\n\nAssign each node a column, decrementing going left and incrementing going right, then group by column. The ordering rule within a column is what makes this harder than it looks.\n\n**Logic**\n\nNodes are ordered by column first, then by row, and — critically — by *value* when two nodes share both. That last rule means a plain BFS insertion order is not sufficient; the entries must be sorted.\n\nCollect every node as a (column, row, value) triple in one traversal, then sort by all three keys and group. Sorting explicitly is clearer than trying to arrange the traversal to produce the order naturally.\n\nO(n log n) for the sort.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static IList<IList<int>> VerticalTraversal(TreeNode root)\n    {\n        var entries = new List<(int Column, int Row, int Value)>();\n        Collect(root, 0, 0, entries);\n\n        // Column, then row, then VALUE - the third key is the one people miss.\n        return entries\n            .OrderBy(e => e.Column).ThenBy(e => e.Row).ThenBy(e => e.Value)\n            .GroupBy(e => e.Column)\n            .Select(g => (IList<int>)g.Select(e => e.Value).ToList())\n            .ToList();\n    }\n\n    private static void Collect(TreeNode node, int column, int row,\n                                List<(int, int, int)> entries)\n    {\n        if (node == null) return;\n\n        entries.Add((column, row, node.Val));\n        Collect(node.Left, column - 1, row + 1, entries);\n        Collect(node.Right, column + 1, row + 1, entries);\n    }\n\n    private static string Render(IList<IList<int>> r) =>\n        r.Count == 0 ? \"(empty)\" : string.Join(\" \", r.Select(c => \"[\" + string.Join(\",\", c) + \"]\"));\n\n    public static void Main()\n    {\n        //     3\n        //    / \\\n        //   9   20\n        //      /  \\\n        //     15   7\n        Console.WriteLine(Render(VerticalTraversal(new TreeNode(3,\n            new TreeNode(9),\n            new TreeNode(20, new TreeNode(15), new TreeNode(7))))));\n\n        // Two nodes share a column AND a row: 5 and 6 must be ordered by value.\n        //      1\n        //     / \\\n        //    2   3\n        //   / \\ / \\\n        //  4  6 5  7\n        Console.WriteLine(Render(VerticalTraversal(new TreeNode(1,\n            new TreeNode(2, new TreeNode(4), new TreeNode(6)),\n            new TreeNode(3, new TreeNode(5), new TreeNode(7))))));\n\n        Console.WriteLine(Render(VerticalTraversal(new TreeNode(1))));\n        Console.WriteLine(Render(VerticalTraversal(null)));\n    }\n}\n```\n\n**Output**\n\n```\n[9] [3,15] [20] [7]\n[4] [2] [1,5,6] [3] [7]\n[1]\n(empty)\n```",
   "tags": [
    "trees",
-   "traversal",
+   "vertical-order",
    "sorting",
-   "hashmap"
+   "tie-breaking",
+   "csharp"
   ],
   "companies": [
    "Facebook",
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why is sorting by value necessary as the third key?",
+    "a": "Because two nodes can occupy the same column and the same row while being in different subtrees, as 5 and 6 do in the second example - 6 is the right child of 2 and 5 is the left child of 3, both at column 0, row 2. The problem specifies they are ordered by value, so 5 precedes 6. A BFS that relies on insertion order would emit 6 first, since the left subtree is visited first. It is the detail that separates this from the simpler column-grouping problem."
+   },
+   {
+    "q": "Would a BFS be better than collecting and sorting?",
+    "a": "BFS gives rows in order for free, so you would only need to sort within a row-and-column group rather than globally, which is a smaller sort. But you still need that sort for the value tie-break, so the code does not get simpler. Collecting everything and sorting once is easier to reason about and the O(n log n) is the same either way. For a very large tree the BFS version has better constants."
+   },
+   {
+    "q": "What is the difference between this and the top view of a tree?",
+    "a": "The top view takes only the first node encountered in each column, which requires BFS specifically, because DFS could reach a deeper node in a column before a shallower one and record the wrong value. Vertical order takes every node in every column. So one needs a level-order guarantee and the other does not, which is a neat example of the traversal choice being forced by the requirement rather than being a matter of taste."
+   }
   ]
  },
  {
@@ -7974,15 +8150,31 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Count good nodes in a binary tree: nodes with no larger value on the path from the root.",
-  "answer": "DFS carrying the maximum seen so far; a node is good when its value is at least that maximum, and the child calls receive the updated maximum. Time O(n), space O(h).",
+  "answer": "**Approach**\n\nA single pre-order traversal carrying the maximum seen on the path so far. A node is good when its value is at least that maximum.\n\n**Logic**\n\nThe root is always good, since the path to it contains only itself. Descending, each child receives the larger of the running maximum and the current node's value.\n\nPassing the maximum down rather than computing it on the way up is what keeps this a single pass. The property depends only on ancestors, so it is naturally a pre-order quantity.\n\nO(n) time, O(h) stack space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int Val;\n    public TreeNode Left, Right;\n    public TreeNode(int val = 0, TreeNode left = null, TreeNode right = null)\n    { Val = val; Left = left; Right = right; }\n}\n\npublic class Solution\n{\n    public static int GoodNodes(TreeNode root) =>\n        root == null ? 0 : Count(root, int.MinValue);\n\n    private static int Count(TreeNode node, int maxOnPath)\n    {\n        if (node == null) return 0;\n\n        // >= because an equal value still has nothing LARGER before it.\n        int good = node.Val >= maxOnPath ? 1 : 0;\n\n        int updated = Math.Max(maxOnPath, node.Val);\n\n        return good + Count(node.Left, updated) + Count(node.Right, updated);\n    }\n\n    public static void Main()\n    {\n        //     3\n        //    / \\\n        //   1   4\n        //  /   / \\\n        // 3   1   5\n        Console.WriteLine(GoodNodes(new TreeNode(3,\n            new TreeNode(1, new TreeNode(3)),\n            new TreeNode(4, new TreeNode(1), new TreeNode(5)))));\n\n        //   3\n        //  /\n        // 3\n        //  \\\n        //   4\n        Console.WriteLine(GoodNodes(new TreeNode(3,\n            new TreeNode(3, null, new TreeNode(4)))));\n\n        Console.WriteLine(GoodNodes(new TreeNode(1)));\n        Console.WriteLine(GoodNodes(null));\n\n        // Strictly decreasing: only the root is good.\n        Console.WriteLine(GoodNodes(new TreeNode(5, new TreeNode(4, new TreeNode(3)))));\n\n        // Negative values still work, which int.MinValue as the seed guarantees.\n        Console.WriteLine(GoodNodes(new TreeNode(-5, new TreeNode(-3))));\n    }\n}\n```\n\n**Output**\n\n```\n4\n3\n1\n0\n1\n2\n```",
   "tags": [
    "trees",
-   "dfs",
-   "recursion"
+   "pre-order",
+   "path-state",
+   "counting",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why is the comparison >= rather than >?",
+    "a": "Because the definition is that no node on the path is *larger*, so an equal value still qualifies - there is nothing strictly greater before it. The second example makes this concrete: a 3 beneath a 3 is good, giving 3 rather than 2. Using a strict greater-than undercounts on any tree with repeated values along a path, which is easy to miss if the test data has distinct values throughout."
+   },
+   {
+    "q": "Why seed with int.MinValue rather than the root's value?",
+    "a": "So the root is counted without a special case, since any value is at least int.MinValue. Seeding with the root's value would also work here but would need the root handled separately, and seeding with 0 would break on trees containing negative values, which the last test exercises. Choosing a seed outside the possible data range is the general rule, and it is the same reasoning as the sentinel discussion in BST validation."
+   },
+   {
+    "q": "Could this be done iteratively?",
+    "a": "Yes, with an explicit stack holding node-and-maximum pairs, which removes the recursion depth limit. The recursion is only as deep as the tree, so for a balanced tree it is fine, but a degenerate tree of a million nodes would overflow. Since the state passed down is a single integer, the iterative version is genuinely simple here, which is not always true of pre-order algorithms carrying richer state."
+   }
   ]
  },
  {
