@@ -37,6 +37,7 @@ def load():
         r.setdefault("difficulty", "Medium")
         r.setdefault("tags", [])
         r.setdefault("followups", [])
+        r.setdefault("companies", [])
 
     # Ids are assigned here, not stored in the source, so adding a question
     # never renumbers the files.
@@ -62,25 +63,27 @@ def build_sqlite(rows):
             category TEXT, subcategory TEXT, difficulty TEXT,
             question TEXT, answer TEXT, tags TEXT,
             followups TEXT          -- JSON array of {q, a} interviewer follow-ups
+            companies TEXT          -- comma separated, commonly reported
         )""")
     cur.execute("CREATE INDEX idx_cat ON questions(category)")
     cur.execute("CREATE INDEX idx_sub ON questions(subcategory)")
     cur.execute("CREATE INDEX idx_diff ON questions(difficulty)")
     cur.execute("""
         CREATE VIRTUAL TABLE questions_fts USING fts5(
-            question, answer, tags, category, subcategory, followups,
+            question, answer, tags, category, subcategory, followups, companies,
             content='questions', content_rowid='id',
             tokenize='porter unicode61'
         )""")
     for r in rows:
         cur.execute(
-            "INSERT INTO questions(id,category,subcategory,difficulty,question,answer,tags,followups) VALUES(?,?,?,?,?,?,?,?)",
+            "INSERT INTO questions(id,category,subcategory,difficulty,question,answer,tags,followups,companies) VALUES(?,?,?,?,?,?,?,?,?)",
             (r["id"], r["category"], r["subcategory"], r["difficulty"],
              r["question"], r["answer"], ", ".join(r["tags"]),
-             json.dumps(r["followups"], ensure_ascii=False)))
+             json.dumps(r["followups"], ensure_ascii=False),
+             ", ".join(r["companies"])))
     cur.execute("""
-        INSERT INTO questions_fts(rowid,question,answer,tags,category,subcategory,followups)
-        SELECT id,question,answer,tags,category,subcategory,followups FROM questions""")
+        INSERT INTO questions_fts(rowid,question,answer,tags,category,subcategory,followups,companies)
+        SELECT id,question,answer,tags,category,subcategory,followups,companies FROM questions""")
     con.commit()
     con.close()
     return out

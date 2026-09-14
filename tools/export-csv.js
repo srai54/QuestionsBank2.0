@@ -28,13 +28,14 @@ const split = splitIdx > -1 ? Number(process.argv[splitIdx + 1]) : 0;
 // field are legal, which matters because every answer now contains them.
 const cell = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
 
-const HEADER = ['category', 'subcategory', 'difficulty', 'question', 'answer', 'tags', 'followups'];
+const HEADER = ['category', 'subcategory', 'difficulty', 'question', 'answer', 'tags', 'followups', 'companies'];
 
 const rows = load(SOURCE);
 const line = r => [
   r.category, r.subcategory, r.difficulty, r.question, r.answer,
   (r.tags || []).join(', '),
   JSON.stringify(r.followups || []),
+  (r.companies || []).join(', '),
 ].map(cell).join(',');
 
 function write(file, subset) {

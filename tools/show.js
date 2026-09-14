@@ -31,6 +31,7 @@ if (csOnly) {
 }
 
 console.log(`id ${match.id}  [${match.category} / ${match.subcategory}]  ${match.difficulty}`);
+if (match.companies) console.log('commonly reported at: ' + match.companies.join(', '));
 console.log(`\n${match.question}\n`);
 console.log(match.answer);
 if (match.followups?.length) {

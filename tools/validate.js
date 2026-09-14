@@ -46,6 +46,16 @@ rows.forEach((row, i) => {
   // followups are the nested probes an interviewer asks after the first answer
   // ("fine - and what if the input does not fit in memory?"). Optional, but when
   // present every entry must be a real question/answer pair.
+  // companies: the organisations a question is COMMONLY REPORTED to have been
+  // asked at. These come from crowdsourced community lists, not from verified
+  // interview records, and the field name in the UI should say so.
+  if (row.companies !== undefined) {
+    if (!Array.isArray(row.companies) || row.companies.length === 0)
+      errors.push(`${where}: companies must be a non-empty array`);
+    else if (row.companies.some(c => typeof c !== 'string' || !c.trim()))
+      errors.push(`${where}: companies must all be non-empty strings`);
+  }
+
   if (row.followups !== undefined) {
     if (!Array.isArray(row.followups) || row.followups.length === 0) {
       errors.push(`${where}: followups must be a non-empty array`);

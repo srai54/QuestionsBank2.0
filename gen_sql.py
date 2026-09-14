@@ -36,6 +36,8 @@ create table questions (
   answer      text not null,
   tags        text,
   followups   jsonb not null default '[]'::jsonb,
+  -- organisations the question is COMMONLY REPORTED to be asked at (crowdsourced)
+  companies   text,
   search tsvector generated always as (
     setweight(to_tsvector('english', coalesce(question,'')), 'A') ||
     setweight(to_tsvector('english', coalesce(tags,'')),     'B') ||
@@ -57,7 +59,7 @@ create index questions_diff_idx   on questions(difficulty);
 lines = [schema]
 # batched multi-row inserts (200 rows per statement)
 B = 200
-cols = "(category, subcategory, difficulty, question, answer, tags, followups)"
+cols = "(category, subcategory, difficulty, question, answer, tags, followups, companies)"
 for i in range(0, len(rows), B):
     chunk = rows[i:i+B]
     lines.append(f"insert into questions {cols} values")
@@ -65,7 +67,8 @@ for i in range(0, len(rows), B):
     for r in chunk:
         tags = ", ".join(r.get("tags", []))
         followups = json.dumps(r.get("followups", []), ensure_ascii=False)
-        vals.append(f"  ('{esc(r.get('category'))}', '{esc(r.get('subcategory'))}', '{esc(r.get('difficulty'))}', '{esc(r.get('question'))}', '{esc(r.get('answer'))}', '{esc(tags)}', '{esc(followups)}'::jsonb)")
+        companies = ", ".join(r.get("companies", []))
+        vals.append(f"  ('{esc(r.get('category'))}', '{esc(r.get('subcategory'))}', '{esc(r.get('difficulty'))}', '{esc(r.get('question'))}', '{esc(r.get('answer'))}', '{esc(tags)}', '{esc(followups)}'::jsonb, '{esc(companies)}')")
     lines.append(",\n".join(vals) + ";")
 lines.append("")
 lines.append("-- Done. Quick test:")
