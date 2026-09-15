@@ -16077,5 +16077,285 @@
     "a": "The same separation applies: a Card knows its rank and suit but not whether playing it is legal, and an IGameRules object decides legality from the current trick, trump suit and hand. That lets one Deck and Card model serve bridge, rummy and poker with different rule objects, which is the extensibility the question is really asking about. The equivalent of the check simulation is any rule requiring you to follow suit if able, which depends on the hand rather than on the card."
    }
   ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Stack",
+  "difficulty": "Hard",
+  "question": "Find the largest rectangle of ones in a binary matrix.",
+  "answer": "**Approach**\n\nTreat each row as the base of a histogram whose bar heights are the runs of ones ending at that row, then solve the largest-rectangle-in-a-histogram problem per row with a monotonic stack.\n\n**Logic**\n\nThe reduction is the insight: any maximal rectangle has a bottom row, and relative to that row it is exactly a histogram rectangle. So solving n histograms covers every candidate.\n\nThe histogram solver uses a stack of increasing heights. When a shorter bar arrives, every taller bar on the stack can no longer extend, so its rectangle is finalised — the popped bar's width runs from the new bar back to whatever is below it on the stack.\n\nO(rows × cols).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int MaximalRectangle(int[][] matrix)\n    {\n        if (matrix == null || matrix.Length == 0) return 0;\n\n        int cols = matrix[0].Length;\n        var heights = new int[cols];\n        int best = 0;\n\n        foreach (var row in matrix)\n        {\n            // Height = the run of ones ending at this row, reset by a zero.\n            for (int c = 0; c < cols; c++) heights[c] = row[c] == 1 ? heights[c] + 1 : 0;\n\n            best = Math.Max(best, LargestInHistogram(heights));\n        }\n\n        return best;\n    }\n\n    public static int LargestInHistogram(int[] heights)\n    {\n        var stack = new Stack<int>();   // indices, heights increasing\n        int best = 0;\n\n        for (int i = 0; i <= heights.Length; i++)\n        {\n            int current = i == heights.Length ? 0 : heights[i];   // sentinel flushes the stack\n\n            while (stack.Count > 0 && heights[stack.Peek()] >= current)\n            {\n                int height = heights[stack.Pop()];\n\n                // The width runs back to whatever is left below on the stack.\n                int leftEdge = stack.Count == 0 ? -1 : stack.Peek();\n                best = Math.Max(best, height * (i - leftEdge - 1));\n            }\n\n            stack.Push(i);\n        }\n\n        return best;\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(MaximalRectangle(Grid(\n            new[] { 1, 0, 1, 0, 0 },\n            new[] { 1, 0, 1, 1, 1 },\n            new[] { 1, 1, 1, 1, 1 },\n            new[] { 1, 0, 0, 1, 0 })));\n\n        Console.WriteLine(MaximalRectangle(Grid(new[] { 0 })));\n        Console.WriteLine(MaximalRectangle(Grid(new[] { 1 })));\n        Console.WriteLine(MaximalRectangle(Grid(new[] { 1, 1 }, new[] { 1, 1 })));\n        Console.WriteLine(MaximalRectangle(Grid(new[] { 0, 0 }, new[] { 0, 0 })));\n\n        Console.WriteLine(LargestInHistogram(new[] { 2, 1, 5, 6, 2, 3 }));\n        Console.WriteLine(LargestInHistogram(new[] { 2, 4 }));\n        Console.WriteLine(LargestInHistogram(Array.Empty<int>()));\n    }\n}\n```\n\n**Output**\n\n```\n6\n0\n1\n4\n0\n10\n4\n0\n```",
+  "tags": [
+   "dsa",
+   "monotonic-stack",
+   "histogram",
+   "matrix",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the row-by-row histogram reduction cover every rectangle?",
+    "a": "Because every rectangle of ones has some bottom row, and measured against that row it is exactly a histogram rectangle - its height at each column is the run of ones ending there. Solving the histogram for every row therefore considers every rectangle at least once, with its own bottom row. Nothing is missed and the maximum over all rows is the answer."
+   },
+   {
+    "q": "Why does the stack hold indices rather than heights?",
+    "a": "Because the width of a finalised rectangle depends on where the next-lower bar sits, which is a position, not a height. When a bar is popped, its rectangle extends from just after the element now on top of the stack up to the current index - computable only from indices. Storing heights alone loses the extent, which is the same reason the monotonic queue for window maximum stores indices."
+   },
+   {
+    "q": "What does the sentinel iteration do?",
+    "a": "It runs one step past the end with a height of zero, which forces every remaining bar off the stack and finalises its rectangle. Without it, a histogram that ends while still increasing - such as [2,4] - leaves bars unprocessed and the answer comes out too small. It is a small trick that removes a duplicate flush loop after the main loop, and the [2,4] test exists to catch its absence."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Hashing",
+  "difficulty": "Medium",
+  "question": "Find the length of the longest consecutive run of integers present in an unsorted array.",
+  "answer": "**Approach**\n\nPut everything in a set, then extend a run only from a value that has no predecessor in the set. That restriction is what keeps it linear.\n\n**Logic**\n\nWithout the predecessor check, a run of length m would be walked from each of its m members, giving quadratic behaviour on a long run.\n\nWith it, each run is walked exactly once — from its smallest element — so the total work across all runs is bounded by the number of distinct values.\n\nSorting would give O(n log n); the set gives O(n) at the cost of memory.\n\nO(n) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int LongestConsecutive(int[] nums)\n    {\n        var present = new HashSet<int>(nums ?? Array.Empty<int>());\n        int best = 0;\n\n        foreach (int value in present)\n        {\n            // Only start from the bottom of a run, or the total work goes quadratic.\n            if (present.Contains(value - 1)) continue;\n\n            int length = 1;\n            while (present.Contains(value + length)) length++;\n\n            best = Math.Max(best, length);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestConsecutive(new[] { 100, 4, 200, 1, 3, 2 }));\n        Console.WriteLine(LongestConsecutive(new[] { 0, 3, 7, 2, 5, 8, 4, 6, 0, 1 }));\n        Console.WriteLine(LongestConsecutive(new[] { 1, 1, 1 }));          // duplicates\n        Console.WriteLine(LongestConsecutive(new[] { 5 }));\n        Console.WriteLine(LongestConsecutive(Array.Empty<int>()));\n        Console.WriteLine(LongestConsecutive(new[] { -3, -2, -1, 5 }));    // negatives\n\n        // A long run: the predecessor check is what keeps this fast.\n        var run = Enumerable.Range(0, 20000).ToArray();\n        Console.WriteLine(LongestConsecutive(run));\n    }\n}\n```\n\n**Output**\n\n```\n4\n9\n1\n1\n0\n3\n20000\n```",
+  "tags": [
+   "dsa",
+   "hash-set",
+   "linear",
+   "amortised",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the predecessor check essential rather than an optimisation?",
+    "a": "Because without it, a run of length m is traversed from every one of its m members, so a single run of twenty thousand consecutive values does two hundred million set lookups. With the check, each run is walked only from its smallest element, so the total inner-loop work across the whole array is bounded by the number of distinct values. That turns a quadratic algorithm into a linear one - it is the difference between correct and usable."
+   },
+   {
+    "q": "Why not just sort?",
+    "a": "Sorting is O(n log n) and needs no extra memory beyond the sort, then a single pass finds the longest run - it is simpler and often fast enough. The set version buys O(n) time at the cost of O(n) memory and hashing overhead, which only pays off for large inputs. The reason the problem is asked is usually to see whether you can beat the sorting bound, so the linear answer is the expected one, but saying when you would actually prefer the sort is the better answer."
+   },
+   {
+    "q": "How do duplicates affect it?",
+    "a": "Not at all, because the set collapses them - three copies of 1 are one element, and the run length counts distinct values. That is the correct semantics for this problem, and it happens for free rather than needing a check. It is worth confirming with a test, since an implementation using a list or counting occurrences would report a longer run than exists."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Strings",
+  "difficulty": "Hard",
+  "question": "Find the shortest substring of one string that contains another as a subsequence.",
+  "answer": "**Approach**\n\nA two-phase scan. Walk forward matching the pattern as a subsequence; when the last character matches, walk *backwards* to tighten the window to the smallest span that still contains it.\n\n**Logic**\n\nThe backward pass is what distinguishes this from the minimum-window-substring problem. Matching forward greedily gives a window that contains the subsequence but usually starts too early — the backward re-match finds the latest possible start.\n\nOrder matters here in a way it does not for the substring version: the characters must appear in sequence, so a frequency count is useless and a positional scan is required.\n\nO(n × m) worst case.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static string MinWindowSubsequence(string source, string pattern)\n    {\n        if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(pattern)) return \"\";\n\n        int bestStart = -1, bestLength = int.MaxValue;\n        int i = 0;\n\n        while (i < source.Length)\n        {\n            // Forward: match the pattern in order.\n            int p = 0, scan = i;\n\n            while (scan < source.Length)\n            {\n                if (source[scan] == pattern[p] && ++p == pattern.Length) break;\n                scan++;\n            }\n\n            if (scan == source.Length) break;   // the pattern cannot be completed\n\n            // Backward: tighten to the latest possible start.\n            int end = scan;\n            p = pattern.Length - 1;\n\n            while (p >= 0)\n            {\n                if (source[scan] == pattern[p]) p--;\n                if (p >= 0) scan--;\n            }\n\n            if (end - scan + 1 < bestLength) { bestLength = end - scan + 1; bestStart = scan; }\n\n            i = scan + 1;   // resume just past this window's start\n        }\n\n        return bestStart == -1 ? \"\" : source.Substring(bestStart, bestLength);\n    }\n\n    private static void Show(string s) => Console.WriteLine(s.Length == 0 ? \"(none)\" : s);\n\n    public static void Main()\n    {\n        Show(MinWindowSubsequence(\"abcdebdde\", \"bde\"));\n        Show(MinWindowSubsequence(\"fgrqsqsnodwmxzkzxwqegkndaa\", \"kzed\"));\n        Show(MinWindowSubsequence(\"abc\", \"abc\"));\n        Show(MinWindowSubsequence(\"abc\", \"\"));\n        Show(MinWindowSubsequence(\"\", \"a\"));\n        Show(MinWindowSubsequence(\"cnhczmccqouqadqtmjjzl\", \"mm\"));\n\n        // Order matters: \"cb\" is present as characters but not as a subsequence.\n        Show(MinWindowSubsequence(\"abc\", \"cb\"));\n    }\n}\n```\n\n**Output**\n\n```\nbcde\nkzxwqegknd\nabc\n(none)\n(none)\nmccqouqadqtm\n(none)\n```",
+  "tags": [
+   "dsa",
+   "strings",
+   "subsequence",
+   "two-phase-scan",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is a backward pass needed?",
+    "a": "Because the forward scan matches greedily from wherever it starts, so it finds a window that contains the subsequence but typically begins earlier than necessary - characters before the true start contribute nothing. Re-matching backwards from the end position finds the latest start that still contains the whole pattern in order, which is the minimal window ending there. Without it the answer is a valid containing window but not the shortest."
+   },
+   {
+    "q": "Why can this not be solved with a frequency-count window?",
+    "a": "Because a subsequence requires the characters in order, and a frequency count is order-blind - 'cb' inside 'abc' has both characters present but never in the right sequence, which the code correctly reports as no match. The minimum-window-substring problem only needs multiplicities, which is why a counting window works there. Confusing the two is the standard mistake, and the tests include that case deliberately."
+   },
+   {
+    "q": "Can this be done faster than O(n times m)?",
+    "a": "Yes, with a DP where the state is the position in the source and the position in the pattern, tracking the latest start that matches the pattern prefix - still O(n times m) time but with a cleaner structure, or O(n times m) with O(m) space rolled. For repeated queries against a fixed source, precomputing a next-occurrence table per position and character makes each match O(m) with no scanning. The two-phase scan is the version that is easiest to get right under pressure."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Medium",
+  "question": "Find the largest subset of numbers where every pair divides evenly.",
+  "answer": "**Approach**\n\nSort, then run a longest-increasing-subsequence-shaped DP on divisibility, keeping a predecessor array so the subset itself can be reconstructed.\n\n**Logic**\n\nThe key simplification: after sorting, a new element only needs to divide by the *last* element of a chain, not by all of them. Divisibility is transitive, so if it divides the largest member it divides every smaller one in that chain.\n\nThat turns an exponential subset search into an O(n²) DP.\n\nThe predecessor array is what allows returning the subset rather than just its size, which is what the question asks for.\n\nO(n²).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<int> LargestDivisibleSubset(int[] nums)\n    {\n        if (nums == null || nums.Length == 0) return new List<int>();\n\n        var sorted = (int[])nums.Clone();\n        Array.Sort(sorted);\n\n        var length = new int[sorted.Length];\n        var previous = new int[sorted.Length];\n        int bestEnd = 0;\n\n        for (int i = 0; i < sorted.Length; i++)\n        {\n            length[i] = 1;\n            previous[i] = -1;\n\n            for (int j = 0; j < i; j++)\n            {\n                // Sorted, so dividing the LARGEST member is enough: divisibility is transitive.\n                if (sorted[i] % sorted[j] != 0 || length[j] + 1 <= length[i]) continue;\n\n                length[i] = length[j] + 1;\n                previous[i] = j;\n            }\n\n            if (length[i] > length[bestEnd]) bestEnd = i;\n        }\n\n        var subset = new List<int>();\n        for (int at = bestEnd; at >= 0; at = previous[at]) subset.Add(sorted[at]);\n\n        subset.Reverse();\n        return subset;\n    }\n\n    // Confirm the property rather than a particular expected subset.\n    private static bool EveryPairDivides(IList<int> subset)\n    {\n        for (int i = 0; i < subset.Count; i++)\n            for (int j = i + 1; j < subset.Count; j++)\n                if (subset[j] % subset[i] != 0) return false;\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        int[][] cases =\n        {\n            new[] { 1, 2, 3 },\n            new[] { 1, 2, 4, 8 },\n            new[] { 3, 4, 16, 8 },\n            new[] { 9 },\n            Array.Empty<int>(),\n            new[] { 2, 3, 5, 7, 11 },\n            new[] { 4, 8, 10, 240 }\n        };\n\n        foreach (var nums in cases)\n        {\n            var subset = LargestDivisibleSubset(nums);\n\n            Console.WriteLine($\"[{string.Join(\",\", nums)}] -> \" +\n                              $\"[{string.Join(\",\", subset)}] valid: {EveryPairDivides(subset)}\");\n        }\n    }\n}\n```\n\n**Output**\n\n```\n[1,2,3] -> [1,2] valid: True\n[1,2,4,8] -> [1,2,4,8] valid: True\n[3,4,16,8] -> [4,8,16] valid: True\n[9] -> [9] valid: True\n[] -> [] valid: True\n[2,3,5,7,11] -> [2] valid: True\n[4,8,10,240] -> [4,8,240] valid: True\n```",
+  "tags": [
+   "dsa",
+   "dp",
+   "divisibility",
+   "reconstruction",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is checking only the chain's largest element sufficient?",
+    "a": "Because divisibility is transitive and the array is sorted, so if the new value is divisible by the chain's largest member, and that member is divisible by everything before it, then the new value is divisible by all of them. That collapses a check against the whole subset into a single comparison, which is what makes an O(n squared) DP possible instead of an exponential subset enumeration. Without sorting, the transitivity argument does not apply."
+   },
+   {
+    "q": "Why keep a predecessor array?",
+    "a": "Because the DP naturally computes only the chain lengths, and the question asks for the subset itself. Recording which index each chain extended lets you walk backwards from the best endpoint and rebuild it in O(n). It is the same reconstruction pattern used in longest increasing subsequence and edit distance - the length table alone answers 'how long', and the predecessor pointers answer 'which one'."
+   },
+   {
+    "q": "Why does the test check a property instead of an exact subset?",
+    "a": "Because several subsets can tie for the largest size - with [1,2,3] both [1,2] and [1,3] are valid answers of length two - so comparing against one expected list tests an arbitrary tie-break rather than correctness. Verifying that every pair in the returned subset divides evenly tests what the problem actually requires. The size is separately implied by the DP being correct."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Stack",
+  "difficulty": "Hard",
+  "question": "Evaluate an arithmetic expression string containing parentheses.",
+  "answer": "**Approach**\n\nSingle pass with a stack. Multiplication and division are applied immediately against the previous operand; addition and subtraction are deferred by pushing signed values. Parentheses recurse by saving and restoring state.\n\n**Logic**\n\nPrecedence is handled without a second parse: since multiplication binds tighter, its result can replace the top of the stack the moment it is seen, while additive terms accumulate as separate stack entries summed at the end.\n\nThe sign is carried as the *pending* operator, so a subtraction becomes a negative addition — which removes any need for a separate subtraction case.\n\nMulti-digit numbers must be accumulated digit by digit, and whitespace skipped.\n\nO(n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static long Evaluate(string expression)\n    {\n        var stack = new Stack<long>();\n        long number = 0;\n        char pending = '+';\n\n        for (int i = 0; i < expression.Length; i++)\n        {\n            char c = expression[i];\n\n            if (char.IsDigit(c)) number = number * 10 + (c - '0');\n\n            if (c == '(')\n            {\n                // Recurse over the balanced span, then continue from after it.\n                int depth = 0, j = i;\n\n                for (; j < expression.Length; j++)\n                {\n                    if (expression[j] == '(') depth++;\n                    else if (expression[j] == ')' && --depth == 0) break;\n                }\n\n                number = Evaluate(expression.Substring(i + 1, j - i - 1));\n                i = j;\n            }\n\n            bool lastCharacter = i == expression.Length - 1;\n\n            if ((!char.IsDigit(c) && c != ' ' && c != '(') || lastCharacter)\n            {\n                switch (pending)\n                {\n                    case '+': stack.Push(number); break;\n                    case '-': stack.Push(-number); break;                      // a negative addition\n                    case '*': stack.Push(stack.Pop() * number); break;         // binds tighter\n                    case '/': stack.Push(stack.Pop() / number); break;\n                }\n\n                pending = c;\n                number = 0;\n            }\n        }\n\n        long total = 0;\n        foreach (long value in stack) total += value;\n        return total;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Evaluate(\"3+2*2\"));\n        Console.WriteLine(Evaluate(\" 3/2 \"));            // integer division\n        Console.WriteLine(Evaluate(\" 3+5 / 2 \"));\n        Console.WriteLine(Evaluate(\"2*(3+4)\"));\n        Console.WriteLine(Evaluate(\"(1+(4+5+2)-3)+(6+8)\"));\n        Console.WriteLine(Evaluate(\"100\"));\n        Console.WriteLine(Evaluate(\"2*3*4\"));\n        Console.WriteLine(Evaluate(\"10-2-3\"));           // left associative\n        Console.WriteLine(Evaluate(\"((2))\"));\n    }\n}\n```\n\n**Output**\n\n```\n7\n1\n5\n14\n23\n100\n24\n5\n2\n```",
+  "tags": [
+   "dsa",
+   "stack",
+   "parsing",
+   "precedence",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "How does one pass handle precedence without a grammar?",
+    "a": "By exploiting the fact that multiplication and division bind tighter than addition: their result can be applied immediately to the value on top of the stack, because nothing later can change that grouping. Additive terms are left as separate stack entries and summed at the end, so their grouping is deferred until everything is known. Subtraction becomes a negative addition, which removes the need for associativity handling on the additive level."
+   },
+   {
+    "q": "Why is the operator tracked as pending rather than applied when read?",
+    "a": "Because when you read an operator, its right operand has not been parsed yet - only the left one is complete. Storing it and acting when the NEXT operator or the end of input arrives means both operands are available. That is also why the last-character condition is part of the trigger: without it the final number is parsed and then never applied, and every expression comes out short by its last term."
+   },
+   {
+    "q": "What would you change for a production expression evaluator?",
+    "a": "Use the shunting-yard algorithm or a proper recursive-descent parser, which handle arbitrary operators, precedence levels, right associativity for exponentiation, unary minus and function calls - none of which this version supports. It also has no error handling: a malformed expression silently produces a wrong number rather than reporting where it failed. This solution is the right answer to the interview question and the wrong basis for a real calculator."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Backtracking",
+  "difficulty": "Hard",
+  "question": "Determine whether an array can be partitioned into k subsets of equal sum.",
+  "answer": "**Approach**\n\nBacktracking with three pruning rules that turn an intractable search into a fast one: sort descending, skip duplicate bucket states, and abort early when the largest element exceeds the target.\n\n**Logic**\n\nThe naive search assigns each element to each bucket, which is k^n. The prunings are what make it practical:\n\nSorting descending places the hardest elements first, so dead ends are discovered near the top of the tree rather than deep in it.\n\nSkipping buckets with the same current sum avoids exploring symmetric states — putting an element in empty bucket 2 is identical to putting it in empty bucket 3.\n\nBreaking when a bucket reaches exactly the target and the next recursion fails prevents rediscovering the same failure.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static bool CanPartitionIntoK(int[] nums, int k)\n    {\n        if (nums == null || nums.Length < k || k <= 0) return false;\n\n        long total = nums.Sum(v => (long)v);\n        if (total % k != 0) return false;\n\n        long target = total / k;\n\n        // Descending: the hardest elements first, so dead ends surface early.\n        var sorted = nums.OrderByDescending(v => v).ToArray();\n        if (sorted[0] > target) return false;\n\n        return Fill(sorted, 0, new long[k], target);\n    }\n\n    private static bool Fill(int[] sorted, int at, long[] buckets, long target)\n    {\n        if (at == sorted.Length) return true;\n\n        for (int b = 0; b < buckets.Length; b++)\n        {\n            if (buckets[b] + sorted[at] > target) continue;\n\n            // Symmetric states: two buckets holding the same sum are interchangeable.\n            bool duplicate = false;\n            for (int earlier = 0; earlier < b; earlier++)\n                if (buckets[earlier] == buckets[b]) { duplicate = true; break; }\n            if (duplicate) continue;\n\n            buckets[b] += sorted[at];\n            if (Fill(sorted, at + 1, buckets, target)) return true;\n            buckets[b] -= sorted[at];\n\n            // If this element could not be placed in an empty bucket, nothing can.\n            if (buckets[b] == 0) break;\n        }\n\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CanPartitionIntoK(new[] { 4, 3, 2, 3, 5, 2, 1 }, 4));\n        Console.WriteLine(CanPartitionIntoK(new[] { 1, 2, 3, 4 }, 3));       // sum not divisible\n        Console.WriteLine(CanPartitionIntoK(new[] { 1, 1, 1, 1 }, 4));\n        Console.WriteLine(CanPartitionIntoK(new[] { 10, 1, 1 }, 2));         // one element too big\n        Console.WriteLine(CanPartitionIntoK(new[] { 5 }, 1));\n        Console.WriteLine(CanPartitionIntoK(new[] { 1, 2 }, 3));             // more buckets than items\n\n        // Large and adversarial: without the prunings this would not finish.\n        var hard = new[] { 2, 2, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };\n        Console.WriteLine(CanPartitionIntoK(hard, 5));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\n```",
+  "tags": [
+   "dsa",
+   "backtracking",
+   "pruning",
+   "partitioning",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does skipping equal-sum buckets preserve correctness?",
+    "a": "Because two buckets holding the same running total are interchangeable - any completion using one has a mirror image using the other, so exploring both can only rediscover the same outcomes. Skipping the duplicate prunes an entire symmetric half of the search tree at every level. It is a symmetry-breaking rule, the same idea as fixing the first queen's position in n-queens, and it is often the difference between seconds and hours."
+   },
+   {
+    "q": "Why break when the element cannot go into an empty bucket?",
+    "a": "Because if the current element does not lead to a solution when placed in a completely empty bucket, no other bucket can help - every other bucket offers less remaining room. So the whole branch is hopeless and continuing the loop is wasted work. Combined with the descending sort, this is what makes hard instances tractable: the biggest element fails fast rather than after exploring every arrangement of the smaller ones."
+   },
+   {
+    "q": "Is there a polynomial algorithm?",
+    "a": "No - the problem is NP-complete, being a generalisation of the partition problem, so exponential worst-case behaviour is expected and the prunings only improve the average case. For small n a bitmask DP over subsets is O(2 to the n times n) and gives a predictable bound rather than a heuristic one, which is preferable when n is known to be small. Recognising it as NP-complete is the honest first sentence of the answer."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Greedy",
+  "difficulty": "Hard",
+  "question": "Choose a team of k engineers maximising the product of total speed and minimum efficiency.",
+  "answer": "**Approach**\n\nSort by efficiency descending and sweep. At each engineer, treat their efficiency as the team's minimum and keep the k highest speeds seen so far in a min-heap.\n\n**Logic**\n\nThe sort is what makes the minimum known: processing in descending efficiency means every engineer already considered has efficiency at least the current one, so the current engineer's value is a valid team minimum.\n\nThe heap then answers the remaining question — given that minimum, maximise the speed sum — by keeping the best k speeds and evicting the weakest.\n\nSmaller teams are allowed, which is why the candidate is recorded at every step rather than only once the heap is full.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static long MaxPerformance(int[] speed, int[] efficiency, int k)\n    {\n        // Descending efficiency: the current engineer is a valid team minimum.\n        var engineers = speed.Zip(efficiency, (s, e) => (Speed: (long)s, Efficiency: (long)e))\n                             .OrderByDescending(x => x.Efficiency)\n                             .ToArray();\n\n        var slowest = new PriorityQueue<long, long>();   // min-heap of the kept speeds\n        long speedSum = 0, best = 0;\n\n        foreach (var (s, e) in engineers)\n        {\n            slowest.Enqueue(s, s);\n            speedSum += s;\n\n            if (slowest.Count > k) speedSum -= slowest.Dequeue();   // drop the weakest\n\n            // Teams smaller than k are allowed, so record at every step.\n            best = Math.Max(best, speedSum * e);\n        }\n\n        return best;\n    }\n\n    private static long BruteForce(int[] speed, int[] efficiency, int k)\n    {\n        int n = speed.Length;\n        long best = 0;\n\n        for (int mask = 1; mask < (1 << n); mask++)\n        {\n            if (System.Numerics.BitOperations.PopCount((uint)mask) > k) continue;\n\n            long sum = 0, minimum = long.MaxValue;\n\n            for (int i = 0; i < n; i++)\n                if ((mask & (1 << i)) != 0)\n                { sum += speed[i]; minimum = Math.Min(minimum, efficiency[i]); }\n\n            best = Math.Max(best, sum * minimum);\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        var speed = new[] { 2, 10, 3, 1, 5, 8 };\n        var efficiency = new[] { 5, 4, 3, 9, 7, 2 };\n\n        foreach (int k in new[] { 1, 2, 3, 4, 6 })\n            Console.WriteLine($\"k={k}: {MaxPerformance(speed, efficiency, k)} \" +\n                              $\"(brute {BruteForce(speed, efficiency, k)})\");\n\n        Console.WriteLine(MaxPerformance(new[] { 7 }, new[] { 3 }, 1));\n\n        var random = new Random(1357);\n        var s = Enumerable.Range(0, 14).Select(_ => random.Next(1, 50)).ToArray();\n        var e = Enumerable.Range(0, 14).Select(_ => random.Next(1, 50)).ToArray();\n\n        bool agrees = true;\n        for (int k = 1; k <= 14 && agrees; k++)\n            if (MaxPerformance(s, e, k) != BruteForce(s, e, k)) agrees = false;\n\n        Console.WriteLine($\"14 engineers across every k agree with brute force: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\nk=1: 40 (brute 40)\nk=2: 60 (brute 60)\nk=3: 68 (brute 68)\nk=4: 72 (brute 72)\nk=6: 72 (brute 72)\n21\n14 engineers across every k agree with brute force: True\n```",
+  "tags": [
+   "dsa",
+   "greedy",
+   "heap",
+   "sorting",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does sorting by efficiency make the problem tractable?",
+    "a": "Because the objective couples two quantities - a sum and a minimum - and the minimum is the awkward one. Fixing it by iterating candidates in descending efficiency means that at each step every engineer already seen qualifies, so the only remaining question is which k speeds to take, which a heap answers greedily. Decoupling a two-variable objective by enumerating one variable in a useful order is the reusable technique."
+   },
+   {
+    "q": "Why record a candidate before the heap is full?",
+    "a": "Because the problem allows teams of AT MOST k, so a team of one engineer with enormous efficiency can beat a full team - the k=1 case here gives 60 from a single engineer. Recording only once the heap holds k members would miss every smaller team. If the problem demanded exactly k, the guard would be added, which is a one-line difference with a materially different answer."
+   },
+   {
+    "q": "Why cross-check against an exponential brute force?",
+    "a": "Because the greedy argument is easy to state and easy to get subtly wrong - the at-most-k detail, or evicting the wrong heap end. Enumerating all subsets of fourteen engineers is sixteen thousand masks, which is instant, and comparing across every k gives real evidence rather than agreement with my own reasoning. It is the same discipline as the closest-pair and segment-tree checks: use the slow oracle where it is still affordable."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Stack",
+  "difficulty": "Medium",
+  "question": "Find the next greater element for every item in a circular array.",
+  "answer": "**Approach**\n\nA monotonic stack over two passes of the array, simulated by iterating 2n times with a modulo index. The stack holds indices whose answer is still unknown.\n\n**Logic**\n\nThe circularity is handled by the second pass: after one full loop, any index still on the stack has seen every later element, and the wrap gives it a chance at the earlier ones.\n\nCrucially, nothing is pushed during the second pass — only resolved. Pushing again would allow an element to be its own answer and produce cycles.\n\nEach index is pushed once and popped once, so the whole thing is linear despite the doubled iteration.\n\nO(n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[] NextGreaterCircular(int[] nums)\n    {\n        int n = nums.Length;\n        var result = new int[n];\n        Array.Fill(result, -1);\n\n        var stack = new Stack<int>();   // indices still waiting for an answer\n\n        for (int step = 0; step < 2 * n; step++)\n        {\n            int i = step % n;\n\n            while (stack.Count > 0 && nums[stack.Peek()] < nums[i])\n                result[stack.Pop()] = nums[i];\n\n            // Only the first pass pushes; the second merely resolves.\n            if (step < n) stack.Push(i);\n        }\n\n        return result;\n    }\n\n    private static int[] BruteForce(int[] nums)\n    {\n        int n = nums.Length;\n        var result = new int[n];\n\n        for (int i = 0; i < n; i++)\n        {\n            result[i] = -1;\n\n            for (int step = 1; step < n; step++)\n                if (nums[(i + step) % n] > nums[i]) { result[i] = nums[(i + step) % n]; break; }\n        }\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        int[][] cases =\n        {\n            new[] { 1, 2, 1 },\n            new[] { 1, 2, 3, 4, 3 },\n            new[] { 5, 4, 3, 2, 1 },       // only the wrap can help\n            new[] { 1, 1, 1 },             // strictly greater, so none\n            new[] { 7 },\n            Array.Empty<int>()\n        };\n\n        foreach (var nums in cases)\n            Console.WriteLine($\"[{string.Join(\",\", nums)}] -> \" +\n                              $\"[{string.Join(\",\", NextGreaterCircular(nums))}] \" +\n                              $\"(brute [{string.Join(\",\", BruteForce(nums))}])\");\n\n        var random = new Random(864);\n        var many = Enumerable.Range(0, 300).Select(_ => random.Next(0, 50)).ToArray();\n\n        Console.WriteLine($\"300 values agree: \" +\n            $\"{NextGreaterCircular(many).SequenceEqual(BruteForce(many))}\");\n    }\n}\n```\n\n**Output**\n\n```\n[1,2,1] -> [2,-1,2] (brute [2,-1,2])\n[1,2,3,4,3] -> [2,3,4,-1,4] (brute [2,3,4,-1,4])\n[5,4,3,2,1] -> [-1,5,5,5,5] (brute [-1,5,5,5,5])\n[1,1,1] -> [-1,-1,-1] (brute [-1,-1,-1])\n[7] -> [-1] (brute [-1])\n[] -> [] (brute [])\n300 values agree: True\n```",
+  "tags": [
+   "dsa",
+   "monotonic-stack",
+   "circular",
+   "next-greater",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must the second pass not push?",
+    "a": "Because an index pushed on the second pass would be waiting for an answer it has already had the chance to find, and it could be resolved by an element that comes before it in the original array on a third notional lap - which is not a valid answer. Worse, it could end up matched against itself. One lap to register every index and a second only to resolve is exactly enough, since after two laps every index has seen every other element."
+   },
+   {
+    "q": "Why does the stack hold indices rather than values?",
+    "a": "Because the result must be written back to the position that was waiting, and a value does not identify its position - especially with duplicates. Popping an index lets you assign result[index] directly. It is the same reason the histogram and sliding-window-maximum stacks store indices: the answer is positional even when the comparison is by value."
+   },
+   {
+    "q": "Why is this linear despite iterating twice the length?",
+    "a": "Because the 2n loop is a constant factor, and within it each index is pushed at most once and popped at most once, so the total stack work is bounded by n. The inner while loop can pop many elements in one step, but only by removing work that later steps would otherwise do. That amortised argument is the same one behind every monotonic stack, and without stating it the nested loop looks quadratic."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Binary Search",
+  "difficulty": "Hard",
+  "question": "Find the median of two sorted arrays in logarithmic time.",
+  "answer": "**Approach**\n\nBinary search for the *partition point* rather than for a value. Split both arrays so that everything on the left is at most everything on the right and the left half holds exactly half the elements.\n\n**Logic**\n\nOnce such a partition is found, the median is determined by the four elements at the boundary — no merging required.\n\nSearching the smaller array is what gives the O(log(min(m,n))) bound and also guarantees the partition index in the other array stays within range.\n\nThe sentinels for empty sides are what let the boundary comparisons be written without special cases for partitions at either end.\n\nO(log(min(m, n))).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static double FindMedianSortedArrays(int[] a, int[] b)\n    {\n        // Search the SMALLER array: bounds the work and keeps the other index valid.\n        if (a.Length > b.Length) (a, b) = (b, a);\n\n        int m = a.Length, n = b.Length;\n        if (m + n == 0) throw new ArgumentException(\"both arrays are empty\");\n\n        int lo = 0, hi = m;\n        int half = (m + n + 1) / 2;\n\n        while (lo <= hi)\n        {\n            int cutA = lo + (hi - lo) / 2;\n            int cutB = half - cutA;\n\n            // Sentinels remove the end-of-array special cases.\n            long leftA = cutA == 0 ? long.MinValue : a[cutA - 1];\n            long rightA = cutA == m ? long.MaxValue : a[cutA];\n            long leftB = cutB == 0 ? long.MinValue : b[cutB - 1];\n            long rightB = cutB == n ? long.MaxValue : b[cutB];\n\n            if (leftA > rightB) { hi = cutA - 1; continue; }\n            if (leftB > rightA) { lo = cutA + 1; continue; }\n\n            // Correct partition: the median is decided by the four boundary values.\n            if ((m + n) % 2 == 1) return Math.Max(leftA, leftB);\n\n            return (Math.Max(leftA, leftB) + Math.Min(rightA, rightB)) / 2.0;\n        }\n\n        throw new InvalidOperationException(\"inputs were not sorted\");\n    }\n\n    private static double BruteForce(int[] a, int[] b)\n    {\n        var all = a.Concat(b).OrderBy(v => v).ToArray();\n        int mid = all.Length / 2;\n\n        return all.Length % 2 == 1 ? all[mid] : ((double)all[mid - 1] + all[mid]) / 2;\n    }\n\n    public static void Main()\n    {\n        (int[] A, int[] B)[] cases =\n        {\n            (new[] { 1, 3 }, new[] { 2 }),\n            (new[] { 1, 2 }, new[] { 3, 4 }),\n            (Array.Empty<int>(), new[] { 1 }),\n            (new[] { 2 }, Array.Empty<int>()),\n            (new[] { 1, 1 }, new[] { 1, 1 }),\n            (new[] { 1, 2, 3 }, new[] { 100, 200 }),      // no interleaving at all\n            (new[] { int.MinValue }, new[] { int.MaxValue })\n        };\n\n        foreach (var (a, b) in cases)\n            Console.WriteLine($\"{FindMedianSortedArrays(a, b):F5} (brute {BruteForce(a, b):F5})\");\n\n        var random = new Random(5150);\n        bool agrees = true;\n\n        for (int trial = 0; trial < 300 && agrees; trial++)\n        {\n            var a = Enumerable.Range(0, random.Next(0, 12)).Select(_ => random.Next(-50, 50))\n                              .OrderBy(v => v).ToArray();\n            var b = Enumerable.Range(0, random.Next(a.Length == 0 ? 1 : 0, 12))\n                              .Select(_ => random.Next(-50, 50)).OrderBy(v => v).ToArray();\n\n            if (Math.Abs(FindMedianSortedArrays(a, b) - BruteForce(a, b)) > 1e-9) agrees = false;\n        }\n\n        Console.WriteLine($\"300 random pairs agree: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\n2.00000 (brute 2.00000)\n2.50000 (brute 2.50000)\n1.00000 (brute 1.00000)\n2.00000 (brute 2.00000)\n1.00000 (brute 1.00000)\n3.00000 (brute 3.00000)\n-0.50000 (brute -0.50000)\n300 random pairs agree: True\n```",
+  "tags": [
+   "dsa",
+   "binary-search",
+   "partition",
+   "median",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What is being binary searched, given the answer is a value?",
+    "a": "The partition index in the smaller array. Every choice of cut in one array forces the cut in the other, since the left side must hold exactly half the elements, so one index parameterises the whole configuration. The search tests whether that configuration satisfies the cross conditions and moves accordingly. Searching over configurations rather than values is what makes the logarithmic bound possible without ever merging - and note the final test, where int.MinValue and int.MaxValue average to -0.5, which is why the boundary values are held in long rather than int."
+   },
+   {
+    "q": "Why search the smaller array?",
+    "a": "For two reasons. It bounds the work at O(log of the smaller length), which matters when one array is tiny and the other enormous. And it guarantees the derived cut in the larger array stays within its bounds - searching the larger one can compute a negative or out-of-range index for the smaller, requiring extra clamping. The swap is one line and removes a class of index bugs."
+   },
+   {
+    "q": "Why use sentinels instead of conditionals?",
+    "a": "Because a partition at position zero has no element to its left and one at the end has none to its right, and every boundary comparison would otherwise need a null check. Treating a missing left value as negative infinity and a missing right value as positive infinity makes those comparisons always succeed in the right direction, so the four-way test is uniform. Using long for the sentinels matters because int.MinValue and int.MaxValue are legitimate array values, which the last test case checks."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Hard",
+  "question": "Find the minimum number of swaps to make a string of brackets balanced.",
+  "answer": "**Approach**\n\nCount the unmatched closing brackets at their worst point; the answer is the ceiling of half that count.\n\n**Logic**\n\nScanning left to right and tracking the balance, the deepest negative dip is the number of closing brackets with no partner. Each swap can move an opening bracket from the end into a deficit position, fixing two units of imbalance at once — hence the halving.\n\nThe formula only holds when the brackets are equal in number, which the problem guarantees; otherwise no arrangement is balanced and swapping cannot help.\n\nO(n) time, O(1) space.\n\nThe test cross-checks against a BFS over swap states for small inputs, since a closed-form answer deserves independent confirmation.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int MinimumSwaps(string brackets)\n    {\n        int balance = 0, deficit = 0;\n\n        foreach (char c in brackets)\n        {\n            balance += c == '[' ? 1 : -1;\n\n            // The deepest dip is the number of unmatched closing brackets.\n            if (balance < 0) deficit = Math.Max(deficit, -balance);\n        }\n\n        // One swap fixes two units of imbalance.\n        return (deficit + 1) / 2;\n    }\n\n    // BFS over swap states: slow, but an independent check for short inputs.\n    private static int BfsSwaps(string start)\n    {\n        if (IsBalanced(start)) return 0;\n\n        var seen = new HashSet<string> { start };\n        var queue = new Queue<string>();\n        queue.Enqueue(start);\n\n        int swaps = 0;\n\n        while (queue.Count > 0)\n        {\n            swaps++;\n            int levelSize = queue.Count;\n\n            for (int q = 0; q < levelSize; q++)\n            {\n                var current = queue.Dequeue().ToCharArray();\n\n                for (int i = 0; i < current.Length; i++)\n                    for (int j = i + 1; j < current.Length; j++)\n                    {\n                        if (current[i] == current[j]) continue;\n\n                        (current[i], current[j]) = (current[j], current[i]);\n                        string next = new string(current);\n                        (current[i], current[j]) = (current[j], current[i]);\n\n                        if (!seen.Add(next)) continue;\n                        if (IsBalanced(next)) return swaps;\n                        queue.Enqueue(next);\n                    }\n            }\n        }\n\n        return -1;\n    }\n\n    private static bool IsBalanced(string s)\n    {\n        int balance = 0;\n\n        foreach (char c in s)\n        {\n            balance += c == '[' ? 1 : -1;\n            if (balance < 0) return false;\n        }\n\n        return balance == 0;\n    }\n\n    public static void Main()\n    {\n        foreach (string s in new[] { \"[]\", \"]][[\", \"][][\", \"]]][[[\", \"[]][][\", \"\" })\n            Console.WriteLine($\"\\\"{s}\\\": {MinimumSwaps(s)} (bfs {BfsSwaps(s)})\");\n    }\n}\n```\n\n**Output**\n\n```\n\"[]\": 0 (bfs 0)\n\"]][[\": 1 (bfs 1)\n\"][][\": 1 (bfs 1)\n\"]]][[[\": 2 (bfs 2)\n\"[]][][\": 1 (bfs 1)\n\"\": 0 (bfs 0)\n```",
+  "tags": [
+   "dsa",
+   "greedy",
+   "brackets",
+   "counting",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does one swap fix two units of imbalance?",
+    "a": "Because the useful swap exchanges an unmatched closing bracket near the front with an unmatched opening bracket near the back. That removes a closing bracket from the deficit region and adds an opening one, so the running balance at that point improves by two. Hence the deepest deficit is halved, with the ceiling covering an odd dip. Seeing that a single swap does double duty is the whole insight."
+   },
+   {
+    "q": "Why is the deepest dip the right quantity rather than the final balance?",
+    "a": "Because the string is guaranteed to have equal numbers of each bracket, so the final balance is always zero and carries no information. What makes it invalid is going negative partway through - a closing bracket arriving before its partner - and the worst such moment determines how much repair is needed. Measuring the minimum of the running balance rather than its endpoint is the distinction."
+   },
+   {
+    "q": "Why include a BFS check for a closed-form answer?",
+    "a": "Because a formula derived by reasoning deserves independent confirmation - the halving and the ceiling are both easy to get wrong, and a wrong formula produces plausible numbers. The BFS explores actual swap sequences and finds the true minimum by construction, so agreement is real evidence. It is exponential and only usable on short strings, which is the normal compromise: an expensive oracle applied where it is affordable."
+   }
+  ]
  }
 ]
