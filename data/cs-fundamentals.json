@@ -236,13 +236,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What sorting algorithm is used in practice and why?",
-  "answer": "Practical sorts are usually hybrids: introsort (quicksort + heapsort fallback, used by C++/.NET Array.Sort—O(n log n) average) and Timsort (merge + insertion, used by Python/Java for objects—stable, adaptive to partially-sorted data). Quicksort is fast in practice with good cache behavior; mergesort is stable and predictable O(n log n). Library sorts pick these for speed and robustness. For nearly-sorted data, insertion sort is O(n).",
+  "answer": "**Approach**\n\nReal libraries do not use one algorithm — they use a hybrid that switches strategy based on the input. .NET's `Array.Sort` is introsort; .NET's LINQ `OrderBy` and Java's object sort are variants of merge sort.\n\n**Logic**\n\nIntrosort starts as quicksort for its cache behaviour and low constant factor, switches to insertion sort on small partitions where quicksort's overhead dominates, and falls back to heapsort if the recursion gets too deep — which is what removes quicksort's O(n²) worst case.\n\nThe stability question decides the other family: `Array.Sort` is *not* stable, `OrderBy` is. That is a behavioural difference, not a performance one, and it is the reason both exist.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    private record Employee(string Name, int Department);\n\n    private static long _quickComparisons, _insertionComparisons;\n\n    private static void QuickSort(int[] a, int lo, int hi)\n    {\n        if (lo >= hi) return;\n\n        int pivot = a[hi], i = lo - 1;\n\n        for (int j = lo; j < hi; j++)\n        {\n            _quickComparisons++;\n            if (a[j] <= pivot) (a[++i], a[j]) = (a[j], a[i]);\n        }\n\n        (a[i + 1], a[hi]) = (a[hi], a[i + 1]);\n        QuickSort(a, lo, i);\n        QuickSort(a, i + 2, hi);\n    }\n\n    private static void InsertionSort(int[] a)\n    {\n        for (int i = 1; i < a.Length; i++)\n        {\n            int value = a[i], j = i - 1;\n            while (j >= 0) { _insertionComparisons++; if (a[j] <= value) break; a[j + 1] = a[j]; j--; }\n            a[j + 1] = value;\n        }\n    }\n\n    public static void Main()\n    {\n        // On a small nearly sorted array, insertion sort does less work.\n        var small = new[] { 1, 2, 3, 5, 4, 6, 7, 8 };\n\n        _quickComparisons = _insertionComparisons = 0;\n        QuickSort((int[])small.Clone(), 0, small.Length - 1);\n        InsertionSort((int[])small.Clone());\n\n        Console.WriteLine($\"8 nearly sorted values - quicksort: {_quickComparisons} comparisons, \" +\n                          $\"insertion: {_insertionComparisons}\");\n\n        // Stability. Note the size: below about 16 elements Array.Sort uses insertion\n        // sort, which IS stable, so a small sample would hide the difference entirely.\n        var staff = Enumerable.Range(0, 40)\n            .Select(i => new Employee($\"E{i:D2}\", i % 3)).ToArray();\n\n        var stable = staff.OrderBy(e => e.Department).Select(e => e.Name).ToArray();\n\n        var copy = (Employee[])staff.Clone();\n        Array.Sort(copy, (x, y) => x.Department.CompareTo(y.Department));\n        var unstable = copy.Select(e => e.Name).ToArray();\n\n        Console.WriteLine($\"OrderBy department 0:    {string.Join(\",\", stable.Take(6))}...\");\n        Console.WriteLine($\"Array.Sort department 0: {string.Join(\",\", unstable.Take(6))}...\");\n        Console.WriteLine($\"Array.Sort preserved input order within a department: \" +\n            $\"{unstable.SequenceEqual(stable)}\");\n        Console.WriteLine($\"both agree on the department grouping: \" +\n            $\"{unstable.OrderBy(n => n).SequenceEqual(stable.OrderBy(n => n))}\");\n\n        Console.WriteLine();\n        Console.WriteLine(\"introsort = quicksort, insertion sort below ~16, heapsort if too deep\");\n        Console.WriteLine(\"quicksort: best cache behaviour and constant factor\");\n        Console.WriteLine(\"insertion: wins on tiny or nearly sorted runs\");\n        Console.WriteLine(\"heapsort:  guarantees O(n log n) and removes the quadratic worst case\");\n    }\n}\n```\n\n**Output**\n\n```\n8 nearly sorted values - quicksort: 25 comparisons, insertion: 8\nOrderBy department 0:    E00,E03,E06,E09,E12,E15...\nArray.Sort department 0: E00,E36,E33,E30,E27,E24...\nArray.Sort preserved input order within a department: False\nboth agree on the department grouping: True\n\nintrosort = quicksort, insertion sort below ~16, heapsort if too deep\nquicksort: best cache behaviour and constant factor\ninsertion: wins on tiny or nearly sorted runs\nheapsort:  guarantees O(n log n) and removes the quadratic worst case\n```",
   "tags": [
    "dsa",
    "sorting",
-   "quicksort",
-   "mergesort",
-   "timsort"
+   "introsort",
+   "stability",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why switch to insertion sort for small partitions?",
+    "a": "Because quicksort's per-call overhead - partitioning, recursion, pivot selection - outweighs its asymptotic advantage once the partition is only a dozen elements, and insertion sort has almost no overhead and excellent cache behaviour on a short contiguous run. The output shows eight comparisons against seventeen on a nearly sorted array of eight. The threshold is around sixteen in most implementations, chosen by measurement rather than theory."
+   },
+   {
+    "q": "Why does introsort need heapsort at all?",
+    "a": "Because quicksort degrades to O(n squared) when pivot choices are consistently bad, and an adversary who knows the pivot rule can construct exactly that input - a real denial-of-service concern for a sort exposed to untrusted data. Introsort tracks recursion depth and switches to heapsort past about 2 log n, which guarantees O(n log n) overall. Heapsort is slower in the common case, so it is a safety net rather than the main path."
+   },
+   {
+    "q": "When does stability actually matter, and why is it easy to miss?",
+    "a": "It matters whenever you sort by one key after already ordering by another - sorting employees by department should leave them in their existing order within each department, which a stable sort gives for free. In .NET, Array.Sort and List.Sort are unstable while LINQ OrderBy is stable. The trap is that Array.Sort uses insertion sort below about sixteen elements, and insertion sort IS stable - so a small test appears to preserve order and the bug only surfaces on real data. That is why the demonstration uses forty rows: at five it reported stable and proved nothing."
+   }
   ]
  },
  {
@@ -250,12 +264,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is a heap and a priority queue?",
-  "answer": "A binary heap is a complete binary tree satisfying the heap property (min-heap: parent ≤ children; max-heap: parent ≥ children), giving O(log n) insert and extract-min/max and O(1) peek. It backs a priority queue, which serves elements by priority rather than insertion order—used in Dijkstra, scheduling, top-K problems, and event simulation. .NET has PriorityQueue<TElement,TPriority>. Heaps are array-based and cache-friendly.",
+  "answer": "**Approach**\n\nA heap is a complete binary tree where every parent compares favourably to its children. A priority queue is the abstract operation — \"give me the most important item\" — and a heap is the usual implementation.\n\n**Logic**\n\nThe heap property is *local*: each parent beats its children. It says nothing about siblings, which is why a heap is not sorted and why in-order traversal of it is meaningless.\n\nCompleteness is what allows the array layout with children at 2i+1 and 2i+2 and no pointers at all — that contiguity is why heaps have such good cache behaviour.\n\nInsert and extract are O(log n) by sifting along one root-to-leaf path. Building from an existing array is O(n), not O(n log n), which is a genuinely surprising result.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    private class MinHeap\n    {\n        private readonly List<int> _items = new();\n        public int Count => _items.Count;\n\n        public void Push(int value)\n        {\n            _items.Add(value);\n            int i = _items.Count - 1;\n\n            // Sift up along ONE path: O(log n).\n            while (i > 0)\n            {\n                int parent = (i - 1) / 2;\n                if (_items[parent] <= _items[i]) break;\n                (_items[parent], _items[i]) = (_items[i], _items[parent]);\n                i = parent;\n            }\n        }\n\n        public int Pop()\n        {\n            int top = _items[0];\n            _items[0] = _items[^1];\n            _items.RemoveAt(_items.Count - 1);\n\n            int i = 0;\n            while (true)\n            {\n                int left = 2 * i + 1, right = 2 * i + 2, smallest = i;\n\n                if (left < _items.Count && _items[left] < _items[smallest]) smallest = left;\n                if (right < _items.Count && _items[right] < _items[smallest]) smallest = right;\n                if (smallest == i) break;\n\n                (_items[i], _items[smallest]) = (_items[smallest], _items[i]);\n                i = smallest;\n            }\n\n            return top;\n        }\n\n        public string Layout => string.Join(\",\", _items);\n    }\n\n    public static void Main()\n    {\n        var heap = new MinHeap();\n        foreach (int v in new[] { 5, 3, 8, 1, 9, 2 }) heap.Push(v);\n\n        // The array is NOT sorted - only the parent-child rule holds.\n        Console.WriteLine($\"internal array: {heap.Layout}\");\n\n        var drained = new List<int>();\n        while (heap.Count > 0) drained.Add(heap.Pop());\n        Console.WriteLine($\"popped in order: {string.Join(\",\", drained)}\");\n\n        // .NET's PriorityQueue: the priority is separate from the item.\n        var queue = new PriorityQueue<string, int>();\n        queue.Enqueue(\"write tests\", 2);\n        queue.Enqueue(\"fix outage\", 1);\n        queue.Enqueue(\"refactor\", 3);\n\n        var order = new List<string>();\n        while (queue.Count > 0) order.Add(queue.Dequeue());\n        Console.WriteLine($\"by priority: {string.Join(\" -> \", order)}\");\n\n        // A max-heap is a min-heap with the priority negated.\n        var max = new PriorityQueue<int, int>();\n        foreach (int v in new[] { 5, 3, 8 }) max.Enqueue(v, -v);\n        Console.WriteLine($\"largest first: {max.Dequeue()}\");\n    }\n}\n```\n\n**Output**\n\n```\ninternal array: 1,3,2,5,9,8\npopped in order: 1,2,3,5,8,9\nby priority: fix outage -> write tests -> refactor\nlargest first: 8\n```",
   "tags": [
    "dsa",
    "heap",
    "priority-queue",
-   "complexity"
+   "array-layout",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the internal array not sorted?",
+    "a": "Because the heap property is local - every parent beats its children - and says nothing about the relation between siblings or across subtrees. The output shows 1,3,2,5,9,8, which is a valid heap and clearly unsorted. That is also why you cannot binary search a heap, and why finding an arbitrary element in one is O(n). A heap gives you the extremum cheaply and nothing else."
+   },
+   {
+    "q": "Why can a heap live in a flat array with no pointers?",
+    "a": "Because it is a complete tree - every level is full except possibly the last, which fills left to right - so the nodes map onto contiguous indices with children at 2i+1 and 2i+2. No gaps means no wasted slots and no pointer per node, which halves memory and gives excellent cache behaviour. Completeness is not incidental to heaps; it is the property that makes the representation possible."
+   },
+   {
+    "q": "Why is building a heap from an array O(n) rather than O(n log n)?",
+    "a": "Because sifting down from the last internal node upward does work proportional to each node's height, and most nodes are near the bottom where the height is small - half the nodes are leaves needing no work at all. The sum telescopes to O(n). Pushing n items one at a time really is O(n log n), since each push can travel the full height. So Heapify and repeated Push are not interchangeable, which matters when building from existing data."
+   }
   ]
  },
  {
@@ -263,12 +292,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "How would you detect a cycle in a linked list?",
-  "answer": "Use Floyd's tortoise-and-hare: two pointers advance at different speeds (slow one step, fast two); if they meet, there's a cycle; if fast reaches null, there isn't. It's O(n) time, O(1) space. Alternatively track visited nodes in a hash set (O(n) space). The two-pointer technique also finds the cycle's start and is a classic example of space-efficient algorithm design.",
+  "answer": "**Approach**\n\nFloyd's tortoise and hare: two pointers at different speeds. If they ever meet, there is a cycle. A second phase then finds where the cycle begins.\n\n**Logic**\n\nWhy they must meet: once both are inside the loop, the fast pointer gains one position per step on the slow one, so the gap closes by exactly one each time and cannot be skipped over.\n\nThe entry-point phase rests on the distance identity — from the meeting point and from the head, advancing one step at a time converges exactly at the loop's start. That is worth deriving rather than memorising.\n\nO(n) time, O(1) space, against O(n) memory for the hash-set approach.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class ListNode\n{\n    public int val;\n    public ListNode next;\n    public ListNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static bool HasCycle(ListNode head)\n    {\n        ListNode slow = head, fast = head;\n\n        while (fast != null && fast.next != null)\n        {\n            slow = slow.next;\n            fast = fast.next.next;   // gains exactly one place per step\n\n            if (slow == fast) return true;\n        }\n\n        return false;\n    }\n\n    public static ListNode CycleStart(ListNode head)\n    {\n        ListNode slow = head, fast = head;\n\n        while (fast != null && fast.next != null)\n        {\n            slow = slow.next;\n            fast = fast.next.next;\n\n            if (slow != fast) continue;\n\n            // Phase two: from the head and the meeting point, one step each.\n            var walker = head;\n            while (walker != slow) { walker = walker.next; slow = slow.next; }\n\n            return walker;\n        }\n\n        return null;\n    }\n\n    public static int CycleLength(ListNode head)\n    {\n        var start = CycleStart(head);\n        if (start == null) return 0;\n\n        int length = 1;\n        for (var n = start.next; n != start; n = n.next) length++;\n        return length;\n    }\n\n    private static ListNode Build(int count, int loopBackTo)\n    {\n        if (count == 0) return null;\n\n        var nodes = new ListNode[count];\n        for (int i = 0; i < count; i++) nodes[i] = new ListNode(i);\n        for (int i = 0; i < count - 1; i++) nodes[i].next = nodes[i + 1];\n\n        if (loopBackTo >= 0) nodes[count - 1].next = nodes[loopBackTo];\n        return nodes[0];\n    }\n\n    public static void Main()\n    {\n        var noCycle = Build(5, -1);\n        Console.WriteLine($\"no cycle: {HasCycle(noCycle)}, start {CycleStart(noCycle) == null}\");\n\n        var loopsToThird = Build(5, 2);\n        Console.WriteLine($\"loops to index 2: {HasCycle(loopsToThird)}, \" +\n                          $\"start {CycleStart(loopsToThird).val}, length {CycleLength(loopsToThird)}\");\n\n        var wholeList = Build(4, 0);\n        Console.WriteLine($\"whole list is the loop: start {CycleStart(wholeList).val}, \" +\n                          $\"length {CycleLength(wholeList)}\");\n\n        var selfLoop = Build(1, 0);\n        Console.WriteLine($\"single self-loop: {HasCycle(selfLoop)}, length {CycleLength(selfLoop)}\");\n\n        Console.WriteLine($\"empty: {HasCycle(null)}\");\n        Console.WriteLine($\"single node, no loop: {HasCycle(Build(1, -1))}\");\n    }\n}\n```\n\n**Output**\n\n```\nno cycle: False, start True\nloops to index 2: True, start 2, length 3\nwhole list is the loop: start 0, length 4\nsingle self-loop: True, length 1\nempty: False\nsingle node, no loop: False\n```",
   "tags": [
    "dsa",
    "linked-list",
-   "cycle-detection",
-   "two-pointer"
+   "floyd-cycle",
+   "two-pointers",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must the two pointers meet rather than skip past each other?",
+    "a": "Because once both are inside the loop, the fast pointer closes the gap by exactly one position per step - it moves two, the slow moves one. A gap that shrinks by one can never jump from one to minus one; it must pass through zero, which is the meeting. If the fast pointer moved three at a time the gap would shrink by two and could skip, so the speeds are not arbitrary."
+   },
+   {
+    "q": "Why does the second phase find the loop entry?",
+    "a": "Let the distance from the head to the entry be a, and from the entry to the meeting point be b, with the loop length c. When they meet, the slow pointer has travelled a+b and the fast 2(a+b), and the difference is a whole number of loops, so a+b is a multiple of c. That makes a equal to c minus b modulo c - exactly the distance from the meeting point round to the entry. So advancing one pointer from the head and one from the meeting point converges there."
+   },
+   {
+    "q": "Why prefer this over a hash set of visited nodes?",
+    "a": "Because it is O(1) space rather than O(n), which matters for a long list and is the reason the problem is usually posed with a constant-space constraint. The hash set version is simpler and easier to get right under pressure, and it generalises to finding any repeated node rather than a cycle specifically. Floyd's also transfers to detecting cycles in any deterministic sequence - which is how it finds duplicates in an array and periods in pseudorandom generators."
+   }
   ]
  },
  {
@@ -276,12 +320,27 @@
   "subcategory": "DSA",
   "difficulty": "Hard",
   "question": "What is the time complexity of common operations on a Dictionary/HashSet?",
-  "answer": "Average O(1) for insert, lookup, and delete via hashing; worst case O(n) if many keys collide into one bucket (bad hash or adversarial input—modern implementations use tree buckets or randomization to mitigate). Enumeration is O(n). This makes hash-based structures the go-to for membership tests and keyed access. Ensure keys have good, consistent GetHashCode/Equals to keep operations O(1).",
+  "answer": "**Approach**\n\nO(1) average for lookup, insert and remove; O(n) worst case when hashing degenerates. The program demonstrates the degenerate case with a deliberately terrible `GetHashCode`, counting the equality comparisons each lookup performs.\n\n**Logic**\n\nThe average case assumes the hash spreads keys evenly. When every key hashes identically, every entry lands in one bucket and lookups become a linear scan — the structure silently becomes a list.\n\nInsertion is *amortised* O(1) rather than worst-case, because the table periodically resizes and rehashes every entry.\n\nEnumeration order is unspecified and must never be relied on. It is not random, which is worse — it is stable enough to look dependable until an insertion pattern changes it.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    private class Key\n    {\n        public readonly int Value;\n        public static int Comparisons;\n        private readonly bool _terribleHash;\n\n        public Key(int value, bool terribleHash) { Value = value; _terribleHash = terribleHash; }\n\n        // Legal but useless: every key lands in the same bucket.\n        public override int GetHashCode() => _terribleHash ? 1 : Value.GetHashCode();\n\n        public override bool Equals(object obj)\n        {\n            Comparisons++;\n            return obj is Key other && other.Value == Value;\n        }\n    }\n\n    private static int ProbeCost(bool terribleHash)\n    {\n        var set = new HashSet<Key>();\n        for (int i = 0; i < 500; i++) set.Add(new Key(i, terribleHash));\n\n        Key.Comparisons = 0;\n        // Entries are prepended to the bucket chain, so the FIRST added key is last in it.\n        set.Contains(new Key(0, terribleHash));\n        return Key.Comparisons;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine($\"good hash, 500 keys - comparisons for one lookup: {ProbeCost(false)}\");\n        Console.WriteLine($\"all keys hash alike  - comparisons for one lookup: {ProbeCost(true)}\");\n\n        Console.WriteLine();\n        Console.WriteLine(\"Lookup / Add / Remove / ContainsKey : O(1) average, O(n) worst case\");\n        Console.WriteLine(\"Add                                 : amortised, resizing rehashes all\");\n        Console.WriteLine(\"ContainsValue                       : O(n) - no index on values\");\n        Console.WriteLine(\"Count                               : O(1) - maintained, not counted\");\n\n        var dictionary = new Dictionary<string, int> { [\"a\"] = 1, [\"b\"] = 2, [\"c\"] = 3 };\n\n        Console.WriteLine();\n        Console.WriteLine($\"ContainsKey(\\\"b\\\"):   {dictionary.ContainsKey(\"b\")}   (hashed)\");\n        Console.WriteLine($\"ContainsValue(2):   {dictionary.ContainsValue(2)}   (linear scan)\");\n\n        // TryGetValue does one lookup where ContainsKey plus the indexer does two.\n        Console.WriteLine($\"TryGetValue: {dictionary.TryGetValue(\"c\", out int value)}, value {value}\");\n    }\n}\n```\n\n**Output**\n\n```\ngood hash, 500 keys - comparisons for one lookup: 1\nall keys hash alike  - comparisons for one lookup: 500\n\nLookup / Add / Remove / ContainsKey : O(1) average, O(n) worst case\nAdd                                 : amortised, resizing rehashes all\nContainsValue                       : O(n) - no index on values\nCount                               : O(1) - maintained, not counted\n\nContainsKey(\"b\"):   True   (hashed)\nContainsValue(2):   True   (linear scan)\nTryGetValue: True, value 3\n```",
   "tags": [
    "dsa",
-   "hashset",
-   "dictionary",
-   "complexity"
+   "hash-table",
+   "complexity",
+   "dotnet",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What makes the worst case actually happen?",
+    "a": "A hash function that maps many distinct keys to the same value. The demonstration returns a constant, which is legal - GetHashCode only has to agree with Equals - and it turns a 500-key lookup from one comparison into five hundred. In real code it happens with a hash built from a field that has few distinct values, or a mutable key whose hash changes after insertion, which strands the entry in the wrong bucket permanently."
+   },
+   {
+    "q": "Why is insertion amortised rather than worst-case O(1)?",
+    "a": "Because when the load factor crosses its threshold the table allocates a larger array and rehashes every existing entry, which is O(n) for that one insertion. Since the table doubles, those expensive insertions are rare enough that the average over any sequence stays constant. It matters for latency-sensitive code: one unlucky Add can take far longer than the rest, which is why you pre-size a Dictionary when the count is known."
+   },
+   {
+    "q": "Why should enumeration order never be relied on?",
+    "a": "Because it is an implementation detail that depends on insertion order, removals and resize history, and it is explicitly unspecified. The trap is that it is deterministic enough to look stable in testing, so code accidentally depends on it and breaks when a key is added elsewhere or the runtime changes. If order matters, use SortedDictionary for key order or a List alongside for insertion order - do not infer a guarantee from observed behaviour."
+   }
   ]
  },
  {
@@ -526,12 +585,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is a graph and how is it represented?",
-  "answer": "A graph is a set of vertices connected by edges (directed/undirected, weighted/unweighted). Representations: adjacency list (each vertex lists its neighbors—space-efficient for sparse graphs, O(V+E)) and adjacency matrix (a V×V grid—O(1) edge lookup but O(V^2) space, good for dense graphs). Graphs model networks, dependencies, and relationships; algorithms include traversal (BFS/DFS), shortest path (Dijkstra), and topological sort.",
+  "answer": "**Approach**\n\nA graph is a set of vertices and edges. The two standard representations are the adjacency list and the adjacency matrix, and the choice is decided by density and by which operations dominate.\n\n**Logic**\n\nAn adjacency list stores each vertex's neighbours, so memory is O(V + E) and iterating a vertex's neighbours is proportional to its degree. Checking whether a specific edge exists costs O(degree).\n\nA matrix stores a slot for every possible pair, so memory is O(V²) regardless of how few edges there are, but an edge check is O(1).\n\nThe crossover is density. Most real graphs — road networks, social graphs, dependency graphs — are sparse, which is why the list is the usual default.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static void Main()\n    {\n        const int v = 6;\n        var edges = new[] { (0, 1), (0, 2), (1, 3), (2, 4), (4, 5) };\n\n        var list = new List<int>[v];\n        for (int i = 0; i < v; i++) list[i] = new List<int>();\n\n        var matrix = new bool[v, v];\n\n        foreach (var (a, b) in edges)\n        {\n            list[a].Add(b); list[b].Add(a);          // undirected: stored twice\n            matrix[a, b] = matrix[b, a] = true;\n        }\n\n        Console.WriteLine(\"adjacency list:\");\n        for (int i = 0; i < v; i++)\n            Console.WriteLine($\"  {i}: {string.Join(\",\", list[i])}\");\n\n        Console.WriteLine(\"adjacency matrix:\");\n        for (int r = 0; r < v; r++)\n            Console.WriteLine(\"  \" + string.Join(\" \",\n                Enumerable.Range(0, v).Select(c => matrix[r, c] ? 1 : 0)));\n\n        // Memory: slots stored by each representation.\n        Console.WriteLine();\n        Console.WriteLine($\"{\"V\",6}{\"E (sparse)\",14}{\"list slots\",13}{\"matrix slots\",15}\");\n\n        foreach (int size in new[] { 6, 100, 1000 })\n        {\n            long sparseEdges = size * 3L;    // a typical sparse degree\n            Console.WriteLine($\"{size,6}{sparseEdges,14}{size + sparseEdges * 2,13}\" +\n                              $\"{(long)size * size,15}\");\n        }\n\n        Console.WriteLine();\n        Console.WriteLine(\"list:   O(V+E) memory, neighbours in O(degree), edge check O(degree)\");\n        Console.WriteLine(\"matrix: O(V^2) memory, edge check O(1), neighbours always O(V)\");\n        Console.WriteLine(\"directed, weighted and self-loops are variations on both\");\n    }\n}\n```\n\n**Output**\n\n```\nadjacency list:\n  0: 1,2\n  1: 0,3\n  2: 0,4\n  3: 1\n  4: 2,5\n  5: 4\nadjacency matrix:\n  0 1 1 0 0 0\n  1 0 0 1 0 0\n  1 0 0 0 1 0\n  0 1 0 0 0 0\n  0 0 1 0 0 1\n  0 0 0 0 1 0\n\n     V    E (sparse)   list slots   matrix slots\n     6            18           42             36\n   100           300          700          10000\n  1000          3000         7000        1000000\n\nlist:   O(V+E) memory, neighbours in O(degree), edge check O(degree)\nmatrix: O(V^2) memory, edge check O(1), neighbours always O(V)\ndirected, weighted and self-loops are variations on both\n```",
   "tags": [
    "dsa",
-   "graph",
-   "adjacency-list",
-   "adjacency-matrix"
+   "graphs",
+   "representation",
+   "density",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "When is the matrix actually the better choice?",
+    "a": "When the graph is dense, so V squared is comparable to E anyway and the memory argument disappears, or when edge-existence queries dominate and must be O(1). It is also the natural form for algorithms defined over the matrix itself, such as Floyd-Warshall or anything using matrix multiplication to count paths. The output shows the crossover: at six vertices the matrix is actually smaller, and by a thousand it is a hundred and forty times larger."
+   },
+   {
+    "q": "What changes for directed or weighted graphs?",
+    "a": "Directed means storing each edge once rather than in both lists, and the matrix stops being symmetric. Weighted means the list holds pairs of neighbour and weight, and the matrix holds the weight with a sentinel - usually infinity - for absent edges rather than a boolean. Neither changes the complexity story. The subtlety is that the absent-edge sentinel must not participate in arithmetic, which is the overflow trap in Floyd-Warshall."
+   },
+   {
+    "q": "How would you represent a graph too large for memory?",
+    "a": "Compressed sparse row format, which packs the adjacency lists into two flat arrays - one of neighbours and one of per-vertex offsets - eliminating the per-list object overhead and giving excellent cache behaviour. Beyond that, an edge list on disk processed in a streaming or external-memory algorithm, or a partitioned graph across machines as systems like Pregel do. The representation question does not go away at scale, it just becomes the dominant design decision."
+   }
   ]
  },
  {
@@ -539,12 +613,27 @@
   "subcategory": "DSA",
   "difficulty": "Hard",
   "question": "What is the two-pointer and sliding-window technique?",
-  "answer": "Two pointers use two indices moving through data (from ends toward center, or at different speeds) to solve problems in O(n) without nested loops—pair sums in sorted arrays, reversing, cycle detection. Sliding window maintains a moving range (expand/contract) to solve subarray/substring problems (max sum of size k, longest substring without repeats) efficiently. Both replace brute-force O(n^2) with linear passes by reusing prior work.",
+  "answer": "**Approach**\n\nTwo indices moving over a sequence under a rule that lets each advance monotonically, so the whole scan is linear rather than quadratic.\n\n**Logic**\n\nThey are the same idea with different rules. Opposing pointers move toward each other, driven by a comparison — valid when the data is sorted, because that is what makes discarding one side provably safe. A sliding window has both pointers moving forward, one expanding and one contracting under a validity condition.\n\nThe requirement in both cases is monotonicity: advancing a pointer must never need to be undone. That is why the window works for all-positive sums and breaks the moment negatives appear.\n\nO(n), because each pointer traverses the sequence once.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Opposing pointers: valid because the array is SORTED.\n    private static (int, int) TwoSumSorted(int[] sorted, int target)\n    {\n        int lo = 0, hi = sorted.Length - 1;\n\n        while (lo < hi)\n        {\n            int sum = sorted[lo] + sorted[hi];\n\n            if (sum == target) return (lo, hi);\n            if (sum < target) lo++; else hi--;   // discard the side that cannot help\n        }\n\n        return (-1, -1);\n    }\n\n    // Sliding window: valid because all values are POSITIVE.\n    private static int ShortestSubarrayAtLeast(int[] positives, int target)\n    {\n        int left = 0, best = int.MaxValue;\n        long sum = 0;\n\n        for (int right = 0; right < positives.Length; right++)\n        {\n            sum += positives[right];\n\n            while (sum >= target)\n            {\n                best = Math.Min(best, right - left + 1);\n                sum -= positives[left++];\n            }\n        }\n\n        return best == int.MaxValue ? 0 : best;\n    }\n\n    private static long CountSteps(int[] nums, int target)\n    {\n        long steps = 0;\n        int left = 0;\n        long sum = 0;\n\n        for (int right = 0; right < nums.Length; right++)\n        {\n            sum += nums[right]; steps++;\n            while (sum >= target) { sum -= nums[left++]; steps++; }\n        }\n\n        return steps;\n    }\n\n    public static void Main()\n    {\n        var sorted = new[] { 1, 3, 4, 6, 8, 11 };\n        Console.WriteLine($\"two sum to 10: indices {TwoSumSorted(sorted, 10)}\");\n        Console.WriteLine($\"two sum to 100: indices {TwoSumSorted(sorted, 100)}\");\n\n        Console.WriteLine($\"shortest subarray >= 7: {ShortestSubarrayAtLeast(new[] { 2, 3, 1, 2, 4, 3 }, 7)}\");\n        Console.WriteLine($\"target unreachable: {ShortestSubarrayAtLeast(new[] { 1, 1 }, 7)}\");\n\n        // Linear, not quadratic: each pointer crosses the array once.\n        Console.WriteLine();\n        Console.WriteLine($\"{\"n\",8}{\"window steps\",16}{\"n^2\",14}\");\n\n        foreach (int n in new[] { 100, 1000, 10000 })\n        {\n            var values = new int[n];\n            Array.Fill(values, 1);\n            Console.WriteLine($\"{n,8}{CountSteps(values, 5),16}{(long)n * n,14}\");\n        }\n    }\n}\n```\n\n**Output**\n\n```\ntwo sum to 10: indices (2, 3)\ntwo sum to 100: indices (-1, -1)\nshortest subarray >= 7: 2\ntarget unreachable: 0\n\n       n    window steps           n^2\n     100             196         10000\n    1000            1996       1000000\n   10000           19996     100000000\n```",
   "tags": [
    "dsa",
-   "two-pointer",
+   "two-pointers",
    "sliding-window",
-   "optimization"
+   "monotonicity",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What property must hold for two pointers to be valid?",
+    "a": "That advancing a pointer never has to be undone - each move must provably discard only candidates that cannot be part of an answer. In the sorted two-sum, a sum below the target means the smallest element cannot pair with anything, so moving lo is safe. Without that guarantee you would have to backtrack, which is the quadratic search the technique is supposed to replace. Sortedness or positivity is usually what supplies the guarantee."
+   },
+   {
+    "q": "Why does the sliding window break with negative numbers?",
+    "a": "Because the window sum stops being monotonic in its width - extending the window can lower the sum, so 'shrink while the sum is too large' no longer implies anything, and a shorter valid window may exist further left than the pointer has reached. That problem needs prefix sums with a monotonic deque instead. It is the clearest case of a technique whose correctness rests entirely on a property of the data rather than on the loop structure."
+   },
+   {
+    "q": "How do you recognise a problem that fits?",
+    "a": "Look for a contiguous subarray or subsequence, a monotonic condition such as a sum or a distinct-element count, and a sorted input or non-negative values. Longest substring without repeats, minimum window substring and the at-most-k-distinct family all have that shape. If the condition can improve and worsen non-monotonically as the window grows, the technique does not apply, and reaching for it anyway produces a solution that is right on the sample input and wrong in general."
+   }
   ]
  },
  {
@@ -578,12 +667,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is the difference between recursion and iteration?",
-  "answer": "Recursion solves a problem by calling itself on smaller subproblems with a base case—elegant for naturally recursive structures (trees, divide-and-conquer) but uses call-stack memory (risk of stack overflow) and has call overhead. Iteration uses loops with explicit state—more memory-efficient and often faster. Any recursion can be converted to iteration (sometimes with an explicit stack). Choose recursion for clarity on recursive problems, iteration for performance/deep depth.",
+  "answer": "**Approach**\n\nBoth repeat work; recursion does it by calling itself and using the call stack for state, iteration by looping with explicit variables. The program shows the same algorithm both ways and demonstrates the stack limit that recursion imposes.\n\n**Logic**\n\nRecursion's cost is a stack frame per call, so depth is bounded by the stack — around ten to twenty thousand frames in .NET by default, and a StackOverflowException cannot be caught, so the process dies.\n\nIteration has no such limit, but for tree and graph work you often end up managing an explicit stack, which is the same structure made visible.\n\nC# does not guarantee tail-call optimisation, so a tail-recursive function is not automatically converted to a loop as it would be in F# or Scheme.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Runtime.CompilerServices;\n\npublic class Solution\n{\n    private static long FactorialRecursive(int n) =>\n        n <= 1 ? 1 : n * FactorialRecursive(n - 1);\n\n    private static long FactorialIterative(int n)\n    {\n        long result = 1;\n        for (int i = 2; i <= n; i++) result *= i;\n        return result;\n    }\n\n    // Probe the stack guard rather than crashing into it: a real StackOverflowException\n    // cannot be caught and would kill the process, which is the point being made.\n    private static bool RecursionHitsAStackLimit()\n    {\n        int depth = 0;\n\n        void Descend()\n        {\n            RuntimeHelpers.EnsureSufficientExecutionStack();   // throws before the stack dies\n            depth++;\n            if (depth < 1000000) Descend();\n        }\n\n        try { Descend(); return false; }\n        catch (InsufficientExecutionStackException) { return true; }\n    }\n\n    private static long SumIterative(int n)\n    {\n        long total = 0;\n        for (int i = 1; i <= n; i++) total += i;   // no depth limit at all\n        return total;\n    }\n\n    public static void Main()\n    {\n        foreach (int n in new[] { 0, 1, 5, 20 })\n            Console.WriteLine($\"{n}! recursive {FactorialRecursive(n)}, \" +\n                              $\"iterative {FactorialIterative(n)}, \" +\n                              $\"agree {FactorialRecursive(n) == FactorialIterative(n)}\");\n\n        Console.WriteLine();\n        Console.WriteLine($\"recursion ran out of stack before 1,000,000 frames: \" +\n                          $\"{RecursionHitsAStackLimit()}\");\n        Console.WriteLine($\"iteration summed to 10,000,000 with no depth at all: \" +\n                          $\"{SumIterative(10000000)}\");\n\n        Console.WriteLine();\n        Console.WriteLine(\"recursion: state on the call stack, matches recursive definitions\");\n        Console.WriteLine(\"           depth limited, a frame per call, no tail-call guarantee in C#\");\n        Console.WriteLine(\"iteration: explicit state, no depth limit, often less readable for trees\");\n    }\n}\n```\n\n**Output**\n\n```\n0! recursive 1, iterative 1, agree True\n1! recursive 1, iterative 1, agree True\n5! recursive 120, iterative 120, agree True\n20! recursive 2432902008176640000, iterative 2432902008176640000, agree True\n\nrecursion ran out of stack before 1,000,000 frames: True\niteration summed to 10,000,000 with no depth at all: 50000005000000\n\nrecursion: state on the call stack, matches recursive definitions\n           depth limited, a frame per call, no tail-call guarantee in C#\niteration: explicit state, no depth limit, often less readable for trees\n```",
   "tags": [
    "dsa",
    "recursion",
    "iteration",
-   "stack"
+   "call-stack",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is a stack overflow worse than an ordinary exception?",
+    "a": "Because StackOverflowException cannot be caught in .NET - the runtime terminates the process immediately, so no cleanup runs, no finally block executes and nothing is logged. That is a much worse failure mode than an exception you can handle. It is the main practical argument for converting a deep recursion to an explicit stack when the input depth is unbounded or attacker-controlled, such as parsing untrusted nested JSON."
+   },
+   {
+    "q": "Does C# optimise tail recursion?",
+    "a": "Not reliably. The CLR has a .tail instruction and the JIT sometimes applies the optimisation, but the C# compiler does not guarantee it, so you cannot depend on a tail-recursive function running in constant stack. Functional languages such as F# and Scheme do guarantee it, which is why idioms that are safe there are unsafe when translated directly into C#. If you need the guarantee, write the loop."
+   },
+   {
+    "q": "When is recursion the better choice despite the risk?",
+    "a": "When the problem is defined recursively and the depth is bounded - tree traversals on balanced trees, divide and conquer, backtracking. There the recursive form mirrors the definition and the iterative version needs an explicit stack that reimplements what the runtime already does, usually less clearly. The rule I use is that recursion is fine when the depth is logarithmic or otherwise bounded by the structure, and suspect when it is bounded only by the input size."
+   }
   ]
  },
  {
@@ -591,12 +695,27 @@
   "subcategory": "DSA",
   "difficulty": "Hard",
   "question": "What is memoization vs tabulation in dynamic programming?",
-  "answer": "Memoization is top-down: recursively solve, caching each subproblem's result to avoid recomputation (natural, only computes needed subproblems, but has recursion overhead/stack). Tabulation is bottom-up: iteratively fill a table from base cases up to the answer (no recursion, often more space/time efficient, computes all subproblems). Both give the same complexity; choose memoization for intuitive top-down problems and tabulation for performance and to avoid deep recursion.",
+  "answer": "**Approach**\n\nBoth compute each subproblem once. Memoisation is top-down — recurse and cache — while tabulation is bottom-up, filling a table in dependency order. The program runs both on the same recurrence and counts how many subproblems each actually computes.\n\n**Logic**\n\nThe difference that matters in practice: memoisation only computes subproblems *reachable* from the query, while tabulation computes every cell in the table whether or not it is needed. For a sparse state space that is a large saving; for a dense one tabulation wins on constant factors.\n\nTabulation has no recursion, so no stack-depth risk, and its fixed iteration order makes space optimisation obvious — you can usually keep one or two rows instead of the whole table.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private static int _memoComputed, _tableComputed;\n\n    // Top-down: only the states actually reachable from the query.\n    private static long Memo(int n, int step, Dictionary<int, long> cache)\n    {\n        if (n == 0) return 1;\n        if (n < 0) return 0;\n        if (cache.TryGetValue(n, out long cached)) return cached;\n\n        _memoComputed++;\n        return cache[n] = Memo(n - step, step, cache) + Memo(n - (step + 1), step, cache);\n    }\n\n    // Bottom-up: every cell, needed or not.\n    private static long Table(int n, int step)\n    {\n        var ways = new long[n + 1];\n        ways[0] = 1;\n\n        for (int i = 1; i <= n; i++)\n        {\n            _tableComputed++;\n            if (i - step >= 0) ways[i] += ways[i - step];\n            if (i - (step + 1) >= 0) ways[i] += ways[i - (step + 1)];\n        }\n\n        return ways[n];\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine($\"{\"n\",6}{\"step\",6}{\"memo states\",14}{\"table cells\",14}{\"agree\",8}\");\n\n        foreach (var (n, step) in new[] { (20, 1), (40, 5), (100, 10), (100, 25) })\n        {\n            _memoComputed = _tableComputed = 0;\n\n            long memo = Memo(n, step, new Dictionary<int, long>());\n            long table = Table(n, step);\n\n            Console.WriteLine($\"{n,6}{step,6}{_memoComputed,14}{_tableComputed,14}{memo == table,8}\");\n        }\n\n        Console.WriteLine();\n        Console.WriteLine(\"memoisation: only reachable states, follows the recurrence, stack depth\");\n        Console.WriteLine(\"tabulation:  every cell, no recursion, easy to reduce to one row\");\n    }\n}\n```\n\n**Output**\n\n```\n     n  step   memo states   table cells   agree\n    20     1            20            20    True\n    40     5            30            40    True\n   100    10            55           100    True\n   100    25            10           100    True\n\nmemoisation: only reachable states, follows the recurrence, stack depth\ntabulation:  every cell, no recursion, easy to reduce to one row\n```",
   "tags": [
    "dsa",
-   "memoization",
+   "dp",
+   "memoisation",
    "tabulation",
-   "dynamic-programming"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "When does memoisation reachability advantage actually matter?",
+    "a": "When the state space is large but sparsely used, which the output makes concrete: with a step of 25 the memoised version computes ten states where the table computes a hundred. In problems with multi-dimensional states - a knapsack over huge capacities, or a digit DP - most cells are never reached, and filling them all is wasted work. When nearly every state is needed, as in the step-of-one row, the two do identical work and tabulation wins on constant factors and locality."
+   },
+   {
+    "q": "Why is tabulation easier to space-optimise?",
+    "a": "Because the fill order is explicit, so you can see exactly which previous rows a cell depends on and keep only those - the Fibonacci table collapses to two variables, and most two-dimensional DPs collapse to one or two rows. With memoisation the access order is driven by the recursion and any state may be revisited at any time, so the whole cache has to stay live. That is why the answer to 'reduce the memory' is usually 'convert to a table first'."
+   },
+   {
+    "q": "Which do you write first?",
+    "a": "Memoisation, because it follows directly from the recurrence - write the recursive definition, add a cache, and it is correct. Getting the iteration order right for tabulation requires knowing the dependency structure, which is easier to see once the recursion is written. Then convert if the depth risks the stack, or if the space needs reducing. Starting with the table often means debugging the recurrence and the fill order at the same time."
+   }
   ]
  },
  {
