@@ -723,12 +723,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is amortized time complexity?",
-  "answer": "Amortized analysis averages the cost of operations over a sequence, so occasional expensive operations are spread across many cheap ones. Example: appending to a dynamic array is O(1) amortized—most appends are O(1), and the rare O(n) resize (doubling) averages out because it happens infrequently. It gives a realistic per-operation cost for data structures with periodic expensive operations (dynamic arrays, hash table resizing), unlike worst-case-per-operation.",
+  "answer": "**Approach**\n\nAmortised analysis averages the cost over a *sequence* of operations, so an occasional expensive one is paid for by the many cheap ones around it. It is a worst-case guarantee over the sequence, not a probabilistic average.\n\n**Logic**\n\nThe canonical example is a dynamic array. Appending is usually O(1), but when capacity is reached the array doubles and copies everything — O(n) for that one call. Because the capacity doubles, those copies happen at 1, 2, 4, 8 … and the total copying across n appends is under 2n, so the average is constant.\n\nThe doubling is what makes it work. Growing by a fixed amount instead gives O(n) amortised per append, which is quadratic overall — a real and common performance bug.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private class GrowableArray\n    {\n        private int[] _items;\n        private readonly bool _double;\n        public int Count { get; private set; }\n        public long ElementsCopied { get; private set; }\n        public int Resizes { get; private set; }\n\n        public GrowableArray(bool doubleCapacity)\n        {\n            _items = new int[1];\n            _double = doubleCapacity;\n        }\n\n        public void Add(int value)\n        {\n            if (Count == _items.Length)\n            {\n                // Doubling: costs are rare and the total stays linear.\n                // Fixed growth: resizes every few adds, and the total is quadratic.\n                int capacity = _double ? _items.Length * 2 : _items.Length + 4;\n                var bigger = new int[capacity];\n\n                Array.Copy(_items, bigger, Count);\n                ElementsCopied += Count;\n                Resizes++;\n                _items = bigger;\n            }\n\n            _items[Count++] = value;\n        }\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine($\"{\"appends\",10}{\"doubling copies\",18}{\"per append\",13}\" +\n                          $\"{\"fixed-growth copies\",22}\");\n\n        foreach (int n in new[] { 100, 1000, 10000 })\n        {\n            var doubling = new GrowableArray(true);\n            var fixedGrowth = new GrowableArray(false);\n\n            for (int i = 0; i < n; i++) { doubling.Add(i); fixedGrowth.Add(i); }\n\n            Console.WriteLine($\"{n,10}{doubling.ElementsCopied,18}\" +\n                              $\"{doubling.ElementsCopied / (double)n,13:F2}\" +\n                              $\"{fixedGrowth.ElementsCopied,22}\");\n        }\n\n        var trace = new GrowableArray(true);\n        for (int i = 0; i < 1000; i++) trace.Add(i);\n\n        Console.WriteLine();\n        Console.WriteLine($\"1000 appends caused {trace.Resizes} resizes, \" +\n                          $\"{trace.ElementsCopied} elements copied in total\");\n        Console.WriteLine(\"amortised O(1): the total is bounded by 2n, however it is distributed\");\n        Console.WriteLine(\"it is a worst-case guarantee over the sequence, not an average case\");\n    }\n}\n```\n\n**Output**\n\n```\n   appends   doubling copies   per append   fixed-growth copies\n       100               127         1.27                  1225\n      1000              1023         1.02                124750\n     10000             16383         1.64              12497500\n\n1000 appends caused 10 resizes, 1023 elements copied in total\namortised O(1): the total is bounded by 2n, however it is distributed\nit is a worst-case guarantee over the sequence, not an average case\n```",
   "tags": [
    "dsa",
-   "amortized",
+   "amortised",
    "complexity",
-   "dynamic-array"
+   "dynamic-array",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "How is amortised different from average case?",
+    "a": "Average case is probabilistic - it assumes a distribution over inputs, and an unlucky input can be much worse, as with quicksort's O(n squared) worst case. Amortised is a deterministic guarantee about any sequence of operations: no adversary can construct a sequence of n appends costing more than O(n) in total. That is a much stronger promise, and it is why hash table lookups are described as average O(1) while dynamic array appends are amortised O(1) - different kinds of claim."
+   },
+   {
+    "q": "Why must the growth be multiplicative?",
+    "a": "Because doubling makes resizes exponentially rarer, so the copy costs form a geometric series summing to under 2n. Growing by a fixed amount means a resize every few appends and the copies sum to a quadratic - the output shows twelve million elements copied for ten thousand appends against sixteen thousand for doubling. Any factor above one works; .NET and Java use two, some implementations use 1.5 to reuse freed memory more readily."
+   },
+   {
+    "q": "When does the occasional expensive operation still matter?",
+    "a": "In latency-sensitive code, where the amortised average is irrelevant if one call takes a hundred times longer at the wrong moment - a real-time audio callback or a request with a tight tail-latency budget. The mitigations are pre-sizing the collection when the count is known, which removes the resizes entirely, or using a structure with worst-case rather than amortised bounds. Amortised analysis is about total throughput, and it deliberately says nothing about the distribution."
+   }
   ]
  },
  {
@@ -815,12 +830,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is a trie and where is it used?",
-  "answer": "A trie (prefix tree) stores strings by shared prefixes—each node represents a character, and paths spell words. It gives O(L) lookup/insert (L = key length) independent of the number of keys, and efficient prefix queries. Used for autocomplete/typeahead, spell-checking, IP routing, and dictionary lookups. It trades memory (many nodes) for fast prefix operations. Compressed tries (radix trees) reduce memory. It's the go-to structure for prefix-based search.",
+  "answer": "**Approach**\n\nA trie stores strings by their characters along tree paths, so a shared prefix is stored once. Lookup is O(length) and independent of how many words the structure holds.\n\n**Logic**\n\nThe defining property is that the key is the *path*, not a value in a node. That is what makes prefix queries natural — finding all words starting with a prefix means walking to one node and collecting the subtree, which no hash table can do.\n\nThe cost is memory: a node per distinct prefix position, each with child slots. A dense array of 26 is fast but wasteful on sparse data; a map per node trades speed for space.\n\nThe program counts nodes against total characters to show the prefix sharing concretely.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    private class Node\n    {\n        public readonly Dictionary<char, Node> Children = new();\n        public bool IsWord;\n    }\n\n    private class Trie\n    {\n        private readonly Node _root = new();\n        public int NodeCount { get; private set; } = 1;\n\n        public void Insert(string word)\n        {\n            var node = _root;\n\n            foreach (char c in word)\n            {\n                if (!node.Children.TryGetValue(c, out var next))\n                {\n                    node.Children[c] = next = new Node();\n                    NodeCount++;                      // a new node only for an UNSHARED prefix\n                }\n                node = next;\n            }\n\n            node.IsWord = true;\n        }\n\n        public bool Contains(string word)\n        {\n            var node = Walk(word);\n            return node != null && node.IsWord;\n        }\n\n        public IList<string> WithPrefix(string prefix)\n        {\n            var found = new List<string>();\n            var start = Walk(prefix);\n            if (start != null) Collect(start, prefix, found);\n            return found;\n        }\n\n        private Node Walk(string text)\n        {\n            var node = _root;\n\n            foreach (char c in text)\n                if (!node.Children.TryGetValue(c, out node)) return null;\n\n            return node;\n        }\n\n        private static void Collect(Node node, string soFar, IList<string> into)\n        {\n            if (node.IsWord) into.Add(soFar);\n\n            foreach (var pair in node.Children.OrderBy(p => p.Key))\n                Collect(pair.Value, soFar + pair.Key, into);\n        }\n    }\n\n    public static void Main()\n    {\n        var words = new[] { \"car\", \"card\", \"care\", \"careful\", \"cat\", \"dog\", \"do\" };\n        var trie = new Trie();\n        foreach (string w in words) trie.Insert(w);\n\n        Console.WriteLine($\"words: {words.Length}, total characters: {words.Sum(w => w.Length)}, \" +\n                          $\"trie nodes: {trie.NodeCount}\");\n\n        Console.WriteLine($\"contains \\\"care\\\": {trie.Contains(\"care\")}\");\n        Console.WriteLine($\"contains \\\"car\\\": {trie.Contains(\"car\")}\");\n        Console.WriteLine($\"contains \\\"ca\\\": {trie.Contains(\"ca\")}   (a prefix is not a word)\");\n\n        Console.WriteLine($\"prefix \\\"car\\\": {string.Join(\",\", trie.WithPrefix(\"car\"))}\");\n        Console.WriteLine($\"prefix \\\"do\\\":  {string.Join(\",\", trie.WithPrefix(\"do\"))}\");\n        Console.WriteLine($\"prefix \\\"z\\\":   [{string.Join(\",\", trie.WithPrefix(\"z\"))}]\");\n\n        Console.WriteLine();\n        Console.WriteLine(\"lookup O(length), independent of how many words are stored\");\n        Console.WriteLine(\"prefix queries are the point - a hash table cannot do them\");\n        Console.WriteLine(\"used for autocomplete, spell check, IP routing tables, word games\");\n    }\n}\n```\n\n**Output**\n\n```\nwords: 7, total characters: 26, trie nodes: 13\ncontains \"care\": True\ncontains \"car\": True\ncontains \"ca\": False   (a prefix is not a word)\nprefix \"car\": car,card,care,careful\nprefix \"do\":  do,dog\nprefix \"z\":   []\n\nlookup O(length), independent of how many words are stored\nprefix queries are the point - a hash table cannot do them\nused for autocomplete, spell check, IP routing tables, word games\n```",
   "tags": [
    "dsa",
    "trie",
    "prefix-tree",
-   "autocomplete"
+   "autocomplete",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why use a trie when a hash set gives O(1) lookup?",
+    "a": "Because the hash set answers exact-membership questions and nothing else - it cannot enumerate every key beginning with a prefix without scanning all of them. A trie makes that a walk to one node plus a subtree collection, proportional to the output rather than the dictionary. If the only operation is exact lookup, the hash set is simpler and faster; the trie earns its keep the moment prefixes matter."
+   },
+   {
+    "q": "What does the node count tell you?",
+    "a": "It shows the prefix sharing directly: seven words totalling twenty-six characters need only thirteen nodes, because car, card, care and careful share their leading path and do and dog share theirs. On a real dictionary the saving is far larger. It also states the cost model - memory grows with the number of distinct prefix positions rather than with the number of words, which is why a trie over natural language is cheap and one over random strings is not."
+   },
+   {
+    "q": "How would you reduce a trie's memory?",
+    "a": "A radix or Patricia trie collapses each chain of single-child nodes into one edge holding a whole substring, which removes most of the nodes in a sparse trie. A ternary search tree stores three pointers per node instead of a full child map, trading a little lookup speed for much less memory. And for a static dictionary, a DAWG merges identical suffixes as well as prefixes, which is what spell checkers and word-game engines typically ship."
+   }
   ]
  },
  {
@@ -828,13 +858,27 @@
   "subcategory": "DSA",
   "difficulty": "Hard",
   "question": "What is the difference between Dijkstra's and BFS for shortest path?",
-  "answer": "BFS finds the shortest path in unweighted graphs (fewest edges) in O(V+E) using a queue. Dijkstra's finds the shortest path in weighted graphs with non-negative weights using a priority queue (min-heap), O((V+E) log V). For negative weights, use Bellman-Ford. So: unweighted → BFS; weighted non-negative → Dijkstra; negative weights → Bellman-Ford; all-pairs → Floyd-Warshall. Choose by whether edges have weights and their sign.",
+  "answer": "**Approach**\n\nBFS finds the path with the fewest edges; Dijkstra finds the path with the lowest total weight. On an unweighted graph they agree, and BFS is faster. The program builds a graph where they disagree.\n\n**Logic**\n\nBFS uses a queue, so nodes are settled in order of edge count. That is only the shortest path when every edge costs the same — the queue has no way to express that a two-edge route might be more expensive than a five-edge one.\n\nDijkstra replaces the queue with a priority queue ordered by accumulated cost, so nodes are settled in cost order instead. BFS is Dijkstra with all weights equal to one.\n\nDijkstra requires non-negative weights; a negative edge breaks the settle-once rule and needs Bellman-Ford.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private static readonly (int To, int Weight)[][] Graph =\n    {\n        /* 0 */ new[] { (1, 10), (2, 1) },\n        /* 1 */ new[] { (4, 10) },\n        /* 2 */ new[] { (3, 1) },\n        /* 3 */ new[] { (4, 1) },\n        /* 4 */ Array.Empty<(int, int)>()\n    };\n\n    private static (int Edges, int Cost) Bfs(int start, int target)\n    {\n        var edges = new Dictionary<int, int> { [start] = 0 };\n        var cost = new Dictionary<int, int> { [start] = 0 };\n        var queue = new Queue<int>();\n        queue.Enqueue(start);\n\n        while (queue.Count > 0)\n        {\n            int node = queue.Dequeue();\n\n            foreach (var (next, weight) in Graph[node])\n            {\n                if (edges.ContainsKey(next)) continue;\n\n                edges[next] = edges[node] + 1;\n                cost[next] = cost[node] + weight;   // the cost of whatever path BFS took\n                queue.Enqueue(next);\n            }\n        }\n\n        return (edges.GetValueOrDefault(target, -1), cost.GetValueOrDefault(target, -1));\n    }\n\n    private static int Dijkstra(int start, int target)\n    {\n        var best = new Dictionary<int, int> { [start] = 0 };\n        var settled = new HashSet<int>();\n        var heap = new PriorityQueue<int, int>();\n        heap.Enqueue(start, 0);\n\n        while (heap.Count > 0)\n        {\n            int node = heap.Dequeue();\n            if (!settled.Add(node)) continue;\n\n            foreach (var (next, weight) in Graph[node])\n            {\n                int through = best[node] + weight;\n\n                if (through >= best.GetValueOrDefault(next, int.MaxValue)) continue;\n\n                best[next] = through;\n                heap.Enqueue(next, through);\n            }\n        }\n\n        return best.GetValueOrDefault(target, -1);\n    }\n\n    public static void Main()\n    {\n        var bfs = Bfs(0, 4);\n\n        Console.WriteLine($\"BFS to node 4:      {bfs.Edges} edges, total weight {bfs.Cost}\");\n        Console.WriteLine($\"Dijkstra to node 4: total weight {Dijkstra(0, 4)}\");\n\n        Console.WriteLine();\n        Console.WriteLine(\"BFS took the two-edge route 0->1->4 costing 20\");\n        Console.WriteLine(\"Dijkstra took the three-edge route 0->2->3->4 costing 3\");\n\n        Console.WriteLine();\n        Console.WriteLine(\"BFS:      queue, settles by edge count, O(V+E), unweighted only\");\n        Console.WriteLine(\"Dijkstra: priority queue, settles by cost, O((V+E) log V), no negatives\");\n        Console.WriteLine(\"BFS is Dijkstra with every weight equal to one\");\n    }\n}\n```\n\n**Output**\n\n```\nBFS to node 4:      2 edges, total weight 20\nDijkstra to node 4: total weight 3\n\nBFS took the two-edge route 0->1->4 costing 20\nDijkstra took the three-edge route 0->2->3->4 costing 3\n\nBFS:      queue, settles by edge count, O(V+E), unweighted only\nDijkstra: priority queue, settles by cost, O((V+E) log V), no negatives\nBFS is Dijkstra with every weight equal to one\n```",
   "tags": [
    "dsa",
    "dijkstra",
    "bfs",
    "shortest-path",
-   "graph"
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why can BFS not simply track the accumulated weight?",
+    "a": "Because it settles a node the first time it is reached and never revisits, and with weights that first arrival need not be the cheapest - the output shows BFS locking in a two-edge route costing 20 when a three-edge route costs 3. Tracking the weight records the cost of the path BFS happened to take, not the minimum. To fix it you would have to allow revisiting and re-expanding, which is Dijkstra with a worse data structure."
+   },
+   {
+    "q": "When is BFS still the right choice on a weighted graph?",
+    "a": "When all the weights are equal, in which case it is strictly better - O(V+E) with no heap. The other important case is weights of only zero and one, where a deque with zero-weight edges pushed to the front and one-weight edges to the back keeps the frontier sorted and recovers linear time. That 0-1 BFS is worth knowing because grid problems with free and costly moves fit it exactly and people reach for Dijkstra unnecessarily."
+   },
+   {
+    "q": "What breaks Dijkstra, and what replaces it?",
+    "a": "Negative edge weights. Dijkstra assumes a settled node can never be improved, which a negative edge violates, so it can finalise a wrong distance. Bellman-Ford handles negatives in O(V times E) and additionally detects negative cycles, where no shortest path exists at all. If you need all pairs with negatives, Floyd-Warshall or Johnson's algorithm. The first question to ask about any shortest-path problem is whether weights can be negative."
+   }
   ]
  },
  {
@@ -868,12 +912,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is the difference between stable and unstable sorting?",
-  "answer": "A stable sort preserves the relative order of equal elements (two records with the same key stay in their original order)—important when sorting by multiple keys sequentially or preserving prior ordering. Merge sort and Timsort are stable; quicksort and heapsort are typically unstable. Choose a stable sort when equal-key order matters (e.g., sort by date, then by name keeping date order). .NET's OrderBy is stable; Array.Sort is not.",
+  "answer": "**Approach**\n\nA stable sort preserves the relative order of elements that compare equal; an unstable one may reorder them. The program sorts the same data both ways and shows where the difference appears.\n\n**Logic**\n\nStability matters when sorting by successive keys. Sorting by one field and then by another gives a correct multi-key ordering only if the second sort is stable — otherwise it destroys the first.\n\nIn .NET the rule is API-specific: `Array.Sort` and `List.Sort` are unstable, LINQ's `OrderBy` is stable. And the instability only shows above the introsort threshold of about sixteen elements, below which the insertion-sort fallback happens to be stable — which is how the bug hides in small test data.\n\nThe alternative is to make the comparison total by adding a tie-break, which removes the dependence on stability entirely.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    private record Row(int Group, int Index);\n\n    public static void Main()\n    {\n        // Enough rows to pass the introsort threshold, where instability appears.\n        var rows = Enumerable.Range(0, 40).Select(i => new Row(i % 4, i)).ToArray();\n\n        var stable = rows.OrderBy(r => r.Group).Select(r => r.Index).ToArray();\n\n        var copy = (Row[])rows.Clone();\n        Array.Sort(copy, (a, b) => a.Group.CompareTo(b.Group));\n        var unstable = copy.Select(r => r.Index).ToArray();\n\n        Console.WriteLine($\"OrderBy, group 0:    {string.Join(\",\", stable.Take(5))}...\");\n        Console.WriteLine($\"Array.Sort, group 0: {string.Join(\",\", unstable.Take(5))}...\");\n        Console.WriteLine($\"same ordering: {stable.SequenceEqual(unstable)}\");\n        Console.WriteLine($\"same grouping: {stable.OrderBy(i => i).SequenceEqual(unstable.OrderBy(i => i))}\");\n\n        // Below the threshold the fallback is insertion sort, which IS stable.\n        var few = Enumerable.Range(0, 8).Select(i => new Row(i % 2, i)).ToArray();\n        var fewStable = few.OrderBy(r => r.Group).Select(r => r.Index);\n        var fewCopy = (Row[])few.Clone();\n        Array.Sort(fewCopy, (a, b) => a.Group.CompareTo(b.Group));\n\n        Console.WriteLine();\n        Console.WriteLine($\"only 8 rows - Array.Sort looks stable: \" +\n            $\"{fewCopy.Select(r => r.Index).SequenceEqual(fewStable)}\");\n\n        // A total comparison makes stability irrelevant.\n        var totalOrder = (Row[])rows.Clone();\n        Array.Sort(totalOrder, (a, b) =>\n            a.Group != b.Group ? a.Group.CompareTo(b.Group) : a.Index.CompareTo(b.Index));\n\n        Console.WriteLine($\"with an explicit tie-break, Array.Sort matches OrderBy: \" +\n            $\"{totalOrder.Select(r => r.Index).SequenceEqual(stable)}\");\n    }\n}\n```\n\n**Output**\n\n```\nOrderBy, group 0:    0,4,8,12,16...\nArray.Sort, group 0: 0,28,4,16,32...\nsame ordering: False\nsame grouping: True\n\nonly 8 rows - Array.Sort looks stable: True\nwith an explicit tie-break, Array.Sort matches OrderBy: True\n```",
   "tags": [
    "dsa",
-   "stable-sort",
-   "unstable-sort",
-   "sorting"
+   "sorting",
+   "stability",
+   "dotnet",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the instability invisible on small inputs?",
+    "a": "Because Array.Sort is introsort, which falls back to insertion sort for partitions below about sixteen elements - and insertion sort is stable. So an eight-row test preserves order and appears to prove the sort is stable, as the output shows. The behaviour then changes on real data, which is the worst kind of bug: correct in the test suite, wrong in production, with no code change in between."
+   },
+   {
+    "q": "How do you avoid depending on stability at all?",
+    "a": "Make the comparison total by adding a tie-break on something unique - an original index, an id, any field that breaks every tie. Then no two elements compare equal, so the sort's stability cannot affect the result and any algorithm gives the same answer. The output confirms it: with the tie-break, Array.Sort matches OrderBy exactly. That is the defensive option when the sorting API might change or is not under your control."
+   },
+   {
+    "q": "What does stability cost?",
+    "a": "Usually memory. Stable sorts are typically merge-sort based and need O(n) auxiliary space, while quicksort-based unstable sorts work in place with O(log n) stack. There are in-place stable sorts but their constant factors are poor. That is the real reason both exist in the framework: Array.Sort optimises for memory and speed, OrderBy for predictable semantics, and LINQ can afford the allocation because it is already materialising a sequence."
+   }
   ]
  },
  {
@@ -908,12 +967,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is the difference between an in-place and out-of-place algorithm?",
-  "answer": "An in-place algorithm transforms data using O(1) (or O(log n)) extra space, modifying the input directly (in-place quicksort, reversing an array)—memory-efficient. An out-of-place algorithm uses additional memory proportional to the input to produce output (merge sort's merge step, copying to a new array)—simpler and sometimes stable, but more memory. Choose in-place to minimize memory (large data, constrained environments); out-of-place when you need to preserve the input or for stability/simplicity.",
+  "answer": "**Approach**\n\nAn in-place algorithm transforms its input using O(1) — or at most O(log n) — extra space; an out-of-place one allocates a separate output. The program shows both for reversal and for a filter, and demonstrates the aliasing hazard that in-place work introduces.\n\n**Logic**\n\nThe real trade is not just memory. In-place mutates the caller's data, so any other reference to it sees the change — which is a correctness hazard rather than a style preference, and the reason `OrderBy` returns a new sequence while `List.Sort` does not.\n\nIn-place also tends to be faster through better cache behaviour and no allocation pressure, which matters in hot paths.\n\nThe practical rule: mutate only what you own, and make it obvious in the name.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    private static void ReverseInPlace(int[] values)\n    {\n        for (int lo = 0, hi = values.Length - 1; lo < hi; lo++, hi--)\n            (values[lo], values[hi]) = (values[hi], values[lo]);\n    }\n\n    private static int[] ReversedCopy(int[] values)\n    {\n        var result = new int[values.Length];\n        for (int i = 0; i < values.Length; i++) result[i] = values[values.Length - 1 - i];\n        return result;\n    }\n\n    // In-place filter: compact the survivors forward and report the new length.\n    private static int RemoveOddsInPlace(int[] values)\n    {\n        int write = 0;\n        foreach (int v in values) if (v % 2 == 0) values[write++] = v;\n        return write;\n    }\n\n    public static void Main()\n    {\n        var original = new[] { 1, 2, 3, 4, 5 };\n        var alsoPointsAtIt = original;      // a second reference to the SAME array\n\n        var copy = ReversedCopy(original);\n        Console.WriteLine($\"out of place - result {string.Join(\",\", copy)}, \" +\n                          $\"input untouched {string.Join(\",\", original)}\");\n\n        ReverseInPlace(original);\n        Console.WriteLine($\"in place     - result {string.Join(\",\", original)}\");\n        Console.WriteLine($\"the other reference changed too: {string.Join(\",\", alsoPointsAtIt)}\");\n\n        var numbers = new[] { 1, 2, 3, 4, 5, 6 };\n        int kept = RemoveOddsInPlace(numbers);\n\n        Console.WriteLine();\n        Console.WriteLine($\"in-place filter kept {kept}: {string.Join(\",\", numbers.Take(kept))}\");\n        Console.WriteLine($\"but the tail is stale: {string.Join(\",\", numbers)}\");\n\n        var fresh = new[] { 1, 2, 3, 4, 5, 6 }.Where(v => v % 2 == 0).ToArray();\n        Console.WriteLine($\"out-of-place filter: {string.Join(\",\", fresh)} (exact length)\");\n\n        Console.WriteLine();\n        Console.WriteLine(\"in place:     O(1) extra space, faster, mutates the caller's data\");\n        Console.WriteLine(\"out of place: allocates, leaves the input intact, safe to share\");\n    }\n}\n```\n\n**Output**\n\n```\nout of place - result 5,4,3,2,1, input untouched 1,2,3,4,5\nin place     - result 5,4,3,2,1\nthe other reference changed too: 5,4,3,2,1\n\nin-place filter kept 3: 2,4,6\nbut the tail is stale: 2,4,6,4,5,6\nout-of-place filter: 2,4,6 (exact length)\n\nin place:     O(1) extra space, faster, mutates the caller's data\nout of place: allocates, leaves the input intact, safe to share\n```",
   "tags": [
    "dsa",
    "in-place",
-   "out-of-place",
-   "space-complexity"
+   "mutation",
+   "aliasing",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is mutation the bigger risk rather than the memory saving being the bigger win?",
+    "a": "Because memory is usually available and correctness bugs are expensive. An array passed to an in-place routine is visible to every other holder of that reference, so a caller who kept it - or a cached value, or another thread - sees it change underneath them. The output makes it concrete: a second variable pointing at the same array reflects the reversal. That class of bug is hard to trace back to the function that caused it."
+   },
+   {
+    "q": "Why does the in-place filter leave a stale tail?",
+    "a": "Because an array cannot shrink, so compacting the survivors forward leaves the original values beyond the new length untouched - the output shows 2,4,6,4,5,6. That is why the function must return the new length and the caller must respect it. It is exactly how the remove-duplicates-from-sorted-array problem is specified, and forgetting to bound the read is the standard way to consume garbage from the tail."
+   },
+   {
+    "q": "Is quicksort genuinely in-place?",
+    "a": "In the usual sense yes - it partitions within the array and allocates no proportional buffer - but it uses O(log n) stack for the recursion, so it is not strictly O(1) space. Most definitions accept O(log n) as in-place. Merge sort in its standard form is not: it needs an O(n) buffer, which is precisely the cost of its stability. That trade between stability and in-place operation is why the two families persist side by side."
+   }
   ]
  },
  {
@@ -947,12 +1021,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is the difference between a min-heap and a max-heap?",
-  "answer": "A min-heap keeps the smallest element at the root (each parent ≤ its children)—efficient for repeatedly extracting the minimum (Dijkstra, merging sorted lists, finding k smallest). A max-heap keeps the largest at the root (parent ≥ children)—for extracting the maximum (finding k largest, heapsort descending). Both give O(log n) insert/extract and O(1) peek. Choose based on whether you need quick access to the smallest or largest element. A priority queue is typically a heap.",
+  "answer": "**Approach**\n\nThey differ only in the comparison. A min-heap keeps the smallest at the root, a max-heap the largest — and in .NET you get the second by negating the priority rather than writing a second class.\n\n**Logic**\n\nThe structure, the sift operations and all the complexity bounds are identical; flipping one comparator converts either into the other.\n\nWhat matters in practice is picking the *opposite* of what the question seems to ask when maintaining a bounded set: to keep the k largest items you use a min-heap, because the root is then the weakest of the kept set and the right one to evict.\n\nNegating an int priority has one trap — `int.MinValue` has no positive counterpart, so negating it overflows back to itself.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var values = new[] { 5, 1, 9, 3, 7 };\n\n        var min = new PriorityQueue<int, int>();\n        var max = new PriorityQueue<int, int>();\n\n        foreach (int v in values) { min.Enqueue(v, v); max.Enqueue(v, -v); }\n\n        var ascending = new List<int>();\n        while (min.Count > 0) ascending.Add(min.Dequeue());\n\n        var descending = new List<int>();\n        while (max.Count > 0) descending.Add(max.Dequeue());\n\n        Console.WriteLine($\"min-heap drains: {string.Join(\",\", ascending)}\");\n        Console.WriteLine($\"max-heap drains: {string.Join(\",\", descending)}\");\n\n        // To keep the k LARGEST, use a MIN-heap: the root is the one to evict.\n        const int k = 3;\n        var keepLargest = new PriorityQueue<int, int>();\n\n        foreach (int v in new[] { 4, 1, 8, 2, 9, 6 })\n        {\n            keepLargest.Enqueue(v, v);\n            if (keepLargest.Count > k) keepLargest.Dequeue();\n        }\n\n        var topThree = new List<int>();\n        while (keepLargest.Count > 0) topThree.Add(keepLargest.Dequeue());\n\n        Console.WriteLine($\"three largest (via a min-heap): {string.Join(\",\", topThree)}\");\n\n        // The negation trap.\n        Console.WriteLine();\n        Console.WriteLine($\"-int.MinValue == int.MinValue: {unchecked(-int.MinValue) == int.MinValue}\");\n        Console.WriteLine(\"so negating the priority is unsafe when int.MinValue can occur;\");\n        Console.WriteLine(\"pass a reversed Comparer instead of negating.\");\n\n        var safeMax = new PriorityQueue<int, int>(Comparer<int>.Create((a, b) => b.CompareTo(a)));\n        foreach (int v in new[] { int.MinValue, 0, int.MaxValue }) safeMax.Enqueue(v, v);\n        Console.WriteLine($\"reversed comparer, largest first: {safeMax.Dequeue()}\");\n    }\n}\n```\n\n**Output**\n\n```\nmin-heap drains: 1,3,5,7,9\nmax-heap drains: 9,7,5,3,1\nthree largest (via a min-heap): 6,8,9\n\n-int.MinValue == int.MinValue: True\nso negating the priority is unsafe when int.MinValue can occur;\npass a reversed Comparer instead of negating.\nreversed comparer, largest first: 2147483647\n```",
   "tags": [
    "dsa",
-   "min-heap",
-   "max-heap",
-   "priority-queue"
+   "heap",
+   "comparator",
+   "top-k",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does keeping the k largest use a min-heap?",
+    "a": "Because a bounded heap works by evicting its worst element, and among the k largest kept so far the worst is the smallest - which is exactly what a min-heap exposes at the root in O(1). A max-heap would surface the biggest, which you never want to discard, and finding the smallest would take a scan. The inversion is counter-intuitive and it is the core of every top-k question."
+   },
+   {
+    "q": "What is wrong with negating the priority?",
+    "a": "It works for ordinary values but breaks on int.MinValue, which in two's complement has no positive counterpart - negating it overflows back to itself, so it sorts as though it were the most negative rather than the most positive. Passing a reversed Comparer avoids the arithmetic entirely and is no more code. Negation is fine when you control the value range and know MinValue cannot occur, which is worth stating rather than assuming."
+   },
+   {
+    "q": "Can one structure serve both directions?",
+    "a": "Not a plain heap - it only maintains one extremum, so finding the other end is O(n). A min-max heap alternates the comparison by level and gives both in O(1), and an interval heap does the same with pairs. In practice people keep two heaps with lazy deletion, or use a balanced BST or SortedSet when both ends and ordered iteration are needed. Reaching for a heap when you need both extremes is the mistake to avoid."
+   }
   ]
  },
  {
@@ -986,13 +1075,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is the difference between an algorithm's time and space complexity?",
-  "answer": "Time complexity measures how the running time grows with input size (Big O of operations). Space complexity measures how much additional memory the algorithm uses relative to input size (auxiliary space, excluding input). There's often a trade-off: caching/memoization uses more space to save time; in-place algorithms save space but may be slower. Analyze both to choose an algorithm fitting your constraints (fast vs memory-limited). State complexity in worst/average case as appropriate.",
+  "answer": "**Approach**\n\nTime counts operations as the input grows; space counts the memory held at once. They are independent axes, and algorithms routinely trade one for the other.\n\n**Logic**\n\nThe distinction most people miss is *auxiliary* space versus total space. The input itself is usually excluded, so an in-place sort is described as O(log n) space even though it holds an O(n) array — because it allocated nothing proportional to n.\n\nRecursion consumes space that is easy to overlook: each frame is memory, so a recursion of depth n is O(n) space even if the body allocates nothing.\n\nThe program computes the same answer three ways, counting operations and peak memory for each, so the trade is visible.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private static long _operations;\n\n    // O(n^2) time, O(1) auxiliary space.\n    private static bool HasPairSlow(int[] values, int target)\n    {\n        _operations = 0;\n\n        for (int i = 0; i < values.Length; i++)\n            for (int j = i + 1; j < values.Length; j++)\n            {\n                _operations++;\n                if (values[i] + values[j] == target) return true;\n            }\n\n        return false;\n    }\n\n    // O(n) time, O(n) auxiliary space: memory bought the speed.\n    private static bool HasPairFast(int[] values, int target, out int stored)\n    {\n        _operations = 0;\n        var seen = new HashSet<int>();\n\n        foreach (int v in values)\n        {\n            _operations++;\n            if (seen.Contains(target - v)) { stored = seen.Count; return true; }\n            seen.Add(v);\n        }\n\n        stored = seen.Count;\n        return false;\n    }\n\n    // Recursion: no allocation in the body, but O(depth) stack space.\n    private static int MaxDepth;\n    private static long SumRecursive(int[] values, int at, int depth)\n    {\n        MaxDepth = Math.Max(MaxDepth, depth);\n        return at == values.Length ? 0 : values[at] + SumRecursive(values, at + 1, depth + 1);\n    }\n\n    public static void Main()\n    {\n        var values = new int[400];\n        for (int i = 0; i < values.Length; i++) values[i] = i;\n\n        int target = 797;   // the last possible pair, so both scan to the end\n\n        HasPairSlow(values, target);\n        long slowOperations = _operations;\n\n        HasPairFast(values, target, out int stored);\n        long fastOperations = _operations;\n\n        Console.WriteLine($\"{\"approach\",12}{\"operations\",14}{\"extra memory\",16}\");\n        Console.WriteLine($\"{\"nested loop\",12}{slowOperations,14}{\"0 items\",16}\");\n        Console.WriteLine($\"{\"hash set\",12}{fastOperations,14}{stored + \" items\",16}\");\n\n        MaxDepth = 0;\n        long sum = SumRecursive(values, 0, 1);\n\n        Console.WriteLine();\n        Console.WriteLine($\"recursive sum = {sum}, stack depth reached {MaxDepth}\");\n        Console.WriteLine(\"the body allocates nothing, yet the space is O(n) in frames\");\n\n        Console.WriteLine();\n        Console.WriteLine(\"time:  how operations grow with input size\");\n        Console.WriteLine(\"space: how memory held at once grows - usually AUXILIARY, input excluded\");\n        Console.WriteLine(\"recursion costs space even when the body allocates nothing\");\n    }\n}\n```\n\n**Output**\n\n```\n    approach    operations    extra memory\n nested loop         79800         0 items\n    hash set           400       399 items\n\nrecursive sum = 79800, stack depth reached 401\nthe body allocates nothing, yet the space is O(n) in frames\n\ntime:  how operations grow with input size\nspace: how memory held at once grows - usually AUXILIARY, input excluded\nrecursion costs space even when the body allocates nothing\n```",
   "tags": [
    "dsa",
-   "time-complexity",
-   "space-complexity",
-   "big-o",
-   "trade-off"
+   "complexity",
+   "space",
+   "trade-offs",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What is auxiliary space and why does the distinction matter?",
+    "a": "Auxiliary space is what the algorithm allocates beyond the input, which is what complexity statements normally mean - so an in-place sort is O(log n) space even though it operates on an O(n) array, because it added only the recursion stack. Total space includes the input. Mixing the two makes claims meaningless: every algorithm that reads an array would be O(n) space and the term would distinguish nothing."
+   },
+   {
+    "q": "Why is recursion depth a space cost?",
+    "a": "Because each active call holds a stack frame with its parameters, locals and return address, so a recursion of depth n occupies memory proportional to n even if nothing is allocated on the heap. The output shows a depth of 400 for summing 400 values. It is also the harder failure mode: exceeding the heap throws an OutOfMemoryException you can catch, while exceeding the stack kills the process outright."
+   },
+   {
+    "q": "Give a case where you would deliberately choose the slower algorithm.",
+    "a": "When memory is the binding constraint. Sorting a dataset far larger than RAM uses external merge sort, which does far more I/O than an in-memory sort but never holds everything at once. On an embedded device with kilobytes of RAM, an O(n squared) in-place algorithm can be the only option. And in latency terms, avoiding an allocation can beat a better asymptotic bound outright by dodging garbage collection pressure in a hot path."
+   }
   ]
  },
  {
