@@ -17281,5 +17281,173 @@
     "a": "A peeling BFS: compute each cell's out-degree toward strictly higher neighbours, start from the cells with none - the local maxima - and peel inward level by level, which is a topological sort by height. It gives the same answer with no recursion, so no stack-depth risk on a large grid, and the level count is the path length directly. Worth reaching for when the grid could be millions of cells."
    }
   ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Design a time-based key-value store returning the value at or before a timestamp.",
+  "answer": "**Approach**\n\nA map from key to a list of (timestamp, value) pairs kept in ascending order, with a binary search for the largest timestamp not exceeding the query.\n\n**Logic**\n\nTimestamps arrive in increasing order per key in the usual formulation, so the list is sorted by construction and appending is O(1) — no insertion cost at all.\n\nThe query is a upper-bound search: find the last entry at or before the target. Getting that boundary right is the whole problem, since an exact-match search returns nothing for the common case where the queried timestamp was never written.\n\nO(1) set, O(log n) get.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TimeMap\n{\n    private readonly Dictionary<string, List<(int Time, string Value)>> _history = new();\n\n    public void Set(string key, string value, int timestamp)\n    {\n        if (!_history.TryGetValue(key, out var entries))\n            _history[key] = entries = new List<(int, string)>();\n\n        // Timestamps arrive ascending, so appending keeps the list sorted for free.\n        entries.Add((timestamp, value));\n    }\n\n    public string Get(string key, int timestamp)\n    {\n        if (!_history.TryGetValue(key, out var entries) || entries.Count == 0) return \"\";\n\n        // The LAST entry at or before the target, not an exact match.\n        int lo = 0, hi = entries.Count - 1, found = -1;\n\n        while (lo <= hi)\n        {\n            int mid = lo + (hi - lo) / 2;\n\n            if (entries[mid].Time <= timestamp) { found = mid; lo = mid + 1; }\n            else hi = mid - 1;\n        }\n\n        return found == -1 ? \"\" : entries[found].Value;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var store = new TimeMap();\n\n        store.Set(\"foo\", \"bar\", 1);\n        Console.WriteLine($\"[{store.Get(\"foo\", 1)}]\");\n        Console.WriteLine($\"[{store.Get(\"foo\", 3)}]\");    // no write at 3: falls back to 1\n\n        store.Set(\"foo\", \"bar2\", 4);\n        Console.WriteLine($\"[{store.Get(\"foo\", 4)}]\");\n        Console.WriteLine($\"[{store.Get(\"foo\", 5)}]\");\n        Console.WriteLine($\"[{store.Get(\"foo\", 0)}]\");    // before every write\n        Console.WriteLine($\"[{store.Get(\"missing\", 1)}]\");\n\n        // Many versions: the search must land on the right one.\n        var many = new TimeMap();\n        for (int t = 0; t < 100; t += 10) many.Set(\"k\", $\"v{t}\", t);\n\n        Console.WriteLine($\"[{many.Get(\"k\", 55)}] [{many.Get(\"k\", 60)}] [{many.Get(\"k\", 1000)}]\");\n    }\n}\n```\n\n**Output**\n\n```\n[bar]\n[bar]\n[bar2]\n[bar2]\n[]\n[]\n[v50] [v60] [v90]\n```",
+  "tags": [
+   "dsa",
+   "design",
+   "binary-search",
+   "upper-bound",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is this an upper-bound search rather than an exact match?",
+    "a": "Because the query asks for the value in effect at a timestamp, and most timestamps were never written to - a get at time 3 when writes happened at 1 and 4 must return the value from 1. An exact-match search returns nothing for those, which is the common case rather than the exception. The loop records the last position that satisfies the condition and keeps searching right, which is the standard floor-search shape."
+   },
+   {
+    "q": "What if timestamps could arrive out of order?",
+    "a": "Appending would no longer keep the list sorted, so each Set would need a binary search for the insertion point plus an O(n) shift - or a SortedList, which hides the same cost. The usual problem statement guarantees ascending timestamps per key precisely to make Set O(1), and that guarantee is worth confirming rather than assuming, because the data structure choice hinges on it entirely."
+   },
+   {
+    "q": "How would this work in a real versioned store?",
+    "a": "The same idea underlies multi-version concurrency control in databases: each row keeps a chain of versions stamped with transaction times, and a read at a snapshot walks to the newest version at or before it. Real systems add garbage collection of versions no snapshot can see, and store the chain so that the newest is cheapest to reach, since recent reads dominate. The binary search here is the teaching version of that lookup."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Hard",
+  "question": "Find the maximum profit from stock trading with a transaction fee.",
+  "answer": "**Approach**\n\nA two-state machine tracked with rolling variables: holding a share, or free of one. The fee is charged once per completed transaction, on the sell.\n\n**Logic**\n\nCharging on the sell rather than the buy is a choice, and it must be consistent — charging on both would double the fee, and charging on the buy changes only where the cost appears, not the answer.\n\nUnlimited transactions mean there is no count dimension, so the whole DP collapses to two numbers.\n\nThe fee is what makes this non-trivial: without it the answer is the sum of every upward move, but with a fee, small gains are not worth taking and the algorithm must decide which runs to merge.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static long MaxProfit(int[] prices, int fee)\n    {\n        if (prices == null || prices.Length < 2) return 0;\n\n        long holding = -prices[0];   // bought on day zero\n        long free = 0;\n\n        for (int i = 1; i < prices.Length; i++)\n        {\n            // The fee is charged once per completed transaction, on the sell.\n            free = Math.Max(free, holding + prices[i] - fee);\n            holding = Math.Max(holding, free - prices[i]);\n        }\n\n        return free;\n    }\n\n    // Exhaustive search over buy/sell decisions, for short inputs only.\n    private static long BruteForce(int[] prices, int fee, int at = 0, bool holding = false)\n    {\n        if (at == prices.Length) return 0;\n\n        long skip = BruteForce(prices, fee, at + 1, holding);\n\n        long act = holding\n            ? prices[at] - fee + BruteForce(prices, fee, at + 1, false)\n            : -prices[at] + BruteForce(prices, fee, at + 1, true);\n\n        return Math.Max(skip, act);\n    }\n\n    public static void Main()\n    {\n        (int[] Prices, int Fee)[] cases =\n        {\n            (new[] { 1, 3, 2, 8, 4, 9 }, 2),\n            (new[] { 1, 3, 7, 5, 10, 3 }, 3),\n            (new[] { 5, 4, 3, 2, 1 }, 1),      // never profitable\n            (new[] { 1, 5 }, 10),              // the fee swallows the gain\n            (new[] { 7 }, 1),\n            (new[] { 1, 2, 3, 4, 5 }, 0)       // no fee: every upward move\n        };\n\n        foreach (var (prices, fee) in cases)\n            Console.WriteLine($\"[{string.Join(\",\", prices)}] fee={fee}: {MaxProfit(prices, fee)} \" +\n                              $\"(brute {BruteForce(prices, fee)})\");\n\n        var random = new Random(753);\n        var many = Enumerable.Range(0, 16).Select(_ => random.Next(1, 30)).ToArray();\n\n        bool agrees = true;\n        for (int fee = 0; fee <= 5 && agrees; fee++)\n            if (MaxProfit(many, fee) != BruteForce(many, fee)) agrees = false;\n\n        Console.WriteLine($\"16 prices across fees 0..5 agree with brute force: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\n[1,3,2,8,4,9] fee=2: 8 (brute 8)\n[1,3,7,5,10,3] fee=3: 6 (brute 6)\n[5,4,3,2,1] fee=1: 0 (brute 0)\n[1,5] fee=10: 0 (brute 0)\n[7] fee=1: 0 (brute 0)\n[1,2,3,4,5] fee=0: 4 (brute 4)\n16 prices across fees 0..5 agree with brute force: True\n```",
+  "tags": [
+   "dsa",
+   "dp",
+   "state-machine",
+   "stock",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the fee make this harder than the unlimited-transactions version?",
+    "a": "Because without a fee the optimal strategy is to capture every upward move, which is a one-line sum - each rise is independently worth taking. With a fee, a small rise may not cover it, so the algorithm must decide whether to sell and re-buy or hold through a dip and take one larger transaction. That decision is exactly what the two-state recurrence makes, and it is why the greedy sum gives the wrong answer as soon as the fee is non-zero."
+   },
+   {
+    "q": "Does it matter whether the fee is charged on the buy or the sell?",
+    "a": "Not to the answer, as long as it is charged exactly once per completed transaction - moving it between the two lines shifts where the cost appears but not the total. What does matter is charging it in both places, which doubles the fee, or charging on a buy that is never sold, which penalises a position the strategy would not actually open. Stating the convention explicitly is worth it because the two formulations look interchangeable and one of the wrong variants is easy to write."
+   },
+   {
+    "q": "How does this relate to the cooldown variant?",
+    "a": "The cooldown version adds a third state - just sold, cannot buy - so the recurrence grows one line rather than changing shape. Both are the same state-machine pattern as the k-transactions problem, which adds a count dimension instead. Recognising the family, and that the difference is only which states exist and how they connect, is worth far more than memorising the three recurrences separately."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Find the contiguous subarray which, if sorted, would sort the whole array.",
+  "answer": "**Approach**\n\nTwo sweeps. Left to right, track the running maximum and note the last position that falls below it; right to left, track the running minimum and note the first position that rises above it.\n\n**Logic**\n\nAn element is out of place on the right side exactly when something larger appears before it — which the running maximum detects. Symmetrically on the left.\n\nThe two boundaries found this way are tight: everything outside them is already in its final sorted position, because it is at least everything to its left and at most everything to its right.\n\nThe sorted-copy comparison is the obvious alternative at O(n log n); this is O(n) with O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static (int Start, int Length) ShortestUnsortedWindow(int[] nums)\n    {\n        int n = nums.Length;\n        if (n < 2) return (0, 0);\n\n        // Left to right: the last element that is below something seen earlier.\n        int end = -1, runningMax = nums[0];\n\n        for (int i = 1; i < n; i++)\n        {\n            if (nums[i] < runningMax) end = i;\n            else runningMax = nums[i];\n        }\n\n        if (end == -1) return (0, 0);   // already sorted\n\n        // Right to left: the first element that is above something seen later.\n        int start = -1, runningMin = nums[n - 1];\n\n        for (int i = n - 2; i >= 0; i--)\n        {\n            if (nums[i] > runningMin) start = i;\n            else runningMin = nums[i];\n        }\n\n        return (start, end - start + 1);\n    }\n\n    private static (int Start, int Length) BySorting(int[] nums)\n    {\n        var sorted = nums.OrderBy(v => v).ToArray();\n\n        int lo = 0;\n        while (lo < nums.Length && nums[lo] == sorted[lo]) lo++;\n        if (lo == nums.Length) return (0, 0);\n\n        int hi = nums.Length - 1;\n        while (hi > lo && nums[hi] == sorted[hi]) hi--;\n\n        return (lo, hi - lo + 1);\n    }\n\n    public static void Main()\n    {\n        int[][] cases =\n        {\n            new[] { 2, 6, 4, 8, 10, 9, 15 },\n            new[] { 1, 2, 3, 4 },          // already sorted\n            new[] { 1 },\n            new[] { 2, 1 },\n            new[] { 1, 3, 2, 2, 2 },\n            new[] { 5, 4, 3, 2, 1 },       // the whole array\n            new[] { 1, 1, 1, 1 }           // equal values are sorted\n        };\n\n        foreach (var nums in cases)\n        {\n            var fast = ShortestUnsortedWindow(nums);\n            var reference = BySorting(nums);\n\n            Console.WriteLine($\"[{string.Join(\",\", nums)}] -> start {fast.Start}, \" +\n                              $\"length {fast.Length} (sorting agrees {fast == reference})\");\n        }\n    }\n}\n```\n\n**Output**\n\n```\n[2,6,4,8,10,9,15] -> start 1, length 5 (sorting agrees True)\n[1,2,3,4] -> start 0, length 0 (sorting agrees True)\n[1] -> start 0, length 0 (sorting agrees True)\n[2,1] -> start 0, length 2 (sorting agrees True)\n[1,3,2,2,2] -> start 1, length 4 (sorting agrees True)\n[5,4,3,2,1] -> start 0, length 5 (sorting agrees True)\n[1,1,1,1] -> start 0, length 0 (sorting agrees True)\n```",
+  "tags": [
+   "dsa",
+   "arrays",
+   "two-pass",
+   "running-extremes",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why do the running extremes identify the boundaries exactly?",
+    "a": "Because an element belongs inside the window precisely when it is out of order relative to something outside its own neighbourhood - and that is what a running maximum detects going forwards, or a running minimum going backwards. Everything beyond the found boundaries is at least all of its predecessors and at most all of its successors, so it is already in its final sorted position. Both conditions are needed; one pass alone finds only one end."
+   },
+   {
+    "q": "Why does an already-sorted array return a length of zero rather than one?",
+    "a": "Because no subarray needs sorting at all, and reporting a length of one would suggest a single element must be rearranged, which is meaningless. The early return when no descent is found handles it. The all-equal case matters too: equal values are already in order, so a comparison using less-than-or-equal instead of strict less-than would wrongly report the whole array."
+   },
+   {
+    "q": "When would you just sort a copy instead?",
+    "a": "When clarity matters more than the constant factor, which is most of the time - the sorted-copy version is four lines and obviously correct, at O(n log n) time and O(n) space. The two-pass version earns its place on large arrays or in memory-constrained code. Keeping the simple one as a test oracle, as here, is the best of both: the fast version ships and the obvious one proves it."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Hashing",
+  "difficulty": "Hard",
+  "question": "Group strings that can be shifted into one another.",
+  "answer": "**Approach**\n\nKey each string by the sequence of gaps between consecutive characters, taken modulo 26. Strings in the same shift group produce identical keys.\n\n**Logic**\n\nShifting adds a constant to every character, which leaves the *differences* between consecutive characters unchanged — so the gap sequence is invariant under shifting and is therefore a valid canonical form.\n\nThe modulo is essential because shifting wraps: 'az' and 'ba' are in the same group, and their raw differences are 25 and -25, which the modulo maps to the same value.\n\nLength is implicitly part of the key since the gap sequence has one fewer element.\n\nO(total characters).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\nusing System.Text;\n\npublic class Solution\n{\n    public static IList<IList<string>> GroupShifted(string[] words)\n    {\n        var groups = new Dictionary<string, List<string>>();\n\n        foreach (string word in words)\n        {\n            string key = ShiftKey(word);\n\n            if (!groups.TryGetValue(key, out var group)) groups[key] = group = new List<string>();\n            group.Add(word);\n        }\n\n        return groups.Values.Cast<IList<string>>().ToList();\n    }\n\n    // Gaps between consecutive characters: unchanged by shifting, so a canonical form.\n    private static string ShiftKey(string word)\n    {\n        if (word.Length <= 1) return word.Length.ToString();\n\n        var sb = new StringBuilder();\n\n        for (int i = 1; i < word.Length; i++)\n        {\n            // Modulo 26 because shifting wraps: \"az\" and \"ba\" are the same group.\n            int gap = ((word[i] - word[i - 1]) % 26 + 26) % 26;\n            sb.Append(gap).Append(',');\n        }\n\n        return sb.ToString();\n    }\n\n    private static void Show(IList<IList<string>> groups)\n    {\n        var rendered = groups\n            .Select(g => \"[\" + string.Join(\",\", g.OrderBy(w => w)) + \"]\")\n            .OrderBy(s => s);\n\n        Console.WriteLine(string.Join(\" \", rendered));\n    }\n\n    public static void Main()\n    {\n        Show(GroupShifted(new[] { \"abc\", \"bcd\", \"acef\", \"xyz\", \"az\", \"ba\", \"a\", \"z\" }));\n        Show(GroupShifted(new[] { \"a\" }));\n        Show(GroupShifted(Array.Empty<string>()));\n        Show(GroupShifted(new[] { \"abc\", \"abd\" }));          // different gap sequences\n        Show(GroupShifted(new[] { \"ab\", \"ba\" }));            // gaps 1 and 25: not a group\n        Show(GroupShifted(new[] { \"az\", \"ba\", \"cd\" }));      // az and ba both wrap by 1\n    }\n}\n```\n\n**Output**\n\n```\n[a,z] [abc,bcd,xyz] [acef] [az,ba]\n[a]\n\n[abc] [abd]\n[ab] [ba]\n[az,ba] [cd]\n```",
+  "tags": [
+   "dsa",
+   "hashing",
+   "canonical-form",
+   "modular-arithmetic",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why are the gaps between characters the right invariant?",
+    "a": "Because shifting adds the same constant to every character, so any difference between two of them is unchanged - the constant cancels. That makes the gap sequence a property of the shift class rather than of the individual string, which is exactly what a grouping key needs. Using the characters themselves would separate strings that are shifts of one another, and using a sorted multiset would wrongly merge unrelated strings."
+   },
+   {
+    "q": "Why is the modulo necessary?",
+    "a": "Because the alphabet wraps, so shifting 'az' by one gives 'ba' - and their raw gaps are 25 and -25, which look different but describe the same relationship. Taking the result modulo 26, normalised to be non-negative, maps both to 25. The 'az' and 'ba' test exists precisely for this; without the modulo they land in separate groups and the wrap-around cases are all wrong."
+   },
+   {
+    "q": "Why does a single character key on its length?",
+    "a": "Because every one-character string is a shift of every other, so they all belong in one group - and the gap sequence is empty, which would collide with any other string that also produced an empty key. Keying on the length distinguishes the empty gap sequence of a one-character string from anything else. It is the same delimiter-ambiguity issue as in the anagram signature: a key must not be producible by two different inputs that should differ."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Greedy",
+  "difficulty": "Hard",
+  "question": "Reconstruct a queue of people described by height and the count of taller people ahead.",
+  "answer": "**Approach**\n\nSort by height descending, breaking ties by the count ascending, then insert each person at the index given by their count.\n\n**Logic**\n\nThe ordering is what makes the insertion index literally correct. Processing tallest first means everyone already placed is at least as tall, so a person's count is exactly how many placed people must precede them — which is their insertion index.\n\nInserting a shorter person later never disturbs the counts of those already placed, because they do not see anyone shorter.\n\nThe tie-break matters: equal heights must go in count order, or the second one displaces the first.\n\nO(n²) with list insertion, which is acceptable and hard to beat without a Fenwick tree.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[][] ReconstructQueue(int[][] people)\n    {\n        // Tallest first; equal heights by ascending count.\n        var ordered = people\n            .OrderByDescending(p => p[0])\n            .ThenBy(p => p[1])\n            .ToArray();\n\n        var queue = new List<int[]>();\n\n        // Everyone already placed is at least as tall, so the count IS the index.\n        foreach (var person in ordered) queue.Insert(person[1], person);\n\n        return queue.ToArray();\n    }\n\n    // Verify the property: each person's count must match the taller people ahead of them.\n    private static bool IsConsistent(int[][] queue)\n    {\n        for (int i = 0; i < queue.Length; i++)\n        {\n            int tallerAhead = 0;\n            for (int j = 0; j < i; j++) if (queue[j][0] >= queue[i][0]) tallerAhead++;\n\n            if (tallerAhead != queue[i][1]) return false;\n        }\n\n        return true;\n    }\n\n    private static int[][] People(params int[][] p) => p;\n\n    private static void Check(int[][] people)\n    {\n        var queue = ReconstructQueue(people);\n\n        Console.WriteLine(string.Join(\" \", queue.Select(p => $\"[{p[0]},{p[1]}]\")) +\n                          $\"   consistent: {IsConsistent(queue)}\");\n    }\n\n    public static void Main()\n    {\n        Check(People(new[] { 7, 0 }, new[] { 4, 4 }, new[] { 7, 1 },\n                     new[] { 5, 0 }, new[] { 6, 1 }, new[] { 5, 2 }));\n\n        Check(People(new[] { 6, 0 }, new[] { 5, 0 }, new[] { 4, 0 },\n                     new[] { 3, 2 }, new[] { 2, 2 }, new[] { 1, 4 }));\n\n        Check(People(new[] { 1, 0 }));\n        Check(People(new[] { 2, 0 }, new[] { 2, 1 }));      // equal heights\n        Check(People());\n    }\n}\n```\n\n**Output**\n\n```\n[5,0] [7,0] [5,2] [6,1] [4,4] [7,1]   consistent: True\n[4,0] [5,0] [2,2] [3,2] [1,4] [6,0]   consistent: True\n[1,0]   consistent: True\n[2,0] [2,1]   consistent: True\n   consistent: True\n```",
+  "tags": [
+   "dsa",
+   "greedy",
+   "sorting",
+   "insertion",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does inserting at the count index work?",
+    "a": "Because everyone placed before this person is at least as tall, so the count of taller-or-equal people ahead of them is simply how many placed people sit in front - which is the index. And inserting shorter people later cannot change an earlier person's count, since they do not count anyone shorter than themselves. The two facts together mean each insertion is correct when made and stays correct forever."
+   },
+   {
+    "q": "Why must equal heights be ordered by ascending count?",
+    "a": "Because people of the same height count each other, so they must be placed in the order their counts describe - the one with count 0 first. Inserting the higher count first would place it at an index that the lower-count person then displaces, breaking both. The [2,0] and [2,1] test is the minimal case, and it is the tie-break most first attempts omit."
+   },
+   {
+    "q": "Can the quadratic insertion be avoided?",
+    "a": "Yes - sort ascending by height instead and use a Fenwick tree or segment tree over the free slots to find the k-th remaining empty position in O(log n), giving O(n log n) overall. It is meaningfully more code and only matters for large inputs, since list insertion is a fast memory move. The quadratic version is what I would write first and the tree version is the answer to 'now make it faster'."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Hard",
+  "question": "Find the length of the longest common subsequence of three sequences.",
+  "answer": "**Approach**\n\nThe two-sequence LCS recurrence extended to a third dimension. A match now requires all three characters to agree; otherwise take the best of the three ways to drop one character.\n\n**Logic**\n\nThe generalisation is mechanical but the cost is not — each extra sequence multiplies the table size, so three sequences of length n need n³ cells. That is why the problem is only posed for small inputs, and why the general k-sequence LCS is NP-hard when k is part of the input.\n\nThe mismatch case must consider dropping from each of the three, not just two, or valid alignments are missed.\n\nO(l × m × n) time and space, reducible to two layers.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int LongestCommonSubsequence(string a, string b, string c)\n    {\n        a ??= \"\"; b ??= \"\"; c ??= \"\";\n\n        var best = new int[a.Length + 1, b.Length + 1, c.Length + 1];\n\n        for (int i = 1; i <= a.Length; i++)\n            for (int j = 1; j <= b.Length; j++)\n                for (int k = 1; k <= c.Length; k++)\n                    best[i, j, k] = a[i - 1] == b[j - 1] && b[j - 1] == c[k - 1]\n                        // All three must agree for a match.\n                        ? best[i - 1, j - 1, k - 1] + 1\n                        // Otherwise drop from any ONE of the three.\n                        : Math.Max(best[i - 1, j, k],\n                          Math.Max(best[i, j - 1, k], best[i, j, k - 1]));\n\n        return best[a.Length, b.Length, c.Length];\n    }\n\n    // Exponential reference over subsequences of the shortest string.\n    private static int BruteForce(string a, string b, string c)\n    {\n        string shortest = a.Length <= b.Length && a.Length <= c.Length ? a\n                        : b.Length <= c.Length ? b : c;\n\n        int best = 0;\n\n        for (int mask = 0; mask < (1 << shortest.Length); mask++)\n        {\n            var chosen = \"\";\n            for (int i = 0; i < shortest.Length; i++)\n                if ((mask & (1 << i)) != 0) chosen += shortest[i];\n\n            if (chosen.Length > best && IsSubsequence(chosen, a) &&\n                IsSubsequence(chosen, b) && IsSubsequence(chosen, c))\n                best = chosen.Length;\n        }\n\n        return best;\n    }\n\n    private static bool IsSubsequence(string candidate, string source)\n    {\n        int i = 0;\n        foreach (char ch in source) if (i < candidate.Length && candidate[i] == ch) i++;\n        return i == candidate.Length;\n    }\n\n    public static void Main()\n    {\n        (string A, string B, string C)[] cases =\n        {\n            (\"abcd\", \"acbd\", \"abd\"),\n            (\"geeks\", \"geeksfor\", \"geeksforgeeks\"),\n            (\"abc\", \"def\", \"ghi\"),\n            (\"a\", \"a\", \"a\"),\n            (\"\", \"abc\", \"abc\"),\n            (\"aaa\", \"aa\", \"a\")\n        };\n\n        foreach (var (a, b, c) in cases)\n            Console.WriteLine($\"(\\\"{a}\\\",\\\"{b}\\\",\\\"{c}\\\"): {LongestCommonSubsequence(a, b, c)} \" +\n                              $\"(brute {BruteForce(a, b, c)})\");\n    }\n}\n```\n\n**Output**\n\n```\n(\"abcd\",\"acbd\",\"abd\"): 3 (brute 3)\n(\"geeks\",\"geeksfor\",\"geeksforgeeks\"): 5 (brute 5)\n(\"abc\",\"def\",\"ghi\"): 0 (brute 0)\n(\"a\",\"a\",\"a\"): 1 (brute 1)\n(\"\",\"abc\",\"abc\"): 0 (brute 0)\n(\"aaa\",\"aa\",\"a\"): 1 (brute 1)\n```",
+  "tags": [
+   "dsa",
+   "dp",
+   "lcs",
+   "multi-dimensional",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the mismatch case need three options rather than two?",
+    "a": "Because with three sequences there are three independent ways to make progress - advance past a character in any one of them - and the optimal alignment may require any of the three. Considering only two would miss alignments that need to skip in the third sequence, producing an answer that is too small on exactly those inputs. The count of options always equals the number of sequences, which is the mechanical part of the generalisation."
+   },
+   {
+    "q": "Why does this not scale to many sequences?",
+    "a": "Because the table has one dimension per sequence, so k sequences of length n need n to the k cells - four sequences of a thousand characters is already a trillion. And the general problem with k as part of the input is NP-hard, so no polynomial algorithm is expected. Three is about the practical limit for the straightforward DP, which is why the question is always posed with exactly three."
+   },
+   {
+    "q": "Why is the brute force built from subsequences of the shortest string?",
+    "a": "Because any common subsequence is a subsequence of all three, so it is certainly one of the shortest string's - enumerating that one covers every candidate while minimising the exponential. It is still 2 to the length, so it only runs on the small cases, but it is an independent derivation rather than a second copy of the DP. For a recurrence with three branches that is worth having, since an omitted branch is silent."
+   }
+  ]
  }
 ]
