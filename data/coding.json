@@ -16357,5 +16357,285 @@
     "a": "Because a formula derived by reasoning deserves independent confirmation - the halving and the ceiling are both easy to get wrong, and a wrong formula produces plausible numbers. The BFS explores actual swap sequences and finds the true minimum by construction, so agreement is real evidence. It is exponential and only usable on short strings, which is the normal compromise: an expensive oracle applied where it is affordable."
    }
   ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Union Find",
+  "difficulty": "Hard",
+  "question": "Count the number of islands as land is added one cell at a time.",
+  "answer": "**Approach**\n\nUnion-find with a running component count. Each new land cell starts as its own island, then merges with each already-land neighbour, decrementing the count per successful merge.\n\n**Logic**\n\nRecomputing with a flood fill after every addition would be O(cells) per operation. Union-find makes each addition near-constant, which is what the incremental phrasing demands.\n\nThe count arithmetic is the whole algorithm: add one for the new cell, subtract one for each *distinct* neighbouring component absorbed. Unioning two cells already in the same component must not decrement, which is why the union returns whether it actually merged.\n\nRepeated additions of the same cell must be ignored, or the count inflates.\n\nO(k α) for k additions.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private class DisjointSet\n    {\n        private readonly int[] _parent, _rank;\n        public DisjointSet(int size)\n        {\n            _parent = new int[size];\n            _rank = new int[size];\n            for (int i = 0; i < size; i++) _parent[i] = i;\n        }\n\n        public int Find(int x)\n        {\n            while (_parent[x] != x) { _parent[x] = _parent[_parent[x]]; x = _parent[x]; }\n            return x;\n        }\n\n        // Returns false when the two were already joined, so the caller does not decrement.\n        public bool Union(int a, int b)\n        {\n            int rootA = Find(a), rootB = Find(b);\n            if (rootA == rootB) return false;\n\n            if (_rank[rootA] < _rank[rootB]) (rootA, rootB) = (rootB, rootA);\n            _parent[rootB] = rootA;\n            if (_rank[rootA] == _rank[rootB]) _rank[rootA]++;\n\n            return true;\n        }\n    }\n\n    public static IList<int> CountIslandsAfterEach(int rows, int cols, int[][] additions)\n    {\n        var isLand = new bool[rows * cols];\n        var sets = new DisjointSet(rows * cols);\n        var counts = new List<int>();\n\n        int[] dr = { -1, 1, 0, 0 }, dc = { 0, 0, -1, 1 };\n        int islands = 0;\n\n        foreach (var cell in additions)\n        {\n            int r = cell[0], c = cell[1], id = r * cols + c;\n\n            if (isLand[id]) { counts.Add(islands); continue; }   // a repeat changes nothing\n\n            isLand[id] = true;\n            islands++;                                            // a new island, for now\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = r + dr[d], nc = c + dc[d];\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n\n                int neighbour = nr * cols + nc;\n                if (!isLand[neighbour]) continue;\n\n                if (sets.Union(id, neighbour)) islands--;          // absorbed a distinct island\n            }\n\n            counts.Add(islands);\n        }\n\n        return counts;\n    }\n\n    private static int[][] Cells(params int[][] cells) => cells;\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", CountIslandsAfterEach(3, 3, Cells(\n            new[] { 0, 0 }, new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 1 }))));\n\n        // The last cell joins two existing islands at once: the count drops by one.\n        Console.WriteLine(string.Join(\",\", CountIslandsAfterEach(1, 3, Cells(\n            new[] { 0, 0 }, new[] { 0, 2 }, new[] { 0, 1 }))));\n\n        // A repeated addition must not change anything.\n        Console.WriteLine(string.Join(\",\", CountIslandsAfterEach(2, 2, Cells(\n            new[] { 0, 0 }, new[] { 0, 0 }, new[] { 1, 1 }))));\n\n        Console.WriteLine(string.Join(\",\", CountIslandsAfterEach(1, 1, Cells(new[] { 0, 0 }))));\n        Console.WriteLine($\"[{string.Join(\",\", CountIslandsAfterEach(2, 2, Cells()))}]\");\n\n        // A cell touching three existing islands collapses all of them into one.\n        Console.WriteLine(string.Join(\",\", CountIslandsAfterEach(3, 3, Cells(\n            new[] { 0, 1 }, new[] { 1, 0 }, new[] { 1, 2 }, new[] { 1, 1 }))));\n    }\n}\n```\n\n**Output**\n\n```\n1,1,2,3\n1,2,1\n1,1,2\n1\n[]\n1,2,3,1\n```",
+  "tags": [
+   "dsa",
+   "union-find",
+   "incremental",
+   "islands",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must Union report whether it actually merged?",
+    "a": "Because the new cell can touch two neighbours that are already in the same island - the top and left of a filled square, say - and decrementing for both would undercount. Only a union that genuinely joined two distinct components removes an island. The last test makes it visible: a cell touching three separate islands drops the count from three to one, which is two decrements from three unions, because one neighbour pair had already been joined."
+   },
+   {
+    "q": "Why not just flood fill after each addition?",
+    "a": "Because that is O(rows times cols) per addition, so k additions cost O(k times cells) - quadratic in the grid for a full fill. Union-find makes each addition near-constant with path compression and union by rank, giving O(k times alpha) overall. The incremental phrasing of the question is the hint: whenever a structure must answer after every update rather than once at the end, recomputation is the wrong shape."
+   },
+   {
+    "q": "Could you support removing land as well?",
+    "a": "Not with plain union-find - it has no undo, since path compression destroys the history needed to split a component. The options are offline processing in reverse, turning deletions into additions, which works when all operations are known in advance; a union-find with rollback that skips path compression and keeps an operation log; or a fully dynamic connectivity structure such as Euler tour trees, which is substantially more machinery. Naming why deletion is hard is the real answer here."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Heap",
+  "difficulty": "Hard",
+  "question": "Schedule tasks with a cooling period between identical ones and return the total time.",
+  "answer": "**Approach**\n\nA counting argument rather than a simulation. The most frequent task dictates the skeleton of the schedule, and everything else either fills the idle gaps or extends the timeline.\n\n**Logic**\n\nLay out the most frequent task with cooldown gaps between its occurrences. That frames `(maxCount - 1)` blocks of width `n + 1`, plus the final occurrence.\n\nOther tasks fill those gaps. If they all fit, the answer is that frame length. If there are more tasks than gap slots, no idling is needed at all and the answer is simply the total number of tasks — which is why the result is the maximum of the two.\n\nTasks tied at the maximum frequency each add one to the tail, which is the `tiedAtMax` term.\n\nO(tasks).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int LeastInterval(char[] tasks, int cooldown)\n    {\n        if (tasks == null || tasks.Length == 0) return 0;\n\n        var counts = new Dictionary<char, int>();\n        foreach (char t in tasks) counts[t] = counts.GetValueOrDefault(t) + 1;\n\n        int maxCount = counts.Values.Max();\n        int tiedAtMax = counts.Values.Count(c => c == maxCount);\n\n        // The frame set by the most frequent task, plus one slot per tie in the tail.\n        int framed = (maxCount - 1) * (cooldown + 1) + tiedAtMax;\n\n        // If there are more tasks than gap slots, no idling is needed at all.\n        return Math.Max(framed, tasks.Length);\n    }\n\n    // Simulation with a heap: independent confirmation of the formula.\n    private static int Simulate(char[] tasks, int cooldown)\n    {\n        var counts = new Dictionary<char, int>();\n        foreach (char t in tasks) counts[t] = counts.GetValueOrDefault(t) + 1;\n\n        var available = new PriorityQueue<char, int>();\n        foreach (var pair in counts) available.Enqueue(pair.Key, -pair.Value);\n\n        var cooling = new Queue<(int ReadyAt, char Task, int Remaining)>();\n        int time = 0;\n\n        while (available.Count > 0 || cooling.Count > 0)\n        {\n            time++;\n\n            if (available.Count > 0)\n            {\n                char task = available.Dequeue();\n                int remaining = counts[task] - 1;\n                counts[task] = remaining;\n\n                if (remaining > 0) cooling.Enqueue((time + cooldown, task, remaining));\n            }\n\n            if (cooling.Count > 0 && cooling.Peek().ReadyAt == time)\n            {\n                var (_, task, remaining) = cooling.Dequeue();\n                available.Enqueue(task, -remaining);\n            }\n        }\n\n        return time;\n    }\n\n    public static void Main()\n    {\n        (string Tasks, int Cooldown)[] cases =\n        {\n            (\"AAABBB\", 2), (\"AAABBB\", 0), (\"AAAAAA\", 2),\n            (\"ABCDEF\", 2), (\"AAABBBCCC\", 2), (\"A\", 5), (\"AABBCC\", 1)\n        };\n\n        foreach (var (tasks, cooldown) in cases)\n            Console.WriteLine($\"\\\"{tasks}\\\" n={cooldown}: {LeastInterval(tasks.ToCharArray(), cooldown)} \" +\n                              $\"(simulated {Simulate(tasks.ToCharArray(), cooldown)})\");\n\n        Console.WriteLine(LeastInterval(Array.Empty<char>(), 3));\n    }\n}\n```\n\n**Output**\n\n```\n\"AAABBB\" n=2: 8 (simulated 8)\n\"AAABBB\" n=0: 6 (simulated 6)\n\"AAAAAA\" n=2: 16 (simulated 16)\n\"ABCDEF\" n=2: 6 (simulated 6)\n\"AAABBBCCC\" n=2: 9 (simulated 9)\n\"A\" n=5: 1 (simulated 1)\n\"AABBCC\" n=1: 6 (simulated 6)\n0\n```",
+  "tags": [
+   "dsa",
+   "greedy",
+   "counting",
+   "scheduling",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the answer the maximum of the framed length and the task count?",
+    "a": "Because the frame assumes idle slots are needed, which is only true when there are too few other tasks to fill the gaps. With many distinct tasks - 'AAABBBCCC' with a cooldown of two - every gap is filled by real work and the schedule is simply back to back, so the answer is the task count. Taking the maximum covers both regimes with one expression, and neither alone is correct in general."
+   },
+   {
+    "q": "What does the tied-at-maximum term account for?",
+    "a": "The tail. If three tasks all occur the maximum number of times, the final block contains one of each rather than just one, so the schedule extends by one slot per tie. 'AAABBB' with a cooldown of two gives eight rather than seven for exactly that reason. Omitting the term is the most common error, and it only shows up when two or more tasks tie at the top frequency."
+   },
+   {
+    "q": "Why include a simulation when the formula is O(n)?",
+    "a": "Because the formula is a counting argument with three interacting terms and no obvious way to see it is right - a wrong version produces plausible numbers on most inputs. The heap simulation schedules tasks concretely and measures the elapsed time, so agreement across the regimes is real evidence. It would also be the answer to give if the question asked for the schedule itself rather than its length."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Design a structure supporting insert, delete and get-random in constant time with duplicates allowed.",
+  "answer": "**Approach**\n\nA list for uniform random access plus a map from value to the *set* of indices holding it. Removal swaps the victim with the last element so the list never has holes.\n\n**Logic**\n\nRandom access in O(1) requires a contiguous array, but removing from the middle of an array is O(n) — unless you move the last element into the gap, which is the central trick.\n\nThe swap has a subtlety that catches most implementations: the index bookkeeping for the moved element must be updated, and when the victim *is* the last element the update must not resurrect it. Doing the removal before the relocation handles both.\n\nDuplicates require a set of indices per value rather than a single index.\n\nO(1) expected for all three operations.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class RandomisedMultiset\n{\n    private readonly List<int> _values = new();\n    private readonly Dictionary<int, HashSet<int>> _positions = new();\n    private readonly Random _random;\n\n    public RandomisedMultiset(Random random) { _random = random; }\n\n    public int Count => _values.Count;\n\n    public bool Insert(int value)\n    {\n        if (!_positions.TryGetValue(value, out var set))\n            _positions[value] = set = new HashSet<int>();\n\n        bool wasAbsent = set.Count == 0;\n\n        set.Add(_values.Count);\n        _values.Add(value);\n        return wasAbsent;\n    }\n\n    public bool Remove(int value)\n    {\n        if (!_positions.TryGetValue(value, out var set) || set.Count == 0) return false;\n\n        int at = set.First();\n        set.Remove(at);\n\n        int last = _values.Count - 1;\n\n        if (at != last)\n        {\n            int moved = _values[last];\n            _values[at] = moved;\n\n            // Retarget the moved element. Order matters: remove the old index first.\n            _positions[moved].Remove(last);\n            _positions[moved].Add(at);\n        }\n\n        _values.RemoveAt(last);\n        return true;\n    }\n\n    public int GetRandom() => _values[_random.Next(_values.Count)];\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var set = new RandomisedMultiset(new Random(2718));\n\n        Console.WriteLine(set.Insert(1));      // newly present\n        Console.WriteLine(set.Insert(1));      // a duplicate\n        Console.WriteLine(set.Insert(2));\n        Console.WriteLine(set.Remove(1));\n        Console.WriteLine(set.Remove(3));      // never present\n        Console.WriteLine($\"count {set.Count}\");\n\n        // The distribution must be uniform over the MULTISET.\n        var sampler = new RandomisedMultiset(new Random(31415));\n        foreach (int v in new[] { 7, 7, 7, 9 }) sampler.Insert(v);\n\n        var seen = new Dictionary<int, int> { [7] = 0, [9] = 0 };\n        const int draws = 200000;\n        for (int i = 0; i < draws; i++) seen[sampler.GetRandom()]++;\n\n        Console.WriteLine($\"7 appears about three quarters of the time: \" +\n            $\"{Math.Abs(seen[7] / (double)draws - 0.75) < 0.01}\");\n        Console.WriteLine($\"9 appears about a quarter of the time: \" +\n            $\"{Math.Abs(seen[9] / (double)draws - 0.25) < 0.01}\");\n\n        // Removing the LAST element must not corrupt the index bookkeeping.\n        var edge = new RandomisedMultiset(new Random(1));\n        edge.Insert(5);\n        edge.Insert(6);\n        edge.Remove(6);\n        Console.WriteLine($\"after removing the last: count {edge.Count}, \" +\n                          $\"random {edge.GetRandom()}\");\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nFalse\ncount 2\n7 appears about three quarters of the time: True\n9 appears about a quarter of the time: True\nafter removing the last: count 1, random 5\n```",
+  "tags": [
+   "dsa",
+   "design",
+   "randomised",
+   "swap-remove",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why swap with the last element rather than removing in place?",
+    "a": "Because removing from the middle of a list shifts everything after it, which is O(n) and would also invalidate every stored index. Moving the last element into the gap and shrinking by one touches exactly two positions, so the list stays hole-free and random access stays a single index lookup. The cost is that the order is not preserved, which this structure does not promise."
+   },
+   {
+    "q": "What goes wrong when the removed element is the last one?",
+    "a": "A naive implementation moves the last element onto itself and then re-adds its index to the position set - resurrecting an entry that was just removed, so the structure reports a phantom element. Guarding the relocation with a check that the victim is not already the last position avoids it. The test removing the final element exists specifically to catch that, since every other removal path hides it."
+   },
+   {
+    "q": "Why does the test assert a distribution rather than specific draws?",
+    "a": "Because seeded Random is not stable across .NET versions, so pinning exact values tests the runtime rather than the structure. What the contract actually promises is uniformity over the multiset - with three 7s and one 9, the 7 must come up about three quarters of the time, which the counts confirm. That also verifies duplicates are stored as separate entries rather than collapsed, which a set-based implementation would get wrong."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Hard",
+  "question": "Count the good nodes in a binary tree, where a node is good if no ancestor is larger.",
+  "answer": "**Approach**\n\nSingle DFS carrying the maximum value seen along the path from the root. A node is good when it is at least that maximum.\n\n**Logic**\n\nOnly the running maximum matters, not the whole ancestor list — if a node is at least the largest ancestor, it is at least all of them. That collapses an O(depth) check per node to a comparison.\n\nThe root is always good, which falls out of seeding the maximum with the root's own value rather than with a sentinel.\n\nThe comparison is non-strict, so a node equal to its largest ancestor still counts.\n\nO(n) time, O(height) stack.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static int CountGoodNodes(TreeNode root) =>\n        root == null ? 0 : Walk(root, root.val);\n\n    // Only the running maximum matters: beating it beats every ancestor.\n    private static int Walk(TreeNode node, int largestSoFar)\n    {\n        if (node == null) return 0;\n\n        int good = node.val >= largestSoFar ? 1 : 0;   // non-strict: ties count\n        int largest = Math.Max(largestSoFar, node.val);\n\n        return good + Walk(node.left, largest) + Walk(node.right, largest);\n    }\n\n    public static void Main()\n    {\n        var a = new TreeNode(3)\n        {\n            left = new TreeNode(1) { left = new TreeNode(3) },\n            right = new TreeNode(4) { left = new TreeNode(1), right = new TreeNode(5) }\n        };\n        Console.WriteLine(CountGoodNodes(a));\n\n        var b = new TreeNode(3) { left = new TreeNode(3) { left = new TreeNode(4),\n                                                          right = new TreeNode(2) } };\n        Console.WriteLine(CountGoodNodes(b));\n\n        Console.WriteLine(CountGoodNodes(new TreeNode(1)));          // the root always counts\n        Console.WriteLine(CountGoodNodes(null));\n\n        // Strictly decreasing: only the root is good.\n        var descending = new TreeNode(5) { left = new TreeNode(4) { left = new TreeNode(3) } };\n        Console.WriteLine(CountGoodNodes(descending));\n\n        // All equal: every node ties, and ties count.\n        var equal = new TreeNode(2) { left = new TreeNode(2), right = new TreeNode(2) };\n        Console.WriteLine(CountGoodNodes(equal));\n\n        var negatives = new TreeNode(-5) { left = new TreeNode(-10), right = new TreeNode(-1) };\n        Console.WriteLine(CountGoodNodes(negatives));\n    }\n}\n```\n\n**Output**\n\n```\n4\n3\n1\n0\n1\n3\n2\n```",
+  "tags": [
+   "dsa",
+   "trees",
+   "dfs",
+   "path-state",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the running maximum enough?",
+    "a": "Because being at least the largest ancestor implies being at least every ancestor - the maximum dominates them all. So a single value summarises an arbitrarily long path and the per-node check is one comparison rather than a walk up the ancestors. That collapse from O(depth) to O(1) per node is what makes the traversal linear, and it is the same idea as tracking only the extremes in the ancestor-difference problem."
+   },
+   {
+    "q": "Why seed with the root's own value?",
+    "a": "Because the root has no ancestors, so it is good by definition, and seeding with its own value makes the non-strict comparison succeed without a special case. Seeding with int.MinValue would also work here, but it relies on no node holding that value - a fragile assumption when the values are unconstrained. Seeding from the data rather than from a sentinel avoids the question entirely."
+   },
+   {
+    "q": "Why is the comparison non-strict?",
+    "a": "Because the definition is that no ancestor is GREATER than the node, so an equal ancestor does not disqualify it. Using strict greater-than would exclude ties and undercount - the all-equal tree would report one instead of three. It is a one-character difference with a materially different meaning, which is why that test case is there rather than only trees with distinct values."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Bit Manipulation",
+  "difficulty": "Medium",
+  "question": "Count the set bits for every number from zero to n.",
+  "answer": "**Approach**\n\nDP using the relation `count[i] = count[i >> 1] + (i & 1)`. Each number's population count is its half's count plus its lowest bit.\n\n**Logic**\n\nShifting right removes the lowest bit, and that value has already been computed — so each entry is one lookup and one addition rather than a bit-by-bit loop.\n\nThe alternative relation `count[i] = count[i & (i - 1)] + 1` uses Brian Kernighan's observation that clearing the lowest set bit gives a smaller already-computed number. Both are O(n) overall against O(n log n) for counting each number independently.\n\nO(n) time and space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    // count[i] = count[i >> 1] + lowest bit: the shifted value is already known.\n    public static int[] CountBits(int n)\n    {\n        var counts = new int[n + 1];\n\n        for (int i = 1; i <= n; i++) counts[i] = counts[i >> 1] + (i & 1);\n\n        return counts;\n    }\n\n    // Kernighan: clearing the lowest set bit lands on a smaller, already-computed number.\n    public static int[] CountBitsKernighan(int n)\n    {\n        var counts = new int[n + 1];\n\n        for (int i = 1; i <= n; i++) counts[i] = counts[i & (i - 1)] + 1;\n\n        return counts;\n    }\n\n    private static int PopCountSlow(int value)\n    {\n        int count = 0;\n        while (value != 0) { count += value & 1; value >>= 1; }\n        return count;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", CountBits(5)));\n        Console.WriteLine(string.Join(\",\", CountBitsKernighan(5)));\n        Console.WriteLine(string.Join(\",\", CountBits(0)));\n        Console.WriteLine(string.Join(\",\", CountBits(1)));\n\n        var shifted = CountBits(2000);\n        var kernighan = CountBitsKernighan(2000);\n        var reference = Enumerable.Range(0, 2001).Select(PopCountSlow).ToArray();\n\n        Console.WriteLine($\"both relations agree with a direct count up to 2000: \" +\n            $\"{shifted.SequenceEqual(reference) && kernighan.SequenceEqual(reference)}\");\n\n        Console.WriteLine($\"count for 1023 (ten ones): {shifted[1023]}\");\n        Console.WriteLine($\"count for 1024 (one one):  {shifted[1024]}\");\n    }\n}\n```\n\n**Output**\n\n```\n0,1,1,2,1,2\n0,1,1,2,1,2\n0\n0,1\nboth relations agree with a direct count up to 2000: True\ncount for 1023 (ten ones): 10\ncount for 1024 (one one):  1\n```",
+  "tags": [
+   "dsa",
+   "bit-manipulation",
+   "dp",
+   "population-count",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the shift relation correct?",
+    "a": "Because shifting right by one discards exactly the lowest bit and keeps the rest, so the population count of i is the count of i >> 1 plus whatever that lowest bit was. Since i >> 1 is strictly smaller than i for positive i, its value is already in the table. That is the whole recurrence - one lookup and one addition per number, against a loop over bits for each."
+   },
+   {
+    "q": "How does the Kernighan relation differ?",
+    "a": "It uses the identity that i & (i - 1) clears the lowest SET bit rather than the lowest bit position, landing on a smaller number with exactly one fewer set bit - so the count is that entry plus one. Both are O(1) per number; Kernighan's is the same trick used to count bits in a single number in as many steps as there are set bits, rather than as many as there are bit positions. Having both and showing they agree is cheap insurance against misremembering either."
+   },
+   {
+    "q": "Would you use any of this in production?",
+    "a": "No - for a single number, System.Numerics.BitOperations.PopCount maps to a hardware instruction on modern CPUs and beats anything written by hand. For the whole range zero to n the DP is still the right shape, since it avoids recomputation, but you would call the intrinsic if you only needed scattered values. The question is about recognising the overlapping-subproblem structure in something that looks purely bitwise."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Hard",
+  "question": "Find the minimum number of transformations between two words using a dictionary.",
+  "answer": "**Approach**\n\nBidirectional BFS over word states. Expanding from both ends and meeting in the middle roughly square-roots the number of states explored.\n\n**Logic**\n\nThe branching factor is the word length times the alphabet size, so the frontier grows fast — a unidirectional BFS of depth d explores b^d states, while meeting in the middle explores about 2·b^(d/2).\n\nThe implementation detail that makes it work: always expand the *smaller* frontier. Without that, one side can balloon and the saving evaporates.\n\nNeighbours are generated by substitution rather than by comparing against every dictionary word, which is the same generate-versus-compare choice as in the word-chain problem.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int LadderLength(string start, string target, IList<string> dictionary)\n    {\n        var words = new HashSet<string>(dictionary);\n        if (!words.Contains(target)) return 0;\n        if (start == target) return 1;   // the word itself is a sequence of length one\n\n        var front = new HashSet<string> { start };\n        var back = new HashSet<string> { target };\n        var visited = new HashSet<string> { start, target };\n\n        int steps = 1;\n\n        while (front.Count > 0 && back.Count > 0)\n        {\n            // Always expand the SMALLER frontier, or the saving disappears.\n            if (front.Count > back.Count) (front, back) = (back, front);\n\n            var next = new HashSet<string>();\n\n            foreach (string word in front)\n            {\n                var letters = word.ToCharArray();\n\n                for (int i = 0; i < letters.Length; i++)\n                {\n                    char original = letters[i];\n\n                    for (char c = 'a'; c <= 'z'; c++)\n                    {\n                        if (c == original) continue;\n\n                        letters[i] = c;\n                        string candidate = new string(letters);\n\n                        // The frontiers touching means the two halves join here.\n                        if (back.Contains(candidate)) return steps + 1;\n\n                        if (words.Contains(candidate) && visited.Add(candidate))\n                            next.Add(candidate);\n                    }\n\n                    letters[i] = original;\n                }\n            }\n\n            front = next;\n            steps++;\n        }\n\n        return 0;\n    }\n\n    public static void Main()\n    {\n        var dictionary = new List<string> { \"hot\", \"dot\", \"dog\", \"lot\", \"log\", \"cog\" };\n\n        Console.WriteLine(LadderLength(\"hit\", \"cog\", dictionary));\n        Console.WriteLine(LadderLength(\"hit\", \"cog\",\n            new List<string> { \"hot\", \"dot\", \"dog\", \"lot\", \"log\" }));   // target absent\n\n        Console.WriteLine(LadderLength(\"a\", \"c\", new List<string> { \"a\", \"b\", \"c\" }));\n        Console.WriteLine(LadderLength(\"hot\", \"hot\", new List<string> { \"hot\" }));\n        Console.WriteLine(LadderLength(\"hit\", \"hot\", dictionary));\n\n        // No route: the dictionary has no bridging word.\n        Console.WriteLine(LadderLength(\"abc\", \"xyz\", new List<string> { \"abc\", \"xyz\" }));\n    }\n}\n```\n\n**Output**\n\n```\n5\n0\n2\n1\n2\n0\n```",
+  "tags": [
+   "dsa",
+   "bfs",
+   "bidirectional",
+   "word-ladder",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does searching from both ends help so much?",
+    "a": "Because BFS explores exponentially in depth - roughly b to the d states for branching factor b. Two searches of depth d/2 explore about 2 times b to the d/2, which for a branching factor of 25 and a depth of six is thousands of states instead of hundreds of millions. The meeting point is where the frontiers touch. It is the standard technique whenever both endpoints are known and the graph is undirected."
+   },
+   {
+    "q": "Why always expand the smaller frontier?",
+    "a": "Because the cost of a level is proportional to the frontier size, and the two sides rarely grow symmetrically - a start word in a dense part of the dictionary can balloon while the other side stays small. Swapping so the smaller one expands keeps both sides balanced and preserves the square-root saving. Without it, bidirectional search can degrade to little better than the unidirectional version."
+   },
+   {
+    "q": "Why generate neighbours rather than scan the dictionary?",
+    "a": "Because a word of length L has 25L neighbours by substitution, each checkable with one hash lookup, whereas scanning the dictionary is O(size times L) per expansion. For a dictionary of thousands of words and short words, generating wins decisively. The crossover is when the words get long - a fifty-letter word has 1250 candidates - at which point a precomputed bucket map keyed by wildcard patterns is the better structure."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Hard",
+  "question": "Count the distinct ways to decode a digit string into letters, including wildcards.",
+  "answer": "**Approach**\n\nLinear DP over prefixes. Each position can be decoded as one digit or, combined with the previous digit, as two — so the count is the sum of the two preceding counts, filtered by validity.\n\n**Logic**\n\nThe shape is Fibonacci-like, but with validity conditions that kill most of the terms: a single zero decodes to nothing, and a two-digit group must fall between 10 and 26.\n\nThe wildcard variant multiplies rather than adds: a star can be any of nine digits, and the two-digit combinations it participates in must be counted by how many of the 1-26 range they cover.\n\nThe modulus is applied at each step to keep counts bounded.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private const long Modulus = 1_000_000_007;\n\n    public static long NumDecodings(string digits)\n    {\n        if (string.IsNullOrEmpty(digits)) return 0;\n\n        long twoBack = 1, oneBack = digits[0] == '0' ? 0 : 1;\n\n        for (int i = 1; i < digits.Length; i++)\n        {\n            long current = 0;\n\n            // Single digit: anything but zero.\n            if (digits[i] != '0') current += oneBack;\n\n            // Two digits: must land in 10..26, and may not have a leading zero.\n            int pair = (digits[i - 1] - '0') * 10 + (digits[i] - '0');\n            if (pair >= 10 && pair <= 26) current += twoBack;\n\n            twoBack = oneBack;\n            oneBack = current % Modulus;\n        }\n\n        return oneBack;\n    }\n\n    // The wildcard variant: '*' stands for any digit 1-9.\n    public static long NumDecodingsWithStars(string digits)\n    {\n        if (string.IsNullOrEmpty(digits)) return 0;\n\n        long twoBack = 1;\n        long oneBack = digits[0] == '*' ? 9 : digits[0] == '0' ? 0 : 1;\n\n        for (int i = 1; i < digits.Length; i++)\n        {\n            char previous = digits[i - 1], current = digits[i];\n            long ways = 0;\n\n            // Single.\n            if (current == '*') ways += 9 * oneBack;\n            else if (current != '0') ways += oneBack;\n\n            // Pair.\n            if (previous == '*' && current == '*') ways += 15 * twoBack;       // 11-19, 21-26\n            else if (previous == '*') ways += (current <= '6' ? 2 : 1) * twoBack;\n            else if (current == '*')\n            {\n                if (previous == '1') ways += 9 * twoBack;\n                else if (previous == '2') ways += 6 * twoBack;\n            }\n            else\n            {\n                int pair = (previous - '0') * 10 + (current - '0');\n                if (pair >= 10 && pair <= 26) ways += twoBack;\n            }\n\n            twoBack = oneBack;\n            oneBack = ways % Modulus;\n        }\n\n        return oneBack;\n    }\n\n    public static void Main()\n    {\n        foreach (string s in new[] { \"12\", \"226\", \"0\", \"06\", \"10\", \"2101\", \"111111\" })\n            Console.WriteLine($\"\\\"{s}\\\": {NumDecodings(s)}\");\n\n        Console.WriteLine();\n\n        foreach (string s in new[] { \"*\", \"1*\", \"2*\", \"**\", \"*0\", \"7*\" })\n            Console.WriteLine($\"\\\"{s}\\\": {NumDecodingsWithStars(s)}\");\n    }\n}\n```\n\n**Output**\n\n```\n\"12\": 2\n\"226\": 3\n\"0\": 0\n\"06\": 0\n\"10\": 1\n\"2101\": 1\n\"111111\": 13\n\n\"*\": 9\n\"1*\": 18\n\"2*\": 15\n\"**\": 96\n\"*0\": 2\n\"7*\": 9\n```",
+  "tags": [
+   "dsa",
+   "dp",
+   "decoding",
+   "wildcards",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the recurrence look like Fibonacci but usually give much smaller numbers?",
+    "a": "Because the structure - each position drawing on the two before it - is the same, but both terms are conditional. A zero kills the single-digit term entirely, and a pair outside 10 to 26 kills the two-digit term, so most strings lose one branch at most positions. '111111' gives 13, the seventh Fibonacci number, because every pair is valid; '2101' gives 1 because the zeros force a unique parse. Recognising the shape and then the constraints that prune it is the answer."
+   },
+   {
+    "q": "Why is '*0' two and not more?",
+    "a": "Because the zero cannot stand alone as a letter, so the only parses are two-digit groups - and of the nine values the star can take, only 10 and 20 are in the 1-26 range. Hence two. That case is worth tracing because it is where a naive wildcard implementation, which multiplies by nine for the single-digit branch without checking the following zero, gives a badly wrong answer."
+   },
+   {
+    "q": "Why apply the modulus during the loop?",
+    "a": "Because the count grows exponentially with the string length - a long run of ones follows Fibonacci and overflows long within about ninety characters, and the wildcard version grows far faster. Reducing at each step keeps every value bounded, and since only addition and multiplication are involved the modular result is exact. Applying it only at the end would be too late; the intermediates have already wrapped."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Matrix",
+  "difficulty": "Medium",
+  "question": "Set entire rows and columns to zero where a zero appears, using constant extra space.",
+  "answer": "**Approach**\n\nUse the first row and first column as the marker storage, with one extra flag for the overlap.\n\n**Logic**\n\nThe obvious solution allocates a row-sized and a column-sized array of flags. Storing those flags inside the matrix itself removes the allocation — but the cell where the first row meets the first column would have to mean two things at once, hence the single extra boolean.\n\nThe ordering is what makes it correct: mark first, then apply from the bottom-right inward, so the markers are not overwritten before they are read. Applying the first row and column last is part of the same requirement.\n\nO(rows × cols) time, O(1) extra space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static void SetZeroes(int[][] matrix)\n    {\n        if (matrix == null || matrix.Length == 0) return;\n\n        int rows = matrix.Length, cols = matrix[0].Length;\n\n        // The overlap cell cannot encode both, so the first column needs its own flag.\n        bool firstColumnHasZero = false;\n\n        for (int r = 0; r < rows; r++)\n        {\n            if (matrix[r][0] == 0) firstColumnHasZero = true;\n\n            for (int c = 1; c < cols; c++)\n                if (matrix[r][c] == 0) { matrix[r][0] = 0; matrix[0][c] = 0; }\n        }\n\n        // Apply inward-out: the markers live in row 0 and column 0, so do those last.\n        for (int r = rows - 1; r >= 0; r--)\n        {\n            for (int c = cols - 1; c >= 1; c--)\n                if (matrix[r][0] == 0 || matrix[0][c] == 0) matrix[r][c] = 0;\n\n            if (firstColumnHasZero) matrix[r][0] = 0;\n        }\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    private static void Show(int[][] m) =>\n        Console.WriteLine(string.Join(\" | \", m.Select(r => string.Join(\",\", r))));\n\n    public static void Main()\n    {\n        var a = Grid(new[] { 1, 1, 1 }, new[] { 1, 0, 1 }, new[] { 1, 1, 1 });\n        SetZeroes(a); Show(a);\n\n        var b = Grid(new[] { 0, 1, 2, 0 }, new[] { 3, 4, 5, 2 }, new[] { 1, 3, 1, 5 });\n        SetZeroes(b); Show(b);\n\n        // A zero only in the first row.\n        var c = Grid(new[] { 1, 0, 3 }, new[] { 4, 5, 6 });\n        SetZeroes(c); Show(c);\n\n        // A zero only in the first column: this is what the extra flag exists for.\n        var d = Grid(new[] { 0, 2 }, new[] { 3, 4 });\n        SetZeroes(d); Show(d);\n\n        var e = Grid(new[] { 1, 2 }, new[] { 3, 4 });\n        SetZeroes(e); Show(e);\n\n        var f = Grid(new[] { 0 });\n        SetZeroes(f); Show(f);\n    }\n}\n```\n\n**Output**\n\n```\n1,0,1 | 0,0,0 | 1,0,1\n0,0,0,0 | 0,4,5,0 | 0,3,1,0\n0,0,0 | 4,0,6\n0,0 | 0,4\n1,2 | 3,4\n0\n```",
+  "tags": [
+   "dsa",
+   "matrix",
+   "in-place",
+   "markers",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is one extra boolean unavoidable?",
+    "a": "Because the cell at row zero, column zero would have to record both 'the first row contains a zero' and 'the first column contains a zero', and a single cell cannot hold two independent bits of information. Splitting one of them into a separate variable resolves the collision. It is a nice illustration that O(1) space does not mean literally zero extra state - it means an amount independent of the input size."
+   },
+   {
+    "q": "Why does the application pass run backwards?",
+    "a": "Because the markers live in the first row and first column, so zeroing those early destroys the information the remaining cells still need. Processing from the bottom-right inward reads every marker before it can be overwritten, and handling the first column at the end of each row keeps the same discipline. Running forwards produces a matrix with far too many zeros - the classic symptom of this bug."
+   },
+   {
+    "q": "Would you ship this or the version with two flag arrays?",
+    "a": "Usually the flag arrays, which are O(rows + cols) space - negligible next to the matrix itself - and dramatically easier to read and to prove correct. The in-place version earns its place when the matrix is enormous and the allocation genuinely matters, or when the interviewer asks for constant space explicitly. Its cost is real: it mutates markers into the data and depends on a subtle traversal order that a later maintainer can easily break."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Hard",
+  "question": "Count the paths in a binary tree summing to a target, where paths need not start at the root.",
+  "answer": "**Approach**\n\nPrefix sums along the root-to-node path, stored in a map, with the counts removed on the way back up.\n\n**Logic**\n\nThis is the subarray-sum-equals-k technique lifted onto a tree. Any downward path is the difference of two root-prefix sums, so seeing a prefix equal to the current sum minus the target means a qualifying path ends here.\n\nThe backtracking step is what makes it correct: a prefix must only be visible to nodes on the same root-to-node path, so its count is decremented when the recursion leaves that node. Omitting it counts paths that jump between branches.\n\nSeeding the map with a zero prefix is what counts paths starting at the root.\n\nO(n) against O(n²) for the naive every-node-as-a-start approach.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static int PathSum(TreeNode root, long target)\n    {\n        // The empty prefix: this is what counts paths starting at the root.\n        var prefixCounts = new Dictionary<long, int> { [0] = 1 };\n\n        return Walk(root, 0, target, prefixCounts);\n    }\n\n    private static int Walk(TreeNode node, long running, long target,\n                            Dictionary<long, int> prefixCounts)\n    {\n        if (node == null) return 0;\n\n        running += node.val;\n\n        int found = prefixCounts.GetValueOrDefault(running - target);\n\n        prefixCounts[running] = prefixCounts.GetValueOrDefault(running) + 1;\n\n        found += Walk(node.left, running, target, prefixCounts);\n        found += Walk(node.right, running, target, prefixCounts);\n\n        // Backtrack: this prefix is only valid for nodes on this root-to-node path.\n        prefixCounts[running]--;\n\n        return found;\n    }\n\n    public static void Main()\n    {\n        var a = new TreeNode(10)\n        {\n            left = new TreeNode(5)\n            {\n                left = new TreeNode(3) { left = new TreeNode(3), right = new TreeNode(-2) },\n                right = new TreeNode(2) { right = new TreeNode(1) }\n            },\n            right = new TreeNode(-3) { right = new TreeNode(11) }\n        };\n        Console.WriteLine(PathSum(a, 8));\n\n        var b = new TreeNode(1) { left = new TreeNode(2), right = new TreeNode(3) };\n        Console.WriteLine(PathSum(b, 3));\n\n        Console.WriteLine(PathSum(new TreeNode(5), 5));\n        Console.WriteLine(PathSum(null, 0));\n\n        // Zeros: each contributes a distinct path.\n        var zeros = new TreeNode(0) { left = new TreeNode(0) };\n        Console.WriteLine(PathSum(zeros, 0));\n\n        // Negative target.\n        var negatives = new TreeNode(-2) { right = new TreeNode(-3) };\n        Console.WriteLine(PathSum(negatives, -5));\n    }\n}\n```\n\n**Output**\n\n```\n3\n2\n1\n0\n3\n1\n```",
+  "tags": [
+   "dsa",
+   "trees",
+   "prefix-sum",
+   "backtracking",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must the prefix count be decremented on the way back up?",
+    "a": "Because a prefix sum is only meaningful for nodes below it on the same root-to-node path - once the recursion returns, that node is no longer an ancestor and its prefix must not be visible to a sibling branch. Without the decrement, paths that jump across the tree are counted, which is not a path at all. It is the tree equivalent of scoping, and it is the single line that distinguishes this from the array version."
+   },
+   {
+    "q": "Why seed the map with a zero prefix?",
+    "a": "Because a qualifying path starting at the root has no earlier prefix to subtract from, and the notional empty prefix has a sum of zero. Without the seed, every path beginning at the root is missed. It is the same off-by-one as in subarray-sum-equals-k, and the single-node tree whose value equals the target is the smallest case that exposes it."
+   },
+   {
+    "q": "What does the naive approach cost?",
+    "a": "Treating every node as a possible start and walking down from it is O(n squared) in general and O(n times height) more precisely - fine for a balanced tree of moderate size, quadratic for a skewed one. The prefix map does it in one traversal, O(n). For a small tree the naive version is easier to write and to justify, so it is a reasonable first answer as long as you can say what it costs and how to improve it."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Greedy",
+  "difficulty": "Medium",
+  "question": "Partition a string so that each letter appears in at most one part, maximising the number of parts.",
+  "answer": "**Approach**\n\nRecord the last index of every character, then sweep extending the current part's end to the furthest last-index seen. Close a part when the scan reaches that end.\n\n**Logic**\n\nA part must extend at least to the last occurrence of every character it contains — otherwise that letter appears in two parts. So the part's end is the maximum last-index over everything included so far.\n\nClosing as soon as the scan reaches that boundary is what maximises the number of parts: extending further would be legal but would merge parts that could have been separate.\n\nO(n) with two passes.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<int> PartitionLabels(string s)\n    {\n        var sizes = new List<int>();\n        if (string.IsNullOrEmpty(s)) return sizes;\n\n        var lastIndex = new Dictionary<char, int>();\n        for (int i = 0; i < s.Length; i++) lastIndex[s[i]] = i;\n\n        int start = 0, end = 0;\n\n        for (int i = 0; i < s.Length; i++)\n        {\n            // The part must reach the last occurrence of everything it contains.\n            end = Math.Max(end, lastIndex[s[i]]);\n\n            if (i != end) continue;\n\n            sizes.Add(end - start + 1);   // closing here maximises the part count\n            start = i + 1;\n        }\n\n        return sizes;\n    }\n\n    // Verify the property: no letter may span two parts.\n    private static bool NoLetterSpansParts(string s, IList<int> sizes)\n    {\n        if (sizes.Sum() != s.Length) return false;\n\n        var seen = new HashSet<char>();\n        int at = 0;\n\n        foreach (int size in sizes)\n        {\n            var part = s.Substring(at, size);\n            foreach (char c in part) if (seen.Contains(c)) return false;\n            foreach (char c in part) seen.Add(c);\n            at += size;\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        foreach (string s in new[] { \"ababcbacadefegdehijhklij\", \"eccbbbbdec\", \"abc\", \"aaa\", \"a\", \"\" })\n        {\n            var sizes = PartitionLabels(s);\n\n            Console.WriteLine($\"\\\"{s}\\\" -> [{string.Join(\",\", sizes)}] \" +\n                              $\"valid: {NoLetterSpansParts(s, sizes)}\");\n        }\n    }\n}\n```\n\n**Output**\n\n```\n\"ababcbacadefegdehijhklij\" -> [9,7,8] valid: True\n\"eccbbbbdec\" -> [10] valid: True\n\"abc\" -> [1,1,1] valid: True\n\"aaa\" -> [3] valid: True\n\"a\" -> [1] valid: True\n\"\" -> [] valid: True\n```",
+  "tags": [
+   "dsa",
+   "greedy",
+   "strings",
+   "last-occurrence",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is closing at the first opportunity optimal?",
+    "a": "Because a part cannot end before the last occurrence of any letter it contains, so the computed end is the earliest legal boundary. Ending there and starting a new part can only increase the count - extending further merges what could have been two parts. So the greedy choice is forced rather than merely reasonable, which is what makes it provably optimal rather than a heuristic."
+   },
+   {
+    "q": "Why does the end pointer need a running maximum?",
+    "a": "Because including a new character can push the boundary further right, and it must never move back - a letter encountered early may have its last occurrence beyond one seen later. Taking the maximum keeps the constraint from every included character. Assigning rather than maximising would let the boundary retreat and would split a part in the middle of a letter's span, which is exactly the failure the validity check catches."
+   },
+   {
+    "q": "Why does the test verify a property instead of expected sizes?",
+    "a": "Because the requirement is that no letter spans two parts and the parts cover the string - that is what correctness means here, and checking it directly tests the specification. Comparing against hand-computed sizes tests my arithmetic as much as the code. The property check would also catch a subtly wrong greedy that happens to produce the right number of parts on the sample input."
+   }
+  ]
  }
 ]
