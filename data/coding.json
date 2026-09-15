@@ -17449,5 +17449,229 @@
     "a": "Because any common subsequence is a subsequence of all three, so it is certainly one of the shortest string's - enumerating that one covers every candidate while minimising the exponential. It is still 2 to the length, so it only runs on the small cases, but it is an independent derivation rather than a second copy of the DP. For a recurrence with three branches that is worth having, since an omitted branch is silent."
    }
   ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Design a skip list supporting search, insert and delete.",
+  "answer": "**Approach**\n\nA tower of sorted linked lists. Each level skips roughly twice as far as the one below, so a search descends and advances rather than walking every node.\n\n**Logic**\n\nThe level of a new node is chosen randomly — heads at probability one half — which gives the expected logarithmic height without any rebalancing logic. That is the whole appeal: a balanced BST's bounds with none of the rotation code.\n\nThe search collects the rightmost node below the target at every level, and those become the splice points for insertion and deletion, so all three operations share one descent.\n\nO(log n) expected for all operations.\n\nThe test asserts ordering and membership invariants rather than a seeded structure, since the levels are random.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class SkipList\n{\n    private const int MaxLevel = 16;\n\n    private class Node\n    {\n        public int Value;\n        public readonly Node[] Next;\n        public Node(int value, int level) { Value = value; Next = new Node[level]; }\n    }\n\n    private readonly Node _head = new(int.MinValue, MaxLevel);\n    private readonly Random _random;\n    private int _levels = 1;\n\n    public SkipList(Random random) { _random = random; }\n\n    // Heads at one half: expected logarithmic height, no rebalancing needed.\n    private int RandomLevel()\n    {\n        int level = 1;\n        while (level < MaxLevel && _random.Next(2) == 0) level++;\n        return level;\n    }\n\n    // One descent serves search, insert and delete.\n    private Node[] FindPredecessors(int value)\n    {\n        var before = new Node[MaxLevel];\n        var node = _head;\n\n        for (int level = _levels - 1; level >= 0; level--)\n        {\n            while (node.Next[level] != null && node.Next[level].Value < value)\n                node = node.Next[level];\n\n            before[level] = node;\n        }\n\n        return before;\n    }\n\n    public bool Contains(int value)\n    {\n        var after = FindPredecessors(value)[0].Next[0];\n        return after != null && after.Value == value;\n    }\n\n    public void Insert(int value)\n    {\n        var before = FindPredecessors(value);\n        int level = RandomLevel();\n\n        for (int i = _levels; i < level; i++) before[i] = _head;\n        _levels = Math.Max(_levels, level);\n\n        var fresh = new Node(value, level);\n\n        for (int i = 0; i < level; i++)\n        {\n            fresh.Next[i] = before[i].Next[i];\n            before[i].Next[i] = fresh;\n        }\n    }\n\n    public bool Remove(int value)\n    {\n        var before = FindPredecessors(value);\n        var target = before[0].Next[0];\n\n        if (target == null || target.Value != value) return false;\n\n        for (int i = 0; i < _levels; i++)\n            if (before[i].Next[i] == target) before[i].Next[i] = target.Next[i];\n\n        while (_levels > 1 && _head.Next[_levels - 1] == null) _levels--;\n\n        return true;\n    }\n\n    public IList<int> ToList()\n    {\n        var values = new List<int>();\n        for (var n = _head.Next[0]; n != null; n = n.Next[0]) values.Add(n.Value);\n        return values;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var list = new SkipList(new Random(8642));\n\n        foreach (int v in new[] { 5, 1, 9, 3, 7, 3 }) list.Insert(v);\n\n        Console.WriteLine($\"sorted: {string.Join(\",\", list.ToList())}\");\n        Console.WriteLine($\"contains 7: {list.Contains(7)}, contains 4: {list.Contains(4)}\");\n        Console.WriteLine($\"remove 9: {list.Remove(9)}, remove 4: {list.Remove(4)}\");\n        Console.WriteLine($\"after removal: {string.Join(\",\", list.ToList())}\");\n\n        // Duplicates are stored separately, so removing one leaves the other.\n        Console.WriteLine($\"remove 3: {list.Remove(3)}, still contains 3: {list.Contains(3)}\");\n\n        // Randomised: assert the INVARIANTS, since the tower heights are random.\n        var big = new SkipList(new Random(13579));\n        var mirror = new SortedSet<int>();\n        var random = new Random(24680);\n\n        for (int step = 0; step < 4000; step++)\n        {\n            int value = random.Next(0, 500);\n\n            // Insert only when absent, so the comparison against a SET is like for like:\n            // the skip list itself is a multiset and would otherwise keep extra copies.\n            if (random.Next(2) == 0)\n            {\n                if (!big.Contains(value)) { big.Insert(value); mirror.Add(value); }\n            }\n            else { big.Remove(value); mirror.Remove(value); }\n        }\n\n        var produced = big.ToList().Distinct().ToList();\n        bool sorted = produced.Zip(produced.Skip(1), (a, b) => a <= b).All(x => x);\n\n        Console.WriteLine($\"4000 operations - output sorted: {sorted}\");\n        Console.WriteLine($\"membership matches a SortedSet: \" +\n            $\"{produced.SequenceEqual(mirror)}\");\n    }\n}\n```\n\n**Output**\n\n```\nsorted: 1,3,3,5,7,9\ncontains 7: True, contains 4: False\nremove 9: True, remove 4: False\nafter removal: 1,3,3,5,7\nremove 3: True, still contains 3: True\n4000 operations - output sorted: True\nmembership matches a SortedSet: True\n```",
+  "tags": [
+   "dsa",
+   "skip-list",
+   "randomised",
+   "probabilistic-balance",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is a skip list attractive compared with a balanced BST?",
+    "a": "Because it achieves the same expected O(log n) bounds with no rebalancing logic at all - no rotations, no colour invariants, no case analysis on deletion. The balance is probabilistic, coming from the coin-flip level assignment, and the constant factors are competitive. It is also far easier to make lock-free for concurrent use, which is why it appears in LevelDB, Redis sorted sets and several concurrent map implementations."
+   },
+   {
+    "q": "Why does one descent serve all three operations?",
+    "a": "Because insertion and deletion both need the rightmost node below the target at every level - those are exactly the nodes whose forward pointers must change - and the search naturally visits them on the way down. Collecting them into an array during the descent means no second traversal. That shared predecessor array is the core of the implementation; get it right and all three operations are a few lines each."
+   },
+   {
+    "q": "Why does the test assert invariants rather than a fixed structure?",
+    "a": "Because the tower heights come from a random number generator, so the internal shape differs between runs and between .NET versions - pinning it would test the runtime, not the structure. What the skip list promises is sorted iteration and correct membership, so the test checks those against a SortedSet over four thousand mixed operations. That is the same discipline as testing a shuffle by checking it produces a permutation."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Hard",
+  "question": "Compute the minimum spanning tree weight of a weighted graph.",
+  "answer": "**Approach**\n\nKruskal's algorithm: sort the edges by weight and add each one whose endpoints are not already connected, using union-find to test that in near-constant time.\n\n**Logic**\n\nThe cut property is what justifies the greedy — the lightest edge crossing any partition of the vertices belongs to some minimum spanning tree, so taking edges in weight order and skipping those that would close a cycle is safe.\n\nUnion-find is what makes the cycle test cheap. Without it, checking connectivity per edge would be a traversal and the algorithm would be O(E·V).\n\nA disconnected graph has no spanning tree at all, which the edge count detects.\n\nO(E log E), dominated by the sort.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    private class DisjointSet\n    {\n        private readonly int[] _parent, _rank;\n        public int Components { get; private set; }\n\n        public DisjointSet(int size)\n        {\n            _parent = new int[size];\n            _rank = new int[size];\n            Components = size;\n            for (int i = 0; i < size; i++) _parent[i] = i;\n        }\n\n        public int Find(int x)\n        {\n            while (_parent[x] != x) { _parent[x] = _parent[_parent[x]]; x = _parent[x]; }\n            return x;\n        }\n\n        public bool Union(int a, int b)\n        {\n            int rootA = Find(a), rootB = Find(b);\n            if (rootA == rootB) return false;   // adding this edge would close a cycle\n\n            if (_rank[rootA] < _rank[rootB]) (rootA, rootB) = (rootB, rootA);\n            _parent[rootB] = rootA;\n            if (_rank[rootA] == _rank[rootB]) _rank[rootA]++;\n\n            Components--;\n            return true;\n        }\n    }\n\n    public static (long Weight, int EdgesUsed, bool Connected) MinimumSpanningTree(\n        int n, int[][] edges)\n    {\n        if (n == 0) return (0, 0, true);\n\n        var sets = new DisjointSet(n);\n        long total = 0;\n        int used = 0;\n\n        // Lightest first: the cut property makes this safe.\n        foreach (var edge in edges.OrderBy(e => e[2]))\n        {\n            if (!sets.Union(edge[0], edge[1])) continue;\n\n            total += edge[2];\n            used++;\n\n            if (used == n - 1) break;   // a spanning tree has exactly n-1 edges\n        }\n\n        return (total, used, sets.Components == 1);\n    }\n\n    private static int[][] Edges(params int[][] e) => e;\n\n    private static void Report(int n, int[][] edges)\n    {\n        var (weight, used, connected) = MinimumSpanningTree(n, edges);\n\n        Console.WriteLine(connected\n            ? $\"n={n}: weight {weight} using {used} edge(s)\"\n            : $\"n={n}: disconnected - no spanning tree (forest weight {weight})\");\n    }\n\n    public static void Main()\n    {\n        Report(4, Edges(\n            new[] { 0, 1, 10 }, new[] { 0, 2, 6 }, new[] { 0, 3, 5 },\n            new[] { 1, 3, 15 }, new[] { 2, 3, 4 }));\n\n        Report(3, Edges(new[] { 0, 1, 1 }, new[] { 1, 2, 2 }, new[] { 0, 2, 3 }));\n        Report(1, Array.Empty<int[]>());\n        Report(3, Edges(new[] { 0, 1, 5 }));                    // node 2 is isolated\n        Report(2, Edges(new[] { 0, 1, 7 }, new[] { 0, 1, 3 }));  // parallel edges\n\n        // Equal weights: any spanning tree of that weight is correct.\n        Report(4, Edges(\n            new[] { 0, 1, 1 }, new[] { 1, 2, 1 }, new[] { 2, 3, 1 }, new[] { 3, 0, 1 }));\n    }\n}\n```\n\n**Output**\n\n```\nn=4: weight 19 using 3 edge(s)\nn=3: weight 3 using 2 edge(s)\nn=1: weight 0 using 0 edge(s)\nn=3: disconnected - no spanning tree (forest weight 5)\nn=2: weight 3 using 1 edge(s)\nn=4: weight 3 using 3 edge(s)\n```",
+  "tags": [
+   "dsa",
+   "kruskal",
+   "union-find",
+   "mst",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What is the cut property and why does it justify the greedy?",
+    "a": "It says that for any partition of the vertices into two sets, the lightest edge crossing between them belongs to some minimum spanning tree. Processing edges in increasing weight means that whenever an edge joins two components, it is the lightest edge crossing that cut among those still available - so taking it is safe. Skipping edges within a component is equally safe, since they would close a cycle and add weight without connecting anything new."
+   },
+   {
+    "q": "When would you use Prim's algorithm instead?",
+    "a": "On a dense graph, where Prim's with an adjacency matrix is O(V squared) and beats Kruskal's O(E log E) once E approaches V squared. Prim's grows a single tree from a start vertex using a priority queue, so it also suits the case where the graph is given as an adjacency structure rather than an edge list. Kruskal's wins on sparse graphs and is the natural choice when the edges arrive as a list, which is the usual problem format."
+   },
+   {
+    "q": "What does the early exit at n-1 edges buy?",
+    "a": "It stops the scan as soon as a spanning tree is complete, since any tree on n vertices has exactly n-1 edges - no later edge could be added without a cycle. On a dense graph that can skip most of the sorted list. It is only an optimisation, not a correctness matter, but it also documents the structural fact, and the component count is what actually detects the disconnected case where that target is never reached."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Compress a string using run-length encoding in place.",
+  "answer": "**Approach**\n\nTwo indices over the same array: one reading runs, one writing the compressed form. The write pointer never overtakes the read pointer, which is what makes it safe in place.\n\n**Logic**\n\nThe safety argument matters. A run of length one writes one character and consumes one, so the two pointers stay level; any longer run writes fewer characters than it consumes. So the write index is always at or behind the read index and can never clobber unread data.\n\nThe count must be written digit by digit, and a run of one writes no count at all — which is the case that makes the output shorter than a naive character-plus-count encoding.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Compress(char[] chars)\n    {\n        int write = 0, read = 0;\n\n        while (read < chars.Length)\n        {\n            char current = chars[read];\n            int runLength = 0;\n\n            while (read < chars.Length && chars[read] == current) { read++; runLength++; }\n\n            // Writing is never ahead of reading: a run of one breaks even, longer runs gain.\n            chars[write++] = current;\n\n            if (runLength == 1) continue;   // a count of one is omitted\n\n            foreach (char digit in runLength.ToString()) chars[write++] = digit;\n        }\n\n        return write;\n    }\n\n    private static void Show(char[] chars)\n    {\n        int length = Compress(chars);\n        Console.WriteLine($\"[{new string(chars, 0, length)}] length {length}\");\n    }\n\n    public static void Main()\n    {\n        Show(new[] { 'a', 'a', 'b', 'b', 'c', 'c', 'c' });\n        Show(new[] { 'a' });\n        Show(new[] { 'a', 'b', 'c' });                       // no run gains anything\n        Show(new char[12].Select(_ => 'a').ToArray());       // a two-digit count\n        Show(Array.Empty<char>());\n        Show(new[] { 'a', 'a', 'a', 'b', 'b', 'a', 'a' });   // the same letter twice over\n    }\n}\n```\n\n**Output**\n\n```\n[a2b2c3] length 6\n[a] length 1\n[abc] length 3\n[a12] length 3\n[] length 0\n[a3b2a2] length 6\n```",
+  "tags": [
+   "dsa",
+   "strings",
+   "in-place",
+   "two-pointers",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why can the write pointer never overtake the read pointer?",
+    "a": "Because a run of length one consumes one character and writes one, keeping them level, and any longer run consumes k characters while writing one plus the digits of k - which is fewer for every k of two or more, since even a three-digit count needs a run of at least a hundred. So the write index is always at or behind the read index and cannot clobber data still to be read. That inequality is the whole safety argument for doing it in place."
+   },
+   {
+    "q": "Why is a count of one omitted?",
+    "a": "Because writing it would make the output longer than the input for a string with no repeats - 'abc' would become 'a1b1c1'. Omitting it means the encoding never grows, which is the point of a compression scheme. The cost is that the format is slightly harder to parse, since a character may or may not be followed by digits, but for this problem the decoder is unambiguous because digits never appear as data."
+   },
+   {
+    "q": "When does run-length encoding actually help?",
+    "a": "On data with long runs of identical values - bitmap images with flat regions, fax transmissions, and the row-level encoding inside some columnar database formats. It is useless or harmful on high-entropy data, where runs are rare and the format overhead dominates. That is why real formats pair it with a model that creates runs first, such as the Burrows-Wheeler transform before RLE in bzip2, rather than applying it to raw input."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Hard",
+  "question": "Count the number of valid parenthesis strings that can be formed with n pairs.",
+  "answer": "**Approach**\n\nThe Catalan recurrence: split on where the first opening bracket's partner sits, which divides the string into an inside and a remainder.\n\n**Logic**\n\nThe decomposition is the argument. Every valid string starts with an opening bracket; its matching close splits the rest into what is inside that pair and what follows. Both parts are themselves valid strings, and their sizes sum to n-1 pairs.\n\nThat gives the sum over all splits of the product of the two counts — exactly the Catalan recurrence.\n\nThe generation function is included because the question is often paired with \"now produce them\", and backtracking with the open and close counters is the standard answer.\n\nO(n²) for the count, O(Catalan(n)) output for the generation.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Text;\n\npublic class Solution\n{\n    // Split on where the FIRST bracket's partner sits: inside, then the remainder.\n    public static long CountValid(int pairs)\n    {\n        var counts = new long[pairs + 1];\n        counts[0] = 1;   // the empty string is one valid arrangement\n\n        for (int n = 1; n <= pairs; n++)\n            for (int inside = 0; inside < n; inside++)\n                counts[n] += counts[inside] * counts[n - 1 - inside];\n\n        return counts[pairs];\n    }\n\n    public static IList<string> Generate(int pairs)\n    {\n        var all = new List<string>();\n        var current = new StringBuilder();\n\n        void Build(int opened, int closed)\n        {\n            if (current.Length == pairs * 2) { all.Add(current.ToString()); return; }\n\n            if (opened < pairs)\n            {\n                current.Append('(');\n                Build(opened + 1, closed);\n                current.Length--;\n            }\n\n            // Closing is only legal while it would not go negative.\n            if (closed < opened)\n            {\n                current.Append(')');\n                Build(opened, closed + 1);\n                current.Length--;\n            }\n        }\n\n        Build(0, 0);\n        return all;\n    }\n\n    private static bool IsValid(string s)\n    {\n        int balance = 0;\n\n        foreach (char c in s)\n        {\n            balance += c == '(' ? 1 : -1;\n            if (balance < 0) return false;\n        }\n\n        return balance == 0;\n    }\n\n    public static void Main()\n    {\n        for (int n = 0; n <= 6; n++)\n        {\n            var generated = Generate(n);\n            bool allValid = true;\n            foreach (string s in generated) if (!IsValid(s)) allValid = false;\n\n            Console.WriteLine($\"n={n}: count {CountValid(n)}, generated {generated.Count}, \" +\n                              $\"all valid {allValid}, agree {CountValid(n) == generated.Count}\");\n        }\n\n        Console.WriteLine(string.Join(\" \", Generate(3)));\n        Console.WriteLine($\"n=15: {CountValid(15)}\");\n    }\n}\n```\n\n**Output**\n\n```\nn=0: count 1, generated 1, all valid True, agree True\nn=1: count 1, generated 1, all valid True, agree True\nn=2: count 2, generated 2, all valid True, agree True\nn=3: count 5, generated 5, all valid True, agree True\nn=4: count 14, generated 14, all valid True, agree True\nn=5: count 42, generated 42, all valid True, agree True\nn=6: count 132, generated 132, all valid True, agree True\n((())) (()()) (())() ()(()) ()()()\nn=15: 9694845\n```",
+  "tags": [
+   "dsa",
+   "catalan",
+   "dp",
+   "backtracking",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does splitting on the first bracket's partner give the recurrence?",
+    "a": "Because every valid string begins with an opening bracket, and its matching close is uniquely determined - everything between them is a valid string, and everything after is too. If the inside holds i pairs then the remainder holds n-1-i, so summing the product over every i counts each string exactly once, partitioned by where that first partner sits. That uniqueness is what makes it a partition rather than an overcount."
+   },
+   {
+    "q": "Why is the generation's closing condition closed < opened rather than closed < pairs?",
+    "a": "Because a closing bracket is only legal when there is an unmatched opening one to pair with - otherwise the running balance goes negative and the string is invalid no matter what follows. Bounding by pairs alone would generate invalid strings that then need filtering. Enforcing it at the point of generation prunes those branches entirely, which is why the generated count matches the Catalan number exactly with no rejection step."
+   },
+   {
+    "q": "Where else do the Catalan numbers turn up?",
+    "a": "The same sequence counts binary search tree shapes on n nodes, triangulations of a convex polygon, monotonic lattice paths that stay below the diagonal, and the number of ways to fully parenthesise a product. They all share the split-into-two-independent-parts structure, which is why they satisfy the same recurrence. Recognising the pattern means one derivation answers several apparently unrelated questions."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Find all elements appearing more than a third of the time.",
+  "answer": "**Approach**\n\nThe Boyer-Moore voting algorithm generalised to two candidates, followed by a mandatory verification pass.\n\n**Logic**\n\nThere can be at most two such elements, because three would each need more than a third and together exceed the whole array. That bound is what fixes the number of candidate slots.\n\nThe voting pass pairs off distinct values, and any element exceeding the threshold survives because it cannot be fully cancelled. But the pass alone proves nothing — it always produces candidates, even when none qualifies.\n\nSo the verification is not optional. That is the part most implementations omit.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<int> MajorityOverThird(int[] nums)\n    {\n        var result = new List<int>();\n        if (nums == null || nums.Length == 0) return result;\n\n        // At most two can exceed a third, so two candidate slots suffice.\n        int first = 0, second = 0, firstVotes = 0, secondVotes = 0;\n\n        foreach (int n in nums)\n        {\n            if (firstVotes > 0 && n == first) firstVotes++;\n            else if (secondVotes > 0 && n == second) secondVotes++;\n            else if (firstVotes == 0) { first = n; firstVotes = 1; }\n            else if (secondVotes == 0) { second = n; secondVotes = 1; }\n            else { firstVotes--; secondVotes--; }   // pair off three distinct values\n        }\n\n        // The voting pass always yields candidates, so verification is mandatory.\n        foreach (int candidate in new[] { first, second }.Distinct())\n            if (nums.Count(v => v == candidate) > nums.Length / 3) result.Add(candidate);\n\n        result.Sort();\n        return result;\n    }\n\n    private static IList<int> BruteForce(int[] nums) =>\n        nums.GroupBy(v => v).Where(g => g.Count() > nums.Length / 3)\n            .Select(g => g.Key).OrderBy(v => v).ToList();\n\n    private static void Check(int[] nums)\n    {\n        var fast = MajorityOverThird(nums);\n\n        Console.WriteLine($\"[{string.Join(\",\", nums)}] -> [{string.Join(\",\", fast)}] \" +\n                          $\"agrees {fast.SequenceEqual(BruteForce(nums))}\");\n    }\n\n    public static void Main()\n    {\n        Check(new[] { 3, 2, 3 });\n        Check(new[] { 1 });\n        Check(new[] { 1, 2 });\n        Check(new[] { 1, 2, 3 });            // none qualifies\n        Check(new[] { 2, 2 });\n        Check(new[] { 1, 1, 1, 3, 3, 2, 2, 2 });\n\n        var random = new Random(555);\n        bool agrees = true;\n\n        for (int trial = 0; trial < 300 && agrees; trial++)\n        {\n            var nums = Enumerable.Range(0, random.Next(1, 30))\n                                 .Select(_ => random.Next(0, 5)).ToArray();\n\n            if (!MajorityOverThird(nums).SequenceEqual(BruteForce(nums))) agrees = false;\n        }\n\n        Console.WriteLine($\"300 random arrays agree: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\n[3,2,3] -> [3] agrees True\n[1] -> [1] agrees True\n[1,2] -> [1,2] agrees True\n[1,2,3] -> [] agrees True\n[2,2] -> [2] agrees True\n[1,1,1,3,3,2,2,2] -> [1,2] agrees True\n300 random arrays agree: True\n```",
+  "tags": [
+   "dsa",
+   "boyer-moore",
+   "voting",
+   "verification",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why are two candidate slots exactly right?",
+    "a": "Because three elements each appearing more than a third of the time would together account for more than the whole array, which is impossible - so at most two can qualify. That bound comes from the threshold itself, and it generalises: for more than a k-th of the array, at most k-1 elements qualify and the algorithm needs k-1 slots. Knowing the generalisation is what turns this from a memorised trick into a technique."
+   },
+   {
+    "q": "Why is verification mandatory rather than a safety check?",
+    "a": "Because the voting pass always ends with two candidates regardless of the input - it has no way to report 'none qualify'. Feeding it [1,2,3] leaves candidates that appear once each, well under the threshold. Skipping the count pass therefore returns confident wrong answers on every array without a heavy element, which is most arrays. Elimination narrows; verification decides."
+   },
+   {
+    "q": "Why does the comparison use strictly greater than n over 3?",
+    "a": "Because the problem asks for MORE than a third, so an element appearing exactly a third of the time does not qualify - and integer division truncates, so comparing against nums.Length / 3 with a strict greater-than is the correct expression. Using greater-than-or-equal would admit elements at exactly the boundary in some lengths and not others, giving answers that depend on divisibility. The randomised comparison against grouping is what pins that detail down."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Hard",
+  "question": "Find the largest binary search tree contained within a binary tree.",
+  "answer": "**Approach**\n\nPost-order traversal returning four facts per subtree: whether it is a BST, its size, and its minimum and maximum values. A node forms a BST only when both children do and its value sits strictly between their ranges.\n\n**Logic**\n\nThe range information is what makes the check local. Testing a subtree's validity by scanning it would be O(n) per node and O(n²) overall; returning the extremes lets the parent decide in constant time.\n\nThe bounds must be propagated even from invalid subtrees, or a parent could wrongly accept a child whose interior violates the ordering.\n\nThe empty subtree is a valid BST of size zero, seeded with extremes that make any parent value acceptable.\n\nO(n).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    private readonly record struct Summary(bool IsBst, int Size, long Min, long Max);\n\n    public static int LargestBstSize(TreeNode root) => Examine(root).Size;\n\n    private static Summary Examine(TreeNode node)\n    {\n        // An empty subtree is a valid BST whose extremes accept any parent value.\n        if (node == null) return new Summary(true, 0, long.MaxValue, long.MinValue);\n\n        var left = Examine(node.left);\n        var right = Examine(node.right);\n\n        if (left.IsBst && right.IsBst && left.Max < node.val && node.val < right.Min)\n            return new Summary(true, left.Size + right.Size + 1,\n                               Math.Min(left.Min, node.val), Math.Max(right.Max, node.val));\n\n        // Not a BST here: report the larger child's size and useless extremes.\n        return new Summary(false, Math.Max(left.Size, right.Size), long.MinValue, long.MaxValue);\n    }\n\n    public static void Main()\n    {\n        // The right subtree rooted at 15 is a BST of size 3.\n        var a = new TreeNode(10)\n        {\n            left = new TreeNode(5) { left = new TreeNode(1), right = new TreeNode(8) },\n            right = new TreeNode(15) { left = new TreeNode(7), right = new TreeNode(19) }\n        };\n        Console.WriteLine(LargestBstSize(a));\n\n        // Already a BST: the whole tree counts.\n        var whole = new TreeNode(4)\n        {\n            left = new TreeNode(2) { left = new TreeNode(1), right = new TreeNode(3) },\n            right = new TreeNode(5)\n        };\n        Console.WriteLine(LargestBstSize(whole));\n\n        Console.WriteLine(LargestBstSize(new TreeNode(7)));\n        Console.WriteLine(LargestBstSize(null));\n\n        // Equal values break the strict ordering, so the pair is not a BST.\n        var duplicates = new TreeNode(2) { left = new TreeNode(2) };\n        Console.WriteLine(LargestBstSize(duplicates));\n\n        // Extreme values: the long extremes keep the comparisons honest.\n        var extremes = new TreeNode(0)\n        {\n            left = new TreeNode(int.MinValue),\n            right = new TreeNode(int.MaxValue)\n        };\n        Console.WriteLine(LargestBstSize(extremes));\n    }\n}\n```\n\n**Output**\n\n```\n3\n5\n1\n0\n1\n3\n```",
+  "tags": [
+   "dsa",
+   "trees",
+   "post-order",
+   "bst",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must the subtree extremes be returned rather than recomputed?",
+    "a": "Because a parent needs to know whether its value fits strictly between everything on its left and everything on its right, and scanning each subtree for that would be O(n) per node - quadratic overall. Returning the minimum and maximum lets the parent decide in two comparisons. Bundling several facts into one return value to avoid recomputation is the same technique as the deepest-nodes-subtree problem, and it is what makes these traversals linear."
+   },
+   {
+    "q": "Why are the empty-subtree extremes inverted?",
+    "a": "Because an empty left subtree must not constrain the parent, so its reported maximum has to be smaller than any possible value - long.MinValue - and symmetrically its minimum must be larger than any. That makes the parent's comparisons succeed automatically. Using int extremes would fail on a node holding int.MinValue or int.MaxValue, which the last test exercises deliberately; widening to long puts the sentinels outside the value domain."
+   },
+   {
+    "q": "Why does a duplicate value break the BST?",
+    "a": "Because the comparisons are strict, which encodes a BST with distinct keys - the usual definition for this problem. A tree holding 2 with a left child of 2 therefore reports a largest BST of size one, not two. Some formulations allow duplicates on one side, in which case one comparison becomes non-strict. It is a specification choice, and stating which convention the code implements avoids an argument about an otherwise correct answer."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Bit Manipulation",
+  "difficulty": "Hard",
+  "question": "Add two integers without using the plus or minus operators.",
+  "answer": "**Approach**\n\nXOR gives the sum with the carries dropped; AND shifted left gives the carries. Repeat until no carry remains.\n\n**Logic**\n\nThe decomposition is what binary addition does in hardware: each bit position produces a sum bit and a carry bit, and XOR and AND compute those two in parallel across all positions at once.\n\nThe loop terminates because each iteration pushes the carries one position further left, so after at most 32 rounds they fall off the end.\n\nOverflow during the shift is why the work happens in `unchecked` context — the intermediate carry can exceed int range legitimately, and wrapping is the correct behaviour rather than an error.\n\nO(bits).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int Add(int a, int b)\n    {\n        // XOR is the sum without carries; AND shifted is the carries.\n        unchecked\n        {\n            while (b != 0)\n            {\n                int carry = (a & b) << 1;\n                a ^= b;\n                b = carry;   // each round pushes carries one place left\n            }\n        }\n\n        return a;\n    }\n\n    public static int Subtract(int a, int b) => Add(a, Add(~b, 1));   // two's complement negation\n\n    public static void Main()\n    {\n        (int A, int B)[] cases =\n        {\n            (1, 2), (0, 0), (-1, 1), (-5, -7), (5, -3),\n            (int.MaxValue, 1), (int.MinValue, -1), (123456, 654321)\n        };\n\n        bool allAgree = true;\n\n        foreach (var (a, b) in cases)\n        {\n            int mine = Add(a, b);\n            int expected = unchecked(a + b);\n\n            if (mine != expected) allAgree = false;\n            Console.WriteLine($\"{a} + {b} = {mine} (expected {expected})\");\n        }\n\n        Console.WriteLine($\"all agree with the + operator: {allAgree}\");\n        Console.WriteLine($\"10 - 3 = {Subtract(10, 3)}\");\n        Console.WriteLine($\"3 - 10 = {Subtract(3, 10)}\");\n\n        var random = new Random(2468);\n        bool randomAgree = true;\n\n        for (int trial = 0; trial < 2000 && randomAgree; trial++)\n        {\n            int a = random.Next(int.MinValue, int.MaxValue);\n            int b = random.Next(int.MinValue, int.MaxValue);\n\n            if (Add(a, b) != unchecked(a + b)) randomAgree = false;\n        }\n\n        Console.WriteLine($\"2000 random pairs agree: {randomAgree}\");\n    }\n}\n```\n\n**Output**\n\n```\n1 + 2 = 3 (expected 3)\n0 + 0 = 0 (expected 0)\n-1 + 1 = 0 (expected 0)\n-5 + -7 = -12 (expected -12)\n5 + -3 = 2 (expected 2)\n2147483647 + 1 = -2147483648 (expected -2147483648)\n-2147483648 + -1 = 2147483647 (expected 2147483647)\n123456 + 654321 = 777777 (expected 777777)\nall agree with the + operator: True\n10 - 3 = 7\n3 - 10 = -7\n2000 random pairs agree: True\n```",
+  "tags": [
+   "dsa",
+   "bit-manipulation",
+   "twos-complement",
+   "carry",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why do XOR and AND compute the sum and the carry?",
+    "a": "Because for a single bit position, the sum bit is one exactly when the inputs differ - which is XOR - and a carry is produced exactly when both are one, which is AND. Shifting the carry left by one moves it to the position it affects. Doing this with whole integers applies the same logic to all 32 positions simultaneously, which is precisely what a ripple-carry adder does in hardware."
+   },
+   {
+    "q": "Why does the loop always terminate?",
+    "a": "Because each iteration shifts the carries one position left, so after at most 32 rounds every carry has been pushed past the top of the word and vanishes. There is no input that loops forever. The bound is the word width, which is why the algorithm is O(bits) rather than depending on the magnitude of the numbers - adding two billions takes the same number of rounds as adding two small values."
+   },
+   {
+    "q": "Why does this need unchecked?",
+    "a": "Because the shifted carry can legitimately exceed int range during the computation even when the final result is in range, and in a checked context that would throw rather than wrap. Two's complement wrapping is exactly the semantics binary addition requires - the negative cases work only because of it, which is why -5 plus -7 comes out correctly without any sign handling. The int.MaxValue plus one case shows the wrap is the same as the built-in operator's."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Sliding Window",
+  "difficulty": "Hard",
+  "question": "Find the maximum number of consecutive ones after flipping at most k zeros.",
+  "answer": "**Approach**\n\nA sliding window that never shrinks, tracking how many zeros it contains. When the count exceeds k, both edges advance together.\n\n**Logic**\n\nThe window holds the invariant that it contains at most k zeros, so its width is always a candidate answer.\n\nAs in the character-replacement problem, the window slides rather than contracts: once a width is achieved, a narrower one can never improve the answer, so shrinking is wasted work. The window stays at its best size and grows only when a genuinely better one appears.\n\nThat is why the answer can be read off as the final width with no separate maximum variable.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int LongestOnes(int[] nums, int k)\n    {\n        int left = 0, zeros = 0;\n\n        for (int right = 0; right < nums.Length; right++)\n        {\n            if (nums[right] == 0) zeros++;\n\n            // Slide rather than shrink: a narrower window can never win.\n            if (zeros > k)\n            {\n                if (nums[left] == 0) zeros--;\n                left++;\n            }\n        }\n\n        return nums.Length - left;\n    }\n\n    private static int BruteForce(int[] nums, int k)\n    {\n        int best = 0;\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            int zeros = 0;\n\n            for (int j = i; j < nums.Length; j++)\n            {\n                if (nums[j] == 0) zeros++;\n                if (zeros > k) break;\n                best = Math.Max(best, j - i + 1);\n            }\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        (int[] Nums, int K)[] cases =\n        {\n            (new[] { 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0 }, 2),\n            (new[] { 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1 }, 3),\n            (new[] { 0, 0, 0 }, 0),          // no flips allowed\n            (new[] { 1, 1, 1 }, 0),\n            (new[] { 0 }, 1),\n            (Array.Empty<int>(), 2)\n        };\n\n        foreach (var (nums, k) in cases)\n            Console.WriteLine($\"k={k}: {LongestOnes(nums, k)} (brute {BruteForce(nums, k)})\");\n\n        var random = new Random(3690);\n        var many = Enumerable.Range(0, 400).Select(_ => random.Next(2)).ToArray();\n\n        bool agrees = true;\n        for (int k = 0; k <= 10 && agrees; k++)\n            if (LongestOnes(many, k) != BruteForce(many, k)) agrees = false;\n\n        Console.WriteLine($\"400 values across k=0..10 agree: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\nk=2: 6 (brute 6)\nk=3: 10 (brute 10)\nk=0: 0 (brute 0)\nk=0: 3 (brute 3)\nk=1: 1 (brute 1)\nk=2: 0 (brute 0)\n400 values across k=0..10 agree: True\n```",
+  "tags": [
+   "dsa",
+   "sliding-window",
+   "monotonic-window",
+   "flips",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the window slide rather than shrink?",
+    "a": "Because the answer is the maximum width ever achieved, so contracting below the current best can never help - there is nothing to gain from a smaller valid window. Advancing both edges together on an invalid window keeps the width constant, and it grows again only when a genuinely longer valid window appears. That is why the answer is simply the array length minus the final left pointer, with no maximum variable at all."
+   },
+   {
+    "q": "Why is the zero check on the left edge conditional?",
+    "a": "Because only a departing zero reduces the count - a departing one changes nothing. Decrementing unconditionally would let the count drift negative and the window would accept more zeros than k. It is one line, and its absence produces answers that are too large on inputs where the window's left edge often sits on a one, which is most of them."
+   },
+   {
+    "q": "How does this relate to the character-replacement problem?",
+    "a": "It is the same template with a different validity condition - there the count is of characters that are not the most frequent, here it is simply the zeros. Both slide rather than shrink for the same reason, and both read the answer off the final width. Recognising that a family of window problems shares one skeleton, differing only in what is counted and what the threshold is, is worth more than solving each from scratch."
+   }
+  ]
  }
 ]
