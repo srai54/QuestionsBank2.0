@@ -16945,5 +16945,341 @@
     "a": "Because the comparison is non-strict - water flows across equal heights - so every cell of a plateau reaches every border. That is the intended semantics, and it is worth testing because an implementation using a strict comparison would return only the border cells themselves. Plateaux are also where a naive outward search can loop, since equal heights allow movement in both directions; the visited set is what prevents it."
    }
   ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Hard",
+  "question": "Find the maximum coins obtainable by bursting balloons in the best order.",
+  "answer": "**Approach**\n\nInterval DP on the balloon burst *last* in each range, not first. Padding the array with virtual ones at both ends removes the boundary cases.\n\n**Logic**\n\nChoosing which balloon bursts first is the natural framing and it fails — after a burst, the remaining balloons become adjacent in a way that depends on the whole history, so the subproblems are not independent.\n\nChoosing the one burst *last* fixes that. When balloon k is last in the range, everything to its left and right has already gone, so its neighbours are exactly the range boundaries — fixed and known. The two sides then become independent subproblems.\n\nThe virtual ones at the ends mean a balloon at the array edge still has a multiplier.\n\nO(n³).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int MaxCoins(int[] balloons)\n    {\n        int n = balloons.Length;\n        if (n == 0) return 0;\n\n        // Virtual 1s at both ends, so an edge balloon still has neighbours.\n        var padded = new int[n + 2];\n        padded[0] = padded[n + 1] = 1;\n        for (int i = 0; i < n; i++) padded[i + 1] = balloons[i];\n\n        var best = new int[n + 2, n + 2];\n\n        for (int width = 1; width <= n; width++)\n            for (int lo = 1; lo + width - 1 <= n; lo++)\n            {\n                int hi = lo + width - 1;\n\n                // k is the balloon burst LAST in [lo, hi], so its neighbours are fixed.\n                for (int k = lo; k <= hi; k++)\n                    best[lo, hi] = Math.Max(best[lo, hi],\n                        best[lo, k - 1] + padded[lo - 1] * padded[k] * padded[hi + 1] +\n                        best[k + 1, hi]);\n            }\n\n        return best[1, n];\n    }\n\n    // Exhaustive search over burst orders, for small inputs only.\n    private static int BruteForce(int[] balloons)\n    {\n        if (balloons.Length == 0) return 0;\n\n        int best = 0;\n\n        for (int i = 0; i < balloons.Length; i++)\n        {\n            int left = i > 0 ? balloons[i - 1] : 1;\n            int right = i < balloons.Length - 1 ? balloons[i + 1] : 1;\n\n            var remaining = new int[balloons.Length - 1];\n            for (int j = 0, w = 0; j < balloons.Length; j++)\n                if (j != i) remaining[w++] = balloons[j];\n\n            best = Math.Max(best, left * balloons[i] * right + BruteForce(remaining));\n        }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        int[][] cases =\n        {\n            new[] { 3, 1, 5, 8 },\n            new[] { 1, 5 },\n            new[] { 7 },\n            Array.Empty<int>(),\n            new[] { 9, 76, 64, 21 },\n            new[] { 1, 1, 1, 1 }\n        };\n\n        foreach (var balloons in cases)\n            Console.WriteLine($\"[{string.Join(\",\", balloons)}]: {MaxCoins(balloons)} \" +\n                              $\"(brute {BruteForce(balloons)})\");\n    }\n}\n```\n\n**Output**\n\n```\n[3,1,5,8]: 167 (brute 167)\n[1,5]: 10 (brute 10)\n[7]: 7 (brute 7)\n[]: 0 (brute 0)\n[9,76,64,21]: 116718 (brute 116718)\n[1,1,1,1]: 4 (brute 4)\n```",
+  "tags": [
+   "dsa",
+   "interval-dp",
+   "reframing",
+   "padding",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why choose the balloon burst last rather than first?",
+    "a": "Because the coins a burst earns depend on its current neighbours, and after earlier bursts those neighbours depend on the entire history - so splitting on the first burst leaves subproblems that are not independent. If k is the LAST balloon in a range, everything else in that range is already gone, so its neighbours are exactly the range boundaries, which are fixed. That restores independence and makes the interval DP valid. It is the classic example of a problem that only becomes tractable after reframing."
+   },
+   {
+    "q": "What do the padded ones accomplish?",
+    "a": "They give balloons at the array edge a multiplier, since the problem treats an absent neighbour as one. Without the padding every subproblem touching a boundary needs a conditional, and those conditionals are easy to get subtly wrong inside a triple loop. Padding turns the special case into ordinary data, which is the same trick as sentinel nodes in a linked list or a zero-height bar in the histogram problem."
+   },
+   {
+    "q": "Why is the brute force limited to small inputs?",
+    "a": "Because it explores every burst order, which is n factorial - eight balloons is already forty thousand orders and twelve would be half a billion. It is only there as an oracle on inputs of four or five, which is enough to catch a wrong recurrence. The DP is O(n cubed), so it handles a few hundred balloons comfortably. Using an exponential reference where it is affordable and stopping there is the practical compromise."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Hard",
+  "question": "Count the number of unique paths through a grid with obstacles.",
+  "answer": "**Approach**\n\nRow-by-row DP with a single rolling row. An obstacle sets its cell's count to zero, which naturally propagates the blockage.\n\n**Logic**\n\nThe count for a cell is the sum of the counts from above and from the left, so a zero simply contributes nothing — no special casing of blocked regions is needed.\n\nThe start cell being an obstacle is the case that needs a check, since the seed value would otherwise claim a path exists from a blocked square.\n\nThe rolling row works because each cell needs only the value directly above, which the row holds before being overwritten, and the value to the left, which it holds after.\n\nO(rows × cols) time, O(cols) space.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static long UniquePathsWithObstacles(int[][] grid)\n    {\n        if (grid == null || grid.Length == 0) return 0;\n\n        int rows = grid.Length, cols = grid[0].Length;\n\n        // A blocked start means no path exists at all.\n        if (grid[0][0] == 1) return 0;\n\n        var ways = new long[cols];\n        ways[0] = 1;\n\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n            {\n                // An obstacle contributes nothing, which propagates the blockage.\n                if (grid[r][c] == 1) { ways[c] = 0; continue; }\n\n                // ways[c] is still the row above; ways[c-1] is already this row.\n                if (c > 0) ways[c] += ways[c - 1];\n            }\n\n        return ways[cols - 1];\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(UniquePathsWithObstacles(Grid(\n            new[] { 0, 0, 0 }, new[] { 0, 1, 0 }, new[] { 0, 0, 0 })));\n\n        Console.WriteLine(UniquePathsWithObstacles(Grid(new[] { 0, 1 }, new[] { 0, 0 })));\n        Console.WriteLine(UniquePathsWithObstacles(Grid(new[] { 1, 0 })));      // blocked start\n        Console.WriteLine(UniquePathsWithObstacles(Grid(new[] { 0, 0 }, new[] { 0, 1 })));\n        Console.WriteLine(UniquePathsWithObstacles(Grid(new[] { 0 })));\n\n        // A wall across the middle: no route at all.\n        Console.WriteLine(UniquePathsWithObstacles(Grid(\n            new[] { 0, 0, 0 }, new[] { 1, 1, 1 }, new[] { 0, 0, 0 })));\n\n        // No obstacles: the answer is the binomial coefficient.\n        Console.WriteLine(UniquePathsWithObstacles(Grid(\n            new[] { 0, 0, 0, 0 }, new[] { 0, 0, 0, 0 }, new[] { 0, 0, 0, 0 })));\n    }\n}\n```\n\n**Output**\n\n```\n2\n1\n0\n0\n1\n0\n10\n```",
+  "tags": [
+   "dsa",
+   "dp",
+   "grid",
+   "rolling-row",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does an obstacle need no special propagation logic?",
+    "a": "Because setting its count to zero means it contributes nothing to the cells below and to the right, so the blockage spreads automatically through the ordinary sum. Explicitly marking whole regions as unreachable would be redundant. The wall-across-the-middle test confirms it: every cell in the bottom row ends at zero without any code that knows about walls."
+   },
+   {
+    "q": "Why does the rolling row work with a single array?",
+    "a": "Because a cell needs the value above it, which the array still holds at that index before the write, and the value to its left, which the array already holds from earlier in this row. Reading both before overwriting means one array serves both generations. The iteration must run left to right for that to hold - reversing it would read the left neighbour from the previous row, which is the standard rolling-array direction trap."
+   },
+   {
+    "q": "What is the answer without obstacles, and why does that matter?",
+    "a": "It is the binomial coefficient (rows+cols-2) choose (rows-1) - ten for a three-by-four grid, as the last test shows - because a path is a sequence of moves of which you choose which are downward. That gives a closed form with no DP at all, and it is worth knowing as a sanity check on the DP. It also shows why the counts grow fast and are held in long: a twenty-by-twenty grid already exceeds a hundred billion paths."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Strings",
+  "difficulty": "Hard",
+  "question": "Implement the KMP prefix function and use it for substring search.",
+  "answer": "**Approach**\n\nBuild the failure table — for each prefix, the length of its longest proper border — then scan the text without ever moving the text pointer backwards.\n\n**Logic**\n\nThe failure table answers \"on a mismatch, how much of what I matched is still usable?\". A border is a prefix that is also a suffix, so falling back to its length reuses the overlap instead of rescanning.\n\nThat is why the text index never retreats, which is what makes the search linear rather than O(n·m) for the naive scan.\n\nThe table is built by matching the pattern against itself with the same fallback logic — the construction and the search share their inner loop.\n\nO(n + m).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    // failure[i] = length of the longest proper prefix of pattern[0..i] that is also a suffix.\n    public static int[] BuildFailure(string pattern)\n    {\n        var failure = new int[pattern.Length];\n        int length = 0;\n\n        for (int i = 1; i < pattern.Length; i++)\n        {\n            while (length > 0 && pattern[i] != pattern[length]) length = failure[length - 1];\n\n            if (pattern[i] == pattern[length]) length++;\n\n            failure[i] = length;\n        }\n\n        return failure;\n    }\n\n    public static IList<int> Search(string text, string pattern)\n    {\n        var found = new List<int>();\n        if (string.IsNullOrEmpty(pattern) || pattern.Length > text.Length) return found;\n\n        var failure = BuildFailure(pattern);\n        int matched = 0;\n\n        for (int i = 0; i < text.Length; i++)   // i NEVER moves backwards\n        {\n            while (matched > 0 && text[i] != pattern[matched]) matched = failure[matched - 1];\n\n            if (text[i] == pattern[matched]) matched++;\n\n            if (matched != pattern.Length) continue;\n\n            found.Add(i - pattern.Length + 1);\n            matched = failure[matched - 1];   // allow overlapping matches\n        }\n\n        return found;\n    }\n\n    private static IList<int> Naive(string text, string pattern)\n    {\n        var found = new List<int>();\n        if (pattern.Length == 0 || pattern.Length > text.Length) return found;\n\n        for (int i = 0; i + pattern.Length <= text.Length; i++)\n            if (string.CompareOrdinal(text, i, pattern, 0, pattern.Length) == 0) found.Add(i);\n\n        return found;\n    }\n\n    private static void Show(IList<int> v) =>\n        Console.WriteLine(v.Count == 0 ? \"none\" : string.Join(\",\", v));\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", BuildFailure(\"ababaca\")));\n        Console.WriteLine(string.Join(\",\", BuildFailure(\"aaaa\")));\n        Console.WriteLine(string.Join(\",\", BuildFailure(\"abcd\")));\n\n        Show(Search(\"ababcabcabababd\", \"ababd\"));\n        Show(Search(\"aaaaa\", \"aa\"));            // overlapping matches\n        Show(Search(\"abc\", \"d\"));\n        Show(Search(\"abc\", \"\"));\n\n        var random = new Random(97);\n        string alphabet = \"ab\";\n        bool agrees = true;\n\n        for (int trial = 0; trial < 200 && agrees; trial++)\n        {\n            string text = new string(Enumerable.Range(0, random.Next(0, 40))\n                .Select(_ => alphabet[random.Next(alphabet.Length)]).ToArray());\n            string pattern = new string(Enumerable.Range(0, random.Next(1, 5))\n                .Select(_ => alphabet[random.Next(alphabet.Length)]).ToArray());\n\n            if (!Search(text, pattern).SequenceEqual(Naive(text, pattern))) agrees = false;\n        }\n\n        Console.WriteLine($\"200 random searches agree with the naive scan: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\n0,0,1,2,3,0,1\n0,1,2,3\n0,0,0,0\n10\n0,1,2,3\nnone\nnone\n200 random searches agree with the naive scan: True\n```",
+  "tags": [
+   "dsa",
+   "kmp",
+   "strings",
+   "prefix-function",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What does the failure table actually store?",
+    "a": "For each prefix of the pattern, the length of the longest proper border - a string that is both a prefix and a suffix of that prefix. For 'ababaca' the table is 0,0,1,2,3,0,1, meaning the prefix 'ababa' has a border 'aba' of length three. On a mismatch you fall back to that length, because those characters are already known to match the text. It is the compressed answer to 'how much of my progress survives a failure'."
+   },
+   {
+    "q": "Why does the text index never move backwards?",
+    "a": "Because the fallback consumes the mismatch by shortening the matched length rather than by rewinding the text - the characters already scanned are never re-examined. That is the whole source of the linear bound: the text pointer advances n times and the matched length can only decrease as much as it increased, so the total work is O(n + m). The naive scan restarts the text pointer after each failure, giving O(n times m)."
+   },
+   {
+    "q": "Why reset to the border length after a full match rather than to zero?",
+    "a": "Because matches may overlap, and resetting to zero would skip any occurrence starting inside the one just found - searching 'aa' in 'aaaaa' would report two matches instead of four. Falling back to the border keeps the partial progress that a following occurrence can reuse. The test on 'aaaaa' is there precisely to pin that down, since most test data has no overlapping matches and hides the difference."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Design a structure that returns the maximum frequency element and supports increment and decrement.",
+  "answer": "**Approach**\n\nA doubly linked list of frequency buckets, each holding the set of keys at that count, plus a map from key to its bucket. Every operation moves a key one bucket along.\n\n**Logic**\n\nThe buckets are kept in a linked list sorted by frequency, so the maximum is always the tail — O(1) to read.\n\nAn increment moves a key from its bucket to the adjacent one, creating that bucket if it does not exist. Because frequencies change by exactly one, the destination is always an immediate neighbour, which is what makes the move O(1) rather than a search.\n\nEmpty buckets must be unlinked, or the tail can point at a bucket with no keys and the maximum is wrong.\n\nO(1) for every operation.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class AllOne\n{\n    private class Bucket\n    {\n        public int Count;\n        public readonly HashSet<string> Keys = new();\n        public Bucket Previous, Next;\n    }\n\n    private readonly Bucket _head = new() { Count = 0 };   // sentinels remove the edge cases\n    private readonly Bucket _tail = new() { Count = int.MaxValue };\n    private readonly Dictionary<string, Bucket> _bucketOf = new();\n\n    public AllOne() { _head.Next = _tail; _tail.Previous = _head; }\n\n    private static Bucket InsertAfter(Bucket node, int count)\n    {\n        var fresh = new Bucket { Count = count, Previous = node, Next = node.Next };\n        node.Next.Previous = fresh;\n        node.Next = fresh;\n        return fresh;\n    }\n\n    private static void Unlink(Bucket node)\n    {\n        node.Previous.Next = node.Next;\n        node.Next.Previous = node.Previous;\n    }\n\n    public void Increment(string key)\n    {\n        if (!_bucketOf.TryGetValue(key, out var bucket))\n        {\n            if (_head.Next.Count != 1) InsertAfter(_head, 1);\n            _head.Next.Keys.Add(key);\n            _bucketOf[key] = _head.Next;\n            return;\n        }\n\n        // The destination is always the immediate neighbour: counts move by one.\n        if (bucket.Next.Count != bucket.Count + 1) InsertAfter(bucket, bucket.Count + 1);\n\n        bucket.Next.Keys.Add(key);\n        _bucketOf[key] = bucket.Next;\n\n        bucket.Keys.Remove(key);\n        if (bucket.Keys.Count == 0) Unlink(bucket);   // an empty bucket would corrupt the ends\n    }\n\n    public void Decrement(string key)\n    {\n        if (!_bucketOf.TryGetValue(key, out var bucket)) return;\n\n        if (bucket.Count > 1)\n        {\n            if (bucket.Previous.Count != bucket.Count - 1) InsertAfter(bucket.Previous, bucket.Count - 1);\n\n            bucket.Previous.Keys.Add(key);\n            _bucketOf[key] = bucket.Previous;\n        }\n        else _bucketOf.Remove(key);\n\n        bucket.Keys.Remove(key);\n        if (bucket.Keys.Count == 0) Unlink(bucket);\n    }\n\n    public string MostFrequent => _tail.Previous == _head ? \"\" : _tail.Previous.Keys.First();\n    public string LeastFrequent => _head.Next == _tail ? \"\" : _head.Next.Keys.First();\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var counter = new AllOne();\n\n        counter.Increment(\"hello\");\n        counter.Increment(\"hello\");\n        Console.WriteLine($\"{counter.MostFrequent} / {counter.LeastFrequent}\");\n\n        counter.Increment(\"world\");\n        Console.WriteLine($\"{counter.MostFrequent} / {counter.LeastFrequent}\");\n\n        counter.Increment(\"world\");\n        counter.Increment(\"world\");\n        Console.WriteLine($\"{counter.MostFrequent} / {counter.LeastFrequent}\");\n\n        counter.Decrement(\"world\");\n        counter.Decrement(\"world\");\n        Console.WriteLine($\"{counter.MostFrequent} / {counter.LeastFrequent}\");\n\n        // Decrementing to zero removes the key entirely.\n        counter.Decrement(\"world\");\n        Console.WriteLine($\"{counter.MostFrequent} / {counter.LeastFrequent}\");\n\n        counter.Decrement(\"hello\");\n        counter.Decrement(\"hello\");\n        Console.WriteLine($\"empty: [{counter.MostFrequent}] [{counter.LeastFrequent}]\");\n\n        // Decrementing an absent key is a no-op, not an error.\n        counter.Decrement(\"missing\");\n        Console.WriteLine($\"still empty: [{counter.MostFrequent}]\");\n    }\n}\n```\n\n**Output**\n\n```\nhello / hello\nhello / world\nworld / hello\nhello / world\nhello / hello\nempty: [] []\nstill empty: []\n```",
+  "tags": [
+   "dsa",
+   "design",
+   "linked-list",
+   "buckets",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is a linked list of buckets O(1) where a heap would not be?",
+    "a": "Because frequencies change by exactly one, so a key's new bucket is always the immediate neighbour of its current one - no search is needed. A heap would need to find and reposition the element, which is O(log n) at best and needs an index to locate it at all. The bucket list exploits the unit-step property of the updates, which is the same structure used in the O(1) LFU cache."
+   },
+   {
+    "q": "Why must empty buckets be unlinked?",
+    "a": "Because the maximum is read as the bucket before the tail sentinel, and an empty bucket left in place would be reported as holding the most frequent key - returning nothing, or throwing. It also breaks the neighbour-is-adjacent invariant that makes the moves O(1). Unlinking on the step that empties a bucket keeps both properties, and it is the detail most implementations miss until a decrement empties a middle bucket."
+   },
+   {
+    "q": "What do the head and tail sentinels buy?",
+    "a": "They remove every boundary case from the insertion and unlinking code - there is always a previous and a next node, so no null checks are needed and the first and last real buckets are handled by the same lines as the middle ones. The cost is two objects and remembering that the ends are not real buckets, which the accessors handle by comparing against them. It is the standard doubly-linked-list technique and it eliminates most of the pointer bugs."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Binary Search",
+  "difficulty": "Hard",
+  "question": "Split an array into subarrays so the largest sum is minimised, and report the split points.",
+  "answer": "**Approach**\n\nBinary search on the answer for the value, then one greedy pass to recover the actual split. Reporting the split, not just its cost, is what makes this more than the standard problem.\n\n**Logic**\n\nThe feasibility predicate is monotone — if a cap works, any larger cap works — so the value is found by searching over caps rather than over arrangements.\n\nRecovering the split then needs a second greedy pass at the found cap. The subtlety is that the greedy may use fewer pieces than allowed, so the reconstruction must pad: splitting further never increases the maximum, so any leftover pieces can be taken from the front.\n\nO(n log(sum)).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static (long Largest, IList<int> Sizes) SplitArray(int[] nums, int k)\n    {\n        long lo = 0, hi = 0;\n        foreach (int n in nums) { lo = Math.Max(lo, n); hi += n; }\n\n        while (lo < hi)\n        {\n            long cap = lo + (hi - lo) / 2;\n            if (PiecesNeeded(nums, cap) <= k) hi = cap; else lo = cap + 1;\n        }\n\n        return (lo, Reconstruct(nums, lo, k));\n    }\n\n    private static int PiecesNeeded(int[] nums, long cap)\n    {\n        int pieces = 1;\n        long running = 0;\n\n        foreach (int n in nums)\n            if (running + n > cap) { pieces++; running = n; } else running += n;\n\n        return pieces;\n    }\n\n    private static IList<int> Reconstruct(int[] nums, long cap, int k)\n    {\n        var sizes = new List<int>();\n        long running = 0;\n        int size = 0;\n\n        foreach (int n in nums)\n        {\n            if (running + n > cap) { sizes.Add(size); running = 0; size = 0; }\n            running += n;\n            size++;\n        }\n\n        if (size > 0) sizes.Add(size);\n\n        // The greedy may use fewer pieces than allowed; splitting more never hurts.\n        while (sizes.Count < k && sizes.Any(s => s > 1))\n        {\n            int at = sizes.FindIndex(s => s > 1);\n            sizes[at]--;\n            sizes.Insert(at, 1);\n        }\n\n        return sizes;\n    }\n\n    private static void Report(int[] nums, int k)\n    {\n        var (largest, sizes) = SplitArray(nums, k);\n\n        // Verify: the sizes must cover the array and respect the reported maximum.\n        int at = 0;\n        long worst = 0;\n\n        foreach (int size in sizes)\n        {\n            long sum = 0;\n            for (int i = 0; i < size; i++) sum += nums[at++];\n            worst = Math.Max(worst, sum);\n        }\n\n        Console.WriteLine($\"[{string.Join(\",\", nums)}] k={k}: largest {largest}, \" +\n                          $\"sizes [{string.Join(\",\", sizes)}] \" +\n                          $\"valid: {at == nums.Length && worst == largest && sizes.Count <= k}\");\n    }\n\n    public static void Main()\n    {\n        Report(new[] { 7, 2, 5, 10, 8 }, 2);\n        Report(new[] { 1, 2, 3, 4, 5 }, 2);\n        Report(new[] { 1, 4, 4 }, 3);\n        Report(new[] { 1, 2, 3, 4, 5 }, 1);\n        Report(new[] { 1, 2, 3, 4, 5 }, 5);\n        Report(new[] { 10 }, 1);\n    }\n}\n```\n\n**Output**\n\n```\n[7,2,5,10,8] k=2: largest 18, sizes [3,2] valid: True\n[1,2,3,4,5] k=2: largest 9, sizes [3,2] valid: True\n[1,4,4] k=3: largest 4, sizes [1,1,1] valid: True\n[1,2,3,4,5] k=1: largest 15, sizes [5] valid: True\n[1,2,3,4,5] k=5: largest 5, sizes [1,1,1,1,1] valid: True\n[10] k=1: largest 10, sizes [1] valid: True\n```",
+  "tags": [
+   "dsa",
+   "binary-search",
+   "reconstruction",
+   "greedy",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does reconstructing the split need a second pass?",
+    "a": "Because the binary search only establishes the minimum feasible cap - it never records how the array was divided at that cap. A single greedy pass at the found value produces a valid split, and greedy is optimal for the piece count, so it cannot exceed k. Separating 'what is the answer' from 'what achieves it' is the same pattern as the predecessor array in a DP reconstruction."
+   },
+   {
+    "q": "Why can the reconstruction pad with extra splits?",
+    "a": "Because splitting a piece further can only lower the maximum piece sum or leave it unchanged - never raise it. So if the greedy used fewer than k pieces, the remaining budget can be spent anywhere without breaking the guarantee. The [1,4,4] with k of 3 case exercises it: the greedy would produce two pieces and the padding makes three. A version that returned fewer pieces than requested would still be optimal but would not answer the question as asked."
+   },
+   {
+    "q": "Why does the report verify the split rather than print it?",
+    "a": "Because the sizes and the reported maximum are two separate claims that could disagree - the value could be right while the reconstruction is wrong, which a printed list would not reveal. Walking the sizes, summing each piece and checking that they cover the array and hit exactly the reported maximum tests the actual contract. It is cheap and it would catch a padding step that lost or duplicated an element."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Trees",
+  "difficulty": "Hard",
+  "question": "Build a binary tree from its inorder and postorder traversals.",
+  "answer": "**Approach**\n\nConsume the postorder from the back — the last element is always the current root — and use an index map to find that root in the inorder, which splits it into the two subtrees.\n\n**Logic**\n\nThe right subtree must be built *before* the left, because postorder read backwards gives root, then all of the right subtree, then all of the left. Building left first consumes the wrong nodes and produces a silently wrong tree.\n\nThe index map turns the \"find the root in the inorder\" step from a scan into a lookup, which is the difference between O(n²) on a skewed tree and O(n).\n\nThis works only when values are distinct; duplicates make the split ambiguous.\n\nO(n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static TreeNode BuildTree(int[] inorder, int[] postorder)\n    {\n        var positionInInorder = new Dictionary<int, int>();\n        for (int i = 0; i < inorder.Length; i++) positionInInorder[inorder[i]] = i;\n\n        int next = postorder.Length - 1;\n\n        TreeNode Build(int lo, int hi)\n        {\n            if (lo > hi) return null;\n\n            var node = new TreeNode(postorder[next--]);\n            int split = positionInInorder[node.val];\n\n            // RIGHT first: postorder read backwards gives root, right subtree, left subtree.\n            node.right = Build(split + 1, hi);\n            node.left = Build(lo, split - 1);\n\n            return node;\n        }\n\n        return Build(0, inorder.Length - 1);\n    }\n\n    private static void Walk(TreeNode node, IList<int> into, bool inorderOrder)\n    {\n        if (node == null) return;\n\n        if (inorderOrder)\n        {\n            Walk(node.left, into, true);\n            into.Add(node.val);\n            Walk(node.right, into, true);\n        }\n        else\n        {\n            Walk(node.left, into, false);\n            Walk(node.right, into, false);\n            into.Add(node.val);\n        }\n    }\n\n    private static void Check(int[] inorder, int[] postorder)\n    {\n        var tree = BuildTree(inorder, postorder);\n\n        var rebuiltInorder = new List<int>();\n        var rebuiltPostorder = new List<int>();\n        Walk(tree, rebuiltInorder, true);\n        Walk(tree, rebuiltPostorder, false);\n\n        // The real invariant: both traversals of the rebuilt tree match the input.\n        bool inorderMatches = string.Join(\",\", rebuiltInorder) == string.Join(\",\", inorder);\n        bool postorderMatches = string.Join(\",\", rebuiltPostorder) == string.Join(\",\", postorder);\n\n        Console.WriteLine($\"in [{string.Join(\",\", inorder)}] post [{string.Join(\",\", postorder)}] \" +\n                          $\"-> round trips: {inorderMatches && postorderMatches}\");\n    }\n\n    public static void Main()\n    {\n        Check(new[] { 9, 3, 15, 20, 7 }, new[] { 9, 15, 7, 20, 3 });\n        Check(new[] { -1 }, new[] { -1 });\n        Check(Array.Empty<int>(), Array.Empty<int>());\n        Check(new[] { 1, 2, 3 }, new[] { 3, 2, 1 });      // a right chain\n        Check(new[] { 3, 2, 1 }, new[] { 3, 2, 1 });      // a left chain\n        Check(new[] { 4, 2, 5, 1, 6, 3, 7 }, new[] { 4, 5, 2, 6, 7, 3, 1 });\n    }\n}\n```\n\n**Output**\n\n```\nin [9,3,15,20,7] post [9,15,7,20,3] -> round trips: True\nin [-1] post [-1] -> round trips: True\nin [] post [] -> round trips: True\nin [1,2,3] post [3,2,1] -> round trips: True\nin [3,2,1] post [3,2,1] -> round trips: True\nin [4,2,5,1,6,3,7] post [4,5,2,6,7,3,1] -> round trips: True\n```",
+  "tags": [
+   "dsa",
+   "trees",
+   "reconstruction",
+   "traversal-order",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must the right subtree be built first?",
+    "a": "Because postorder is left, right, root - so reading it backwards gives root, then the entire right subtree, then the entire left. The consuming index therefore encounters right-subtree nodes immediately after the root. Building left first hands those nodes to the wrong side and produces a tree that is wrong but often still plausible-looking, which is why the round-trip check rather than eyeballing is the right test."
+   },
+   {
+    "q": "Why does the index map matter?",
+    "a": "Because finding the root's position in the inorder array by scanning is O(n) per node, giving O(n squared) overall - and on a skewed tree that is the actual behaviour, not a pathological corner. The map makes it a single lookup, so the whole construction is linear. It costs O(n) memory, which is the standard trade and almost always worth it."
+   },
+   {
+    "q": "Why does the reconstruction need distinct values?",
+    "a": "Because the root is located in the inorder array by its value, and with duplicates there is no way to tell which occurrence is the current root - different choices give different, equally consistent trees, so the input does not determine a unique answer. Preorder plus postorder is ambiguous for a different reason: it cannot distinguish a single left child from a single right child. Inorder paired with either of the others, over distinct values, is what pins a tree down."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Compute the product of all other elements without using division.",
+  "answer": "**Approach**\n\nTwo sweeps. The first fills each position with the product of everything to its left; the second multiplies through by a running product of everything to its right.\n\n**Logic**\n\nThe division approach fails on zeros — one zero makes every other entry zero by division, and two zeros make the total product zero with no way to recover the individual answers.\n\nThe prefix-suffix method sidesteps the question entirely: it never divides, so zeros need no special handling and simply propagate correctly.\n\nUsing the output array for the prefix pass and a single running variable for the suffix keeps the extra space at O(1) beyond the result.\n\nO(n) time.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static long[] ProductExceptSelf(int[] nums)\n    {\n        int n = nums.Length;\n        var result = new long[n];\n        if (n == 0) return result;\n\n        // Pass one: everything to the left.\n        result[0] = 1;\n        for (int i = 1; i < n; i++) result[i] = result[i - 1] * nums[i - 1];\n\n        // Pass two: multiply through by everything to the right, held in one variable.\n        long fromRight = 1;\n        for (int i = n - 1; i >= 0; i--)\n        {\n            result[i] *= fromRight;\n            fromRight *= nums[i];\n        }\n\n        return result;\n    }\n\n    private static long[] BruteForce(int[] nums)\n    {\n        var result = new long[nums.Length];\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            long product = 1;\n            for (int j = 0; j < nums.Length; j++) if (j != i) product *= nums[j];\n            result[i] = product;\n        }\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        int[][] cases =\n        {\n            new[] { 1, 2, 3, 4 },\n            new[] { -1, 1, 0, -3, 3 },      // one zero\n            new[] { 0, 0 },                 // two zeros: division could not recover these\n            new[] { 5 },\n            Array.Empty<int>(),\n            new[] { 2, 3 },\n            new[] { 100000, 100000, 100000 }   // the product exceeds int\n        };\n\n        foreach (var nums in cases)\n            Console.WriteLine($\"[{string.Join(\",\", nums)}] -> \" +\n                              $\"[{string.Join(\",\", ProductExceptSelf(nums))}] \" +\n                              $\"matches brute force: \" +\n                              $\"{ProductExceptSelf(nums).SequenceEqual(BruteForce(nums))}\");\n    }\n}\n```\n\n**Output**\n\n```\n[1,2,3,4] -> [24,12,8,6] matches brute force: True\n[-1,1,0,-3,3] -> [0,0,9,0,0] matches brute force: True\n[0,0] -> [0,0] matches brute force: True\n[5] -> [1] matches brute force: True\n[] -> [] matches brute force: True\n[2,3] -> [3,2] matches brute force: True\n[100000,100000,100000] -> [10000000000,10000000000,10000000000] matches brute force: True\n```",
+  "tags": [
+   "dsa",
+   "arrays",
+   "prefix-product",
+   "zeros",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the no-division rule more than an artificial constraint?",
+    "a": "Because division genuinely breaks on zeros. With one zero, every position except that one must be zero and that one must be the product of the rest - which the total product cannot supply, since it is zero. With two zeros every answer is zero, and there is no way to distinguish the cases from the total alone. So you would need to count zeros and special-case the result, which is more code than the prefix-suffix method and easier to get wrong."
+   },
+   {
+    "q": "Why does a single element return one?",
+    "a": "Because the product of an empty set is one, the multiplicative identity - there are no other elements to multiply. It falls out of the algorithm naturally, since the prefix seed is one and the suffix variable is one. It is the same identity reasoning as the empty subtree counting as one shape or ways[0] being one in coin change, and a solution that special-cased it to zero would be wrong."
+   },
+   {
+    "q": "Why accumulate in long?",
+    "a": "Because the product of n values easily exceeds int - three values of a hundred thousand already give ten billion, as the last test shows - and overflow would wrap silently to a plausible number. The usual problem statement promises the answer fits in 32 bits, but the intermediate prefix and suffix products can still exceed it even when the final answers do not. Widening costs nothing and removes the question."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Backtracking",
+  "difficulty": "Medium",
+  "question": "Generate all subsets of a collection that may contain duplicates.",
+  "answer": "**Approach**\n\nSort, then backtrack, skipping any element equal to its predecessor unless the predecessor was taken at this level. That single rule prevents duplicate subsets without a deduplication pass.\n\n**Logic**\n\nSorting groups equal values so duplicates are adjacent and detectable locally.\n\nThe skip condition is precise: within one recursion level, only the *first* of a run of equal values may start a branch. Allowing the second would generate a subset identical to one the first already produced.\n\nThe alternative — generating everything and deduplicating with a set — works but wastes exponential effort and needs a canonical form for hashing.\n\nO(2^n) output, which is inherent.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<IList<int>> SubsetsWithDuplicates(int[] nums)\n    {\n        var sorted = (int[])nums.Clone();\n        Array.Sort(sorted);                    // duplicates become adjacent\n\n        var all = new List<IList<int>>();\n        var current = new List<int>();\n\n        void Explore(int from)\n        {\n            all.Add(new List<int>(current));\n\n            for (int i = from; i < sorted.Length; i++)\n            {\n                // Only the FIRST of a run may start a branch at this level.\n                if (i > from && sorted[i] == sorted[i - 1]) continue;\n\n                current.Add(sorted[i]);\n                Explore(i + 1);\n                current.RemoveAt(current.Count - 1);\n            }\n        }\n\n        Explore(0);\n        return all;\n    }\n\n    private static void Show(IList<IList<int>> subsets) =>\n        Console.WriteLine(string.Join(\" \", subsets.Select(s => \"[\" + string.Join(\",\", s) + \"]\")));\n\n    public static void Main()\n    {\n        Show(SubsetsWithDuplicates(new[] { 1, 2, 2 }));\n        Show(SubsetsWithDuplicates(new[] { 0 }));\n        Show(SubsetsWithDuplicates(Array.Empty<int>()));\n        Show(SubsetsWithDuplicates(new[] { 2, 2, 2 }));\n        Show(SubsetsWithDuplicates(new[] { 4, 4, 4, 1, 4 }));\n\n        // Distinct values give the full power set, and every subset is unique.\n        var distinct = SubsetsWithDuplicates(new[] { 1, 2, 3 });\n        var canonical = distinct.Select(s => string.Join(\",\", s)).ToList();\n\n        Console.WriteLine($\"count {distinct.Count}, all distinct: \" +\n                          $\"{canonical.Distinct().Count() == canonical.Count}\");\n    }\n}\n```\n\n**Output**\n\n```\n[] [1] [1,2] [1,2,2] [2] [2,2]\n[] [0]\n[]\n[] [2] [2,2] [2,2,2]\n[] [1] [1,4] [1,4,4] [1,4,4,4] [1,4,4,4,4] [4] [4,4] [4,4,4] [4,4,4,4]\ncount 8, all distinct: True\n```",
+  "tags": [
+   "dsa",
+   "backtracking",
+   "duplicates",
+   "canonical-form",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the skip condition i > from rather than i > 0?",
+    "a": "Because the rule applies within a single recursion level, not globally. The first iteration of any level must be allowed to take its element even if it equals the one before - that earlier element belongs to a different branch. Using i > 0 would forbid legitimate subsets such as [2,2], since the second 2 would always be skipped. That one comparison is the whole difference between correct and silently incomplete."
+   },
+   {
+    "q": "Why does sorting make the rule work?",
+    "a": "Because it puts equal values adjacent, so 'is this a repeat of something already tried at this level' becomes a comparison with the immediate predecessor rather than a search of everything tried so far. Without sorting, duplicates can be scattered and the local check misses them - the [4,4,4,1,4] case would produce repeats. Sorting to make a local check sufficient is the same move as in the three-sum and combination-sum problems."
+   },
+   {
+    "q": "Why not generate everything and deduplicate?",
+    "a": "It gives the right answer but does exponentially more work than necessary, and it needs a canonical form - a sorted, joined string or similar - to hash subsets that are equal as multisets. For an input with many duplicates the waste is enormous: [2,2,2] would generate eight subsets to keep four. Pruning at the point of generation is both faster and, once the rule is understood, simpler than defining an equality for collections."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Linked List",
+  "difficulty": "Hard",
+  "question": "Reverse the nodes of a linked list in groups of k, leaving any remainder as it is.",
+  "answer": "**Approach**\n\nWalk ahead k nodes to confirm a full group exists, reverse exactly that group, then reconnect and continue from the new tail.\n\n**Logic**\n\nThe look-ahead is what distinguishes this from plain reversal: a trailing group shorter than k must be left untouched, so you cannot reverse first and check afterwards.\n\nThe reconnection is where implementations go wrong. After reversing a group, its original head has become its tail and must point at whatever comes next — which is not known until the following group is processed, so the previous group's tail is carried forward.\n\nA dummy head removes the special case of the first group, whose reversal changes the list's head.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class ListNode\n{\n    public int val;\n    public ListNode next;\n    public ListNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static ListNode ReverseInGroups(ListNode head, int k)\n    {\n        if (head == null || k <= 1) return head;\n\n        var dummy = new ListNode(0) { next = head };   // the first group changes the head\n        var groupPrevious = dummy;\n\n        while (true)\n        {\n            // Look ahead: a short trailing group is left alone.\n            var check = groupPrevious;\n            for (int i = 0; i < k && check != null; i++) check = check.next;\n            if (check == null) break;\n\n            var groupStart = groupPrevious.next;\n            var current = groupStart;\n            ListNode previous = null;\n\n            for (int i = 0; i < k; i++)\n            {\n                var next = current.next;\n                current.next = previous;\n                previous = current;\n                current = next;\n            }\n\n            // groupStart is now the group's TAIL and must point at what follows.\n            groupPrevious.next = previous;\n            groupStart.next = current;\n            groupPrevious = groupStart;\n        }\n\n        return dummy.next;\n    }\n\n    private static ListNode Build(params int[] values)\n    {\n        var dummy = new ListNode(0);\n        var tail = dummy;\n        foreach (int v in values) { tail.next = new ListNode(v); tail = tail.next; }\n        return dummy.next;\n    }\n\n    private static void Show(ListNode head)\n    {\n        var parts = new List<string>();\n        for (var n = head; n != null; n = n.next) parts.Add(n.val.ToString());\n        Console.WriteLine(parts.Count == 0 ? \"(empty)\" : string.Join(\",\", parts));\n    }\n\n    public static void Main()\n    {\n        Show(ReverseInGroups(Build(1, 2, 3, 4, 5), 2));\n        Show(ReverseInGroups(Build(1, 2, 3, 4, 5), 3));   // the trailing 4,5 stays\n        Show(ReverseInGroups(Build(1, 2, 3, 4, 5), 1));   // no change\n        Show(ReverseInGroups(Build(1, 2, 3), 5));         // group larger than the list\n        Show(ReverseInGroups(Build(1, 2, 3, 4), 4));\n        Show(ReverseInGroups(null, 2));\n        Show(ReverseInGroups(Build(1), 2));\n    }\n}\n```\n\n**Output**\n\n```\n2,1,4,3,5\n3,2,1,4,5\n1,2,3,4,5\n1,2,3\n4,3,2,1\n(empty)\n1\n```",
+  "tags": [
+   "dsa",
+   "linked-list",
+   "reversal",
+   "pointer-surgery",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why look ahead before reversing rather than after?",
+    "a": "Because a trailing group shorter than k must be left in its original order, and once reversed it cannot be cheaply restored - you would have to reverse it back, which is wasteful and easy to get wrong. Counting k nodes first means the reversal only ever runs on a group that qualifies. The list of five with k of three shows it: the trailing 4,5 is untouched."
+   },
+   {
+    "q": "Why keep a reference to the group's original start?",
+    "a": "Because after reversal that node is the group's tail, and it must point at the first node of whatever follows - which is the node the reversal loop stopped at. Without the reference there is no way to find it, since the reversal has destroyed the forward links. It also becomes the previous-group anchor for the next iteration. Naming it before the reversal is the save-before-overwrite discipline that all linked-list surgery needs."
+   },
+   {
+    "q": "How would you reverse the remainder as well?",
+    "a": "Drop the look-ahead and reverse whatever is left when fewer than k nodes remain - the loop becomes 'reverse min(k, remaining)'. That is a genuinely different problem with a different answer on the same input, so it is worth clarifying which is wanted before writing anything. Both are asked; the version leaving the remainder alone is the more common one and the one with the subtler control flow."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Greedy",
+  "difficulty": "Medium",
+  "question": "Determine the minimum number of intervals to remove so the rest do not overlap.",
+  "answer": "**Approach**\n\nSort by end coordinate and keep greedily. The number removed is the total minus the number kept.\n\n**Logic**\n\nThis is activity selection in disguise — maximising what stays is the same as minimising what goes — and the same proof applies: keeping the interval that ends earliest leaves the most room for the rest.\n\nSorting by start instead fails, because a long interval starting early blocks several short ones that would all have fitted.\n\nTouching intervals do not overlap here, so an interval starting exactly where the previous ends is kept.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int MinimumRemovals(int[][] intervals)\n    {\n        if (intervals == null || intervals.Length == 0) return 0;\n\n        // By END: keeping the earliest-ending interval leaves the most room.\n        var byEnd = intervals.OrderBy(i => i[1]).ToArray();\n\n        int kept = 1;\n        long lastEnd = byEnd[0][1];\n\n        for (int i = 1; i < byEnd.Length; i++)\n        {\n            // Touching is not overlapping, so the comparison is non-strict.\n            if (byEnd[i][0] < lastEnd) continue;\n\n            kept++;\n            lastEnd = byEnd[i][1];\n        }\n\n        return byEnd.Length - kept;\n    }\n\n    private static int[][] Intervals(params int[][] v) => v;\n\n    public static void Main()\n    {\n        Console.WriteLine(MinimumRemovals(Intervals(\n            new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 4 }, new[] { 1, 3 })));\n\n        Console.WriteLine(MinimumRemovals(Intervals(\n            new[] { 1, 2 }, new[] { 1, 2 }, new[] { 1, 2 })));      // all identical\n\n        Console.WriteLine(MinimumRemovals(Intervals(\n            new[] { 1, 2 }, new[] { 2, 3 })));                       // touching, so none\n\n        Console.WriteLine(MinimumRemovals(Intervals(new[] { 1, 100 })));\n        Console.WriteLine(MinimumRemovals(Intervals()));\n\n        // Sorting by start would keep [0,10] and remove three; by end it removes one.\n        Console.WriteLine(MinimumRemovals(Intervals(\n            new[] { 0, 10 }, new[] { 1, 2 }, new[] { 3, 4 }, new[] { 5, 6 })));\n    }\n}\n```\n\n**Output**\n\n```\n1\n2\n0\n0\n0\n1\n```",
+  "tags": [
+   "dsa",
+   "greedy",
+   "intervals",
+   "activity-selection",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is minimising removals the same problem as activity selection?",
+    "a": "Because the intervals either stay or go, so minimising the removed count is exactly maximising the kept count - the two differ by a constant, the total. That means the same greedy and the same exchange-argument proof apply without modification. Recognising the complement relationship saves deriving anything new, and it is why these two questions are often asked as a pair to see whether the connection is spotted."
+   },
+   {
+    "q": "Why does sorting by start give the wrong answer?",
+    "a": "Because it keeps whichever interval begins earliest regardless of how long it runs, so one sprawling interval can block several short ones. The last test is built for it: sorting by start keeps [0,10] and removes the other three, while sorting by end keeps all three short ones and removes only the long one. The end coordinate is what measures how much room an interval leaves behind."
+   },
+   {
+    "q": "Why is a touching pair not an overlap here?",
+    "a": "Because the intervals are treated as half-open - [1,2] occupies up to but not including 2 - so an interval starting at 2 does not conflict. That is the convention this problem uses, and it is encoded by the strict less-than in the comparison. The discrete reading, where [1,2] and [2,3] would clash, needs a non-strict comparison and gives a different answer, which is why stating the convention matters more than it might seem."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Hashing",
+  "difficulty": "Medium",
+  "question": "Find all starting indices where a permutation of one string occurs in another.",
+  "answer": "**Approach**\n\nA fixed-width sliding window with a count array and a running match counter, so each step is O(1) rather than a 26-slot comparison.\n\n**Logic**\n\nAn anagram is determined entirely by character counts, so the question is whether the window's counts equal the pattern's — an order-blind test, unlike the subsequence problems.\n\nComparing the two count arrays at every position would be O(26) per step. Tracking how many characters currently have the right count, and updating that counter only when a count crosses the target, makes each step constant.\n\nThe window is fixed width, so one character enters and one leaves per step.\n\nO(n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<int> FindAnagramStarts(string text, string pattern)\n    {\n        var found = new List<int>();\n        if (string.IsNullOrEmpty(pattern) || text.Length < pattern.Length) return found;\n\n        var needed = new int[26];\n        foreach (char c in pattern) needed[c - 'a']++;\n\n        var window = new int[26];\n        int matching = 0;   // how many letters currently have exactly the right count\n\n        for (int i = 0; i < 26; i++) if (needed[i] == 0) matching++;\n\n        for (int i = 0; i < text.Length; i++)\n        {\n            int entering = text[i] - 'a';\n\n            // Update the counter only when a count crosses the target.\n            if (window[entering] == needed[entering]) matching--;\n            window[entering]++;\n            if (window[entering] == needed[entering]) matching++;\n\n            if (i >= pattern.Length)\n            {\n                int leaving = text[i - pattern.Length] - 'a';\n\n                if (window[leaving] == needed[leaving]) matching--;\n                window[leaving]--;\n                if (window[leaving] == needed[leaving]) matching++;\n            }\n\n            if (matching == 26) found.Add(i - pattern.Length + 1);\n        }\n\n        return found;\n    }\n\n    private static IList<int> BruteForce(string text, string pattern)\n    {\n        var found = new List<int>();\n        if (pattern.Length == 0 || text.Length < pattern.Length) return found;\n\n        var sortedPattern = string.Concat(pattern.OrderBy(c => c));\n\n        for (int i = 0; i + pattern.Length <= text.Length; i++)\n            if (string.Concat(text.Substring(i, pattern.Length).OrderBy(c => c)) == sortedPattern)\n                found.Add(i);\n\n        return found;\n    }\n\n    private static void Show(IList<int> v) =>\n        Console.WriteLine(v.Count == 0 ? \"none\" : string.Join(\",\", v));\n\n    public static void Main()\n    {\n        Show(FindAnagramStarts(\"cbaebabacd\", \"abc\"));\n        Show(FindAnagramStarts(\"abab\", \"ab\"));          // overlapping matches\n        Show(FindAnagramStarts(\"af\", \"be\"));\n        Show(FindAnagramStarts(\"a\", \"ab\"));             // pattern longer than the text\n        Show(FindAnagramStarts(\"aaaa\", \"aa\"));\n        Show(FindAnagramStarts(\"abc\", \"\"));\n\n        var random = new Random(159);\n        bool agrees = true;\n\n        for (int trial = 0; trial < 200 && agrees; trial++)\n        {\n            string text = new string(Enumerable.Range(0, random.Next(0, 30))\n                .Select(_ => (char)('a' + random.Next(3))).ToArray());\n            string pattern = new string(Enumerable.Range(0, random.Next(1, 4))\n                .Select(_ => (char)('a' + random.Next(3))).ToArray());\n\n            if (!FindAnagramStarts(text, pattern).SequenceEqual(BruteForce(text, pattern)))\n                agrees = false;\n        }\n\n        Console.WriteLine($\"200 random cases agree with a sorting check: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\n0,6\n0,1,2\nnone\nnone\n0,1,2\nnone\n200 random cases agree with a sorting check: True\n```",
+  "tags": [
+   "dsa",
+   "sliding-window",
+   "anagram",
+   "counting",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why track a matching counter instead of comparing the arrays?",
+    "a": "Because comparing two 26-slot arrays at every position is O(26) per step, making the scan O(26n) - correct but wasteful. A count can only cross the target when it is incremented or decremented, so maintaining a counter of how many letters are currently correct costs two comparisons per step. That is the same transition-based bookkeeping used in the minimum-window-substring problem, and it is what makes the window genuinely O(1) per move."
+   },
+   {
+    "q": "Why does the counter start by counting the zeros?",
+    "a": "Because letters absent from the pattern must have a window count of zero to match, and at the start they all do - so they are already correct and must be counted. Starting the counter at zero would require all 26 letters to be touched before a match could register, so no match would ever be found. It is an initialisation detail that makes the invariant true from the first step rather than only after the window fills."
+   },
+   {
+    "q": "How does this differ from finding a subsequence?",
+    "a": "Completely. An anagram is order-blind and contiguous, so character counts over a fixed window decide it. A subsequence requires the characters in order and allows gaps, so counts are useless and a positional scan is needed. The two problems look similar in wording and share almost no machinery, which is why 'find all anagrams' and 'minimum window subsequence' are worth solving side by side."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Hard",
+  "question": "Find the length of the longest increasing path through a matrix.",
+  "answer": "**Approach**\n\nDFS with memoisation. Each cell's answer is one plus the best of its strictly higher neighbours, and the memo turns an exponential search into a linear one.\n\n**Logic**\n\nNo visited set is needed, which is the surprising part: the strictly-increasing requirement makes cycles impossible, so the recursion cannot revisit a cell on its own path. The grid is implicitly a DAG.\n\nThat is also what makes memoisation valid — a cell's longest path depends only on the cell, not on how it was reached.\n\nThe alternative is a topological sort by height with a peeling BFS, which gives the same answer iteratively and avoids the recursion depth.\n\nO(cells), each computed once.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private static readonly int[] Dr = { -1, 1, 0, 0 };\n    private static readonly int[] Dc = { 0, 0, -1, 1 };\n\n    public static int LongestIncreasingPath(int[][] matrix)\n    {\n        if (matrix == null || matrix.Length == 0) return 0;\n\n        int rows = matrix.Length, cols = matrix[0].Length;\n        var memo = new int[rows, cols];\n        int best = 0;\n\n        // No visited set needed: strict increase forbids cycles, so this is a DAG.\n        int Longest(int r, int c)\n        {\n            if (memo[r, c] != 0) return memo[r, c];\n\n            int length = 1;\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = r + Dr[d], nc = c + Dc[d];\n\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;\n                if (matrix[nr][nc] <= matrix[r][c]) continue;\n\n                length = Math.Max(length, 1 + Longest(nr, nc));\n            }\n\n            return memo[r, c] = length;\n        }\n\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++) best = Math.Max(best, Longest(r, c));\n\n        return best;\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(LongestIncreasingPath(Grid(\n            new[] { 9, 9, 4 }, new[] { 6, 6, 8 }, new[] { 2, 1, 1 })));\n\n        Console.WriteLine(LongestIncreasingPath(Grid(\n            new[] { 3, 4, 5 }, new[] { 3, 2, 6 }, new[] { 2, 2, 1 })));\n\n        Console.WriteLine(LongestIncreasingPath(Grid(new[] { 1 })));\n        Console.WriteLine(LongestIncreasingPath(Grid(new[] { 7, 7 }, new[] { 7, 7 })));  // all equal\n        Console.WriteLine(LongestIncreasingPath(Array.Empty<int[]>()));\n\n        // A spiral of increasing values: the path covers every cell.\n        Console.WriteLine(LongestIncreasingPath(Grid(\n            new[] { 1, 2, 3 }, new[] { 8, 9, 4 }, new[] { 7, 6, 5 })));\n    }\n}\n```\n\n**Output**\n\n```\n4\n4\n1\n1\n0\n9\n```",
+  "tags": [
+   "dsa",
+   "memoisation",
+   "dag",
+   "matrix",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is no visited set needed?",
+    "a": "Because the path must strictly increase, so following edges can never return to a cell already on the path - that would require a value to be greater than itself. The grid therefore behaves as a directed acyclic graph even though the adjacency is undirected. That is what allows plain memoisation: without acyclicity a cell's answer would depend on the path taken to reach it and caching would be invalid."
+   },
+   {
+    "q": "Why is memoisation valid here?",
+    "a": "Because the longest increasing path starting at a cell depends only on that cell and the grid, not on how the search arrived - there is no state carried along the path. So the value is a property of the cell and can be cached and shared across all callers. That independence is exactly the optimal-substructure condition, and it is why the all-equal grid returns one rather than looping."
+   },
+   {
+    "q": "What is the iterative alternative?",
+    "a": "A peeling BFS: compute each cell's out-degree toward strictly higher neighbours, start from the cells with none - the local maxima - and peel inward level by level, which is a topological sort by height. It gives the same answer with no recursion, so no stack-depth risk on a large grid, and the level count is the path length directly. Worth reaching for when the grid could be millions of cells."
+   }
+  ]
  }
 ]
