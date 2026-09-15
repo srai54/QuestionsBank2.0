@@ -3936,5 +3936,350 @@
     "a": "Rewrite first when the predicate is not sargable, because no index can help a query that wraps the column in a function. Add an index when the predicate is already sargable and the plan shows a scan. Be cautious about adding indexes reflexively: each one costs write throughput and storage, and a table with fifteen indexes has a genuinely slow insert path. Covering an existing index with INCLUDE columns to eliminate key lookups is usually cheaper than adding a new index."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Performance",
+  "difficulty": "Hard",
+  "question": "A query filtering on an indexed datetime column suddenly does a full table scan. Nobody changed the index or the query. What are the likely causes?",
+  "answer": "**What's happening**\n\nThe index exists but the optimiser has stopped using it. Five common reasons, in the order I would check them:\n\n**1. A function wrapping the column.** `WHERE CAST(CreatedAt AS DATE) = @d` or `WHERE YEAR(CreatedAt) = 2026` makes the predicate non-sargable — the index is ordered by `CreatedAt`, not by `YEAR(CreatedAt)`, so it cannot seek. This is the most common and it often arrives via an ORM change rather than a SQL change.\n\n**2. Implicit conversion.** A parameter typed `nvarchar` against a `varchar` column, or `datetime2` against `datetime`, forces a conversion on the *column* side and kills the seek. The plan shows `CONVERT_IMPLICIT` and a warning.\n\n**3. Statistics gone stale.** After a large insert the optimiser believes the table is small or the range is narrow, estimates a handful of rows, and picks a scan. Nothing in the code changed — the data did.\n\n**4. Parameter sniffing.** The plan was compiled for a parameter value that matched most of the table, cached, and is now being reused for a selective value. Same query text, wrong plan.\n\n**5. Tipping point.** If the query selects columns not in the index, each match costs a key lookup. Past roughly 1% of the table the optimiser correctly decides a scan is cheaper — the index is being ignored on purpose.\n\n**How to confirm**\n\nRead the actual execution plan, not the estimated one, and compare estimated versus actual rows. A large discrepancy points at statistics or sniffing; a `CONVERT_IMPLICIT` points at typing; a scan with a filter above it points at a non-sargable predicate.\n\n**The fix**\n\nRewrite the predicate as a range — `WHERE CreatedAt >= @from AND CreatedAt < @to` — so it can seek. Match parameter types to column types exactly. Update statistics. For sniffing, `OPTIMIZE FOR UNKNOWN`, `RECOMPILE`, or splitting into separate procedures for the skewed cases. Add included columns to cover the query if key lookups are the cost.\n\n**Example of the rewrite**\n\n```sql\n-- Non-sargable: the index on CreatedAt cannot be used\nSELECT * FROM Orders WHERE CAST(CreatedAt AS DATE) = '2026-09-15';\n\n-- Sargable: a range seek on the same index\nSELECT * FROM Orders\nWHERE CreatedAt >= '2026-09-15' AND CreatedAt < '2026-09-16';\n```",
+  "tags": [
+   "sql",
+   "query-plan",
+   "sargable",
+   "parameter-sniffing",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "How would you tell parameter sniffing from stale statistics?",
+    "a": "Both show a large gap between estimated and actual rows, so the distinguishing test is what fixes it. Clearing the plan cache for that query, or adding OPTION (RECOMPILE), fixes sniffing immediately and does nothing for stale statistics. Running UPDATE STATISTICS fixes staleness and only incidentally helps sniffing by invalidating the plan. Sniffing also shows the classic pattern of being fast for some parameter values and slow for others with the same query text, which staleness does not."
+   },
+   {
+    "q": "Is adding OPTION (RECOMPILE) everywhere a reasonable policy?",
+    "a": "No. It pays a compilation cost on every execution, which for a query running thousands of times a second is a significant CPU tax and can become the bottleneck itself. It is the right answer for a query with wildly varying selectivity that runs occasionally - a report, an admin search. For hot paths, prefer fixing the underlying cause: better statistics, a covering index, or splitting the skewed case into its own procedure so each gets an appropriate cached plan."
+   },
+   {
+    "q": "The developer says 'just add an index'. When is that the wrong instinct?",
+    "a": "When the predicate is non-sargable, because no index can help a query that wraps the column in a function - you would add an index that is never used and pay its write cost forever. Also when the table is write-heavy, since every index multiplies insert and update cost and enlarges the transaction log. And when an existing index would work if the query were fixed. The order should be: make the predicate sargable, confirm the existing indexes, then add one only if a genuine gap remains."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Hard",
+  "question": "Two operations that each work fine start deadlocking when run concurrently. The error names a deadlock victim. How do you diagnose and fix it without just adding retries?",
+  "answer": "**What's happening**\n\nA deadlock needs two transactions acquiring the same locks in *opposite orders*. Transaction A locks row 1 then wants row 2; transaction B locks row 2 then wants row 1. Neither can proceed, so the engine picks a victim and rolls it back.\n\nIt appears under concurrency only because it needs both transactions in flight simultaneously — which is why each works fine alone.\n\n**How to confirm**\n\nCapture the deadlock graph: the `system_health` extended events session records it by default in SQL Server, so you can read the exact two statements, the resources and the lock modes without reproducing it. The graph tells you which two objects were involved and in which order each side took them.\n\n**The fix, in order of preference**\n\n**1. Consistent lock ordering.** If every transaction touches tables and rows in the same order — always Accounts before Transactions, always ascending by id — the cycle cannot form. This is the real fix and it usually means changing one code path.\n\n**2. Shorten the transaction.** Do not do HTTP calls, file IO or user interaction inside one. The shorter the lock is held, the smaller the window.\n\n**3. Take the strong lock first.** If a transaction reads a row and later updates it, another reader can acquire a shared lock in between and the upgrade deadlocks. Reading with `UPDLOCK` up front takes the update lock immediately and serialises the pair instead of deadlocking them.\n\n**4. Reduce the isolation level.** Read Committed Snapshot removes the reader-writer conflicts entirely, since readers get a version rather than blocking. It is often a one-line database setting that eliminates a whole class of deadlocks — at the cost of tempdb version-store usage.\n\nRetries are still worth having as a backstop, because a distributed system cannot eliminate every deadlock — but a retry on a deadlock that happens routinely is masking a design problem and will fail under enough load.\n\n**The classic shape**\n\n```sql\n-- Transaction A\nBEGIN TRAN;\nUPDATE Accounts SET Balance -= 100 WHERE Id = 1;   -- locks 1\nUPDATE Accounts SET Balance += 100 WHERE Id = 2;   -- wants 2\nCOMMIT;\n\n-- Transaction B, opposite order: the cycle\nBEGIN TRAN;\nUPDATE Accounts SET Balance -= 50 WHERE Id = 2;    -- locks 2\nUPDATE Accounts SET Balance += 50 WHERE Id = 1;    -- wants 1\nCOMMIT;\n\n-- The fix: both order by ascending Id, so B does 1 then 2 as well.\n```",
+  "tags": [
+   "sql",
+   "deadlock",
+   "transactions",
+   "lock-ordering",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is a retry not a sufficient fix on its own?",
+    "a": "Because it treats a design problem as a transient one. The deadlock rate grows with concurrency, so the retry rate grows too, and every retry redoes work already done - at high enough load the system spends more time retrying than progressing, and latency degrades sharply rather than gracefully. Retries are correct for genuinely unavoidable contention and as a safety net, but if the deadlock graph shows two code paths taking the same rows in opposite orders, that is a bug with a one-line fix and retrying it is choosing to keep paying."
+   },
+   {
+    "q": "How does Read Committed Snapshot change the picture?",
+    "a": "It makes readers take a row version from tempdb instead of a shared lock, so readers no longer block writers and writers no longer block readers - which eliminates the large family of deadlocks involving a SELECT. Write-write conflicts remain, so it is not a complete answer. The costs are tempdb growth, the version-store overhead on every update, and subtly different semantics: a reader sees a consistent snapshot as of the statement start, which can surprise code that assumed it would block and read fresh data."
+   },
+   {
+    "q": "The deadlock involves only one table and one statement. How is that possible?",
+    "a": "Usually a non-clustered index and the clustered index being accessed in different orders by the same statement - one session seeks the non-clustered index then looks up the clustered, while another updates the clustered and must maintain the non-clustered. Parallelism can also deadlock a query against itself across threads. The fix is often a covering index that removes the lookup, or reducing the degree of parallelism for that statement. It is the case that convinces people to read the deadlock graph rather than guess."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "EF Core",
+  "difficulty": "Hard",
+  "question": "An EF Core save that updates one field on one row is issuing an UPDATE with every column in it, and occasionally overwrites a change another user made. What is happening and how do you fix both?",
+  "answer": "**What's happening**\n\nTwo separate issues that share a root cause: the entity was loaded, detached, and re-attached.\n\n**The wide UPDATE.** When you `Attach` or `Update` an entity, EF has no original values to compare against, so it marks every property as modified and writes them all. Only an entity tracked by the same context since it was loaded produces a narrow UPDATE containing just the changed column.\n\n**The lost update.** Because every column is written, the save also writes back the values the entity held when it left the client — including the field another user changed in the meantime. Last write wins, silently.\n\n**How to confirm**\n\nTurn on `EnableSensitiveDataLogging` and look at the generated SQL. A `SET` clause naming every column is the signature.\n\n**The fix**\n\nFor the wide update: load the entity in the same context, mutate it, and save — change tracking then emits only the changed column. Or explicitly mark just the properties you intend to change:\n\n```csharp\ncontext.Attach(order);\ncontext.Entry(order).Property(o => o.Status).IsModified = true;\n```\n\nFor the lost update: add a concurrency token. A `rowversion`/`timestamp` column marked `[Timestamp]` makes EF add the original value to the `WHERE` clause, so a row modified since you read it matches zero rows and EF throws `DbUpdateConcurrencyException` — which you handle by reloading and merging, or by telling the user.\n\n**The generated SQL**\n\n```sql\n-- Attached entity, no concurrency token: writes everything, clobbers other changes\nUPDATE Orders SET Status=@p0, Total=@p1, CustomerId=@p2, Notes=@p3\nWHERE Id=@p4;\n\n-- Tracked entity with a rowversion: writes one column, and fails safely if stale\nUPDATE Orders SET Status=@p0\nWHERE Id=@p1 AND RowVersion=@p2;\n```\n\nIf that second statement affects zero rows, somebody else changed it — which is exactly the signal the first statement threw away.",
+  "tags": [
+   "ef-core",
+   "change-tracking",
+   "concurrency",
+   "lost-update",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does the detached case have to write every column?",
+    "a": "Because change tracking works by comparing current values against the originals captured at load time, and a detached entity arriving from a client has no originals - EF cannot know whether Total was changed by the user or is simply the value it had. Marking everything modified is the only safe default given that ignorance. That is why the fix is either to supply the originals, by loading in the same context, or to state explicitly which properties you meant to change."
+   },
+   {
+    "q": "The client posts a DTO, not an entity. Does that change the answer?",
+    "a": "It makes it cleaner, because you are then free to load the entity fresh, copy across only the fields the DTO is allowed to change, and save - which gives a narrow update and, incidentally, prevents over-posting where a client sets a field it should not be able to. Binding a request body straight onto an entity and calling Update is the pattern that produces both bugs at once. Carrying the rowversion in the DTO and reapplying it is what keeps the concurrency check working across the round trip."
+   },
+   {
+    "q": "How would you handle DbUpdateConcurrencyException in practice?",
+    "a": "It depends on the field. For an independent field such as a status, reload the database values, reapply your change, and retry - the two edits do not conflict in meaning. For a value derived from what the user saw, such as a price they agreed to, retrying silently is wrong and the user must be shown the current state and asked. The important part is that the exception forces that decision to be made rather than resolved arbitrarily, which is exactly what the version-less update did by accident."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Schema Design",
+  "difficulty": "Medium",
+  "question": "A table has grown to 400 million rows and queries have degraded. A colleague proposes adding more indexes. What questions do you ask before agreeing?",
+  "answer": "**Questions I would ask, in order**\n\n**Which queries are actually slow?** Not 'the table is slow' — the specific statements, their frequency and their latency. Optimising a query that runs twice a day is wasted effort next to one running a thousand times a second.\n\n**What is the read-to-write ratio?** Every index makes inserts, updates and deletes more expensive and enlarges the log. On a 400-million-row table that is heavily written, adding indexes can make the overall system slower while making one query faster.\n\n**How many indexes are there already, and are they used?** `sys.dm_db_index_usage_stats` shows seeks, scans and updates per index. Unused indexes are pure cost and I would expect to drop some before adding any. Duplicate and near-duplicate indexes are extremely common on a table that has grown this way.\n\n**Does all the data need to be there?** Four hundred million rows usually includes years nobody queries. Archiving or partitioning by date, so that the hot partition is small, often beats any index change — and it makes maintenance operations possible again.\n\n**Are the queries selective enough for an index to help?** If a query returns 10% of the table, an index will not be used and adding one changes nothing.\n\n**What is the clustered index?** On a table this size the clustering key choice dominates everything — a non-sequential key such as a random GUID causes page splits and fragmentation on every insert, and widens every non-clustered index, since they all carry the clustering key.\n\n**What I would propose instead**\n\nUsually some combination of: drop the unused indexes, fix the one or two queries that are non-sargable, partition or archive by date, and add at most one carefully chosen covering index for the genuinely hot query. Index-first is treating a symptom.",
+  "tags": [
+   "sql",
+   "indexing",
+   "large-tables",
+   "partitioning",
+   "trade-offs",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does the clustered index choice matter so much at this scale?",
+    "a": "Because the clustered index IS the table - the rows are stored in its order - and every non-clustered index stores the clustering key as its row pointer. So a wide clustering key inflates every other index on the table, and a non-sequential one such as a random GUID means each insert lands in the middle of a page, causing splits, fragmentation and log churn. On 400 million rows those costs are structural and cannot be indexed away. Changing it later means rebuilding the entire table, which is why it is worth getting right early."
+   },
+   {
+    "q": "When is partitioning genuinely the answer rather than a complication?",
+    "a": "When queries filter on the partition key, so the optimiser can eliminate partitions and touch only the relevant slice, and when you need to age data out - switching a partition out is a metadata operation rather than a DELETE of a hundred million rows. It is not a general performance feature: partitioning a table whose queries do not filter on the key adds complexity and can make things slower. The maintenance argument is usually the stronger one."
+   },
+   {
+    "q": "How do you find indexes that are safe to drop?",
+    "a": "sys.dm_db_index_usage_stats gives seeks, scans, lookups and updates per index since the last restart - an index with zero reads and many writes is pure cost. Two caveats: the counters reset on restart and on some maintenance operations, so a short window can mislead about monthly or quarterly reports, and a unique index may be enforcing a constraint rather than serving queries. I would collect the stats over a full business cycle, script the index before dropping it, and disable rather than drop first so it can be rebuilt quickly if something regresses."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "EF Core",
+  "difficulty": "Medium",
+  "question": "A read-only endpoint listing 5,000 records uses noticeably more memory and CPU than expected. The query itself is fast. What would you change?",
+  "answer": "**What's happening**\n\nChange tracking. By default EF Core creates a tracking entry for every entity it materialises, holding the entity plus a snapshot of its original values so it can detect changes later. For a read-only query that is pure overhead: double the memory per row and CPU spent building snapshots nobody will consult.\n\nAt 5,000 rows it is noticeable; at 50,000 it dominates.\n\n**How to confirm**\n\nCompare `context.ChangeTracker.Entries().Count()` after the query — for a read-only endpoint it should be zero. If it equals the row count, you are tracking.\n\n**The fix**\n\n`AsNoTracking()` on any query whose results will not be modified. It skips the snapshot entirely and can also return the same instance for duplicated rows unless you ask for identity resolution.\n\nBeyond that, for a list endpoint:\n\n- **Project to a DTO** with `Select`. That fetches only the columns you need rather than every column of the entity, which usually saves more than the tracking change — and it makes the query narrower, so covering indexes become possible.\n- **Paginate.** Returning 5,000 records to a UI is rarely the requirement; it is usually a missing `Skip`/`Take`.\n- **Consider `AsNoTrackingWithIdentityResolution()`** only if the result graph has shared references you need de-duplicated.\n\n**The change**\n\n```csharp\n// Tracked: snapshots 5,000 entities nobody will modify\nvar orders = await context.Orders\n    .Where(o => o.CustomerId == id)\n    .ToListAsync();\n\n// Read-only and projected: no snapshots, fewer columns\nvar orders = await context.Orders\n    .AsNoTracking()\n    .Where(o => o.CustomerId == id)\n    .OrderByDescending(o => o.CreatedAt)\n    .Skip(page * size).Take(size)\n    .Select(o => new OrderSummary(o.Id, o.Status, o.Total))\n    .ToListAsync();\n```\n\nNote that a `Select` projection to a non-entity type is not tracked anyway — so projecting makes `AsNoTracking` redundant, and projecting is the better habit.",
+  "tags": [
+   "ef-core",
+   "performance",
+   "as-no-tracking",
+   "projection",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "If projection already avoids tracking, why does AsNoTracking exist?",
+    "a": "For when you genuinely need the entity type - passing it to code that expects the model, or reading a graph with Includes - but will not modify it. Projection is better when you control the shape, because it also reduces the columns fetched, which tracking never does. The practical rule is: project when you can, AsNoTracking when you must return entities, and tracking only when you intend to save."
+   },
+   {
+    "q": "What breaks if you call AsNoTracking and then try to save a change?",
+    "a": "Nothing happens - SaveChanges reports zero rows affected, because the context has no entry for that entity and therefore nothing to write. It fails silently, which is worse than an exception. That is why AsNoTracking should be applied deliberately per query rather than set as a global default on the context: a global NoTracking default turns every forgotten tracking requirement into a silent no-op rather than a loud error."
+   },
+   {
+    "q": "Is returning 5,000 records ever the right answer?",
+    "a": "For a UI list, essentially never - the user cannot consume it and the payload alone will dominate the latency. It is legitimate for an export, a batch job or a feed consumed by another service, and in those cases the better tool is streaming: AsAsyncEnumerable so rows are yielded as they arrive rather than buffered into a list, keeping memory flat regardless of the row count. The question to ask is who consumes it, because that decides whether pagination or streaming is the fix."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Correctness",
+  "difficulty": "Medium",
+  "question": "A report totals order values with SUM and the number is slightly wrong. The data looks correct. A colleague says 'it must be a rounding issue'. How do you actually find out?",
+  "answer": "**What's happening**\n\nThere are three plausible causes and they are distinguishable, so guessing is unnecessary.\n\n**1. NULL handling.** `SUM` ignores NULLs, but a join that should be `INNER` and is `LEFT` can introduce rows whose value is NULL — the total looks right but the count is wrong. Conversely, `SUM(a + b)` yields NULL for any row where either is NULL, quietly dropping that row's contribution entirely, whereas `SUM(a) + SUM(b)` does not.\n\n**2. A join fanning out rows.** If the join to a child table matches multiple rows, the parent's value is counted once per match. This is the most common cause of a total being *too high* and it is invisible in a spot check of the data.\n\n**3. Genuine floating-point error.** Only if the column is `float` or `real`. `DECIMAL` is exact and does not drift. If someone stored money in a `float`, the total will differ in the last places and no amount of ordering will fix it reliably.\n\n**How to distinguish them**\n\nCompare `COUNT(*)` against `COUNT(DISTINCT OrderId)` in the same query. If they differ, the join is fanning out — that is the answer and it has nothing to do with rounding. Check `COUNT(ValueColumn)` against `COUNT(*)`: a difference means NULLs. Check the column type: if it is `DECIMAL`, rounding is not the explanation.\n\n**The fix**\n\nFor fan-out, aggregate the child to one row per parent before joining, or use a window function. For NULLs, decide deliberately between `COALESCE(value, 0)` and excluding the row. For money in a `float`, change the column type — that is a data-correctness bug, not a display problem.\n\n```sql\n-- Diagnostic: do these three numbers agree?\nSELECT COUNT(*)                AS JoinedRows,\n       COUNT(DISTINCT o.Id)    AS DistinctOrders,\n       COUNT(o.Total)          AS NonNullTotals,\n       SUM(o.Total)            AS Total\nFROM Orders o\nLEFT JOIN OrderLines l ON l.OrderId = o.Id;\n```",
+  "tags": [
+   "sql",
+   "aggregation",
+   "joins",
+   "nulls",
+   "decimal",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is money in a float a correctness bug rather than a precision preference?",
+    "a": "Because binary floating point cannot represent most decimal fractions exactly - 0.1 has no finite binary expansion - so values drift as they are summed, and the drift depends on the order of summation, which means the same query can return different totals depending on the plan. For money that is unacceptable: two runs of the same report disagree, and reconciliation fails. DECIMAL stores the value exactly in base ten, which is why every financial system uses it. The cost is that it is slower, which is never a good trade for money."
+   },
+   {
+    "q": "How does a window function avoid the fan-out problem?",
+    "a": "Because it computes the aggregate over a partition without collapsing the rows, so you can total the parent value once per parent while still having the child rows available - SUM(o.Total) OVER (PARTITION BY o.Id). More often the cleaner fix is to aggregate the child in a subquery or CTE to one row per parent and then join, which keeps the grain of the result set explicit. Being able to say what one row of the result represents is the discipline that prevents the bug in the first place."
+   },
+   {
+    "q": "Why does SUM(a + b) behave differently from SUM(a) + SUM(b)?",
+    "a": "Because NULL propagates through arithmetic: if b is NULL for a row, a + b is NULL and SUM skips that row entirely, losing a as well. SUM(a) + SUM(b) sums each column independently, skipping only the NULLs in that column. So the two expressions give different answers on the same data whenever either column has a NULL, and neither is universally correct - the right one depends on whether a row with a missing b should contribute its a or be excluded. It is a question about the business meaning, which is why COALESCE should be a deliberate decision rather than a reflex."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Migrations",
+  "difficulty": "Hard",
+  "question": "You need to add a NOT NULL column with a default to a 200-million-row table in production with no maintenance window. Walk through your approach.",
+  "answer": "**The risk**\n\nA naive `ALTER TABLE ... ADD COLUMN NOT NULL DEFAULT` can rewrite every row while holding a schema-modification lock, blocking all access to the table for the duration. On 200 million rows that is minutes to hours of an outage that was not scheduled.\n\nWhat actually happens depends on the engine and version, and knowing which you are on is the first step:\n\n- **SQL Server 2012+ Enterprise** adds a `NOT NULL` column with a constant default as a metadata-only operation — instant. Standard edition and non-constant defaults rewrite.\n- **PostgreSQL 11+** is metadata-only for a constant default; earlier versions rewrite the whole table.\n- **MySQL** depends on the storage engine and version; `ALGORITHM=INSTANT` exists in 8.0 for some cases.\n\n**The approach that works regardless**\n\nSplit it into steps that are each safe and reversible:\n\n**1. Add the column as nullable with no default.** This is metadata-only everywhere and takes no meaningful lock.\n\n**2. Deploy code that writes the new column** on every insert and update, while still tolerating NULL on read. The application is now forward-compatible.\n\n**3. Backfill in batches.** Update a few thousand rows at a time in separate transactions, with a short pause between batches, so no single transaction holds locks long or bloats the log. Track progress so it can resume.\n\n**4. Add the NOT NULL constraint** once no NULLs remain. Where supported, add it as `NOT VALID` first and validate separately, which avoids a long-held lock.\n\n**5. Add the default** for future inserts if needed.\n\n**The batched backfill**\n\n```sql\nWHILE 1 = 1\nBEGIN\n    UPDATE TOP (5000) Orders\n    SET Region = 'UNKNOWN'\n    WHERE Region IS NULL;\n\n    IF @@ROWCOUNT = 0 BREAK;\n    WAITFOR DELAY '00:00:00.100';   -- let other work through\nEND\n```\n\n**The principle**\n\nEvery schema change should be deployable independently of the code change, in both orders. That means expand, migrate, contract: add the new thing, move to it, remove the old thing — three deployments, each safe to roll back on its own.",
+  "tags": [
+   "sql",
+   "migrations",
+   "zero-downtime",
+   "expand-contract",
+   "production",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does the backfill need to be batched rather than one UPDATE?",
+    "a": "Because a single UPDATE of 200 million rows is one transaction: it holds locks until it commits, escalates to a table lock, writes the entire change set to the transaction log before committing, and cannot be interrupted without rolling all of it back. Batching bounds each of those - short locks, a log that can be truncated between batches, and progress that survives a cancellation. The pause between batches matters too, because it gives other work a chance at the locks rather than starving it."
+   },
+   {
+    "q": "What is expand-migrate-contract and why three deployments?",
+    "a": "Expand adds the new structure while the old one still works, migrate moves readers and writers to it, contract removes the old structure. Three deployments because each one must be safe with the previous version of the application still running - during a rolling deploy both versions are live simultaneously. A rename done as a single migration breaks the instances that have not been updated yet; done as add, dual-write, switch reads, drop, no version ever sees a schema it does not understand."
+   },
+   {
+    "q": "How do you make this safe to run repeatedly?",
+    "a": "Make every step idempotent and resumable. The backfill filters on IS NULL, so re-running it is harmless and it naturally resumes where it stopped. Schema steps should check for existence first rather than assuming. That matters because a long migration will be interrupted - a deploy times out, a connection drops, someone cancels it - and a migration that cannot be safely re-run turns an interruption into an incident requiring manual repair at exactly the wrong moment."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "EF Core",
+  "difficulty": "Medium",
+  "question": "A LINQ query that worked in EF Core 5 throws at runtime after upgrading, with a message about not being able to translate an expression. What changed and what do you do?",
+  "answer": "**What's happening**\n\nEF Core 3.0 removed automatic client-side evaluation for anything other than the final projection. Before that, an expression the provider could not translate to SQL was silently evaluated in memory — which meant EF fetched the entire table and filtered it in the application. That produced correct answers and catastrophic performance, often discovered only in production.\n\nThe change made it throw instead. So the upgrade did not break the query; it revealed that the query had always been running a table scan into memory.\n\nCommon triggers: calling your own C# method inside a `Where`, using a .NET API with no SQL equivalent, or a `GroupBy` shape the provider cannot express.\n\n**How to confirm**\n\nThe exception names the expression it could not translate. Read the query for anything that is not a simple property comparison or a known translatable function.\n\n**The fix, in order of preference**\n\n**1. Rewrite it so it translates.** Usually the C# helper can be inlined as an expression the provider understands. A method call like `o => IsRecent(o.CreatedAt)` becomes `o => o.CreatedAt > cutoff`.\n\n**2. Move the untranslatable part into the projection**, which is still evaluated client-side legitimately — so filtering happens in SQL and formatting happens in memory.\n\n**3. Split explicitly with `AsEnumerable()`.** If part genuinely cannot be translated, make the boundary visible so the next reader can see exactly where SQL stops and memory starts, and how many rows cross that line.\n\n```csharp\n// Throws: the provider cannot translate IsEligible\nvar result = await context.Orders\n    .Where(o => IsEligible(o))\n    .ToListAsync();\n\n// Translates: the same rule expressed as a predicate SQL understands\nvar result = await context.Orders\n    .Where(o => o.Status == Status.Open && o.Total > 100)\n    .ToListAsync();\n\n// Explicit boundary when it truly cannot translate - filter first, narrow the set\nvar candidates = await context.Orders\n    .Where(o => o.Status == Status.Open)      // in SQL\n    .ToListAsync();\nvar result = candidates.Where(IsEligible).ToList();   // in memory, on a small set\n```\n\n**The important point**\n\nThe upgrade turned a silent performance bug into a loud error. That is an improvement, and the right response is to fix the query rather than to look for a switch that restores the old behaviour.",
+  "tags": [
+   "ef-core",
+   "client-evaluation",
+   "upgrade",
+   "linq-translation",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why was silent client evaluation considered so dangerous?",
+    "a": "Because the failure mode was invisible and scaled with the data. A query that worked perfectly on a developer machine with a thousand rows would fetch ten million in production, and nothing in the code, the logs or the tests indicated that SQL had stopped filtering. Teams discovered it as an unexplained memory spike or timeout long after the code shipped. Making it throw moves the discovery to compile-adjacent time - you find out the first time you run it, on any data size."
+   },
+   {
+    "q": "Is there any way to keep a C# helper and still have it translate?",
+    "a": "Yes, if you express it as an Expression<Func<T, bool>> rather than a Func - the expression tree can be composed into the query and translated, while a compiled delegate is opaque to the provider. That gives you a named, reusable, testable predicate that still runs in SQL. Libraries such as LinqKit exist to make composing them ergonomic. The key distinction is that EF can read an expression tree and cannot read IL, so the return type of your helper decides whether it translates."
+   },
+   {
+    "q": "How would you catch this class of problem before production?",
+    "a": "Log the generated SQL in development and read it for the queries on hot paths - most surprises are visible immediately. Beyond that, test against a realistic data volume, since a query that silently pulls a table is fast on empty test data and ruinous on real data. EF Core can also be configured to throw on specific warnings, such as lazy loading or the multiple-collection-include cartesian explosion, which turns known performance traps into build-time failures rather than latency regressions."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Isolation",
+  "difficulty": "Hard",
+  "question": "An inventory check reads stock, decides there is enough, then decrements it. Under load, stock occasionally goes negative. The code is inside a transaction. Why is that not enough?",
+  "answer": "**What's happening**\n\nA transaction guarantees atomicity and a consistency level — it does not, by itself, prevent two transactions from reading the same value and both acting on it. At the default Read Committed isolation, the read takes a shared lock that is released immediately, so:\n\n1. A reads stock = 1, decides it is sufficient\n2. B reads stock = 1, decides it is sufficient\n3. A writes 0\n4. B writes -1\n\nBoth transactions were internally consistent. The problem is the gap between the read and the write, during which the value the decision was based on stopped being true. This is a lost update / write skew, and being inside a transaction does nothing about it.\n\n**How to confirm**\n\nIt appears only under concurrency and only occasionally, which is the signature. Reproduce by running the two statements in two sessions with a manual pause between the read and the write.\n\n**The fixes, from best to worst**\n\n**1. Make it a single atomic statement.** Let the database do the check and the decrement together, and check the row count:\n\n```sql\nUPDATE Inventory SET Stock = Stock - @qty\nWHERE ProductId = @id AND Stock >= @qty;\n-- 0 rows affected means there was not enough\n```\n\nNo gap exists, because the read and the write are the same operation.\n\n**2. Take the write lock at read time** with `UPDLOCK, HOLDLOCK`, so the second transaction blocks rather than reading a value it will act on.\n\n**3. Optimistic concurrency** with a rowversion — detect the conflict at write time and retry.\n\n**4. Serializable isolation** — correct but the heaviest, and it converts the problem into blocking and deadlocks rather than removing it.\n\n**The principle**\n\nIf a decision is made from a read and then acted on by a write, either the two must be one operation, or the read must take a lock strong enough to survive until the write. A transaction boundary alone guarantees neither.",
+  "tags": [
+   "sql",
+   "isolation-levels",
+   "race-condition",
+   "lost-update",
+   "concurrency",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is the single UPDATE better than locking?",
+    "a": "Because it holds no lock across a round trip - the check and the change happen inside one statement, so the window simply does not exist rather than being protected. Locking works but keeps the row unavailable for the duration of the application's think time, which includes network latency and whatever else the transaction does, so it scales worse. The single statement also fails gracefully: zero rows affected is a clean signal to report insufficient stock, with no exception handling required."
+   },
+   {
+    "q": "The business wants to reserve stock for 15 minutes while the user checks out. Now what?",
+    "a": "That cannot be a database lock - holding a transaction open for fifteen minutes would be catastrophic for concurrency and would not survive a client disconnect. It has to become a modelled reservation: a row in a Reservations table with an expiry, decremented from available stock atomically at reservation time, released by a background job or by a query that treats expired reservations as free. The general lesson is that a business-level hold is application state with a lifecycle, never a held database lock."
+   },
+   {
+    "q": "How does this change in a distributed system with multiple services?",
+    "a": "The single-statement trick stops being available, because the check and the write may be in different services or different databases - there is no shared transaction to make them atomic. The usual answers are to keep the invariant inside one service that owns the stock, so it can still do the atomic update locally, or to accept eventual consistency and use a saga with a compensating action when the reservation cannot be honoured. What you must not do is distributed two-phase commit across services by reflex: it couples their availability together, so any one being down blocks all of them."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Performance",
+  "difficulty": "Medium",
+  "question": "A paginated endpoint is fast on page 1 and takes several seconds by page 500. The query uses OFFSET/FETCH. Explain and fix.",
+  "answer": "**What's happening**\n\n`OFFSET 10000 ROWS FETCH NEXT 20` does not skip to row 10,000 — the engine must produce and discard the first 10,000 rows to know which ones to skip. So the cost grows linearly with the page number, and the last page is the most expensive.\n\nThis is inherent to offset pagination, not a tuning problem. It is also why deep pagination degrades smoothly rather than suddenly, which makes it easy to miss until someone actually browses that far.\n\nThere is a correctness problem too: if rows are inserted or deleted while a user pages through, offsets shift, so a row can be seen twice or skipped entirely.\n\n**The fix: keyset pagination**\n\nInstead of 'skip 10,000', say 'give me the rows after this one'. The sort key from the last row of the previous page becomes a `WHERE` predicate, which an index can seek directly — so every page costs the same as the first.\n\n```sql\n-- Offset: cost grows with the page number\nSELECT * FROM Orders\nORDER BY CreatedAt DESC, Id DESC\nOFFSET 10000 ROWS FETCH NEXT 20 ROWS ONLY;\n\n-- Keyset: seeks straight to the position, constant cost\nSELECT TOP 20 * FROM Orders\nWHERE (CreatedAt < @lastCreatedAt)\n   OR (CreatedAt = @lastCreatedAt AND Id < @lastId)\nORDER BY CreatedAt DESC, Id DESC;\n```\n\nThe tie-breaker on `Id` matters: without it, rows sharing a `CreatedAt` value straddle the page boundary unpredictably and can be duplicated or skipped.\n\n**The trade-off**\n\nKeyset pagination cannot jump to an arbitrary page number — there is no way to ask for 'page 500' without knowing where it starts. It gives next/previous, which is what infinite scroll and API cursors need, and is what most UIs actually use. If numbered pages are a hard requirement, the honest options are to cap the depth, or accept the cost and make sure the sort is covered by an index.",
+  "tags": [
+   "sql",
+   "pagination",
+   "keyset",
+   "offset",
+   "performance",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does the tie-breaker column matter?",
+    "a": "Because the sort must be a total order for the boundary to be well defined. If ten rows share the same CreatedAt and the page boundary falls in the middle of them, the database is free to return them in any order between queries - so the next page's predicate either re-includes rows already shown or skips some. Adding a unique column such as the primary key to the ORDER BY and to the predicate makes the position unambiguous. The same requirement applies to offset pagination, where an unstable sort silently produces duplicate and missing rows."
+   },
+   {
+    "q": "The UI needs a total page count. How do you square that with keyset?",
+    "a": "You usually cannot, cheaply - a COUNT over the filtered set is itself a scan and defeats the purpose. The pragmatic answers are: show an approximate count from statistics, show 'more results' rather than a total, or run the count once and cache it per filter rather than per page. Many products quietly moved to infinite scroll precisely because an exact total at depth is expensive and nobody uses page 500 anyway. It is worth asking whether the requirement is real before engineering around it."
+   },
+   {
+    "q": "Does the same problem exist with EF Core Skip and Take?",
+    "a": "Yes - Skip translates to OFFSET, so it has identical behaviour and identical degradation. Keyset in EF Core means expressing the comparison as a predicate, which for a composite key is a slightly awkward OR-of-ANDs as in the SQL above, or the row-value comparison syntax where the provider supports it. The important part is recognising that Skip is not free, because the LINQ reads as though it is."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Stored Procedures",
+  "difficulty": "Medium",
+  "question": "Your team is split on whether business logic belongs in stored procedures or application code. Argue both sides and say what you would actually do.",
+  "answer": "**The case for stored procedures**\n\nThey run next to the data, so a set-based operation over a large table avoids pulling rows across the network — the difference between updating a million rows in one statement and fetching them all to change a field. They give a stable interface: the schema can change behind the procedure without redeploying the application. Permissions can be granted on the procedure rather than the tables, which is a genuine security advantage. And they can be changed without a deployment, which some operations teams value highly.\n\n**The case against**\n\nThey are hard to unit test, hard to debug, and hard to version — the procedure in production and the one in source control drift, and there is usually no build that would catch it. Business rules split across two languages means the logic lives in two places and neither is complete. Code review, refactoring tools, static analysis and dependency injection are all much weaker in T-SQL. They tie the application to one database engine. And 'can be changed without a deployment' is also a description of an unaudited change to production behaviour.\n\n**What I would actually do**\n\nPut business logic in application code, where it can be tested and reviewed, and use stored procedures for the things they are genuinely better at:\n\n- **Set-based data operations** — bulk updates, archival, complex aggregations where moving the data would dominate the cost.\n- **Operations that must be atomic and data-local**, such as a queue dequeue with `UPDATE ... OUTPUT`.\n- **A stable contract** where several independent applications share a database and you need to change the schema without coordinating deployments.\n\nThe deciding question is where the cost lives. If the operation is expensive because of data volume, move the code to the data. If it is expensive because of business complexity, keep it where you can test it.\n\n**What I would push back on**\n\nA procedure with hundreds of lines of branching business rules, or a rule implemented in both places. The first is untestable; the second guarantees they will disagree.",
+  "tags": [
+   "sql",
+   "stored-procedures",
+   "architecture",
+   "trade-offs",
+   "testability",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "How would you make stored procedures testable if you have to keep them?",
+    "a": "Keep them in source control as the single authority and deploy them through migrations, so the database is built from the repository rather than edited in place - that alone removes the drift problem. Then test them like any other integration point: a test database created from those migrations, seeded per test, with assertions on the results. tSQLt exists for unit-testing T-SQL with mocking and isolation if the investment is justified. The thing to avoid is treating the procedure as configuration that lives only in production."
+   },
+   {
+    "q": "The team says an ORM is too slow so everything must be a procedure. How do you respond?",
+    "a": "By asking which queries, and by how much. ORMs generate reasonable SQL for most workloads, and when they do not, the fix is usually a projection, a fixed N+1 or a raw SQL query for that one case - not abandoning the ORM everywhere. EF Core supports FromSqlRaw and ExecuteSqlRaw precisely so the hot path can drop to SQL while the other ninety-five percent keeps the productivity. Choosing the slowest option for every query because a few were slow is trading a lot of maintainability for a benefit you have not measured."
+   },
+   {
+    "q": "Several applications share this database. Does that change your answer?",
+    "a": "Substantially, yes. With multiple independent consumers the database has become an integration point, and procedures are a reasonable way to give it a contract that survives schema changes - otherwise every table change requires coordinating deployments across teams. But I would treat that as a symptom worth addressing: a shared database is tight coupling between services, and the longer-term fix is usually one owner per schema with an API in front of it. The procedure layer is a sensible way to manage that coupling, not a reason to be comfortable with it."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Data Integrity",
+  "difficulty": "Medium",
+  "question": "A team proposes removing foreign keys from the database because they slow down inserts and the application already validates relationships. What is your view?",
+  "answer": "**The claim is partly true and the conclusion is wrong.**\n\nForeign keys do cost something: each one requires an index lookup on insert and update to verify the referenced row exists, and they constrain the order of operations in bulk loads and deletes. On a very high-throughput write path that cost is real and measurable.\n\n**But the application validating relationships is not equivalent**, for reasons worth stating precisely:\n\n**The application is not the only writer.** Data fixes run by hand, imports, a reporting tool, a second service, an old version during a rolling deploy — none of these go through your validation code. The database is the only place that sees every write.\n\n**Validation is not atomic.** Checking that a customer exists and then inserting an order is two operations with a gap; the customer can be deleted in between. The foreign key is enforced as part of the write.\n\n**Orphans are silent and cumulative.** Nothing fails at the moment of corruption. You find out months later when a join drops rows and a report is wrong, and by then the bad data is spread through backups and downstream systems.\n\n**Foreign keys are also information.** The optimiser uses them to eliminate redundant joins, and every tool that reverse-engineers a schema — documentation, ORM scaffolding, diagram tools — relies on them to know how the tables relate.\n\n**What I would propose instead**\n\nIf inserts are genuinely the bottleneck, measure which constraint is costing what. Usually the answer is a missing index on the referencing column, since the check needs one, or it is the indexes rather than the constraints. For bulk loads, disable the constraints for the load and re-enable *with validation* afterwards — which keeps the guarantee while removing the per-row cost.\n\nDropping foreign keys on a system that needs throughput is a decision some teams make deliberately, at very large scale, with strong operational discipline and reconciliation jobs to catch what drifts. That is a considered trade with compensating controls, not a performance tweak.",
+  "tags": [
+   "sql",
+   "foreign-keys",
+   "data-integrity",
+   "trade-offs",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What compensating controls would you want if the decision stands?",
+    "a": "Reconciliation jobs that periodically detect orphans and alert, because the whole risk is that corruption is silent - you need something that makes it loud. A single writer, enforced by access control, so the application really is the only path in. Foreign keys still declared but disabled where the engine supports it, so the metadata survives for tooling and documentation. And a documented decision, because the next engineer will otherwise assume the relationships are enforced and write code that depends on it."
+   },
+   {
+    "q": "Where does this argument differ for a microservices architecture?",
+    "a": "Across service boundaries you cannot have foreign keys - the referenced data lives in another service's database, so referential integrity becomes an application and eventual-consistency concern by necessity, handled with sagas, compensating actions and reconciliation. That is a genuine constraint of the architecture. But it is an argument for keeping integrity strong WITHIN each service's own schema, not for abandoning it there too: the places you cannot enforce it are exactly why you should where you can."
+   },
+   {
+    "q": "Does the same reasoning apply to check constraints and NOT NULL?",
+    "a": "The same reasoning, and the costs are even smaller - a NOT NULL or a simple CHECK is essentially free on insert, with no lookup involved. So the performance argument evaporates entirely while the correctness argument stands unchanged. If a team is dropping those, the discussion is not really about performance; it is about wanting the schema to accept whatever the application sends, which is worth surfacing as the actual position being argued."
+   }
+  ]
  }
 ]
