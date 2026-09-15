@@ -1578,5 +1578,33 @@
    "tooling",
    "configuration"
   ]
+ },
+ {
+  "category": "JavaScript/TypeScript",
+  "subcategory": "Types",
+  "difficulty": "Medium",
+  "question": "A TypeScript codebase compiles cleanly but throws 'cannot read property of undefined' in production. How is that possible and what would you change?",
+  "answer": "**How it is possible**\n\nTypeScript checks what it is told. Several holes let untyped or wrongly-typed values through:\n\n**1. `any`.** Explicit or implicit, it disables checking entirely and propagates — anything derived from an `any` is unchecked too. With `noImplicitAny` off, every untyped parameter is a hole.\n\n**2. Type assertions.** `as User` tells the compiler to stop checking, it does not verify. `response.json() as User` is a claim, not a validation — and it is the single most common source of this bug, because API responses are `any` by default.\n\n**3. External data.** JSON from an API, `localStorage`, `process.env`, query parameters — all arrive as `any` or `string | undefined` and are routinely asserted into a shape nobody checked.\n\n**4. `strictNullChecks` disabled.** Without it, `null` and `undefined` are assignable to everything, so the compiler cannot catch the exact bug in the error message.\n\n**5. Array index access.** `arr[10]` is typed as the element type even when the array is empty — `noUncheckedIndexedAccess` fixes this and is off by default.\n\n**What I would change**\n\n**Turn on `strict`**, and `noUncheckedIndexedAccess` alongside it. On an existing codebase, enable per-file or per-directory and migrate, rather than accepting thousands of errors at once.\n\n**Validate at the boundary.** Every value entering the system from outside gets parsed by a runtime validator — Zod, io-ts, ArkType — which produces a properly typed value *and* fails loudly on unexpected shapes:\n\n```ts\n// A claim the compiler cannot check\nconst user = await res.json() as User;\n\n// A check that produces the same type and validates it\nconst user = UserSchema.parse(await res.json());\n```\n\n**Ban `as` in review** except where genuinely unavoidable, and prefer type guards, which narrow by actually testing.\n\n**The principle**\n\nTypeScript's guarantees stop at the boundary of your code. Everything crossing that boundary needs runtime validation, because the compiler has no visibility of what a server actually sent. Types are a design and refactoring tool; they are not a runtime contract.",
+  "tags": [
+   "typescript",
+   "type-safety",
+   "runtime-validation",
+   "strict-mode",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is a type assertion so much worse than it looks?",
+    "a": "Because it silences the compiler at exactly the point where you have the least information - the boundary with an external system you do not control. Everything downstream then reasons confidently about a shape that was never verified, so the eventual failure occurs far from the assertion, in code that looks correct. It is also invisible in review unless you are looking for it, since 'as User' reads like documentation rather than like disabling a check."
+   },
+   {
+    "q": "What does noUncheckedIndexedAccess actually change?",
+    "a": "It makes indexing an array or a record return T | undefined rather than T, which reflects reality - nothing guarantees index 10 exists. That forces an explicit check or a non-null assertion at each access, which is noisy and is precisely why it is off by default. On a codebase where array access bugs are occurring it is worth the noise; on one where they are not, the ergonomic cost is real. It is the clearest example of TypeScript's defaults trading soundness for usability."
+   },
+   {
+    "q": "Is runtime validation not just duplicating the type definition?",
+    "a": "It would be if you wrote both by hand, which is why the good libraries derive the type from the schema - define the Zod schema once and infer the TypeScript type from it, so they cannot drift. That gives one definition producing both the compile-time type and the runtime check. Writing an interface and a separate validator is the failure mode people are objecting to, and it is avoidable."
+   }
+  ]
  }
 ]

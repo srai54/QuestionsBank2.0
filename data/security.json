@@ -2592,5 +2592,33 @@
     "a": "User secrets in .NET, which store them outside the repository in the user profile, or a local Key Vault access using the developer's own identity via az login - so the credential is theirs and auditable rather than shared. What to avoid is a shared development credential passed around, because it cannot be attributed, never gets rotated, and inevitably ends up in a file someone commits. Making the local path as easy as the wrong path is what determines whether the policy is followed."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Authorisation",
+  "difficulty": "Hard",
+  "question": "An endpoint checks that the user is authenticated and then returns the record whose id is in the URL. A security test finds users can read each other's records. What is the flaw and how do you fix it systematically?",
+  "answer": "**The flaw: authentication without authorisation**\n\nThe endpoint verifies *who* the user is and then never checks whether that user may access *this* record. Changing the id in the URL returns somebody else's data. This is Insecure Direct Object Reference, and it is consistently among the most common serious web vulnerabilities — because the check that is missing is invisible in the code.\n\nNothing looks wrong: the endpoint has `[Authorize]`, it fetches by id, it returns the result. The absence of a line is hard to see in review.\n\n**The immediate fix**\n\nScope the query to the caller rather than filtering afterwards:\n\n```csharp\n// Vulnerable: authenticated, but not authorised for THIS record\nvar order = await db.Orders.FindAsync(id);\nreturn Ok(order);\n\n// Fixed: the query cannot return another user's row at all\nvar order = await db.Orders\n    .SingleOrDefaultAsync(o => o.Id == id && o.CustomerId == currentUserId);\n\nreturn order is null ? NotFound() : Ok(order);\n```\n\nReturning `NotFound` rather than `Forbidden` also avoids confirming that the record exists, which is a minor information leak in itself.\n\n**Why the systematic fix matters more**\n\nFixing this endpoint leaves the next one exposed. Anything that relies on every developer remembering a check will fail eventually.\n\n**Resource-based authorisation.** ASP.NET Core's `IAuthorizationService` with a handler per resource type centralises the rule, so the policy lives in one place and is applied explicitly.\n\n**Query filters.** EF Core global query filters can scope every query for a tenant automatically, so forgetting is not possible for the common case. Powerful, and worth understanding the escape hatches — `IgnoreQueryFilters` exists and will be used.\n\n**Repository methods that require the caller.** If the only way to load an order is `GetForCustomer(orderId, customerId)`, the unsafe call does not exist to be written.\n\n**Test it.** An authorisation test per endpoint — user A cannot read user B's record — is the thing that catches regressions. This is exactly what a security test found, so encoding it in the suite is straightforward.\n\n**The principle**\n\nAuthentication answers 'who are you'; authorisation answers 'may you do this to that'. The second must be enforced against the specific resource, and the design should make omitting it difficult rather than relying on diligence.",
+  "tags": [
+   "security",
+   "idor",
+   "authorisation",
+   "broken-access-control",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Would using GUIDs instead of sequential ids fix this?",
+    "a": "No - it makes enumeration harder, which raises the effort of finding other records, but anyone who legitimately obtains an id can still access the record. That is security by obscurity: it reduces casual discovery and provides no actual access control. GUIDs are worth using for other reasons, and an unguessable identifier is a reasonable defence in depth, but treating it as the control is how organisations end up with data exposed as soon as an id leaks through a log, a referrer header or a shared link."
+   },
+   {
+    "q": "How do global query filters fail?",
+    "a": "They apply to queries against the DbSet, so anything bypassing that - raw SQL, a stored procedure, a different context, or an explicit IgnoreQueryFilters - is unfiltered. They also do not apply to navigation property loads in every case, and an Include can surface related entities the filter did not anticipate. So they are an excellent default that removes the common mistake, not a boundary you can rely on absolutely. Layering them with resource-based checks on sensitive operations is the usual arrangement."
+   },
+   {
+    "q": "How would you find other instances of this across an existing codebase?",
+    "a": "Search for the pattern rather than reading everything: endpoints taking an id parameter, and the data access calls that fetch by primary key alone - FindAsync and SingleOrDefault on an id with no ownership predicate. That narrows it to a reviewable list quickly. Then write the authorisation test for each, since a test proving user A cannot read user B's record is the durable artefact. An automated scan helps, but this class of flaw is semantic, so the list has to be triaged by someone who knows what ownership means in the domain."
+   }
+  ]
  }
 ]

@@ -3320,5 +3320,63 @@
    "adoption",
    "practices"
   ]
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "RAG",
+  "difficulty": "Hard",
+  "question": "A RAG system returns confident answers that are not supported by the retrieved documents. The model is fine. What is likely wrong?",
+  "answer": "**The problem is almost always retrieval, not generation**\n\nIf the right context is not retrieved, the model answers from its training data — fluently and confidently, because that is what it does. The hallucination is a symptom of an empty or irrelevant context window.\n\n**What I would check, in order**\n\n**1. Look at what was actually retrieved.** Log the chunks passed to the model for the failing questions. This answers the question immediately and it is astonishing how often it is skipped in favour of prompt tuning.\n\n**2. Chunking.** Chunks that are too small lose the context that makes them meaningful — a sentence about 'the limit' with no indication of which limit. Too large and the relevant sentence is diluted by surrounding text, so the embedding matches poorly. Chunks that split mid-table or mid-list destroy the structure the answer depended on.\n\n**3. The embedding model and the query.** A user's question and the document that answers it are often phrased quite differently, so pure vector similarity misses. Hybrid search — combining vector similarity with keyword matching such as BM25 — fixes a large share of retrieval failures, particularly for names, codes and exact terms that embeddings handle poorly.\n\n**4. Reranking.** Retrieving twenty candidates and reranking them with a cross-encoder puts the genuinely relevant ones at the top. Top-k by cosine similarity alone is a weak ordering.\n\n**5. The prompt's instructions.** The model should be told explicitly to answer only from the context and to say when it cannot. Without that instruction it will help, because helping is what it was trained to do.\n\n**The structural fix**\n\n**Require citations.** Ask the model to quote the supporting passage for each claim and return the chunk id. That makes unsupported answers visible rather than plausible, and it lets you verify automatically that cited text exists in the retrieved set.\n\n**Evaluate retrieval separately from generation.** Measure whether the correct document was in the top-k at all. If retrieval recall is 60%, no amount of prompt engineering will fix the 40%, and you would otherwise spend weeks tuning the wrong component.",
+  "tags": [
+   "ai-llm",
+   "rag",
+   "hallucination",
+   "retrieval",
+   "evaluation",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does hybrid search help so much over pure vector similarity?",
+    "a": "Because embeddings capture semantic similarity and are poor at exact tokens - a product code, an error number, a surname or a version string may be semantically meaningless to the model yet be precisely what the user asked about. Keyword search nails those and misses paraphrase; vector search does the opposite. Combining them with a fusion method such as reciprocal rank covers both failure modes, and the gain is usually larger than any embedding model upgrade."
+   },
+   {
+    "q": "How would you measure retrieval quality separately?",
+    "a": "Build a small evaluation set of questions with the document or chunk that genuinely answers each, then measure recall at k - how often the right chunk appears in the retrieved set at all. That number bounds everything downstream, because the generator cannot use what it was not given. Tracking it separately from answer quality is what stops a team spending weeks on prompts when the real problem is that the answer was never retrieved. It also makes chunking and embedding changes measurable rather than a matter of impression."
+   },
+   {
+    "q": "The team wants to fine-tune the model to stop hallucinating. Good idea?",
+    "a": "Usually not, for this problem. Fine-tuning teaches style, format and task behaviour; it does not reliably teach a model to withhold an answer it is confident about, and it cannot supply facts that were never retrieved. It is also expensive to maintain as the base model moves on. The cheaper and more effective interventions are fixing retrieval, instructing the model to abstain, and requiring citations so unsupported claims are detectable. Fine-tuning is the right tool when the output format or domain tone is the problem, not when the context is missing."
+   }
+  ]
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Production",
+  "difficulty": "Hard",
+  "question": "An LLM feature works well in testing but in production it occasionally produces malformed output that breaks downstream parsing. How do you make this robust?",
+  "answer": "**The fundamental property to design around**\n\nThe model is non-deterministic and will occasionally produce something outside the expected shape — a missing brace, an explanatory sentence before the JSON, a truncated response because it hit the token limit. Treating its output as trusted structured data is the error.\n\n**Layers of defence, from strongest to weakest**\n\n**1. Constrain the output format at the API level.** Structured outputs or JSON schema mode force the model to emit valid JSON conforming to a schema — this is far stronger than asking politely in the prompt, because the constraint is applied during decoding rather than hoped for afterwards.\n\n**2. Use function/tool calling** where the provider supports it. The shape is defined by the tool signature, which the API enforces.\n\n**3. Validate against a schema on receipt.** Never parse directly into your domain model. Validate, and treat a failure as a normal path rather than an exception — because it will happen.\n\n**4. Retry with the error.** On a validation failure, send the malformed output back with the specific error and ask for a correction. This recovers most cases, and one retry is usually enough.\n\n**5. Fall back deliberately.** Decide what happens when it still fails after retries — a default, a human review queue, a clear error. Not an unhandled exception in a background job at 2am.\n\n**What else production needs that testing did not reveal**\n\n**Token limits.** Truncation produces syntactically invalid output and is invisible in short test cases. Check the finish reason, not just the content — `length` means it was cut off.\n\n**Timeouts and cost limits**, because a request can hang or generate expensively.\n\n**Log the prompt and completion** for failures, or debugging is guesswork. With care about personal data.\n\n**Set temperature to 0** for extraction and classification tasks. Creativity is not wanted when the output must conform to a shape.\n\n**The framing**\n\nTreat the model as an unreliable external service that returns plausible-looking data. Every guarantee must be enforced on your side. The same defensive posture you would apply to a third-party API applies here, with the addition that the failures are subtler because the output usually *looks* right.",
+  "tags": [
+   "ai-llm",
+   "structured-output",
+   "resilience",
+   "validation",
+   "production",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is checking the finish reason important?",
+    "a": "Because a response truncated by the token limit is returned as a successful completion with valid-looking partial content - the JSON is simply cut off mid-object. Parsing it fails with a syntax error that suggests a model quality problem when the real cause is a budget that was too small. The finish reason distinguishes a natural stop from a length stop immediately, and the fix is different: raise the limit or reduce what you asked for, rather than tuning the prompt."
+   },
+   {
+    "q": "How do you test something non-deterministic?",
+    "a": "Not with exact-match assertions. Test the properties that must hold - the output validates against the schema, required fields are present, values are in range, the classification is one of the permitted labels. For quality, build an evaluation set with expected outcomes and measure a pass rate over it, treating a drop as a regression rather than expecting one hundred percent. And run the evaluation against model version changes, because a provider updating the underlying model is a deployment you did not perform and did not test."
+   },
+   {
+    "q": "Should the retry use the same prompt or a modified one?",
+    "a": "A modified one that includes the failed output and the specific validation error, because the model can usually correct a concrete mistake it is shown. Repeating the identical prompt relies on sampling variation and wastes a call. Keep the retry count low - one or two - since a model failing repeatedly on the same input usually indicates a prompt or schema problem rather than bad luck, and a high retry count turns a systematic failure into an expensive systematic failure."
+   }
+  ]
  }
 ]

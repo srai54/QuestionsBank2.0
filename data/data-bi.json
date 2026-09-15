@@ -2038,5 +2038,33 @@
    "data-quality",
    "communication"
   ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "A nightly ETL job that loads yesterday's data occasionally produces duplicate rows in the warehouse. Reruns after a failure make it worse. How do you fix it?",
+  "answer": "**What's happening**\n\nThe job is not idempotent. It appends rather than replacing, so running it twice inserts the data twice — and a failure partway through means someone reruns it, doubling whatever had already loaded.\n\nThis is the defining property a batch job needs: running it again with the same input must produce the same result, not more results.\n\n**How to make it idempotent**\n\n**1. Delete-then-insert per partition.** Before loading a day, delete that day's rows, then insert. Re-running replaces rather than appends. Simple, robust, and the usual answer.\n\n```sql\nBEGIN TRAN;\n  DELETE FROM Sales WHERE LoadDate = @day;\n  INSERT INTO Sales SELECT ... WHERE Date = @day;\nCOMMIT;\n```\n\n**2. Partition swap.** Load into a staging table, then switch the partition in — a metadata operation, so it is atomic and fast, and readers never see a half-loaded state. Better for large volumes.\n\n**3. MERGE on a business key**, if rows can also be updated rather than only replaced. More expensive and needs a genuinely unique key, which is often the part that is missing.\n\n**What else is probably wrong**\n\n**The job is not transactional.** If the delete commits and the insert fails, the day's data is now missing entirely — worse than duplicated. Both must be in one transaction, or use the staging-and-swap approach where the switch is the only visible change.\n\n**There is no watermark.** The job should record what it has processed so a rerun knows what to do rather than relying on a human to remember. A control table with the load date and status makes the job self-aware.\n\n**Failures are probably not detected promptly.** If duplicates are found by someone reading a report, the monitoring is the deeper problem. A row-count check against the source, and a uniqueness check on the business key, should run as part of the job and fail it.\n\n**The principle**\n\nAny job that can be rerun will be rerun — after a failure, after a late-arriving file, after someone triggers it manually. Design for that from the start; retrofitting idempotency after a duplication incident means cleaning the existing data too, which is usually the harder half of the work.",
+  "tags": [
+   "data-bi",
+   "etl",
+   "idempotency",
+   "data-quality",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is delete-then-insert usually preferred over MERGE?",
+    "a": "Because it is simpler to reason about and does not depend on having a reliable unique key, which warehouse source data frequently lacks. MERGE also has performance and locking characteristics that surprise people at volume, and its behaviour with duplicate keys in the source is to fail or to produce non-deterministic results. Delete-then-insert has one obvious semantic: after this runs, the partition contains exactly what the source says. MERGE earns its place when you need to preserve rows not present in the incoming batch."
+   },
+   {
+    "q": "What should happen when yesterday's source file arrives late, after the job ran?",
+    "a": "The job should be re-runnable for that date and produce the correct result, which is exactly what idempotency gives you - so the answer is to run it again for the affected partition rather than to write special handling. What you need alongside is a way to know it happened: a control table recording which dates loaded successfully and when, so a late arrival can be detected and reprocessed rather than silently missing. Late and out-of-order arrival is normal in data pipelines, not an exception."
+   },
+   {
+    "q": "How do you clean up the duplicates already in the warehouse?",
+    "a": "Identify them by the business key with a window function ranking rows within each key, then delete everything but one - keeping the most recently loaded, usually. Do it in batches for a large table so the transaction log does not explode, and take a backup first, since a de-duplication with a slightly wrong key definition deletes real data. The important part is to fix the job before cleaning, or the cleanup is undone by the next run."
+   }
+  ]
  }
 ]

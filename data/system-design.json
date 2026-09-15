@@ -2631,5 +2631,33 @@
     "a": "An idempotency key derived from the trip, so a retried payment request is recognised and returns the original result rather than charging again. The subtlety is that the effect must be idempotent end to end, not just at the API boundary: the payment provider also needs the key, and your record of the charge must be written in the same transaction as the trip completion, or a crash between them leaves an unrecorded charge. That is the outbox pattern, and payments is where it genuinely earns its complexity."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Trade-offs",
+  "difficulty": "Hard",
+  "question": "You are asked to add full-text search across 50 million records. The team suggests adding a LIKE '%term%' query. Walk through why that fails and what you would propose.",
+  "answer": "**Why `LIKE '%term%'` fails at this scale**\n\nA leading wildcard cannot use an index — the index is ordered by the beginning of the value, and the query does not know the beginning. So every query scans 50 million rows. At even 100 bytes a row that is gigabytes of IO per search.\n\nIt is also a poor *search*: no relevance ranking, no stemming so 'running' does not match 'run', no handling of typos, no multi-word or phrase logic, and no way to weight a title match above a body match. It is substring matching, which is not what users mean by search.\n\n**Options, with their trade-offs**\n\n**1. The database's own full-text index.** SQL Server full-text, PostgreSQL `tsvector` with GIN. Free, no new infrastructure, transactionally consistent with the data, and good enough for many cases. Limits: ranking is basic, typo tolerance and faceting are weak, and heavy search load competes with transactional load on the same server.\n\n**2. A dedicated search engine** — Elasticsearch, OpenSearch, Azure AI Search. Purpose-built: relevance tuning, faceting, synonyms, fuzzy matching, highlighting, aggregations. The costs are real and worth stating: another system to operate, and the index is eventually consistent with the database, so you now own a synchronisation problem.\n\n**3. A managed service** to avoid operating a cluster, at a higher per-unit cost.\n\n**What I would propose here**\n\nStart with the database's full-text index unless the requirements demand otherwise. It answers the question with no new infrastructure, and 50 million rows is well within its range. If the requirements include faceting, typo tolerance, relevance tuning or search-as-you-type, that is what justifies a dedicated engine — and those should come from the product, not be assumed.\n\n**The questions I would ask before choosing**\n\nWhat does a user expect to match? How stale may results be — seconds, or must they be immediate? What is the query rate? Are results filtered by permissions, which is much harder in an external index than in a database join? That last one frequently decides the design and is usually discovered late.\n\n**On synchronisation**\n\nIf we go external, the index is updated from the database — ideally via the outbox or change data capture rather than a dual write, and with a periodic full reconciliation, because drift between the two is a matter of when, not whether.",
+  "tags": [
+   "system-design",
+   "full-text-search",
+   "elasticsearch",
+   "trade-offs",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is permission filtering hard in an external search index?",
+    "a": "Because the index does not have your relational model, so you cannot join to a permissions table at query time. The options are to denormalise the access rules into each document, which means reindexing whenever permissions change and can be expensive for group-based access; to over-fetch and filter afterwards, which breaks pagination and relevance counts; or to pre-filter by injecting the user's accessible ids into the query, which fails when that set is large. None is free, which is why it should be raised before the architecture is chosen rather than after."
+   },
+   {
+    "q": "How do you keep an external index in sync reliably?",
+    "a": "Not with a dual write, which has the same failure modes as any two-system update. Publish changes through the transactional outbox or change data capture so the source of truth is the database and the index is derived, then have an indexer consume that stream idempotently. Add a periodic reconciliation comparing counts or checksums, because drift accumulates from bugs and outages regardless of design. And make reindexing from scratch a routine operation rather than an emergency, since you will need it."
+   },
+   {
+    "q": "The requirement is just 'search by product name'. Does that change your answer?",
+    "a": "Substantially - if it is a prefix search rather than a substring one, LIKE 'term%' without the leading wildcard uses an index and needs nothing else. That single character is the difference between a seek and a 50-million-row scan. It is worth establishing what the users actually do before designing for the general case, because search-as-you-type on a name is usually a prefix problem, and building an Elasticsearch cluster to solve it would be a large amount of infrastructure for a query the database already answers in milliseconds."
+   }
+  ]
  }
 ]

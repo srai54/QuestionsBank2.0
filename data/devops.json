@@ -3708,5 +3708,64 @@
     "a": "Corrupted state: two processes writing the same file can leave it describing a reality that never existed, with resources created but untracked or tracked but deleted. Recovery means reconciling by hand against the real infrastructure, which is slow and error-prone. State locking exists to prevent it and should be enabled - a blob lease for Azure, DynamoDB for S3 - and state should be versioned so you can restore a previous copy. Running applies only from the pipeline, rather than from laptops, removes most of the opportunity."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Containers",
+  "difficulty": "Medium",
+  "question": "A container image is 1.8GB and takes 12 minutes to build in CI. What would you change?",
+  "answer": "**Two separate problems: image size and build time**\n\n**Size**\n\n**Use a multi-stage build.** The SDK image is roughly 800MB; the runtime image is around 200MB, and the ASP.NET Core chiseled or Alpine variants are smaller still. Build in one stage, copy only the published output into a runtime stage. Most of the 1.8GB is usually the SDK, the NuGet cache and the intermediate build artefacts, none of which belong in the shipped image.\n\n**Check what is being copied.** A `COPY . .` without a `.dockerignore` brings the `.git` directory, `bin`, `obj`, `node_modules` and local settings into the image — often hundreds of megabytes of things that should never ship.\n\n**Build time**\n\n**Order layers by change frequency.** Docker caches per layer and invalidates everything after the first change. Copying the project files and restoring *before* copying the source means a code change does not re-run the restore:\n\n```dockerfile\nCOPY *.csproj ./\nRUN dotnet restore          # cached unless dependencies change\nCOPY . ./                   # only this layer rebuilds on a code change\nRUN dotnet publish -c Release -o /app --no-restore\n```\n\n**Enable cache export in CI.** Ephemeral runners start with no layer cache, so every build is cold unless you push and restore a cache — BuildKit's `--cache-from`/`--cache-to` against a registry.\n\n**Check whether the test run is inside the image build.** It often is, and it usually belongs in a separate step where it can be parallelised and its results published.\n\n**Why the size matters beyond storage**\n\nEvery pull transfers it — on every deployment, every scale-out event and every node replacement. A 1.8GB image makes autoscaling slow, which matters exactly when load is rising. It also carries the SDK and shell into production, which is a larger attack surface than a runtime-only image.\n\n**What I would expect afterwards**\n\nUnder 250MB and a cached build of two to three minutes, with the first build still slow. Those are routine numbers for a .NET service, so 1.8GB and 12 minutes indicates something structural rather than a tuning problem.",
+  "tags": [
+   "devops",
+   "docker",
+   "image-size",
+   "build-cache",
+   "ci",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does layer ordering matter so much?",
+    "a": "Because Docker invalidates a layer and everything after it when its inputs change - so if the source is copied before the dependency restore, every one-character code change re-downloads all the packages. Putting the rarely-changing steps first means the expensive restore is cached across almost every build. It is the single largest build-time improvement in most Dockerfiles and it costs nothing but reordering three lines."
+   },
+   {
+    "q": "Is Alpine always the right base image?",
+    "a": "Not always. It is small, but it uses musl rather than glibc, which occasionally breaks native dependencies and can have different performance characteristics for some workloads. For .NET, the chiseled Ubuntu images are now usually the better choice - comparably small, glibc-based, no shell or package manager, and supported by Microsoft. The general point is that smallest is not automatically best; the runtime compatibility and the support story matter more than a few tens of megabytes."
+   },
+   {
+    "q": "The team wants to run tests inside the Docker build for consistency. Reasonable?",
+    "a": "The motivation is sound - the tests run in exactly the environment that ships - but it has costs: test failures become build failures with worse output, results are harder to publish to the CI UI, and you cannot parallelise tests across runners. A middle path is a test stage in the multi-stage build that CI targets explicitly, so it is the same image layers but a separate step with its own output. That keeps the environmental consistency without conflating producing an artefact with verifying it."
+   }
+  ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Kubernetes",
+  "difficulty": "Hard",
+  "question": "Pods are being killed and restarted with OOMKilled during traffic peaks, but the application's own memory metrics look normal. Explain the discrepancy.",
+  "answer": "**The discrepancy is the point**\n\nThe application reports its managed heap; the kernel kills on the container's total resident memory. Those differ by everything outside the heap.\n\n**What the application does not count**\n\n**The GC's reserved memory.** .NET's server GC allocates per-core heaps and does not return memory to the OS promptly — the heap may be mostly free while the process still holds it. A container with many visible cores gets many heaps.\n\n**Native allocations** — buffers in native libraries, SSL, compression, memory-mapped files.\n\n**Thread stacks** — 1MB each by default, so a thread-pool spike is tens of megabytes.\n\n**The runtime itself**, JIT-compiled code and loaded assemblies.\n\n**Why peaks specifically**\n\nUnder load the thread count grows, the heap expands to meet allocation rate, and the GC becomes less eager to collect because throughput matters more. Total RSS rises even though 'used' heap looks stable.\n\n**The most common specific cause**\n\nThe container limit is set but the runtime does not know about it — or knows about it and still sizes for the node. Modern .NET reads cgroup limits, but if the limit is absent and only a request is set, the runtime sizes the GC for the *node's* memory, which can be 64GB. It then happily grows past the container's effective allocation and gets killed.\n\n**What I would check and change**\n\n**Set both requests and limits**, and make sure the runtime sees the limit — `DOTNET_GCHeapHardLimit` or the automatic cgroup detection.\n\n**Consider workstation GC or `DOTNET_gcServer=0`** for small containers. Server GC's per-core heaps are wrong for a 512MB container on a 32-core node.\n\n**Watch the right metric.** `container_memory_working_set_bytes` is what the OOM killer acts on, not the .NET heap size counter. Alerting on the wrong one is why this was invisible.\n\n**Check the limit is realistic.** If RSS genuinely needs 800MB under peak, a 512MB limit is a configuration error rather than a memory problem.",
+  "tags": [
+   "devops",
+   "kubernetes",
+   "oomkilled",
+   "gc",
+   "cgroups",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does server GC misbehave in a small container?",
+    "a": "Because it allocates a separate heap per logical processor to reduce contention, sizing itself for the machine rather than the container. On a 32-core node with a 512MB limit that is a lot of heaps for very little memory, and the GC's reluctance to collect until heaps fill means RSS climbs toward the limit rather than staying low. Workstation GC uses a single heap and collects more eagerly, which suits a small container far better. Modern .NET detects cgroup limits and adjusts, but only if the limit is actually set."
+   },
+   {
+    "q": "What is the difference between a request and a limit here, and why does it matter?",
+    "a": "The request is what the scheduler reserves when placing the pod; the limit is the hard ceiling the kernel enforces. Setting only a request means the pod can grow until it is killed by node pressure or evicts something else, and crucially the runtime has no ceiling to size itself against. Setting a limit far above the request allows overcommitting the node, which produces evictions under pressure that look random. For memory specifically, setting request equal to limit gives predictable behaviour at the cost of some density."
+   },
+   {
+    "q": "The team wants to just raise the limit. Is that acceptable?",
+    "a": "As a stopgap yes, and it may even be the correct final answer if the application genuinely needs that memory at peak - a limit set by guesswork is a common cause of this. What makes it unsatisfactory as the only response is that it does not distinguish 'needs more memory' from 'leaks memory', and those have very different futures. Measuring RSS at peak against the limit tells you which: a stable plateau below the new limit is a sizing fix, a continuing climb is a leak that will reach any ceiling."
+   }
+  ]
  }
 ]

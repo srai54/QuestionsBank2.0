@@ -3226,5 +3226,34 @@
     "a": "The rendering problems are identical, since 5,000 rows in the DOM is expensive regardless of where they came from. What changes is that debouncing becomes essential rather than merely helpful, because each keystroke is now a network request, and you need `switchMap` rather than `mergeMap` so a slow earlier response cannot arrive after a faster later one and overwrite it. That out-of-order response bug is subtle and is the main reason switchMap exists."
    }
   ]
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Change Detection",
+  "difficulty": "Hard",
+  "question": "An Angular app becomes sluggish as a list grows, and profiling shows change detection running far more often than expected. What would you investigate?",
+  "answer": "**How Angular's default change detection works**\n\nZone.js patches every async API — timers, events, XHR — and triggers a change detection pass after each. The pass walks the entire component tree from the root, checking every binding. With a large tree and frequent events, that is a lot of work per interaction, including for components whose data did not change.\n\n**What I would investigate**\n\n**1. Function calls in templates.** `{{ getTotal() }}` or `*ngIf=\"canEdit()\"` is invoked on *every* change detection pass, which may be hundreds of times a second. If the function is non-trivial, this alone explains the symptom. It is also invisible in review because it reads naturally.\n\n**2. Missing `OnPush`.** With `ChangeDetectionStrategy.OnPush`, a component is only checked when its inputs change by reference, an event fires within it, or an observable it subscribes to with the async pipe emits. On a large list this cuts the work dramatically — but it requires immutable updates, because mutating an object in place does not change its reference and the view will not update.\n\n**3. `trackBy` on `*ngFor`.** Without it, Angular destroys and recreates every DOM element when the array reference changes, even if the items are the same. With a `trackBy` returning a stable id, it reuses them.\n\n**4. Subscriptions triggering detection.** Every `subscribe` callback runs inside the zone and triggers a pass. A high-frequency stream — mousemove, a websocket, a polling timer — can drive continuous change detection.\n\n**5. Third-party libraries** doing their own DOM work or timers inside the zone. `NgZone.runOutsideAngular` for animation loops and similar.\n\n**The order I would work in**\n\nProfile first with the Angular DevTools profiler, which shows which components are being checked and how long each pass takes. Then remove template function calls, add `trackBy`, and apply `OnPush` where the data flow allows it. For a genuinely long list, virtual scrolling with the CDK removes the problem rather than optimising it.\n\n**The modern direction**\n\nSignals change this model fundamentally — updates become fine-grained and targeted rather than tree-walking, and zoneless change detection removes the Zone.js overhead entirely. For a new feature in a recent Angular version, signals are the better answer than tuning the old mechanism.",
+  "tags": [
+   "angular",
+   "change-detection",
+   "onpush",
+   "performance",
+   "signals",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why are template function calls so costly?",
+    "a": "Because the template is re-evaluated on every change detection pass, so the function runs on every pass rather than when its inputs change - and there is no memoisation. With default change detection firing on every event, timer and HTTP response, a function in a template rendered in a hundred-row list can execute tens of thousands of times a second. The fix is to compute the value once into a property, use a pure pipe which Angular does cache, or use a computed signal."
+   },
+   {
+    "q": "What breaks when you adopt OnPush?",
+    "a": "Anything that mutates an object or array in place, because OnPush compares inputs by reference and an in-place mutation leaves the reference unchanged - so the view silently does not update. That is why OnPush and immutable update patterns go together: replace the array rather than pushing to it. The other common surprise is state changed outside Angular's knowledge, from a third-party callback, which needs markForCheck to tell Angular something happened."
+   },
+   {
+    "q": "Do signals make OnPush unnecessary?",
+    "a": "Largely, in the direction the framework is heading. Signals track dependencies precisely, so a change notifies exactly the views that read that value rather than triggering a tree walk - which is what OnPush was approximating manually. In a fully signal-based zoneless application the change detection strategy becomes much less relevant. During migration both coexist, and OnPush remains the right setting for components that still take conventional inputs."
+   }
+  ]
  }
 ]

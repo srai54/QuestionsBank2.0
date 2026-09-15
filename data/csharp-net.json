@@ -10677,5 +10677,63 @@
     "a": "Add the dependencies with a constructor overload that defaults them to the current behaviour - TimeProvider.System, the real options - so existing callers compile unchanged, then migrate them over time and remove the old constructor. With DI registration, most call sites are the container rather than code, so the change is smaller than it looks. The important part is that the defaulted constructor is a migration step with a removal date, not a permanent escape hatch, or you keep the untestable path forever."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "A code review shows a class with a constructor taking eleven interfaces. The author says it is fine because they are all needed and it follows dependency injection. How do you respond?",
+  "answer": "**Dependency injection is being followed; the design is not the better for it**\n\nEleven dependencies is not a DI problem — it is a signal about the class. The constructor is doing its job by making the dependencies explicit, which is exactly why the number is visible and worth reading as information.\n\n**What it usually means**\n\n**The class has several responsibilities.** Eleven collaborators rarely serve one cohesive job. Often there are two or three classes here: something that orchestrates, something that validates, something that notifies.\n\n**Some dependencies are used by one method each.** That is the clearest signal of a split — if `_emailSender` is touched only by `SendConfirmation` and `_pricingEngine` only by `Quote`, those are separate concerns sharing a file.\n\n**Some are transitive.** The class takes A, B and C only to pass them to D. Those belong behind D, or behind a factory, not in this constructor.\n\n**What I would suggest**\n\n**Look at which methods use which dependencies.** If the dependencies cluster by method, the class splits along those lines cleanly. This is a mechanical check and it usually answers the question in two minutes.\n\n**Consider a facade** where several dependencies genuinely always travel together — but only if the grouping means something in the domain, not just to shorten the list.\n\n**Consider whether some are really one concern.** Three repositories often want to be one unit-of-work or one domain service.\n\n**What I would not suggest**\n\n**Service locator or injecting `IServiceProvider`.** That hides the dependencies rather than reducing them — now the class needs just as much, and nobody can tell what without reading every method. It makes the constructor short and the design worse, and it breaks the compile-time guarantee that everything is registered.\n\n**A property-injection or setter approach** for the same reason: it trades an honest signal for a hidden one.\n\n**How I would phrase it**\n\nNot 'eleven is too many', which invites an argument about the number, but 'which of these does each public method use?' The answer either demonstrates cohesion, in which case I have learned something, or it shows the seams — and then the author usually proposes the split themselves.",
+  "tags": [
+   "dotnet",
+   "dependency-injection",
+   "srp",
+   "code-review",
+   "cohesion",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is injecting IServiceProvider worse than eleven constructor parameters?",
+    "a": "Because it removes the information without removing the coupling. With eleven parameters you can see what the class needs from its signature, the container verifies at startup that everything is registered, and tests are forced to state what they are supplying. With a service locator the dependencies are resolved at arbitrary points inside methods, so discovering them means reading all the code, a missing registration becomes a runtime failure on a rare path, and tests need a configured container rather than a few fakes. It optimises the symptom and worsens the disease."
+   },
+   {
+    "q": "Is there a legitimate case for a class with many dependencies?",
+    "a": "Yes - a composition root, a top-level orchestrator whose entire job is to coordinate, or a controller in a framework that binds several services. There the number reflects genuine coordination rather than hidden responsibilities. The distinguishing test is whether the class does anything with them beyond calling them in sequence; if it holds state and logic as well as coordinating eleven collaborators, it is doing too much. Cohesion is the measure, not the count."
+   },
+   {
+    "q": "The class is legacy and splitting it is a large change. What would you do?",
+    "a": "Not block the pull request over it if the change in front of me is unrelated - raising the observation and moving on is usually right, because demanding a refactor as the price of an unrelated fix discourages people from touching the code at all. What I would do is record it where it will be seen, and if I am adding to the class, add the new behaviour in a new collaborator rather than a twelfth dependency. Strangling it gradually beats a big-bang refactor that nobody has time to review properly."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Serialisation",
+  "difficulty": "Medium",
+  "question": "After upgrading from Newtonsoft.Json to System.Text.Json, some API responses changed subtly and a client broke. What differences would you expect to have caused this?",
+  "answer": "**The differences that bite**\n\n**1. Property name casing.** System.Text.Json in ASP.NET Core defaults to camelCase; Newtonsoft's default is the property name as declared, usually PascalCase. A client matching on `\"OrderId\"` breaks when it becomes `\"orderId\"`.\n\n**2. Case sensitivity when deserialising.** System.Text.Json is case-sensitive by default; Newtonsoft is not. So JSON that previously bound now silently leaves properties at their defaults — which is worse than an error, because it produces zeroes and nulls rather than a failure.\n\n**3. Strictness.** System.Text.Json is deliberately stricter and will not, by default, read a number from a JSON string — `\"123\"` into an `int` fails where Newtonsoft coerced it. Trailing commas and comments are rejected unless enabled.\n\n**4. Non-public members and fields.** Newtonsoft serialises more by default; System.Text.Json requires opt-in for fields and non-public setters.\n\n**5. `null` handling and default values.** The defaults for ignoring nulls differ, so payload shapes change — a client relying on a property being absent, or present, may break.\n\n**6. Polymorphism.** Newtonsoft's `TypeNameHandling` has no direct equivalent; System.Text.Json uses `[JsonDerivedType]` attributes, and any payload relying on `$type` will not round-trip.\n\n**7. Dictionary key casing** is also transformed by the naming policy, which surprises people who expected only property names to change.\n\n**How I would have caught it**\n\n**Contract tests against recorded payloads.** Serialise a representative object and compare against a stored expected JSON document. That turns a silent shape change into a failing test, and it is the single most effective control for this migration.\n\n**Consider the migration deliberately** rather than as a by-product of an upgrade: System.Text.Json is faster and allocates less, which is why it is the default, but it is not a drop-in replacement and the differences are behavioural rather than compile-time.\n\n**The specific lesson**\n\nThe dangerous ones are the silent failures — case-insensitive deserialisation that stops matching, and a string-to-number coercion that stops working. Both produce default values rather than exceptions, so the data is quietly wrong instead of loudly broken.",
+  "tags": [
+   "dotnet",
+   "serialisation",
+   "system-text-json",
+   "migration",
+   "breaking-changes",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is stricter deserialisation a good thing despite breaking the client?",
+    "a": "Because silent coercion hides mismatches between what a caller sent and what you expected - accepting a string where a number is required means the contract is looser than documented and drift goes unnoticed. Strictness turns that into an error at the boundary, which is where it should surface. The transitional pain is real, and the options are to opt into the lenient behaviour explicitly where a client cannot be changed, which at least records the exception rather than leaving it implicit."
+   },
+   {
+    "q": "How would you make the migration safe rather than discovering breaks in production?",
+    "a": "Snapshot the current output first: serialise a representative set of objects with the old serialiser, store the JSON, then assert the new serialiser produces the same. Differences then appear as test failures with a readable diff, and each can be judged as intended or not. Running both serialisers side by side in a canary and comparing outputs on real traffic is the stronger version where the payload space is large. The key point is that this is a behavioural change with no compile-time signal, so only comparison catches it."
+   },
+   {
+    "q": "Is it worth migrating at all if the app works?",
+    "a": "Usually yes for a service under load - System.Text.Json is substantially faster and allocates far less, which shows up in throughput and GC pressure, and it is the default that the framework optimises for. For a low-traffic internal application, the migration risk may exceed the benefit, and Newtonsoft remains supported and is still better for some scenarios such as complex polymorphism. It is a judgement about the workload rather than an obligation to be on the newer library."
+   }
+  ]
  }
 ]

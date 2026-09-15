@@ -274,5 +274,34 @@
     "a": "Because the pool has spare capacity initially, so leaks are absorbed silently and the application behaves normally. Only when cumulative leaks exhaust the pool do requests begin to block and then time out, which may be hours into a deployment and therefore hard to correlate with the change that caused it. The defence is structural: always dispose via using or a dependency-injected scoped lifetime, and never hold a connection across an await that does not need it."
    }
   ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Diagnosis",
+  "difficulty": "Hard",
+  "question": "An API's p50 latency is 40ms and its p99 is 4 seconds. Average latency looks fine. What causes that spread and how do you investigate?",
+  "answer": "**What the shape tells you**\n\nA hundredfold gap between p50 and p99 means most requests are fine and a small fraction hit something completely different. That is not general slowness — it is a distinct failure mode affecting a subset. Average latency hides this entirely, which is why it is the wrong metric to watch.\n\n**Common causes of a long tail**\n\n**1. Garbage collection pauses.** A gen 2 collection stops the world for tens or hundreds of milliseconds; with a large heap it can be seconds. The requests unlucky enough to be in flight pay it. Correlate the slow requests against GC pause metrics.\n\n**2. Queueing.** If the thread pool or connection pool is occasionally saturated, some requests wait before starting. The work is fast; the wait is not. This produces exactly this bimodal shape.\n\n**3. Cold paths.** A cache miss where hits dominate, a JIT compilation on first execution, a lazily-initialised singleton, a connection being established rather than reused.\n\n**4. Data skew.** Most customers have ten orders, one has fifty thousand. The query is the same; the work is not. Very common and easy to overlook, because the p50 request and the p99 request run identical code.\n\n**5. A dependency's own tail.** Your p99 can be someone else's p99 plus your p50.\n\n**6. Noisy neighbours** on shared infrastructure, or a rate limit being hit intermittently.\n\n**How to investigate**\n\n**Sample the slow requests specifically.** Configure telemetry to always retain traces over a latency threshold, so the p99 is never the part that sampling discarded. Then look at what those particular requests have in common — a customer, an endpoint, a time of day, an instance.\n\n**Check whether it correlates with an instance.** If one pod is producing all the slow requests, it is that instance's GC, its cache state or its host, not the code.\n\n**Compare the slow traces to the fast ones** in structure, not just duration. If the slow ones make four hundred database calls and the fast ones make four, it is data skew and the fix is a query change.\n\n**Why this matters more than the average**\n\nAt p99, one in a hundred requests takes four seconds. A page making twenty API calls then has an 18% chance of at least one slow call, so the user-visible slowness is far more common than 1%. Tail latency compounds through fan-out, which is why it is worth chasing even when the average looks healthy.",
+  "tags": [
+   "performance",
+   "tail-latency",
+   "percentiles",
+   "gc",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is average latency actively misleading?",
+    "a": "Because it is dominated by the bulk of fast requests and is insensitive to the tail - a hundred requests at 40ms and one at 4 seconds averages 79ms, which looks healthy while one user waited four seconds. It also cannot be aggregated meaningfully across services or time windows. Percentiles describe the experience of actual users at the bad end, which is the part that generates complaints and abandonment. Reporting an average for latency is close to reporting nothing."
+   },
+   {
+    "q": "How does tail latency compound in a fan-out architecture?",
+    "a": "A request that calls twenty services waits for the slowest, so its latency is the maximum rather than the average of theirs - and with a 1% chance of a slow call each, the probability that at least one is slow is about 18%. So a 1% tail per service becomes a near-20% tail for the user. That is why large systems invest heavily in tail latency specifically, using techniques such as hedged requests, where a duplicate is sent after a delay and the first response wins."
+   },
+   {
+    "q": "How would you confirm GC pauses are responsible?",
+    "a": "Correlate timestamps: capture GC pause durations from the runtime counters and check whether the slow requests fall inside pause windows. If they line up, that is conclusive. The follow-up is to find why gen 2 collections are frequent or long - usually a large heap, a high allocation rate promoting objects, or large object heap pressure - and reduce allocations rather than tune the GC. Server GC with concurrent collection reduces pause length, and pooling buffers reduces the frequency."
+   }
+  ]
  }
 ]
