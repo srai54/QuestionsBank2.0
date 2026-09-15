@@ -17673,5 +17673,173 @@
     "a": "It is the same template with a different validity condition - there the count is of characters that are not the most frequent, here it is simply the zeros. Both slide rather than shrink for the same reason, and both read the answer off the final width. Recognising that a family of window problems shares one skeleton, differing only in what is counted and what the threshold is, is worth more than solving each from scratch."
    }
   ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Hard",
+  "question": "Determine whether a graph can be reconstructed as a valid tree.",
+  "answer": "**Approach**\n\nCheck two conditions together: exactly n-1 edges, and no cycles. Either alone is insufficient, and union-find tests both in one pass.\n\n**Logic**\n\nA tree on n nodes is precisely a connected acyclic graph, and that is equivalent to having n-1 edges *and* being connected — or equivalently n-1 edges and acyclic, since any two of connected, acyclic and n-1 edges imply the third.\n\nUnion-find gives the cycle test directly: an edge whose endpoints already share a root would close one.\n\nThe edge-count check catches the disconnected case without a separate traversal, because n-1 acyclic edges on n nodes must connect everything.\n\nO(E α).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsValidTree(int n, int[][] edges)\n    {\n        if (n == 0) return edges.Length == 0;\n\n        // A tree has exactly n-1 edges. Fewer cannot connect, more must cycle.\n        if (edges.Length != n - 1) return false;\n\n        var parent = new int[n];\n        for (int i = 0; i < n; i++) parent[i] = i;\n\n        int Find(int x)\n        {\n            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }\n            return x;\n        }\n\n        foreach (var edge in edges)\n        {\n            int a = Find(edge[0]), b = Find(edge[1]);\n\n            if (a == b) return false;   // this edge would close a cycle\n\n            parent[a] = b;\n        }\n\n        // n-1 edges with no cycle must be connected, so no separate check is needed.\n        return true;\n    }\n\n    private static int[][] Edges(params int[][] e) => e;\n\n    public static void Main()\n    {\n        Console.WriteLine(IsValidTree(5, Edges(\n            new[] { 0, 1 }, new[] { 0, 2 }, new[] { 0, 3 }, new[] { 1, 4 })));\n\n        Console.WriteLine(IsValidTree(5, Edges(\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 }, new[] { 1, 3 }, new[] { 1, 4 })));\n\n        // Right edge count, but a cycle plus an isolated node.\n        Console.WriteLine(IsValidTree(4, Edges(\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 })));\n\n        Console.WriteLine(IsValidTree(1, Array.Empty<int[]>()));\n        Console.WriteLine(IsValidTree(2, Array.Empty<int[]>()));   // too few edges\n        Console.WriteLine(IsValidTree(0, Array.Empty<int[]>()));\n        Console.WriteLine(IsValidTree(2, Edges(new[] { 0, 1 })));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nFalse\nTrue\nFalse\nTrue\nTrue\n```",
+  "tags": [
+   "dsa",
+   "union-find",
+   "tree-validation",
+   "invariants",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why are both conditions needed?",
+    "a": "Because either alone admits non-trees. A graph with n-1 edges can still be wrong - the third test has three nodes in a cycle plus an isolated fourth, which is exactly n-1 edges and not a tree. And an acyclic graph with fewer than n-1 edges is a forest, not a tree. Any two of connected, acyclic and n-1 edges imply the third, so checking the count plus acyclicity is a complete test."
+   },
+   {
+    "q": "Why does the code not check connectivity explicitly?",
+    "a": "Because it follows from the other two. Each successful union reduces the component count by one, starting at n, so n-1 unions with no cycle leaves exactly one component. If any edge had been rejected as a cycle the function would already have returned false. Stating that derivation is important - otherwise the missing check looks like an oversight rather than a consequence."
+   },
+   {
+    "q": "How would you do this without union-find?",
+    "a": "A DFS or BFS from node 0, counting visited nodes and detecting a revisit that is not the parent - a tree exactly when all n are reached and no such revisit occurs. That is O(V + E) and needs no extra structure, so it is a perfectly good answer. Union-find is preferable when the edges arrive incrementally or when the same structure is also being used for other component queries."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Dynamic Programming",
+  "difficulty": "Hard",
+  "question": "Find the minimum number of perfect squares summing to a given number.",
+  "answer": "**Approach**\n\nA one-dimensional DP over every value up to n, trying each square that fits. Lagrange's four-square theorem bounds the answer at four, which also gives a constant-time alternative.\n\n**Logic**\n\nThe DP is the coin-change recurrence with the coins being the perfect squares — the same shape, so the same loop-order reasoning applies, and here the minimum operation makes the order irrelevant.\n\nThe mathematical route is worth knowing: the answer is never more than four, it is one exactly for perfect squares, and Legendre's three-square theorem says it is four precisely when the number has the form 4^a(8b+7). Everything else is one, two or three.\n\nO(n √n) for the DP.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static int LeastSquares(int n)\n    {\n        if (n <= 0) return 0;\n\n        var best = new int[n + 1];\n\n        for (int value = 1; value <= n; value++)\n        {\n            best[value] = int.MaxValue;\n\n            for (int root = 1; root * root <= value; root++)\n                best[value] = Math.Min(best[value], best[value - root * root] + 1);\n        }\n\n        return best[n];\n    }\n\n    // Lagrange: never more than four. Legendre: exactly four iff n = 4^a(8b+7).\n    public static int LeastSquaresByTheorem(int n)\n    {\n        if (n <= 0) return 0;\n\n        if (IsSquare(n)) return 1;\n\n        while (n % 4 == 0) n /= 4;\n        if (n % 8 == 7) return 4;\n\n        for (int root = 1; root * root <= n; root++)\n            if (IsSquare(n - root * root)) return 2;\n\n        return 3;\n    }\n\n    private static bool IsSquare(int value)\n    {\n        int root = (int)Math.Sqrt(value);\n        return root * root == value;\n    }\n\n    public static void Main()\n    {\n        foreach (int n in new[] { 0, 1, 4, 12, 13, 7, 28, 9999 })\n            Console.WriteLine($\"{n}: dp {LeastSquares(n)}, theorem {LeastSquaresByTheorem(n)}\");\n\n        bool agrees = true;\n        for (int n = 1; n <= 2000 && agrees; n++)\n            if (LeastSquares(n) != LeastSquaresByTheorem(n)) agrees = false;\n\n        Console.WriteLine($\"the two methods agree for every n up to 2000: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\n0: dp 0, theorem 0\n1: dp 1, theorem 1\n4: dp 1, theorem 1\n12: dp 3, theorem 3\n13: dp 2, theorem 2\n7: dp 4, theorem 4\n28: dp 4, theorem 4\n9999: dp 4, theorem 4\nthe two methods agree for every n up to 2000: True\n```",
+  "tags": [
+   "dsa",
+   "dp",
+   "number-theory",
+   "lagrange",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the loop order not matter here, when it does for coin counting?",
+    "a": "Because this takes a minimum rather than a sum, and the minimum over a set is insensitive to the order in which the set is enumerated - whereas a count of arrangements depends on whether you enumerate multisets or sequences. That is the same asymmetry as between minimum coin change and counting coin combinations. It is worth noticing because it tells you exactly when loop order is a correctness question rather than a style one."
+   },
+   {
+    "q": "What do the two theorems give you?",
+    "a": "Lagrange says every positive integer is the sum of at most four squares, so the answer is always one, two, three or four - the search space is tiny. Legendre pins down the four case exactly: it happens precisely when the number has the form 4 to the a times (8b+7). Between them you can decide the answer in O(root n) with no table at all, which is what the second method does. The DP is the general technique; the theorems are the specialised shortcut."
+   },
+   {
+    "q": "Why check both implementations against each other?",
+    "a": "Because the theorem-based version rests on number theory I am applying rather than deriving, and misremembering the 4^a(8b+7) form would produce answers that are right on most inputs and wrong on a few - 7, 28 and 112 are exactly the kind of values that would expose it. The DP is obviously correct by construction but slow. Agreement across every value up to two thousand is real evidence for both."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Validate whether a string is a well-formed number.",
+  "answer": "**Approach**\n\nA single pass with explicit state flags — digits seen, a decimal point seen, an exponent seen — rather than a regular expression or a parse-and-catch.\n\n**Logic**\n\nThe rules are fiddly and most of them are about *ordering*: a point may not follow an exponent, an exponent needs digits before it and at least one digit after, and a sign is only legal at the very start or immediately after an exponent.\n\nUsing `TryParse` would delegate to the framework's notion of a number, which accepts thousands separators, leading and trailing whitespace, and culture-specific decimal marks — none of which this specification allows.\n\nO(n) with no allocation.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsNumber(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return false;\n\n        bool digitSeen = false, pointSeen = false, exponentSeen = false, digitAfterExponent = true;\n\n        for (int i = 0; i < s.Length; i++)\n        {\n            char c = s[i];\n\n            if (char.IsDigit(c))\n            {\n                digitSeen = true;\n                digitAfterExponent = true;\n            }\n            else if (c == '.')\n            {\n                // A point is illegal twice, or anywhere after an exponent.\n                if (pointSeen || exponentSeen) return false;\n                pointSeen = true;\n            }\n            else if (c == 'e' || c == 'E')\n            {\n                // An exponent needs digits before it and at least one after.\n                if (exponentSeen || !digitSeen) return false;\n                exponentSeen = true;\n                digitAfterExponent = false;\n            }\n            else if (c == '+' || c == '-')\n            {\n                // A sign is only legal at the start or right after an exponent.\n                if (i != 0 && s[i - 1] != 'e' && s[i - 1] != 'E') return false;\n            }\n            else return false;\n        }\n\n        return digitSeen && digitAfterExponent;\n    }\n\n    public static void Main()\n    {\n        string[] valid = { \"2\", \"0089\", \"-0.1\", \"+3.14\", \"4.\", \"-.9\", \"2e10\", \"-90E3\",\n                           \"3e+7\", \"+6e-1\", \"53.5e93\", \"-123.456e789\" };\n\n        string[] invalid = { \"abc\", \"1a\", \"1e\", \"e3\", \"99e2.5\", \"--6\", \"-+3\", \"95a54e53\",\n                             \".\", \"\", \"+\", \"1e+\", \"1,000\", \" 1\" };\n\n        bool allValid = true, allInvalid = true;\n\n        foreach (string s in valid) if (!IsNumber(s)) { allValid = false; Console.WriteLine($\"wrongly rejected: [{s}]\"); }\n        foreach (string s in invalid) if (IsNumber(s)) { allInvalid = false; Console.WriteLine($\"wrongly accepted: [{s}]\"); }\n\n        Console.WriteLine($\"all {valid.Length} valid strings accepted: {allValid}\");\n        Console.WriteLine($\"all {invalid.Length} invalid strings rejected: {allInvalid}\");\n\n        // TryParse disagrees: it accepts things this specification forbids.\n        Console.WriteLine($\"double.TryParse accepts \\\"1,000\\\": \" +\n            $\"{double.TryParse(\"1,000\", System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _)}\");\n        Console.WriteLine($\"IsNumber accepts \\\"1,000\\\": {IsNumber(\"1,000\")}\");\n    }\n}\n```\n\n**Output**\n\n```\nall 12 valid strings accepted: True\nall 14 invalid strings rejected: True\ndouble.TryParse accepts \"1,000\": True\nIsNumber accepts \"1,000\": False\n```",
+  "tags": [
+   "dsa",
+   "strings",
+   "state-flags",
+   "validation",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why not just use double.TryParse?",
+    "a": "Because it implements the framework's notion of a number, not this specification - the output shows it accepting '1,000' with thousands separators, and depending on the NumberStyles and culture it also accepts surrounding whitespace, currency symbols and a comma as the decimal mark. Delegating to it means inheriting rules you did not choose and that change with the culture. When the grammar is specified, implementing the grammar is the only way to match it."
+   },
+   {
+    "q": "Which of the rules are about ordering rather than presence?",
+    "a": "Most of them. A point is fine unless one has already appeared or an exponent has; an exponent needs digits before it and at least one after; a sign is legal only at position zero or immediately following an exponent. Presence alone would accept 'e3', '1e' and '--6'. That is why the flags track what has been seen rather than counting characters, and why the digit-after-exponent flag is separate from the general digit flag."
+   },
+   {
+    "q": "Would a regular expression be better?",
+    "a": "A single expression such as one matching an optional sign, digits with an optional point, and an optional exponent group does express this grammar compactly, and for a one-off validation I would consider it. The state-flag version is easier to extend with a new rule, easier to step through when a specific input is misclassified, and avoids the regex engine's own edge cases. For an interview the explicit version also demonstrates that the rules are understood rather than looked up."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Heap",
+  "difficulty": "Hard",
+  "question": "Find the kth smallest sum from pairs drawn from two sorted arrays.",
+  "answer": "**Approach**\n\nA min-heap seeded with the pairs using the first element of the second array, expanding one step at a time. Only the frontier is ever in the heap, never the full product.\n\n**Logic**\n\nThe full set of pairs is m×n, which for large arrays cannot be enumerated. The observation that makes it tractable: when the pair (i, j) is popped, the only new candidate it unlocks is (i, j+1), because (i+1, j) was already reachable from an earlier seed.\n\nSeeding one entry per row and expanding only along the columns is what prevents duplicates without a visited set.\n\nO(k log(min(k, m))).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<(int A, int B)> KSmallestPairs(int[] first, int[] second, int k)\n    {\n        var result = new List<(int, int)>();\n        if (first.Length == 0 || second.Length == 0 || k <= 0) return result;\n\n        // Seed one entry per row, capped at k: more rows than that can never contribute.\n        var heap = new PriorityQueue<(int I, int J), long>();\n\n        for (int i = 0; i < Math.Min(first.Length, k); i++)\n            heap.Enqueue((i, 0), (long)first[i] + second[0]);\n\n        while (result.Count < k && heap.Count > 0)\n        {\n            var (i, j) = heap.Dequeue();\n            result.Add((first[i], second[j]));\n\n            // Only the next column is newly unlocked; the next row was already seeded.\n            if (j + 1 < second.Length)\n                heap.Enqueue((i, j + 1), (long)first[i] + second[j + 1]);\n        }\n\n        return result;\n    }\n\n    private static IList<(int A, int B)> BruteForce(int[] first, int[] second, int k) =>\n        first.SelectMany(a => second.Select(b => (A: a, B: b)))\n             .OrderBy(p => (long)p.A + p.B)\n             .Take(k)\n             .ToList();\n\n    private static void Check(int[] first, int[] second, int k)\n    {\n        var fast = KSmallestPairs(first, second, k);\n        var reference = BruteForce(first, second, k);\n\n        // Compare the SUMS: ties may be ordered differently and both are correct.\n        bool agrees = fast.Select(p => (long)p.A + p.B)\n                          .SequenceEqual(reference.Select(p => (long)p.A + p.B));\n\n        Console.WriteLine($\"k={k}: \" +\n            string.Join(\" \", fast.Select(p => $\"({p.A},{p.B})\")) + $\"   sums agree: {agrees}\");\n    }\n\n    public static void Main()\n    {\n        Check(new[] { 1, 7, 11 }, new[] { 2, 4, 6 }, 3);\n        Check(new[] { 1, 1, 2 }, new[] { 1, 2, 3 }, 2);\n        Check(new[] { 1, 2 }, new[] { 3 }, 3);\n        Check(new[] { 1, 2 }, new[] { 3 }, 10);          // fewer pairs than k\n        Check(Array.Empty<int>(), new[] { 1 }, 2);\n        Check(new[] { int.MaxValue, int.MaxValue }, new[] { int.MaxValue }, 2);   // overflow\n    }\n}\n```\n\n**Output**\n\n```\nk=3: (1,2) (1,4) (1,6)   sums agree: True\nk=2: (1,1) (1,1)   sums agree: True\nk=3: (1,3) (2,3)   sums agree: True\nk=10: (1,3) (2,3)   sums agree: True\nk=2:    sums agree: True\nk=2: (2147483647,2147483647) (2147483647,2147483647)   sums agree: True\n```",
+  "tags": [
+   "dsa",
+   "heap",
+   "k-smallest",
+   "frontier",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does expanding only along the columns avoid duplicates?",
+    "a": "Because every row is seeded at column zero, so the pair (i+1, j) is reachable from row i+1's own seed rather than from (i, j). Expanding in both directions would reach many pairs twice and require a visited set. Restricting the expansion to one direction makes each pair reachable by exactly one path, which is why no deduplication is needed - a small structural choice that removes a whole data structure."
+   },
+   {
+    "q": "Why cap the seeding at k rows?",
+    "a": "Because the first array is sorted, so row k and beyond cannot contribute to the k smallest sums - each of the first k rows already offers a sum no larger. Seeding them all would be O(m log m) for a potentially enormous m when k is small. The cap makes the heap size min(k, m), which is what gives the O(k log(min(k,m))) bound rather than something depending on the array lengths."
+   },
+   {
+    "q": "Why does the test compare sums rather than the pairs themselves?",
+    "a": "Because pairs with equal sums can be emitted in any order and both orderings are correct - comparing the pairs would test an arbitrary tie-break rather than the algorithm. The sums are what the problem specifies. The final test with three copies of int.MaxValue also checks that the priority is computed in long: adding two of them overflows int and would sort them as a large negative number."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Arrays",
+  "difficulty": "Medium",
+  "question": "Sort an array containing only three distinct values in a single pass.",
+  "answer": "**Approach**\n\nThe Dutch national flag partition: three pointers maintaining regions for low, middle and high values, resolved in one pass with no counting.\n\n**Logic**\n\nThe invariant is what makes it correct: everything before `low` is a zero, everything after `high` is a two, and everything between `low` and `current` is a one. The unexamined region is between `current` and `high`.\n\nThe asymmetry is the trap. After swapping with `low`, the incoming value is known to be a one and `current` advances; after swapping with `high`, the incoming value is unexamined and `current` must *not* advance.\n\nA counting sort over two passes is simpler and equally linear; the one-pass version is what the question is really asking for.\n\nO(n) time, O(1) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static void SortThreeValues(int[] nums)\n    {\n        int low = 0, current = 0, high = nums.Length - 1;\n\n        while (current <= high)\n        {\n            if (nums[current] == 0)\n            {\n                (nums[low], nums[current]) = (nums[current], nums[low]);\n                low++;\n                current++;        // the swapped-in value is known to be a one\n            }\n            else if (nums[current] == 2)\n            {\n                (nums[current], nums[high]) = (nums[high], nums[current]);\n                high--;\n                // current does NOT advance: the swapped-in value is unexamined\n            }\n            else current++;\n        }\n    }\n\n    private static void Check(int[] nums)\n    {\n        var expected = nums.OrderBy(v => v).ToArray();\n        var working = (int[])nums.Clone();\n\n        SortThreeValues(working);\n\n        Console.WriteLine($\"[{string.Join(\",\", nums)}] -> [{string.Join(\",\", working)}] \" +\n                          $\"correct: {working.SequenceEqual(expected)}\");\n    }\n\n    public static void Main()\n    {\n        Check(new[] { 2, 0, 2, 1, 1, 0 });\n        Check(new[] { 2, 0, 1 });\n        Check(new[] { 0 });\n        Check(Array.Empty<int>());\n        Check(new[] { 2, 2, 2 });\n        Check(new[] { 0, 0, 0 });\n        Check(new[] { 2, 2, 1, 1, 0, 0 });\n\n        var random = new Random(9753);\n        bool agrees = true;\n\n        for (int trial = 0; trial < 500 && agrees; trial++)\n        {\n            var nums = Enumerable.Range(0, random.Next(0, 40))\n                                 .Select(_ => random.Next(3)).ToArray();\n            var expected = nums.OrderBy(v => v).ToArray();\n\n            SortThreeValues(nums);\n            if (!nums.SequenceEqual(expected)) agrees = false;\n        }\n\n        Console.WriteLine($\"500 random arrays sort correctly: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\n[2,0,2,1,1,0] -> [0,0,1,1,2,2] correct: True\n[2,0,1] -> [0,1,2] correct: True\n[0] -> [0] correct: True\n[] -> [] correct: True\n[2,2,2] -> [2,2,2] correct: True\n[0,0,0] -> [0,0,0] correct: True\n[2,2,1,1,0,0] -> [0,0,1,1,2,2] correct: True\n500 random arrays sort correctly: True\n```",
+  "tags": [
+   "dsa",
+   "dutch-national-flag",
+   "partitioning",
+   "invariants",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the pointer advance after one swap but not the other?",
+    "a": "Because the two swaps bring in values with different provenance. Swapping with low exchanges with a position already examined - it held a one - so the incoming value needs no further inspection and current advances. Swapping with high exchanges with the unexamined region, so the incoming value has never been looked at and must be examined on the next iteration. Advancing there would skip it, leaving zeros stranded in the middle, which is the classic bug."
+   },
+   {
+    "q": "What is the loop invariant?",
+    "a": "Everything strictly before low is a zero, everything strictly after high is a two, and everything from low up to current is a one. The region from current to high is unexamined. Each iteration shrinks that unexamined region by one, either by advancing current or by retreating high, so the loop terminates and on exit the three regions tile the array. Being able to state it is what turns three pointers from a memorised dance into something you can re-derive."
+   },
+   {
+    "q": "Why not just count the three values and rewrite?",
+    "a": "That is simpler, obviously correct, and also O(n) - two passes instead of one, and it is what I would write if the array were mutable and the values genuinely only three. The single-pass partition matters when the data is being streamed, when writes are expensive, or when the values are keys attached to larger records that must be moved rather than overwritten. The same partition is also the core of three-way quicksort, which is why it is worth knowing in this form."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Design a data structure that supports insert, remove and get-random with weighted expiry.",
+  "answer": "**Approach**\n\nA swap-remove list for O(1) random access, plus a lazy expiry sweep that removes stale entries only when they surface — never by scanning.\n\n**Logic**\n\nThe two requirements pull against each other. Random selection wants a contiguous array; expiry wants entries removed at arbitrary times. Scanning for expired entries on every operation would be O(n).\n\nLazy expiry resolves it: an entry is only checked when it is randomly drawn or explicitly removed. A drawn entry that has expired is deleted and the draw retried, so the structure self-cleans in proportion to how much it is used.\n\nThe retry loop terminates because each iteration either returns or strictly shrinks the structure.\n\nO(1) amortised for insert and remove; get-random is O(1) expected, degrading with the proportion of stale entries.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class ExpiringRandomSet\n{\n    private readonly List<(string Key, long ExpiresAt)> _entries = new();\n    private readonly Dictionary<string, int> _positionOf = new();\n    private readonly Random _random;\n\n    public ExpiringRandomSet(Random random) { _random = random; }\n\n    public int Count => _entries.Count;   // includes entries not yet swept\n\n    public void Insert(string key, long expiresAt)\n    {\n        if (_positionOf.TryGetValue(key, out int at))\n        {\n            _entries[at] = (key, expiresAt);   // refresh in place\n            return;\n        }\n\n        _positionOf[key] = _entries.Count;\n        _entries.Add((key, expiresAt));\n    }\n\n    public bool Remove(string key)\n    {\n        if (!_positionOf.TryGetValue(key, out int at)) return false;\n\n        RemoveAt(at);\n        return true;\n    }\n\n    // Swap with the last entry so the list never develops holes.\n    private void RemoveAt(int at)\n    {\n        int last = _entries.Count - 1;\n        _positionOf.Remove(_entries[at].Key);\n\n        if (at != last)\n        {\n            _entries[at] = _entries[last];\n            _positionOf[_entries[at].Key] = at;\n        }\n\n        _entries.RemoveAt(last);\n    }\n\n    // Lazy expiry: stale entries are removed when drawn, never by scanning.\n    public string GetRandom(long now)\n    {\n        while (_entries.Count > 0)\n        {\n            int at = _random.Next(_entries.Count);\n\n            if (_entries[at].ExpiresAt > now) return _entries[at].Key;\n\n            RemoveAt(at);   // each retry strictly shrinks the structure, so this terminates\n        }\n\n        return null;\n    }\n\n    public bool Contains(string key, long now) =>\n        _positionOf.TryGetValue(key, out int at) && _entries[at].ExpiresAt > now;\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var set = new ExpiringRandomSet(new Random(1618));\n\n        set.Insert(\"a\", 10);\n        set.Insert(\"b\", 20);\n        set.Insert(\"c\", 5);\n\n        Console.WriteLine($\"contains a at t=1: {set.Contains(\"a\", 1)}\");\n        Console.WriteLine($\"contains c at t=7: {set.Contains(\"c\", 7)}   (expired)\");\n        Console.WriteLine($\"remove b: {set.Remove(\"b\")}, remove z: {set.Remove(\"z\")}\");\n\n        // At t=7 only \"a\" is live, so every draw must return it.\n        bool alwaysA = true;\n        for (int i = 0; i < 100; i++) if (set.GetRandom(7) != \"a\") alwaysA = false;\n\n        Console.WriteLine($\"only the live entry is ever drawn: {alwaysA}\");\n        Console.WriteLine($\"the expired entry was swept: {set.Count}\");\n\n        Console.WriteLine($\"everything expired at t=99: [{set.GetRandom(99)}], count {set.Count}\");\n\n        // Uniformity over live entries.\n        var sampler = new ExpiringRandomSet(new Random(2718));\n        foreach (string key in new[] { \"p\", \"q\", \"r\", \"s\" }) sampler.Insert(key, 1000);\n\n        var seen = new Dictionary<string, int> { [\"p\"] = 0, [\"q\"] = 0, [\"r\"] = 0, [\"s\"] = 0 };\n        const int draws = 200000;\n        for (int i = 0; i < draws; i++) seen[sampler.GetRandom(1)]++;\n\n        bool uniform = seen.Values.All(c => Math.Abs(c / (double)draws - 0.25) < 0.01);\n        Console.WriteLine($\"draws are uniform over the live entries: {uniform}\");\n\n        // Re-inserting refreshes rather than duplicating.\n        sampler.Insert(\"p\", 2000);\n        Console.WriteLine($\"re-insert refreshes, count still {sampler.Count}\");\n    }\n}\n```\n\n**Output**\n\n```\ncontains a at t=1: True\ncontains c at t=7: False   (expired)\nremove b: True, remove z: False\nonly the live entry is ever drawn: True\nthe expired entry was swept: 1\neverything expired at t=99: [], count 0\ndraws are uniform over the live entries: True\nre-insert refreshes, count still 4\n```",
+  "tags": [
+   "dsa",
+   "design",
+   "lazy-expiry",
+   "swap-remove",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why expire lazily rather than sweeping?",
+    "a": "Because a sweep is O(n) and would have to run often enough to keep the structure clean, which is wasted work when most entries are never drawn. Lazy expiry does the cleanup in proportion to actual use: an entry costs nothing until it surfaces, and then it is removed once. The trade is that the count includes entries not yet swept, so it is an upper bound rather than the live count - which the API should make clear rather than hide."
+   },
+   {
+    "q": "Why does the retry loop terminate?",
+    "a": "Because every iteration either returns a live entry or removes an expired one, and the structure is finite - so at worst it shrinks to empty and returns null. There is no path that loops without making progress. That argument matters because a retry-on-failure loop in a randomised structure is otherwise a plausible place for an infinite loop, and the 'everything expired' test exercises exactly that path."
+   },
+   {
+    "q": "What would you change for a production cache?",
+    "a": "Add a background sweep or a min-heap keyed by expiry so memory is reclaimed even for entries nobody draws - lazy expiry alone lets dead entries accumulate indefinitely in a write-heavy, read-light workload. Make it thread-safe, since the swap-remove is decidedly not. And expose a live count separately from the raw one. The lazy design is right for the draw path and insufficient as the only reclamation strategy."
+   }
+  ]
  }
 ]
