@@ -3796,5 +3796,34 @@
     "a": "Then the branch-by-abstraction pattern applies: introduce an interface over the existing implementation, merge that, then build the new implementation behind the same interface on main, switching over with a flag when it is ready. Both implementations coexist in main during the transition. It is more work than a long branch and it keeps integration continuous, which is the trade. If even that is impossible, merging main in daily is the minimum discipline, because the alternative is a merge nobody can review."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Monitoring",
+  "difficulty": "Medium",
+  "question": "A service's health check endpoint returns 200 but the service cannot actually serve requests. How should health checks be designed?",
+  "answer": "**Why this happens**\n\nThe check returns a constant. It proves the process is running and the web server can respond — nothing else. The database can be unreachable, the message broker down, a required cache empty, and the check still passes.\n\nThat is worse than no check, because the orchestrator and the load balancer are actively told the instance is fine and keep sending it traffic.\n\n**The distinction that resolves it**\n\n**Liveness** — is the process alive, or should it be restarted? This should be nearly unconditional, because a failing liveness check causes a restart, and restarting will not fix a database outage. Making liveness depend on a database means a database blip restarts every instance simultaneously, turning a degradation into an outage.\n\n**Readiness** — can this instance serve traffic right now? This *should* check the dependencies it needs, because failing it removes the instance from the load balancer without killing it. A pod that cannot reach the database should stop receiving requests and recover when it can.\n\n**Startup** — has initialisation finished? Separating this prevents a slow-starting application being killed by a liveness probe before it has finished warming up, which is a common cause of crash loops on applications with a large EF model or heavy caching.\n\n**What a good readiness check includes**\n\nThe dependencies without which requests fail, checked cheaply — a lightweight query rather than a full one, with a short timeout so the check itself cannot hang. ASP.NET Core's health check API supports tagging, so `/health/live` and `/health/ready` can run different sets.\n\n**What to avoid**\n\n**Checking a dependency that is not required.** If the service degrades gracefully without the recommendation engine, its outage should not take the instance out of rotation.\n\n**Expensive checks.** A probe runs every few seconds on every instance; a heavy query multiplies into real load, and health checks have caused outages by overwhelming the database they were checking.\n\n**Cascading checks.** If A's readiness depends on B, and B's on C, then C failing takes down all three — and recovery is serialised. Checking your own ability to function, not your dependencies' health, is the rule.\n\n**The design point**\n\nA health check answers a question an automated system will act on. Design it around what that system will *do* with the answer, which is why liveness and readiness must be different.",
+  "tags": [
+   "devops",
+   "health-checks",
+   "kubernetes",
+   "liveness",
+   "readiness",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why should liveness not check the database?",
+    "a": "Because the action on failure is to restart the container, and restarting does nothing about an unreachable database - it just loses whatever warm state the process had and adds a cold start. Worse, a database blip fails the probe on every instance at once, so the whole deployment restarts simultaneously and then hammers the recovering database with reconnections. Liveness should detect a wedged process: a deadlock, an unrecoverable state. Everything about dependencies belongs in readiness."
+   },
+   {
+    "q": "How do you stop health checks from causing load?",
+    "a": "Cache the result for a few seconds, so a probe every second does not mean a database query every second across every instance - the health check library supports this directly. Keep the queries trivial, such as SELECT 1 rather than a real workload. And set the probe interval to something sensible; sub-second probing of a dozen dependencies across fifty pods is a surprising amount of traffic. There are real incidents where the monitoring was the load that caused the outage."
+   },
+   {
+    "q": "What should the check return when a non-critical dependency is down?",
+    "a": "Degraded rather than unhealthy, if your platform can express it - the instance can still serve most requests, so removing it from rotation makes things worse rather than better. In Kubernetes terms that means readiness passes while the degraded state is surfaced through metrics and alerts for humans. The judgement is whether requests would fail without that dependency; if the answer is 'some would degrade', the instance should keep traffic and the alert should page someone, not the load balancer."
+   }
+  ]
  }
 ]

@@ -1522,5 +1522,34 @@
     "a": "By moving them rather than deleting them - route the non-actionable ones to a low-priority channel or a dashboard for a month and see whether anyone misses them. That removes the fear of loss while ending the paging, and the evidence after a month usually settles the argument. It also helps to frame it as a swap: every alert kept has a cost paid by whoever is on call, and the currency is attention that will not be available for the real one."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Tracing",
+  "difficulty": "Hard",
+  "question": "Distributed tracing shows gaps: a request enters service A, and the trace ends there even though A calls B and C. What breaks trace propagation?",
+  "answer": "**The mechanism that must work**\n\nA trace is held together by context propagated in headers — `traceparent` under W3C Trace Context, or vendor-specific headers. Service A must send them; service B must read them and continue the trace rather than starting a new one.\n\nA gap means the context was lost somewhere in that chain.\n\n**Common causes**\n\n**1. A raw `HttpClient` that is not instrumented.** Auto-instrumentation hooks `HttpClient` created through `IHttpClientFactory` and the standard pipeline; a hand-constructed client with a custom handler can bypass it. The call happens, no headers are added.\n\n**2. The call crosses a boundary that does not forward headers.** A proxy, gateway or service mesh stripping unknown headers, or a message broker — a queued message carries no HTTP headers at all, so the context must be written into the message and read back explicitly.\n\n**3. The async context was lost.** `Activity.Current` flows on the async context; `Task.Run` without flowing it, a fire-and-forget continuation, or a custom thread can lose it — so the outgoing call has no parent to reference.\n\n**4. Different propagation formats.** One service emitting B3 headers and another expecting W3C means each sees no context and starts a new trace.\n\n**5. Sampling decisions.** If A samples out the trace, the downstream spans may never be recorded — the trace is not broken, it was never collected. This looks identical in the UI and is worth ruling out first because it costs nothing to check.\n\n**How to diagnose it**\n\nCapture the outgoing request headers from A. If `traceparent` is absent, the problem is on A's side — instrumentation or context loss. If it is present and B still starts a new trace, the problem is B's ingestion or a header being stripped between them.\n\nThat single observation splits the problem in half and takes minutes.\n\n**The messaging case specifically**\n\nThis is the most common genuine gap. The producer must inject the context into the message properties and the consumer must extract it and create the span as a child — or as a *link*, if the consumption is decoupled in time. Most broker instrumentation libraries do this, but a hand-rolled publisher will not.",
+  "tags": [
+   "observability",
+   "distributed-tracing",
+   "opentelemetry",
+   "context-propagation",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does a message broker need special handling?",
+    "a": "Because there is no HTTP request to carry headers - the context must be written into the message's own metadata by the producer and read back by the consumer. Without that, the consumer has no idea the message relates to an earlier request and starts a fresh trace. The semantics also differ: a queued message may be processed minutes later by a different service, so the relationship is often better expressed as a span link than as a parent-child, since the producer is not waiting for it."
+   },
+   {
+    "q": "How does sampling interact with this?",
+    "a": "The sampling decision is normally made at the root and propagated in the traceparent flags, so all services in one trace agree - which is what you want, since a partially sampled trace is worse than none. The confusion is that a trace sampled out looks exactly like a broken trace in the UI: nothing is there. Checking the sampled flag on the incoming header tells you which you are looking at. Tail-based sampling, deciding after the fact so errors and slow traces are always kept, avoids losing the traces you most want."
+   },
+   {
+    "q": "What does Activity.Current being lost look like in practice?",
+    "a": "Spans appear as separate traces rather than as children, or the parent id is empty on the outgoing call. It typically happens where code leaves the async flow - a Task.Run, a timer callback, a custom thread, or a background queue handing work to a worker. The fix is to capture the Activity explicitly and restore it in the new context, which most background-processing libraries now do. It is worth knowing because it produces a gap that looks like a missing instrumentation problem when it is really a context-flow problem."
+   }
+  ]
  }
 ]

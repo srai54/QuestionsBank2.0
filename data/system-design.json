@@ -2687,5 +2687,34 @@
     "a": "By asking what the limit is protecting. A request count treats a cheap lookup and an expensive report identically, which is a poor proxy for load - so if the goal is protecting capacity, weighting by cost or having separate limits per endpoint class is more honest. If the goal is commercial, a request count is simple and predictable for the customer to reason about, which has its own value. The complaint is usually legitimate and the fix is a second dimension rather than a higher number."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scaling",
+  "difficulty": "Hard",
+  "question": "A file upload feature works for small files and times out for large ones. The team wants to increase the request timeout. What would you propose?",
+  "answer": "**Why raising the timeout is the wrong first move**\n\nIt makes a thread or connection occupied for longer, so concurrency drops. It shifts the failure later rather than removing it — a bigger file still fails. And the upload still fails entirely on a dropped connection, so a user on a mobile network loses a ten-minute upload at 95%.\n\nThe design is wrong, not the number.\n\n**What I would propose instead**\n\n**1. Upload directly to storage, not through the API.** Issue a pre-signed URL — a SAS token for Azure Blob Storage, a pre-signed S3 URL — and have the client upload straight to the storage service. Your API handles a small request that issues the token, and the large transfer never touches your compute at all.\n\nThis removes the timeout question entirely, removes the memory and bandwidth cost from your servers, and lets the storage service do what it is optimised for.\n\n**2. Chunked or resumable upload.** The client splits the file and uploads blocks, which can be retried individually and resumed after a disconnect. Azure Blob's block upload and the tus protocol both do this. Essential for large files on unreliable networks.\n\n**3. Process asynchronously.** The upload completes and returns immediately; processing happens via a queued message, with the client polling or being notified. Holding a request open while you virus-scan and transcode is the other half of the timeout problem.\n\n**4. Stream rather than buffer** if the file genuinely must pass through the API. Reading a 2GB file into memory before writing it is how a single upload takes down an instance — `[DisableRequestSizeLimit]` with a buffered read is a denial-of-service waiting to happen.\n\n**What the design then needs**\n\nValidation of the file *after* upload rather than before, since the API no longer sees the bytes — a queue-triggered function that checks type, size and content, and quarantines failures. A token with a short expiry and write-only permission scoped to one blob path. And a way to clean up orphaned uploads that were never completed.\n\n**The general principle**\n\nWhen a request outgrows a request, stop making it one. Large transfers and long processing both want to be decoupled from the synchronous request path rather than accommodated within it.",
+  "tags": [
+   "system-design",
+   "file-upload",
+   "presigned-url",
+   "async-processing",
+   "scaling",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What are the security considerations for pre-signed upload URLs?",
+    "a": "Scope them as tightly as possible: write-only, a single blob path you generate rather than one the client names, and a short expiry measured in minutes. A client-supplied path allows overwriting other users' files, and a long expiry turns a leaked URL into an open write endpoint. You also lose the ability to validate content at the door, so post-upload scanning becomes mandatory - and the container should not be publicly readable, or an attacker who uploads a malicious file has hosted it on your domain."
+   },
+   {
+    "q": "How does the client know when processing has finished?",
+    "a": "Either it polls a status endpoint, which is simple and works everywhere, or it is pushed to - SignalR, a webhook, or a server-sent event. Polling is usually the right first implementation because it needs no persistent connection and degrades gracefully, with a sensible backoff so a long job does not generate thousands of requests. The important part is that the status is a first-class resource with its own identifier returned at upload time, so the client has something to ask about."
+   },
+   {
+    "q": "The file must be validated before it is stored anywhere. Does that force it through the API?",
+    "a": "Not necessarily - you can upload to a quarantine container that nothing else can read, validate from there, and move or delete based on the result. That keeps the transfer off your compute while preserving the guarantee that nothing unvalidated reaches the real storage. If the requirement is genuinely that no untrusted byte is ever written, then streaming through the API with strict size limits is the honest answer, and the cost in capacity has to be accepted and sized for."
+   }
+  ]
  }
 ]

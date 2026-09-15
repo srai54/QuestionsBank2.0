@@ -4308,5 +4308,33 @@
     "a": "What does unavailable mean - every endpoint, or the checkout path? Measured how, from where, and over what window? That definition changes the engineering by an order of magnitude. Then: what is the cost of the gap, because 99.99% is about four minutes a month and implies multi-region, automated failover, and no single points including deployment and DNS. And what is the cost of the outage it prevents, because the honest answer is sometimes that four nines costs more than the downtime it avoids."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Data Consistency",
+  "difficulty": "Hard",
+  "question": "A user updates their email address, and the change appears in the profile page but not in the notification service for several minutes. Stakeholders call it a bug. Is it?",
+  "answer": "**It depends on a decision that was probably never made explicitly**\n\nIf the system is eventually consistent by design, this is expected behaviour and the bug is that nobody told the stakeholders — or that the UI implies immediacy it cannot deliver.\n\nIf the propagation was supposed to be fast and is taking minutes, that is a performance problem with a cause worth finding.\n\nIf nobody decided, then the architecture has an emergent consistency model nobody owns, which is the real finding.\n\n**Questions I would ask**\n\n**What is the actual requirement?** 'A notification sent within five minutes of a change may go to the old address' is either acceptable or not, and that is a product decision. For a marketing email it is fine; for a password reset it is a security problem.\n\n**Why minutes?** If it is a message flowing through a broker, propagation should be seconds. Minutes suggests a polling job, a batch sync, or a backlog — and a backlog is worth knowing about because it grows.\n\n**Is the delay bounded and monitored?** Eventual consistency is acceptable when you know the bound and alert when it is exceeded. Unbounded and unmeasured is not a design, it is a hope.\n\n**What I would actually do**\n\n**Make the model explicit and visible.** If it is eventually consistent, the UI should not pretend otherwise — 'your change has been saved and will apply across services shortly' is honest and removes most of the complaints.\n\n**Measure the lag** and alert on it. Consumer lag on the topic, or the age of the oldest unprocessed change. This converts 'sometimes slow' into a number with a threshold.\n\n**Read your own writes where it matters.** The user's own profile page should show their change immediately — usually by reading from the service that owns the data rather than from a replica or cache. That fixes the most jarring version of the problem cheaply.\n\n**Identify where strong consistency is genuinely required** and design those paths differently — a password reset should validate the email against the owning service at send time rather than trusting a replica.\n\n**The framing**\n\nThe stakeholders are describing a real user-visible surprise. Whether it is a bug depends on a contract that should exist and probably does not. Producing that contract is the useful outcome, rather than arguing about the label.",
+  "tags": [
+   "architecture",
+   "eventual-consistency",
+   "distributed-systems",
+   "expectations",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What does 'read your own writes' mean and why does it matter so much?",
+    "a": "It is a consistency guarantee that a user always sees the effect of their own changes, even if others see them later. It matters because the jarring case is not that data is stale, it is that a user does something, sees it succeed, and then sees the old value - which reads as data loss and destroys confidence. Routing a user's reads to the primary or to a cache updated synchronously on their own write gives it cheaply, without needing global strong consistency. It resolves most complaints about eventual consistency without changing the architecture."
+   },
+   {
+    "q": "How would you monitor eventual consistency lag?",
+    "a": "Measure the age of the oldest unprocessed change rather than a queue depth, because depth does not tell you how stale anything is - a thousand messages processed quickly is fine and ten stuck for an hour is not. Consumer lag on a partition, or a timestamp comparison between the source's last write and the replica's last applied change, gives the number. Then alert on a threshold derived from the agreed bound. Without that, the first indication of a problem is a user noticing, which is where this question started."
+   },
+   {
+    "q": "The stakeholder asks to make it strongly consistent everywhere. How do you respond?",
+    "a": "By pricing it. Strong consistency across services means synchronous coordination, so every service must be available for any write to succeed - the availability multiplies down, latency rises, and a single slow service blocks everything. That is a genuine option with genuine costs, and for a small number of critical operations it can be right. Applying it everywhere usually trades a mild staleness problem for an outage problem. Framing it as availability versus freshness, with the arithmetic, tends to move the conversation better than invoking CAP."
+   }
+  ]
  }
 ]

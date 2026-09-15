@@ -10822,5 +10822,92 @@
     "a": "Materialise it with ToList or ToArray at the point they want the work done, which forces the whole sequence and makes subsequent enumeration cheap and stable. That is also the right move before returning a sequence across an API boundary, because handing a caller a lazy enumerable over a disposed DbContext or a closed file is a common source of confusing failures. If the producer knows the consumer will always enumerate fully, returning IReadOnlyList in the first place is clearer than expecting them to remember."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Middleware",
+  "difficulty": "Hard",
+  "question": "Custom middleware reads the request body for logging, and downstream controllers start receiving empty models. Explain and fix.",
+  "answer": "**What's happening**\n\nThe request body is a forward-only, non-seekable stream by default. Once the middleware reads it to the end, the position is at the end and the model binder finds nothing to deserialise — so the controller's parameter is null or default.\n\nIt is not that the data was consumed maliciously; it is that a stream can only be read once unless you arrange otherwise.\n\n**The fix: buffering**\n\n`EnableBuffering()` switches the body to a seekable stream backed by memory, with a spill to disk past a threshold. Then the middleware can read it and rewind:\n\n```csharp\napp.Use(async (context, next) =>\n{\n    context.Request.EnableBuffering();\n\n    using var reader = new StreamReader(\n        context.Request.Body, leaveOpen: true);\n\n    var body = await reader.ReadToEndAsync();\n    context.Request.Body.Position = 0;      // rewind for the model binder\n\n    logger.LogInformation(\"Request body: {Body}\", body);\n\n    await next(context);\n});\n```\n\nTwo details that are easy to miss: `leaveOpen: true` on the `StreamReader`, or disposing it closes the body stream; and resetting `Position` to 0, without which the model binder still finds nothing.\n\n**What I would question about the requirement**\n\n**Buffering has a cost.** Every request is now held in memory or spilled to disk. For large uploads that is significant, and the default threshold is only 30KB before it writes to disk — a file upload endpoint will start doing disk IO per request.\n\n**Logging request bodies is usually a bad idea.** They contain personal data, passwords, tokens and card numbers. Once ingested into a log store it is very hard to remove, and it is a compliance problem rather than a technical one.\n\n**What I would propose instead**\n\nLog the metadata — path, method, status, duration, correlation id, content length — which answers most diagnostic questions. If bodies are genuinely needed, capture them only for failures, only for specific endpoints, with redaction of known sensitive fields, and with a short retention. Make it opt-in per route rather than global.\n\n**The response body has the same problem in reverse** — reading it requires swapping the stream and copying back, which is more invasive and also worth avoiding unless necessary.",
+  "tags": [
+   "dotnet",
+   "aspnetcore",
+   "middleware",
+   "request-body",
+   "logging",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does EnableBuffering spill to disk, and does that matter?",
+    "a": "Because holding every request body in memory would be an easy denial-of-service - a few large uploads could exhaust the server. The default threshold is small, around 30KB, after which it writes to a temporary file. That matters because an endpoint accepting file uploads now performs disk IO on every request, adding latency and IO pressure that did not exist before. You can raise the threshold, at the cost of memory, but the better answer is usually not to buffer on routes that accept large bodies."
+   },
+   {
+    "q": "How would you capture bodies only for failed requests?",
+    "a": "Buffer the body but do not read it up front - let the pipeline run, and only if the response status indicates failure, rewind and read it then. That way the cost of reading and logging is paid on the rare path rather than every request, though the buffering cost is still universal. An alternative that avoids buffering entirely is to have the controller log the already-bound model on failure, which is cheaper and gives you the parsed object rather than raw text."
+   },
+   {
+    "q": "What is the equivalent problem with the response body?",
+    "a": "The response stream is write-only and goes straight to the client, so to inspect it you must substitute your own MemoryStream, let the pipeline write into it, read it, then copy it to the real body stream. That is more invasive: it breaks streaming responses, buffers potentially large payloads, and interferes with things like server-sent events or file downloads. It is one of the clearest cases where the diagnostic value rarely justifies the cost, and structured logging of what the handler decided is a better source of the same information."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Validation",
+  "difficulty": "Medium",
+  "question": "A POST endpoint accepts a model with a Role property. A user submits extra JSON fields and escalates their own permissions. What happened and how is it prevented?",
+  "answer": "**What happened: over-posting / mass assignment**\n\nThe model binder populates every property it can match from the request body. If the model exposes `Role`, `IsAdmin` or `AccountId`, a client can set them simply by including them in the JSON — regardless of whether the UI offers that field.\n\nIf the handler then saves that object, the user has assigned themselves whatever those properties control. The API never intended to accept them; it just never said so.\n\n**Why it is so easy to introduce**\n\nBinding an entity directly is convenient and looks harmless:\n\n```csharp\n// Every property of User is bindable from the request body\n[HttpPost]\npublic async Task<IActionResult> Update(User user)\n{\n    db.Users.Update(user);\n    await db.SaveChangesAsync();\n}\n```\n\nThe vulnerability is created by what the model *has*, not by what the code does with it — so it appears whenever someone adds a property to the entity, long after the endpoint was reviewed.\n\n**The fix**\n\n**Bind to a request DTO containing only the fields the caller may set.** Then map explicitly onto the entity:\n\n```csharp\npublic record UpdateProfileRequest(string DisplayName, string TimeZone);\n\n[HttpPost]\npublic async Task<IActionResult> Update(UpdateProfileRequest request)\n{\n    var user = await db.Users.FindAsync(currentUserId);\n\n    user.DisplayName = request.DisplayName;   // only what is permitted\n    user.TimeZone = request.TimeZone;\n\n    await db.SaveChangesAsync();\n}\n```\n\nThe DTO has no `Role`, so there is nothing to over-post. Notice this also fixes the authorisation problem — the entity is loaded by the *current user's* id rather than one supplied by the client.\n\n**Why DTOs rather than `[Bind]` attributes**\n\n`[Bind(Include = ...)]` works but is a denylist mentality applied as an allowlist afterthought — easy to forget on a new action, and invisible at the call site. A DTO makes the contract explicit and cannot silently gain a sensitive property when someone edits the entity.\n\n**The general principle**\n\nNever let the shape of your persistence model define your API surface. They change for different reasons, and coupling them means every new column is a potential API change and a potential vulnerability.",
+  "tags": [
+   "dotnet",
+   "security",
+   "over-posting",
+   "mass-assignment",
+   "dto",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is binding directly to an EF entity so common despite this?",
+    "a": "Because it is genuinely less code and the duplication of a DTO feels wasteful, especially when the shapes are initially identical. The cost only appears later - when a sensitive column is added, when the API needs to differ from the storage shape, or when the entity's navigation properties start appearing in serialisation. By then the pattern is established across dozens of endpoints. It is a case where the cheap option is fine until precisely the moment it is not, and the failure is a security one rather than a maintenance one."
+   },
+   {
+    "q": "Does the same problem exist with JSON Patch or partial updates?",
+    "a": "Yes, and more subtly - a JsonPatchDocument applied to an entity can target any property path, including ones you never intended to be writable, so the allowlist has to be enforced explicitly rather than assumed. The safe approach is to apply the patch to a DTO rather than the entity, then map. Partial update semantics also interact badly with validation, because the object is only complete after the patch is applied, which is why validating the result rather than the request matters."
+   },
+   {
+    "q": "How would you audit an existing codebase for this?",
+    "a": "Look for action parameters typed as entities rather than DTOs - that is the signature, and it is mechanically searchable. Then for each, check which properties of that entity are sensitive: anything controlling authorisation, ownership, pricing or status. The high-risk ones are entities with a role, a tenant id, an owner id or a monetary field. It is also worth checking whether the endpoint loads by a client-supplied id, since over-posting and IDOR usually appear together in the same handler."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Configuration",
+  "difficulty": "Medium",
+  "question": "An application works on a developer machine and fails on the server with a null reference reading a configuration value. Both have the same appsettings.json. What is different?",
+  "answer": "**The configuration system layers sources, and the layers differ by environment**\n\nBy default, later sources override earlier ones in this order: `appsettings.json`, then `appsettings.{Environment}.json`, then user secrets (Development only), then environment variables, then command-line arguments.\n\nSo the same `appsettings.json` can produce different results:\n\n**1. User secrets.** These are only loaded in Development and live outside the repository, in the developer's profile. A value present locally via user secrets is simply absent on the server — and this is the most common cause of exactly this symptom, because it is invisible in the repository.\n\n**2. `appsettings.Development.json`** exists and is being used locally, while `appsettings.Production.json` lacks the key.\n\n**3. `ASPNETCORE_ENVIRONMENT` is not set on the server**, so it defaults to Production and loads a different file than expected — or is set to something unexpected, so no environment-specific file matches at all.\n\n**4. Environment variable naming.** Nested keys use a double underscore: `ConnectionStrings__Default`, not a colon, on Linux. A variable set with the wrong separator is silently ignored.\n\n**5. Case sensitivity of the file name on Linux.** `appsettings.Production.json` versus `appsettings.production.json` — the developer machine is case-insensitive and the server is not.\n\n**6. The file is not copied to the output.** Its `CopyToOutputDirectory` setting, or a Docker image that did not include it.\n\n**How to diagnose quickly**\n\nAt startup, log the resolved environment name and the list of configuration providers that loaded. `(configuration as IConfigurationRoot).GetDebugView()` prints every key with the provider that supplied it, which answers the question immediately — though it must not be logged in production, because it includes secrets.\n\n**How to prevent it**\n\n**Validate configuration at startup**, not at first use. `AddOptions<T>().Bind(...).ValidateDataAnnotations().ValidateOnStart()` fails the application immediately with a clear message naming the missing key, rather than producing a null reference on the first request that happens to need it.\n\nThat converts a confusing runtime error into a deployment failure, which is where it belongs.",
+  "tags": [
+   "dotnet",
+   "configuration",
+   "environments",
+   "user-secrets",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does ValidateOnStart matter so much?",
+    "a": "Because a missing configuration value otherwise surfaces whenever the code path that needs it first executes, which can be hours after deployment on a rarely-used endpoint - and it surfaces as a null reference rather than as a message naming the key. Failing at startup means a bad deployment does not start, so it is caught by the health check and rolled back automatically. It converts a silent misconfiguration into a loud one at the moment you can still do something about it cheaply."
+   },
+   {
+    "q": "Why the double underscore for nested keys in environment variables?",
+    "a": "Because the colon used in configuration paths is not a legal character in environment variable names on all platforms, particularly in shells on Linux. The provider translates a double underscore into the hierarchy separator, so ConnectionStrings__Default maps to ConnectionStrings:Default. The colon form does work on Windows, which is exactly why it is a cross-platform trap: it is set on a developer machine, works, and is silently ignored in a Linux container."
+   },
+   {
+    "q": "Should configuration values be secrets in the first place?",
+    "a": "Connection strings and API keys should not be in appsettings.json at all - they belong in Key Vault or, better, be eliminated with managed identity. What appsettings is for is non-sensitive settings: timeouts, feature toggles, URLs, log levels. Keeping that separation means a missing configuration value is an ordinary deployment problem rather than a secret management one, and the failure modes stay simple. Mixing the two is what leads to secrets in source control."
+   }
+  ]
  }
 ]

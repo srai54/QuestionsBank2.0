@@ -3378,5 +3378,34 @@
     "a": "A modified one that includes the failed output and the specific validation error, because the model can usually correct a concrete mistake it is shown. Repeating the identical prompt relies on sampling variation and wastes a call. Keep the retry count low - one or two - since a model failing repeatedly on the same input usually indicates a prompt or schema problem rather than bad luck, and a high retry count turns a systematic failure into an expensive systematic failure."
    }
   ]
+ },
+ {
+  "category": "AI/LLM",
+  "subcategory": "Cost",
+  "difficulty": "Medium",
+  "question": "An LLM feature costs far more per request than projected. Where do you look and what levers exist?",
+  "answer": "**Where the cost actually goes**\n\nBilling is per token, input and output, usually with output priced several times higher. So the question is which of those is large and why.\n\n**Common causes**\n\n**1. The prompt is much larger than expected.** A system prompt with extensive instructions and examples is sent on *every* request. A few thousand tokens of instructions at scale dominates the bill, and nobody notices because it is written once.\n\n**2. Conversation history grows unbounded.** Each turn resends the whole conversation, so cost grows quadratically with the length of a chat session.\n\n**3. Retrieved context is too large.** Stuffing twenty chunks into the prompt when three would do, because top-k was never tuned.\n\n**4. The model is larger than the task needs.** Classification and extraction often work fine on a smaller, much cheaper model. Using the flagship model for everything is the single most common cost mistake.\n\n**5. Retries and agent loops.** A failed parse retried three times is three times the cost, and an agent loop with no iteration cap can spend a great deal on one request.\n\n**The levers, roughly in order of impact**\n\n**Right-size the model per task.** Route simple tasks to a small model and escalate only when needed. Often a 10x cost reduction with no quality loss on the easy majority.\n\n**Cache.** Identical or near-identical prompts recur far more than people expect. Provider-side prompt caching also discounts the repeated prefix substantially, which directly targets the large system prompt.\n\n**Trim the context.** Fewer, better-ranked retrieved chunks. Summarise old conversation turns rather than resending them verbatim.\n\n**Cap output length.** `max_tokens` bounds the expensive half, and much verbose output is unwanted anyway.\n\n**Batch** where latency permits, since batch pricing is typically half.\n\n**What to put in place**\n\nLog tokens in and out per request with the feature and the model, so cost is attributable rather than a single line on an invoice. Without that, every optimisation is a guess — and the answer is usually one endpoint or one prompt, not a general inefficiency.",
+  "tags": [
+   "ai-llm",
+   "cost-optimisation",
+   "tokens",
+   "caching",
+   "model-selection",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does conversation history grow cost quadratically?",
+    "a": "Because each turn resends everything that came before plus the new message, so a twenty-turn conversation sends roughly twenty times the average turn length in total rather than twenty single messages. The cost of turn n is proportional to n, and the sum over a session is proportional to n squared. That is why long-running chats are disproportionately expensive and why summarising or windowing the history - keeping the last few turns plus a running summary - is one of the highest-leverage changes for a chat product."
+   },
+   {
+    "q": "How do you decide when a smaller model is good enough?",
+    "a": "Build an evaluation set from real inputs with known-good outputs, run both models against it, and compare accuracy against cost - which turns an opinion into a measurement. Many extraction and classification tasks show no meaningful difference, while reasoning-heavy tasks do. A useful pattern is cascading: run the cheap model, and escalate to the expensive one only when its confidence is low or its output fails validation, so you pay the premium on the minority of hard cases."
+   },
+   {
+    "q": "What is prompt caching and when does it help?",
+    "a": "Providers cache the processed prefix of a prompt, so repeated leading content - a long system prompt, a fixed set of instructions or examples - is billed at a large discount on subsequent requests. It helps most exactly where the cost problem usually is: a large invariant prefix sent thousands of times. To benefit, the shared content must come first and be byte-identical, which means putting the variable part at the end rather than interleaving it. That ordering is a small change with a direct cost effect."
+   }
+  ]
  }
 ]

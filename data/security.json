@@ -2620,5 +2620,34 @@
     "a": "Search for the pattern rather than reading everything: endpoints taking an id parameter, and the data access calls that fetch by primary key alone - FindAsync and SingleOrDefault on an id with no ownership predicate. That narrows it to a reviewable list quickly. Then write the authorisation test for each, since a test proving user A cannot read user B's record is the durable artefact. An automated scan helps, but this class of flaw is semantic, so the list has to be triaged by someone who knows what ownership means in the domain."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Dependencies",
+  "difficulty": "Medium",
+  "question": "A vulnerability scanner flags 40 CVEs in your dependencies. The team wants to update everything immediately. How do you approach it?",
+  "answer": "**Why 'update everything' is not the plan**\n\nForty simultaneous updates is a large change with a real chance of breaking something, and it makes any resulting failure hard to attribute. It also treats all forty as equally urgent, which they are not.\n\n**Triage first**\n\n**Is it reachable?** A CVE in a code path your application never executes is a very different risk from one in your request-handling path. Tools that do reachability analysis narrow forty findings to a handful remarkably often. A vulnerability in a transitive test-only dependency is not a production risk at all.\n\n**Is it exploitable in your context?** A deserialisation vulnerability matters if you deserialise untrusted input; an XML parser flaw matters if you parse external XML. Severity scores are context-free by construction — CVSS describes the vulnerability, not your exposure.\n\n**Is it actually fixed?** Sometimes the advisory has no patched version yet, and the answer is a mitigation or a configuration change rather than an update.\n\n**Then sequence the work**\n\n**Critical and reachable** — patch now, out of band if necessary.\n\n**High severity, not obviously reachable** — patch in the next release, verified.\n\n**The rest** — batch into a scheduled dependency update, small groups at a time so failures are attributable.\n\n**What I would also change**\n\n**Automate the routine updates.** Dependabot or Renovate raising PRs continuously means you take dozens of small updates rather than one terrifying batch. The reason forty accumulated is that nothing was updating them.\n\n**Fail the build on new critical vulnerabilities** in direct dependencies, so the number cannot grow again silently.\n\n**Reduce the dependency count.** Forty CVEs across a large tree is partly a statement about how much code you have taken on. Some of it is a two-line utility that could be written or removed.\n\n**The framing I would use with stakeholders**\n\nA count of CVEs is not a measure of risk. The useful question is which of them an attacker could actually reach and what they would gain — and answering that for the top few is more valuable than patching all forty blindly.",
+  "tags": [
+   "security",
+   "dependencies",
+   "cve",
+   "supply-chain",
+   "prioritisation",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is CVSS severity a poor prioritisation tool on its own?",
+    "a": "Because it scores the vulnerability in the abstract, assuming an attacker can reach it - it knows nothing about whether your application calls that function, whether the input is untrusted, or whether a mitigating control already blocks it. So a 9.8 in a code path you never execute can be less urgent than a 6.5 in your authentication flow. Using it as the only input produces a queue sorted by the wrong criterion, which is how teams spend a sprint patching things that were never exploitable."
+   },
+   {
+    "q": "How do you handle a vulnerability with no available fix?",
+    "a": "Assess reachability first, because if it is not reachable the answer may be to accept and track it. If it is, look for a mitigation: a configuration that disables the affected feature, a WAF rule, input validation that blocks the vector, or pinning to a version before the vulnerable code was introduced. Replacing the dependency is the heavier option and sometimes the right one. What matters is recording the decision and the compensating control, so the acceptance is deliberate and revisited rather than forgotten."
+   },
+   {
+    "q": "The team is nervous that automated dependency PRs will break things. Is that reasonable?",
+    "a": "It is reasonable and it is an argument for better tests rather than for manual updates - if you cannot trust a patch-level bump without manual verification, that uncertainty exists whether the update is automated or not. Start with patch and minor updates grouped weekly, with major versions raised separately for human review. The alternative, which is what produced forty CVEs, is that updates happen only under pressure and in large batches, which is strictly riskier."
+   }
+  ]
  }
 ]

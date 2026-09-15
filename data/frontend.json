@@ -2199,5 +2199,34 @@
     "a": "Yes, and it is one of the cheapest protections available - the beforeunload event for tab closes and a router guard for in-app navigation. The caveat is that browsers deliberately limit what you can say and require a prior interaction, so it cannot be relied on absolutely. Autosaving a draft locally is the stronger version, because it survives a crash and a closed tab rather than only a deliberate navigation, and it removes the dialogue entirely."
    }
   ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Build",
+  "difficulty": "Medium",
+  "question": "After a deployment, some users see a blank page with 'Failed to fetch dynamically imported module' in the console. Refreshing fixes it. Explain.",
+  "answer": "**What's happening**\n\nThe user loaded the application before the deployment. Their `index.html` and its already-loaded JavaScript reference asset filenames containing content hashes — `app-a1b2c3.js`, `Dashboard-d4e5f6.js`. After the deployment those files no longer exist, because the new build produced different hashes and the old files were removed from the CDN or storage.\n\nWhen the user then navigates to a lazily-loaded route, the browser requests a chunk that has been deleted and gets a 404. The dynamic import rejects, and if nothing handles it, the route renders nothing.\n\nRefreshing fixes it because it fetches the new `index.html`, which references the new chunk names.\n\n**Why it affects only some users**\n\nOnly those with a session spanning the deployment, who then navigate to a route they had not already loaded. A user who loaded everything before the deploy, or who arrives after it, sees nothing wrong — which makes it look intermittent and hard to reproduce.\n\n**The fixes, which are complementary**\n\n**1. Keep old assets for a period.** Do not delete the previous build's chunks immediately — retain them for a day or two so in-flight sessions can still load them. This is the most effective single change and it is a deployment configuration rather than a code change.\n\n**2. Detect the failure and recover.** Catch the import rejection and reload the page, which picks up the new index. React's error boundaries or a wrapper around the lazy import:\n\n```js\nconst Dashboard = lazy(() =>\n  import('./Dashboard').catch(() => {\n    window.location.reload();\n    return new Promise(() => {});   // never resolves; the reload takes over\n  })\n);\n```\n\n**3. Tell the user a new version is available.** Poll a version endpoint or use a service worker, and prompt them to refresh. Better than a silent reload, which can lose unsaved work.\n\n**4. Cache headers.** `index.html` must be `no-cache` so it is revalidated, while hashed assets can be cached forever — they are immutable by construction. Getting this backwards produces a related and more persistent version of the same problem.\n\n**The general point**\n\nA single-page application is a long-lived client running code from a specific deployment. Deployments are not atomic from its perspective, so the client needs a story for 'the server has moved on'.",
+  "tags": [
+   "frontend",
+   "deployment",
+   "code-splitting",
+   "caching",
+   "spa",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why must index.html be no-cache while the assets are cached forever?",
+    "a": "Because index.html is the only file with a stable name, so it is the one that maps the application to the current set of hashed chunks - caching it means clients keep loading the old manifest and never see a new deployment. The hashed assets can be cached immutably precisely because their names change when their content changes, so there is never a stale version of a given URL. Getting this backwards, with a cached index and no-cache assets, produces both stale applications and unnecessary bandwidth."
+   },
+   {
+    "q": "Is automatically reloading on a failed import safe?",
+    "a": "Not unconditionally - a reload discards unsaved state, so a user mid-form loses their work, and a reload loop is possible if the failure is not actually a stale-deployment problem. The safer pattern is to attempt the reload once, guarded by a flag in sessionStorage so it cannot loop, and to prompt rather than reload when there is unsaved input. Silently reloading is acceptable for a read-only view and a poor choice for an editor."
+   },
+   {
+    "q": "How long should old assets be retained?",
+    "a": "Longer than a realistic session, which for a business application usually means at least a working day and often a week - the cost is storage, which is negligible for JavaScript bundles. The constraint is any requirement to remove code containing a vulnerability, where you do want the old version gone. A reasonable default is to keep the previous few builds and clean up on a schedule, rather than deleting as part of the deployment itself, which is what creates the window."
+   }
+  ]
  }
 ]

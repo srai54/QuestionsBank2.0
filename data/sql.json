@@ -4281,5 +4281,34 @@
     "a": "The same reasoning, and the costs are even smaller - a NOT NULL or a simple CHECK is essentially free on insert, with no lookup involved. So the performance argument evaporates entirely while the correctness argument stands unchanged. If a team is dropping those, the discussion is not really about performance; it is about wanting the schema to accept whatever the application sends, which is worth surfacing as the actual position being argued."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "A background job processes rows from a queue table. When you scale to three instances, rows get processed twice. How do you make the dequeue safe?",
+  "answer": "**What's happening**\n\nThe classic pattern is select-then-update:\n\n```sql\nSELECT TOP 1 * FROM Jobs WHERE Status = 'Pending' ORDER BY CreatedAt;\n-- application decides, then:\nUPDATE Jobs SET Status = 'Processing' WHERE Id = @id;\n```\n\nThree instances run the `SELECT` concurrently, all see the same row, all claim it. The gap between reading and claiming is the entire problem — the same race as the inventory check.\n\n**The fix: claim atomically**\n\nMake the read and the claim one statement, and have it return what was claimed:\n\n```sql\nUPDATE TOP (1) Jobs\nSET Status = 'Processing', ClaimedBy = @instance, ClaimedAt = SYSUTCDATETIME()\nOUTPUT inserted.Id, inserted.Payload\nWHERE Status = 'Pending';\n```\n\n`OUTPUT` returns the rows the update actually modified, so the claim and the retrieval are the same operation and no other instance can take it.\n\n**The other common approach**\n\n`READPAST` with `UPDLOCK` and `ROWLOCK` lets each instance skip rows another has locked rather than blocking on them:\n\n```sql\nSELECT TOP 1 * FROM Jobs WITH (UPDLOCK, READPAST, ROWLOCK)\nWHERE Status = 'Pending' ORDER BY CreatedAt;\n```\n\nThis scales better under contention because instances do not queue behind each other.\n\n**What else a queue table needs**\n\n**Crash recovery.** If an instance dies mid-processing, its rows stay `Processing` forever. A visibility timeout — claimed rows older than N minutes return to `Pending` — is required, which also means processing must be idempotent because a slow job can be reclaimed while still running.\n\n**A retry count and a dead-letter state**, or a poison message is retried indefinitely.\n\n**An index on the claim predicate**, or every dequeue scans the table as it grows.\n\n**The question I would ask**\n\nWhy a database table rather than a real queue? Service Bus, SQS or RabbitMQ solve all of the above — atomic dequeue, visibility timeout, dead-lettering, retry — as built-in behaviour. A queue table is reasonable when you need the work to be transactionally consistent with the data, which is a genuine reason, and otherwise it is reimplementing a broker with more bugs.",
+  "tags": [
+   "sql",
+   "queue-table",
+   "concurrency",
+   "atomic-claim",
+   "distributed",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is a visibility timeout necessary rather than optional?",
+    "a": "Because processes die - deployments, crashes, OOM kills - and a row claimed by a dead instance is otherwise stuck permanently with nothing to notice. The timeout returns it for another attempt. The consequence is that a job running longer than the timeout can be claimed by a second worker while the first is still going, so at-least-once processing and idempotency are forced on you by the recovery mechanism. Setting the timeout longer than the realistic worst-case duration reduces but never eliminates it."
+   },
+   {
+    "q": "What are the costs of using a real broker instead?",
+    "a": "You lose transactional consistency with your database - enqueueing a message and writing a row are two systems again, which is the dual-write problem and needs an outbox. You add an operational dependency and a new failure mode. And local development and testing need the broker available. Those are real costs, which is why queue tables persist. The decision usually turns on whether the work must be atomic with a database change; if it must, the table plus an outbox-style claim is defensible."
+   },
+   {
+    "q": "The table has grown to millions of completed rows and dequeues have slowed. What do you change?",
+    "a": "Archive or delete completed rows on a schedule, because the dequeue's index still has to skip past them and the table's size affects everything. A filtered index covering only Pending rows is the other half, so the index the dequeue uses stays small regardless of history. If completed rows must be retained, moving them to a separate table keeps the queue table hot and small - treating the queue as working state rather than as a permanent log is the shift that fixes it."
+   }
+  ]
  }
 ]
