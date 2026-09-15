@@ -4193,5 +4193,120 @@
    "adr",
    "practices"
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "API Design",
+  "difficulty": "Hard",
+  "question": "A partner integration needs a breaking change to an API that eight other clients use. You cannot coordinate a simultaneous upgrade. How do you proceed?",
+  "answer": "**The constraint that decides everything**\n\nYou cannot change a contract that others depend on, in place, without breaking them. So the only viable approaches make the old contract keep working while the new one exists alongside it.\n\n**Option 1: make the change non-breaking**\n\nFirst check whether it needs to be breaking at all. Adding a field is not breaking for clients that ignore unknown fields. Making a required field optional is not breaking. Adding a new endpoint is not breaking. Many 'breaking' changes are avoidable by adding rather than modifying — a new field alongside the old one, populated in both, with the old one deprecated but honoured.\n\nThis is almost always the cheapest path and it is worth exhausting before versioning.\n\n**Option 2: version the API**\n\nIf the semantics genuinely change — a field's meaning, a workflow's steps — then `v2` exists alongside `v1`. Clients migrate on their own schedule.\n\nThe cost is real and worth stating: two code paths, two sets of tests, two things to fix when a bug is found. Versioning is not free, which is why it should not be the first reflex.\n\n**Option 3: version at the field or resource level** rather than the whole API, so only the affected endpoints fork rather than everything.\n\n**What matters operationally**\n\n**A deprecation policy with dates.** A version with no sunset date never dies — you will be running v1 in five years. Announce the date when you launch v2, not later.\n\n**Know who is using what.** Log the version and the client per request. Without that you cannot tell when it is safe to remove v1, so you never remove it. This is the single most useful thing to have in place before you need it.\n\n**Contract tests**, so you find out in CI that a change broke a consumer rather than finding out from the consumer.\n\n**What I would do here**\n\nAdd the new shape alongside the old, serve both, instrument usage, agree a sunset date with the eight clients, and remove v1 when the telemetry shows nobody is calling it. The partner gets what they need immediately; nobody else is disrupted; and the cleanup is evidence-driven rather than a negotiation.",
+  "tags": [
+   "architecture",
+   "api-design",
+   "versioning",
+   "backwards-compatibility",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is usage telemetry per client version so important?",
+    "a": "Because without it the decision to remove an old version is a guess, and the safe guess is always 'not yet' - which is how organisations end up supporting versions nobody has called in three years. With per-client usage you can approach the two remaining consumers directly instead of broadcasting to everyone, and you can prove the version is dead rather than believing it. It also tells you immediately when a client you thought had migrated silently rolled back."
+   },
+   {
+    "q": "Is URL versioning or header versioning better?",
+    "a": "URL versioning is more visible, trivially cacheable, easy to route and easy to test in a browser, at the cost of being unRESTful in a purist sense and cluttering every path. Header versioning keeps URLs stable and is cleaner conceptually, but it is invisible in logs and browser testing, easy to forget, and caches need configuring to vary on it. For a public API with external consumers I would choose the URL every time, because discoverability and debuggability matter more than purity when the consumers are not you."
+   },
+   {
+    "q": "The partner wants the change urgently and versioning will take two weeks. How do you handle the pressure?",
+    "a": "By separating the urgency from the mechanism. If the change can be made additive, it can ship in days with no versioning at all, so the first move is to check that rather than to accept the framing. If it genuinely cannot, the two weeks is largely the cost of not breaking eight other clients - which is a business trade to be stated plainly, not an engineering preference. What I would avoid is shipping the breaking change and dealing with the fallout, because the eight clients have no idea it is coming and the incident lands on the same team either way."
+   }
+  ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Caching",
+  "difficulty": "Hard",
+  "question": "A cache was added to reduce database load. Users now report occasionally seeing another user's data. What are the likely causes?",
+  "answer": "**This is a cache key problem in almost every case**\n\n**1. The key omits the user or tenant.** Caching `product-list` when the list is filtered by permissions means the first user's results are served to everyone. The key must include every input that affects the output — user, tenant, role, locale, feature flags.\n\n**2. Caching at the wrong layer.** An HTTP response cache or CDN caching a personalised response is the same bug at a different level, and worse because it is shared across everyone. A `Cache-Control: public` on an authenticated response is the specific mistake, and it can leak data to users who never even authenticated.\n\n**3. A shared mutable object.** An in-memory cache returns the *same instance* to every caller. If one request mutates it — sorting the list, adding a computed property, filtering in place — every subsequent caller sees the modification. This looks like a leak and is really shared mutable state.\n\n**4. Key collision from weak hashing** or from concatenating fields without a separator, so `user=12,role=3` and `user=123,role=` produce the same key.\n\n**How to confirm**\n\nLog the cache key alongside the user for a sample of requests. If two users produce the same key, that is the answer. For the HTTP case, check the response headers on an authenticated request — `public` or a missing `Vary: Authorization` is conclusive.\n\n**The fixes**\n\nInclude every discriminating input in the key, and make that mechanical rather than manual — a key-building function that takes the identity, so nobody can forget it. Mark personalised responses `Cache-Control: private, no-store`. Cache immutable data or defensive copies, never a shared mutable object.\n\n**The design point**\n\nCaching personalised data is where this goes wrong. It is usually better to cache the expensive, non-personalised part — the product catalogue — and apply the personalisation per request. Then the cache key is simple, the hit rate is high, and there is no path by which one user's data reaches another.",
+  "tags": [
+   "architecture",
+   "caching",
+   "cache-keys",
+   "data-leak",
+   "security",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is the shared mutable object case so easy to miss?",
+    "a": "Because it is not a cache bug at all - the cache is returning exactly what it stored - and it only manifests when some code path mutates the result. That path may be added months later by someone who has no idea the object is shared, and it will pass every test that exercises one request at a time. The defences are to cache immutable types, return a copy on read, or freeze the object. Of those, caching immutable data is the only one that cannot be accidentally undone later."
+   },
+   {
+    "q": "How do you decide the cache duration?",
+    "a": "From how stale the data may be before it causes harm, which is a business question rather than a technical one - a product description can be an hour old, a stock level cannot. Then check the second question: what is the cost of a miss, because that decides whether a short TTL is affordable. Where the data changes on a known event, event-driven invalidation beats any TTL, and a TTL remains as a backstop for invalidations that were missed. Picking five minutes because it sounds reasonable is how both stale-data incidents and useless hit rates happen."
+   },
+   {
+    "q": "The team proposes caching everything in Redis to fix database load. What would you check?",
+    "a": "Whether the database load is actually from repeated identical reads - if it is from writes, or from one expensive unindexed query, a cache does nothing and adds a dependency. Then what happens when Redis is unavailable: a cache that is required for the system to function is not a cache, it is a database with no durability guarantee, and the failure mode needs designing. And whether the invalidation story is coherent, because the load problem is usually easier than the correctness problem that follows it."
+   }
+  ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Messaging",
+  "difficulty": "Hard",
+  "question": "An order service writes to its database and publishes an event. Occasionally the database write succeeds and the event never arrives, leaving downstream systems inconsistent. How do you fix this properly?",
+  "answer": "**What's happening**\n\nThe dual-write problem. Two systems — a database and a message broker — are being updated in one logical operation with no shared transaction. Any failure between the two leaves them inconsistent:\n\n- The process crashes after the commit and before the publish.\n- The publish fails and the rollback cannot happen because the commit already did.\n- The publish succeeds but the response is lost, so a retry publishes twice.\n\nWrapping both in a transaction does not help, because the broker is not in it. Distributed transactions across both are possible and are almost always the wrong answer — they couple availability, so the database cannot commit when the broker is down.\n\n**The fix: the transactional outbox**\n\nWrite the event to an `Outbox` table **in the same database transaction** as the business data. Now there is one atomic write and no gap. A separate process then reads unpublished rows and publishes them, marking them sent.\n\n```sql\nBEGIN TRAN;\n  INSERT INTO Orders (...) VALUES (...);\n  INSERT INTO Outbox (Id, Type, Payload, OccurredAt)\n    VALUES (NEWID(), 'OrderPlaced', @json, SYSUTCDATETIME());\nCOMMIT;\n-- A relay publishes from Outbox and marks rows sent.\n```\n\nIf the process dies at any point, the state is consistent: either both rows exist and the event will be published when the relay next runs, or neither exists.\n\n**What this buys and what it costs**\n\nIt converts 'might be lost' into 'will be delivered at least once, possibly late'. That is a genuine guarantee. The cost is that consumers must be idempotent, because the relay can publish a row and crash before marking it sent — so duplicates are certain over time.\n\n**Alternatives worth knowing**\n\n**Change data capture** reads the database log and publishes from it, which removes the outbox table and the relay but couples the event schema to the table schema. **Event sourcing** removes the problem entirely by making the event the stored state, which is a much larger commitment.\n\n**The principle**\n\nAny time one operation must update two systems, find a way to make one of them the single atomic write and derive the other from it. The failure is not in the code; it is in the shape of the design.",
+  "tags": [
+   "architecture",
+   "outbox-pattern",
+   "dual-write",
+   "eventual-consistency",
+   "messaging",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why not just publish the event first and then write to the database?",
+    "a": "It moves the inconsistency rather than removing it - now you can publish an OrderPlaced event for an order that fails to save, so downstream systems act on something that does not exist. That is usually worse than the reverse, because a missing event can be republished from data you still hold, while a spurious event has no record to reconcile against. Neither order is safe; the problem is having two writes at all, which is what the outbox eliminates."
+   },
+   {
+    "q": "How do you stop the outbox table growing without bound?",
+    "a": "Delete or archive published rows on a schedule - typically keeping a short window for debugging and replay, then purging. The table is high-churn, so it also needs attention to indexing and to avoiding page fragmentation; many implementations move published rows to an archive table rather than deleting in place. Leaving it to grow is a real operational problem because the relay's query scans it, so an unbounded outbox slowly degrades the publishing latency."
+   },
+   {
+    "q": "Does the outbox guarantee ordering?",
+    "a": "Only if you enforce it. Rows can be published out of order by a parallel relay, and consumers may process out of order regardless. If ordering matters within an aggregate, publish with a partition key such as the order id so the broker preserves order per key, and have the relay process rows for the same key sequentially. If global ordering matters, you are giving up most of your throughput, which is usually a sign the requirement should be revisited - most systems need per-entity ordering, not global."
+   }
+  ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Resilience",
+  "difficulty": "Medium",
+  "question": "Your service depends on five others. Each has 99.9% availability. What is your availability, and what would you do about it?",
+  "answer": "**The arithmetic**\n\nIf all five are required for your service to function, the availabilities multiply:\n\n0.999⁵ ≈ **0.995**, or about 99.5%.\n\nThat is roughly 3.6 hours of downtime a month versus the 43 minutes each dependency allows itself. You cannot be more available than the product of everything you hard-depend on — which is the central point and is frequently a surprise.\n\n**What follows from it**\n\n**1. Reduce the number of hard dependencies.** The most effective lever. Does the request genuinely need all five synchronously? Often two are needed to answer and three are notifications that could be asynchronous — a queued message survives the dependency being down.\n\n**2. Make dependencies soft.** If the recommendation service is down, show the page without recommendations rather than failing. A degraded response is available; an error is not. This converts a multiplicative dependency into an optional one.\n\n**3. Cache.** Serving slightly stale data from a cache when a dependency is unavailable keeps you up through its outage. This is the single most common practical fix.\n\n**4. Timeouts, circuit breakers and bulkheads**, so a dependency's outage costs you a fast failure rather than resource exhaustion and a cascade.\n\n**5. Check whether the outages are independent.** The maths assumes they are. If all five run in the same region, or all depend on the same identity provider, a single failure takes out several at once — so real availability can be better than the naive product for correlated failures, and much worse for shared single points.\n\n**What I would do first**\n\nList the five and ask, for each: what should happen if this is unavailable right now? The answers usually reveal that two or three do not need to be on the critical path at all, which improves availability more than any amount of retry tuning.\n\n**The point to make to stakeholders**\n\nAn SLA is a budget, not a guarantee. If the business needs 99.9%, the architecture has to be designed for it — it cannot be obtained by depending on five things that each promise exactly that.",
+  "tags": [
+   "architecture",
+   "availability",
+   "sla",
+   "graceful-degradation",
+   "dependencies",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "How does making a dependency asynchronous change the arithmetic?",
+    "a": "It removes it from the product entirely for the purpose of serving the request - if the call becomes a message on a durable queue, your endpoint succeeds whether or not the consumer is up, and the work happens when it recovers. Your availability now depends on the queue rather than on the service, and a managed broker typically offers more nines than an application. The trade is eventual consistency: the caller is told it worked before it has fully happened, which has to be acceptable to the business for that operation."
+   },
+   {
+    "q": "Does adding retries improve availability?",
+    "a": "For brief transient failures, genuinely yes - a retry converts a blip into a slightly slower success, and most real failures are short. For a sustained outage it does nothing except consume your resources and add load to a struggling dependency, which can make the outage worse and longer. So retries improve the numbers against the failure mode they suit and are actively harmful against the other. Pairing them with a circuit breaker is what keeps the benefit while bounding the harm."
+   },
+   {
+    "q": "The business asks for 99.99%. What questions do you ask?",
+    "a": "What does unavailable mean - every endpoint, or the checkout path? Measured how, from where, and over what window? That definition changes the engineering by an order of magnitude. Then: what is the cost of the gap, because 99.99% is about four minutes a month and implies multi-region, automated failover, and no single points including deployment and DNS. And what is the cost of the outage it prevents, because the honest answer is sometimes that four nines costs more than the downtime it avoids."
+   }
+  ]
  }
 ]

@@ -3623,5 +3623,90 @@
    "priorities",
    "practices"
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "CI/CD",
+  "difficulty": "Hard",
+  "question": "A deployment caused an outage. The rollback took 45 minutes because of a database migration. How would you change the process?",
+  "answer": "**The root problem**\n\nThe deployment was not reversible. Code can be rolled back in seconds; a schema change usually cannot, because the new schema may already hold data the old code cannot read, or the old code writes in a shape the new schema rejects.\n\nSo the fix is not a faster rollback — it is making deployments reversible by construction.\n\n**Expand, migrate, contract**\n\nNever change a schema in one step. Split it into deployments that are each safe with the *previous* version of the code still running:\n\n1. **Expand** — add the new column or table. Old code ignores it; new code can use it. Safe to roll back because nothing was removed.\n2. **Migrate** — deploy code that writes to both old and new, backfill existing rows. Still safe: the old column is intact.\n3. **Contract** — once everything reads the new shape and no rollback target needs the old one, remove it.\n\nThree deployments instead of one. Each is independently reversible, and at no point does a rollback require a schema change.\n\n**What else I would change**\n\n**Separate the deployment from the release.** Ship the code dark behind a feature flag, then turn it on. Turning a flag off takes seconds and needs no deployment at all — this is the single biggest improvement to recovery time, because most rollbacks become flag flips.\n\n**Deploy progressively.** Canary to a small percentage, watch the error rate and latency, then proceed automatically or roll back automatically. An outage that reaches 5% of traffic is an incident; one that reaches 100% is an outage.\n\n**Make migrations forward-only and idempotent**, so re-running them is safe and there is never a 'down' script to rely on under pressure — down scripts are rarely tested and frequently wrong.\n\n**Practise the rollback.** A recovery path that has never been executed is a hypothesis. Rolling back in a staging environment regularly is what turns it into a procedure.\n\n**The measure that matters**\n\nMean time to recovery, not deployment frequency. Optimising for the ability to undo quickly is what makes frequent deployment safe, and 45 minutes is the number to attack directly.",
+  "tags": [
+   "devops",
+   "deployment",
+   "rollback",
+   "migrations",
+   "feature-flags",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why are down migrations unreliable in practice?",
+    "a": "Because they are almost never executed outside the moment of crisis, so they are untested code running under pressure - and many are not reversible even in principle. Dropping a column loses the data, so the down script cannot restore it, and a transformation that merged two fields cannot be split back without information that is gone. Forward-only migration accepts that and requires every change to be safe on its own, which is a stricter discipline that produces a system you can actually recover."
+   },
+   {
+    "q": "Feature flags have their own cost. What is it?",
+    "a": "They accumulate. Every flag is a branch, so n flags is a combinatorial space nobody tests fully, and stale flags left in the code make it harder to read and reason about. The discipline is an owner and an expiry date per flag, and removing it as part of the work rather than as a follow-up ticket that never happens. There is also a runtime dependency on the flag service, which needs a sensible default when it is unreachable - failing closed on a flag that gates a critical path is its own outage."
+   },
+   {
+    "q": "How would you make a canary deployment decide automatically?",
+    "a": "Compare the canary's error rate and latency against the baseline of the existing version over a window, and abort if it degrades beyond a threshold - comparing against the live baseline rather than a fixed number, because absolute thresholds break whenever normal traffic shifts. It needs enough traffic on the canary for the comparison to be statistically meaningful, which is why percentage-based canaries work poorly for low-volume services. And it needs the metrics to be available quickly, so a service whose errors only show up in a nightly report cannot be canaried this way."
+   }
+  ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Incident Response",
+  "difficulty": "Hard",
+  "question": "You are on call. Alerts fire at 3am: elevated 500s on the checkout service. Walk me through your first ten minutes.",
+  "answer": "**Minute 0–2: establish scope and impact**\n\nHow many users, which endpoints, is it total or partial? Check the dashboard for error rate, latency and traffic. The first question is whether this is a full outage or a degradation, because that sets the urgency and who else needs waking.\n\nStart a timeline document immediately. Everything I observe and do goes in it with a timestamp. This costs nothing and is the difference between a useful post-incident review and a reconstruction from memory.\n\n**Minute 2–4: what changed?**\n\nMost incidents are caused by a change. Check, in order: recent deployments, feature flag changes, configuration changes, infrastructure changes, certificate expiry. If something deployed in the last hour, that is the hypothesis until disproved.\n\nIf a deployment correlates, **roll back first and investigate afterwards.** Restoring service is the priority; understanding is not urgent at 3am while users cannot check out.\n\n**Minute 4–7: if nothing changed on our side**\n\nCheck dependencies — database, identity provider, payment gateway, message broker. Check the cloud provider's status page. Look at the actual errors rather than the count: one exception type dominating points somewhere specific, while a spread suggests a resource problem.\n\nCheck the saturation signals: CPU, memory, connection pools, thread pool queue, disk. A resource exhausting produces 500s across unrelated endpoints, which is a distinctive pattern.\n\n**Minute 7–10: communicate and stabilise**\n\nPost status to the incident channel — what is affected, what is known, what I am doing, when I will next update. Even 'investigating, no cause yet' is valuable; silence makes people start their own parallel investigations.\n\nIf I cannot find it in ten minutes, escalate. Waking a colleague at 3:10 is much cheaper than a two-hour solo investigation.\n\n**What I would not do**\n\nRestart things hoping it helps — it often clears the evidence and produces a recovery nobody can explain, which means it recurs. Change multiple things at once, so the fix cannot be attributed. Or start a root-cause investigation before service is restored: mitigate first, understand later.",
+  "tags": [
+   "devops",
+   "incident-response",
+   "on-call",
+   "troubleshooting",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is 'roll back first, investigate later' the right default?",
+    "a": "Because the cost of downtime accrues continuously while investigation takes an unbounded amount of time, and the deployment is the most likely cause. Rolling back restores service and preserves the ability to investigate at leisure, on a system nobody is depending on right now. The exception is when a rollback is itself risky - typically because of a schema change, which is exactly the argument for making deployments reversible in the first place. If you cannot roll back safely, that is a finding for the review."
+   },
+   {
+    "q": "How do you decide whether to escalate?",
+    "a": "On a time box rather than on confidence, because confidence is a poor guide at 3am - ten or fifteen minutes without a hypothesis, or any point where the impact is larger than expected or the fix carries risk. Escalating is not an admission of failure; it is how the organisation limits the blast radius of one tired person's judgement. Teams where escalation feels like a defeat have longer incidents, because people spend an hour proving they did not need help."
+   },
+   {
+    "q": "What makes a post-incident review actually useful?",
+    "a": "Being blameless, so people describe what they actually did rather than what looks defensible - you cannot learn from an account that has been edited for self-protection. A timeline built from evidence, which is why you write it during the incident. Action items with owners and dates, because a review that produces a list nobody owns changes nothing. And focusing on why the system allowed the failure rather than on who typed the command, since the person will be replaced by someone else who will make the same mistake if nothing else changed."
+   }
+  ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Infrastructure as Code",
+  "difficulty": "Medium",
+  "question": "Terraform plan shows changes nobody made, and applying them would destroy a production resource. What happened and how do you handle it?",
+  "answer": "**What's happening: drift**\n\nSomething changed the infrastructure outside Terraform — a manual fix in the portal during an incident, another tool, an auto-scaling change, or a provider default that changed between versions. Terraform compares its state to reality, sees a difference, and plans to restore what the code says.\n\nThe destroy is the dangerous part, and it usually comes from a change to an immutable attribute: some properties cannot be updated in place, so the provider's only way to reach the desired state is to replace the resource.\n\n**How to handle it right now**\n\n**Do not apply.** Read the plan properly first — the `-/+` marker means replace, and the plan states which attribute forces it.\n\n**Find out what changed and why.** The activity log shows who changed what and when. A manual change during an incident is a different situation from a provider upgrade altering a default.\n\n**Then choose:**\n- If the manual change was correct and should persist, update the code to match and confirm the plan is empty.\n- If the manual change was wrong, applying is correct — but understand what it will do first.\n- If the replacement is unacceptable, `terraform import` the current state, or use `ignore_changes` on that attribute where the drift is legitimate and externally managed.\n\n**How to prevent it**\n\n**Remove write access from humans.** Production infrastructure should be changed only through the pipeline. If people can click in the portal, they will — especially at 3am, which is exactly when it is least likely to be written down.\n\n**Run `plan` continuously**, not just at deploy time. A scheduled plan that alerts on a non-empty diff catches drift within hours instead of at the next deployment, when the context is lost.\n\n**Pin provider versions.** An unpinned provider upgrading silently is a common source of surprise diffs that nobody made.\n\n**Require plan review in the PR**, with the plan output posted to the pull request so the reviewer sees exactly what will change — including any replacement.\n\n**The underlying point**\n\nDrift is a process failure, not a Terraform problem. The tool is telling you the truth: reality and the declared state have diverged. The question is why that was possible.",
+  "tags": [
+   "devops",
+   "terraform",
+   "infrastructure-as-code",
+   "drift",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is a replacement plan so much more dangerous than an update?",
+    "a": "Because it destroys and recreates - which for a database means data loss, for a storage account means the contents go, and for anything with a stable endpoint means the address changes and dependents break. An update is usually reversible; a destroy is not. That is why reading the plan for the -/+ marker matters more than the diff summary, and why production state files should have protections such as prevent_destroy on the resources that genuinely must never be recreated."
+   },
+   {
+    "q": "Is ignore_changes a legitimate tool or a way of hiding problems?",
+    "a": "Both, depending on what it is applied to. It is legitimate when another system genuinely owns an attribute - an autoscaler managing instance count, a platform injecting tags - because there the code should not be the authority. It becomes a way of hiding when it is used to silence a diff nobody wants to investigate, since it makes the drift permanent and invisible. The test is whether you can name the other owner of that attribute; if you cannot, you are suppressing a signal."
+   },
+   {
+    "q": "The state file is in a shared blob container and two engineers applied simultaneously. What are the consequences?",
+    "a": "Corrupted state: two processes writing the same file can leave it describing a reality that never existed, with resources created but untracked or tracked but deleted. Recovery means reconciling by hand against the real infrastructure, which is slow and error-prone. State locking exists to prevent it and should be enabled - a blob lease for Azure, DynamoDB for S3 - and state should be versioned so you can restore a previous copy. Running applies only from the pipeline, rather than from laptops, removes most of the opportunity."
+   }
+  ]
  }
 ]

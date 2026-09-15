@@ -2506,5 +2506,91 @@
    "practices",
    "cost"
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Authentication",
+  "difficulty": "Hard",
+  "question": "A code review shows JWTs being validated by decoding them and checking the claims. The developer says the token came from the identity provider so it is trusted. What is wrong?",
+  "answer": "**What is wrong**\n\nDecoding is not validating. A JWT is base64-encoded, not encrypted — anyone can decode one, change the claims, and re-encode it. The signature is the only thing that establishes the token was issued by who it claims and has not been altered.\n\nSo a check that decodes and reads `role: admin` without verifying the signature is trivially bypassed: change `role` to `admin` in any token and you are an administrator. This is not a subtle weakness; it is a complete authentication bypass.\n\n**What must be validated, not just the signature**\n\n**Signature** against the issuer's public key, fetched from the JWKS endpoint and cached with rotation handled.\n\n**Algorithm** — pinned to what you expect. Accepting the algorithm from the token's own header is the classic `alg: none` and RS256-to-HS256 confusion attack, where the attacker signs with the public key as an HMAC secret.\n\n**Issuer** — the token was minted by your identity provider, not some other one.\n\n**Audience** — the token was intended for *your* API. A valid token for a different service is still a valid token; without this check, any service sharing the identity provider can be used to get into yours.\n\n**Expiry**, and `nbf` if present, with a small clock-skew allowance.\n\n**The fix**\n\nUse the framework's validation rather than hand-rolling it. `AddJwtBearer` with the authority configured does all of the above, handles JWKS fetching and key rotation, and is maintained by people who track the attacks:\n\n```csharp\nbuilder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)\n    .AddJwtBearer(options =>\n    {\n        options.Authority = \"https://login.microsoftonline.com/{tenant}/v2.0\";\n        options.Audience = \"api://my-api\";\n        options.TokenValidationParameters = new TokenValidationParameters\n        {\n            ValidateIssuer = true,\n            ValidateAudience = true,\n            ValidateLifetime = true,\n            ValidateIssuerSigningKey = true\n        };\n    });\n```\n\n**The general rule**\n\nDo not implement cryptographic verification yourself. Every step has a known attack against a plausible-looking implementation, and the library has already absorbed them.",
+  "tags": [
+   "security",
+   "jwt",
+   "authentication",
+   "token-validation",
+   "code-review",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What is the algorithm confusion attack specifically?",
+    "a": "The token header names the algorithm, and a naive implementation uses whatever it says. If the server expects RS256 - asymmetric, verified with a public key - an attacker changes the header to HS256 and signs the token using that public key as the HMAC secret. The public key is public, so the attacker has it, and a library told to verify with 'the key' will happily HMAC-verify against it. The defence is to pin the expected algorithm rather than read it from the untrusted token, which is why the header is input to be validated rather than instruction to be followed."
+   },
+   {
+    "q": "Why does the audience check matter if the signature is valid?",
+    "a": "Because a signature only proves the identity provider issued the token, not that it issued it for you. In an organisation where several APIs share an identity provider, a token legitimately obtained for a low-privilege service would otherwise be accepted by a high-privilege one - so compromising the weakest service yields access to the strongest. The audience claim is what scopes a token to one recipient, and skipping it collapses all your services into a single trust boundary."
+   },
+   {
+    "q": "How should token revocation be handled given JWTs are stateless?",
+    "a": "It is the real weakness of the design: a signed token is valid until it expires and nothing can recall it. The practical answers are short lifetimes - minutes, not hours - with refresh tokens that can be revoked at the provider, so the exposure window is bounded. For immediate revocation you need state, such as a denylist of token identifiers checked on each request, which reintroduces the lookup that JWTs were meant to avoid. Most systems accept a few minutes of exposure; systems that cannot should not be using long-lived bearer tokens."
+   }
+  ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Injection",
+  "difficulty": "Medium",
+  "question": "A developer builds a SQL query by concatenating a search term but argues it is safe because the input is validated to be alphanumeric. Is that a sufficient defence?",
+  "answer": "**Why it is not sufficient**\n\nIt may happen to be safe today, and it is fragile in ways that matter:\n\n**The validation and the query are far apart.** The rule lives in one place and the concatenation in another. Someone adds a second caller, relaxes the validation to allow spaces or hyphens for a legitimate reason, and the injection appears — with no change to the query code that a reviewer would notice.\n\n**Allowlists get relaxed.** Search terms containing apostrophes, names with hyphens, product codes with dots — all reasonable requests that widen the allowlist. Each widening is a small decision made without reference to the SQL it will end up in.\n\n**It only protects this one path.** Validation defends the field it is applied to; parameterisation defends the query regardless of where the value came from.\n\n**It is not free.** Concatenation also prevents plan reuse, because every distinct search term produces different query text and therefore a separate compiled plan — filling the plan cache and costing CPU.\n\n**The fix**\n\nParameterise. It is not a mitigation for untrusted input; it is how you write the query, because it separates code from data structurally rather than by inspection:\n\n```csharp\n// Concatenated: correctness depends on validation staying strict\nvar sql = $\"SELECT * FROM Products WHERE Name LIKE '%{term}%'\";\n\n// Parameterised: the value can never be parsed as SQL\nvar sql = \"SELECT * FROM Products WHERE Name LIKE @term\";\ncommand.Parameters.Add(\"@term\", SqlDbType.NVarChar, 100).Value = $\"%{term}%\";\n```\n\n**Where parameterisation cannot help**\n\nIdentifiers — table names, column names, `ORDER BY` direction — cannot be parameterised. Those must be validated against an allowlist of permitted values, mapping user input to a known-good constant rather than interpolating it. Dynamic sorting is the most common place teams reintroduce injection after fixing everything else.\n\n**The argument I would make in review**\n\nNot 'this is exploitable' — it may not be — but 'the safety of this line depends on a rule enforced somewhere else that will change'. Parameterisation makes the safety local and unconditional, and costs nothing.",
+  "tags": [
+   "security",
+   "sql-injection",
+   "parameterisation",
+   "defence-in-depth",
+   "code-review",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does concatenation hurt performance as well as security?",
+    "a": "Because the database caches execution plans keyed on the query text, and every distinct search term produces different text - so each search compiles a new plan, fills the cache with single-use entries and evicts plans that would have been reused. Parameterised queries share one plan across all values. On a busy system the CPU spent compiling and the cache churn are measurable, which is why parameterisation is the right default even in code where the input is genuinely trusted."
+   },
+   {
+    "q": "The requirement is to sort by a user-selected column. How do you do that safely?",
+    "a": "Map the input to a known-good value rather than interpolating it - a dictionary or switch from the incoming string to a literal column name defined in your code, rejecting anything not in the set. The user's value is used to select, never to construct. Some ORMs let you express this with an expression over the entity, which is safer still because the column names come from the model rather than from strings. What you must not do is validate the column name with a regex and then concatenate it; the allowlist has to be an enumeration of the permitted values."
+   },
+   {
+    "q": "Does using an ORM mean injection is impossible?",
+    "a": "No - it removes it from the common path, which is a large benefit, but every ORM has an escape hatch and those are where it returns. FromSqlRaw with an interpolated string, a hand-built dynamic filter, a raw fragment passed to a query builder. EF Core helps by making FromSqlInterpolated parameterise the interpolation automatically, so the safe form looks like the dangerous one. The review habit is to search the codebase for the raw-SQL entry points specifically, since those are the only places it can occur."
+   }
+  ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Secrets",
+  "difficulty": "Medium",
+  "question": "A secret was committed to the repository three months ago and has just been discovered. The developer removed it in a new commit. Is that sufficient?",
+  "answer": "**No — and the order of operations matters**\n\n**Removing it in a later commit does nothing.** Git keeps the whole history: the secret is in the earlier commit, retrievable by anyone with the repository, including every clone and fork already made. Deleting the line changes the current state and nothing else.\n\n**The only thing that matters is rotating the secret.** Assume it is compromised. It has been readable for three months by anyone with access, it is in every clone, and if the repository was ever public it has been indexed by automated scanners — credentials in public repositories are found within minutes, not months.\n\n**The order I would follow**\n\n**1. Rotate first.** Invalidate the old credential and issue a new one. Until this is done, everything else is theatre.\n\n**2. Check for use.** Audit logs for the credential — was it used from an unexpected IP, at an unexpected time, for unexpected operations? This is what turns 'exposed' into 'exploited' and it determines whether an incident needs declaring.\n\n**3. Then consider history rewriting.** `git filter-repo` or BFG can purge it, but this rewrites every commit hash, breaks every open branch and PR, and requires every clone to be re-cloned. For a private repository where the credential is already rotated, it is often not worth the disruption. For a public one, do it — but only after rotating, because the rewrite takes time and the secret is live throughout.\n\n**4. Prevent recurrence.** Pre-commit hooks or secret scanning in CI — GitHub's push protection, gitleaks, truffleHog — that reject a commit containing something that looks like a credential. This is the control that actually works, because it operates before the mistake is possible rather than after it is discovered.\n\n**The broader fix**\n\nIf a secret can be committed, the application is reading secrets from files that live near the code. Moving to managed identity removes most secrets entirely, and Key Vault with a local development path removes the rest from the repository. The strongest version of this control is having nothing to leak.\n\n**The point I would make**\n\n'I removed it' reflects a reasonable intuition about files and a misunderstanding of version control. The secret is not gone; it is one command away for anybody who has ever cloned.",
+  "tags": [
+   "security",
+   "secrets",
+   "git",
+   "incident-response",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why rotate before rewriting history?",
+    "a": "Because rewriting takes time and coordination - notifying the team, forcing re-clones, fixing open pull requests - and the credential is valid and exposed for that whole period. Rotation is fast and removes the actual risk immediately, after which the rewrite is cleanup rather than an emergency. Teams routinely do it the other way round because the history feels like the problem, and spend hours on the cleanup while the live credential sits in a hundred clones."
+   },
+   {
+    "q": "The repository is private and only five people have access. Does that change the assessment?",
+    "a": "It lowers the probability but not the required response. Those five people have clones on laptops that may be lost or compromised, CI systems have cloned it, and access may have been broader at some point in three months. The credential also appears in any backup of those clones. Rotation is cheap and certain; reasoning about who might have seen it is neither. Where it genuinely changes things is whether you declare an incident and how urgently you rewrite history."
+   },
+   {
+    "q": "How do you handle secrets developers genuinely need locally?",
+    "a": "User secrets in .NET, which store them outside the repository in the user profile, or a local Key Vault access using the developer's own identity via az login - so the credential is theirs and auditable rather than shared. What to avoid is a shared development credential passed around, because it cannot be attributed, never gets rotated, and inevitably ends up in a file someone commits. Making the local path as easy as the wrong path is what determines whether the policy is followed."
+   }
+  ]
  }
 ]

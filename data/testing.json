@@ -2216,5 +2216,61 @@
    "strategy",
    "practices"
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Strategy",
+  "difficulty": "Hard",
+  "question": "A team has 95% code coverage but bugs keep reaching production. What does that tell you and what would you change?",
+  "answer": "**What it tells you**\n\nCoverage measures which lines executed during the test run. It does not measure whether anything was asserted, whether the right behaviour was checked, or whether the important cases were exercised. A test that calls a method and asserts nothing produces the same coverage as one that checks every outcome.\n\nSo 95% coverage with escaping bugs usually means one of:\n\n**Tests assert on implementation rather than behaviour.** Verifying that a mock was called proves the code did what the test said, not that the feature works.\n\n**The integration points are untested.** Unit tests with everything mocked cover all the lines and none of the wiring. The bug is usually in the boundary — the mapping, the SQL, the serialisation, the configuration — which mocks replace with an assumption.\n\n**The failure cases are not covered.** Happy paths are easy to write and easy to cover; the bugs live in the timeout, the null, the empty collection, the concurrent access.\n\n**Coverage became the target.** Once a percentage is mandated, tests get written to satisfy it, and the cheapest way to raise coverage is to execute code without asserting much.\n\n**What I would change**\n\n**Look at the escaped bugs, not the metric.** Categorise the last twenty production bugs: where did they occur, and what kind of test would have caught each? That gives an evidence-based answer instead of a philosophical one, and it usually points somewhere specific — often integration or configuration.\n\n**Add tests at the level the bugs are occurring.** If they are in the interaction between components, more unit tests will not help. Integration tests against a real database in a container, or contract tests against a real API shape.\n\n**Try mutation testing** on the critical modules. It changes the code and checks whether any test fails — which measures assertion quality rather than line execution. It is the direct answer to 'are these tests actually testing anything', and the results on a 95%-coverage suite are often sobering.\n\n**Stop treating coverage as a goal.** It is useful as a signal of what is *not* tested at all — a file at 0% is worth knowing about. As a target it is Goodhart's law in action.",
+  "tags": [
+   "testing",
+   "code-coverage",
+   "test-strategy",
+   "mutation-testing",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What does mutation testing actually measure?",
+    "a": "It makes small changes to the code - flipping a comparison, removing a call, changing a constant - and runs the tests to see whether any fail. A surviving mutant means the tests executed that line but did not notice its behaviour changing, which is precisely the gap coverage cannot see. It is expensive to run, since it re-runs the suite per mutation, so it suits critical modules rather than the whole codebase. The value is that it turns 'are our assertions meaningful' from an opinion into a number."
+   },
+   {
+    "q": "Where should the balance sit between unit and integration tests?",
+    "a": "Wherever the failures are, which is why categorising the escaped bugs comes first. The classic pyramid argues for mostly unit tests on speed grounds, but containers made integration tests fast enough that many teams now run a much heavier middle layer and find more real defects. What is clear is that a suite consisting only of heavily mocked unit tests tests the mocks, and one consisting only of end-to-end tests is slow and flaky. The mix should be an outcome of evidence rather than a shape copied from a diagram."
+   },
+   {
+    "q": "Management wants a coverage target. How do you respond?",
+    "a": "By proposing a better measure rather than refusing. Escaped defects per release and mean time to detect answer the question they actually care about - is the quality improving - while coverage answers a proxy question badly. If a coverage number is unavoidable, argue for it as a floor on new code rather than a target across the codebase, and pair it with mutation score on the critical paths so it cannot be gamed by assertion-free tests. The failure mode to name explicitly is that a mandated percentage reliably produces tests written to reach it."
+   }
+  ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Test Design",
+  "difficulty": "Medium",
+  "question": "A test suite takes 40 minutes and developers have started skipping it locally. How do you approach this?",
+  "answer": "**Why this matters more than it looks**\n\nA suite that is skipped provides no value regardless of its quality. Slow tests are not merely inconvenient — they change behaviour, and the behaviour they produce is people merging without running them.\n\n**First, find where the time goes**\n\nMost suites are dominated by a small proportion of tests. Measure per-test duration and sort; the answer is usually concentrated, and often surprising.\n\n**Common causes**\n\n**Real sleeps.** `Thread.Sleep(2000)` to wait for something, multiplied across a hundred tests. Replace with waiting on a condition.\n\n**Shared expensive setup repeated per test.** Creating a database, starting a container or building a DI container per test rather than per class or per run.\n\n**Tests hitting real networks** — a third-party API, a shared environment. Slow, and flaky as well.\n\n**Everything is an end-to-end test.** Testing a validation rule through the UI takes seconds; testing it directly takes microseconds.\n\n**No parallelism**, on a machine with eight cores.\n\n**What I would do**\n\n**1. Split the suite by speed.** A fast subset — unit and fast integration — that runs in under two minutes and is what developers run locally and on every push. The slow subset runs in CI on the merge, or on a schedule.\n\n**2. Parallelise.** Requires tests to be independent, which they should be anyway; the work of making them parallel-safe usually also removes hidden order dependencies that were causing intermittent failures.\n\n**3. Share expensive fixtures.** One container for the class or the assembly rather than per test, with data isolated per test by using distinct keys rather than by rebuilding everything.\n\n**4. Move tests down the pyramid.** For each slow end-to-end test, ask what it actually verifies and whether that can be checked closer to the code.\n\n**5. Set a budget and enforce it**, so the suite cannot silently return to 40 minutes.\n\n**The principle**\n\nTest speed is a feature. It determines whether tests are run, which determines whether they catch anything. Optimising it is not a nicety — it is what keeps the suite functioning as a feedback mechanism rather than a gate people route around.",
+  "tags": [
+   "testing",
+   "test-performance",
+   "ci",
+   "developer-experience",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What makes tests unsafe to parallelise, and is fixing that worth it?",
+    "a": "Shared mutable state - a common database with fixed ids, static fields, files at fixed paths, an environment variable, or a fixed port. Fixing it means isolating per test: unique keys or schemas, no statics, temporary directories, dynamic ports. It is worth it beyond the speed, because the same shared state is what makes tests order-dependent and intermittently failing. Teams often discover that making the suite parallel-safe fixes flakiness they had been living with for months."
+   },
+   {
+    "q": "Is it acceptable for the local suite to be a subset?",
+    "a": "Yes, provided the split is by speed rather than by importance and the full suite runs before merge. The risk is that the slow suite becomes a second-class citizen nobody looks at - failures there need to block the merge and be owned, or it decays into a permanently red build that everyone ignores. The other requirement is that the fast suite is genuinely fast enough to run on every save or push, because a two-minute suite and a ten-minute one produce completely different habits."
+   },
+   {
+    "q": "The team wants to delete the slow end-to-end tests entirely. Reasonable?",
+    "a": "Some of them, probably - there are usually many end-to-end tests verifying logic that a unit test could check, and those are pure cost. What should survive is a small number of genuine journey tests covering the critical paths, because they are the only tests that exercise the real wiring, the real configuration and the real deployment. Deleting those removes the only evidence the system works when assembled. The goal is a handful that are worth their runtime, not zero and not two hundred."
+   }
+  ]
  }
 ]
