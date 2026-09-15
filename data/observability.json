@@ -1465,5 +1465,62 @@
    "practices",
    "judgement"
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Logging",
+  "difficulty": "Medium",
+  "question": "During an incident, the logs contain the information you need but finding it takes 20 minutes of grepping. What would you change about how the service logs?",
+  "answer": "**The problem is unstructured logs**\n\nString-formatted messages cannot be queried. `$\"Order {id} failed for customer {customer}\"` produces text that must be matched with a regex; the values are not fields, so you cannot filter, aggregate or group by them.\n\n**Structured logging**\n\nLog an event with properties, so the values remain queryable:\n\n```csharp\n// Unqueryable: the values are embedded in a string\n_logger.LogError($\"Order {orderId} failed for customer {customerId}\");\n\n// Structured: orderId and customerId become fields\n_logger.LogError(\"Order {OrderId} failed for customer {CustomerId}\",\n                 orderId, customerId);\n```\n\nThe second form renders identically for a human and produces searchable fields for the query engine — `where CustomerId == 42` instead of a regex.\n\n**Correlation**\n\nThe bigger win during an incident. Every log line from one request should carry the same trace id, so you can retrieve the whole story of a failing request across services in one query. `ILogger` scopes or the `Activity` id propagated by OpenTelemetry provide this, and it turns 20 minutes of correlation by timestamp into one filter.\n\nThe trace id should also be returned to the client in the error response, so a user reporting a problem gives you the exact identifier to search for.\n\n**What to log, and what not**\n\n**Log the context that makes an event actionable** — ids, the operation, the outcome, the duration. Not the whole request body, which is expensive and frequently contains personal data.\n\n**Do not log secrets, tokens or personal data.** This is easy to do accidentally by logging an entire object, and it is a compliance problem that is difficult to undo once ingested.\n\n**Use levels meaningfully.** If everything is Information, levels are useless as a filter. Error means something needs attention; Warning means something was handled but is notable; Information is the business narrative.\n\n**The measure of success**\n\nCan you answer 'what happened to this user's request' with one query? If not, the logging is not doing its job, however much of it there is.",
+  "tags": [
+   "observability",
+   "structured-logging",
+   "correlation",
+   "incident-response",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does the message template form matter rather than just passing the values?",
+    "a": "Because the template stays constant while the values vary, so the logging system can group every occurrence of that event as one class - you can count how many times 'Order {OrderId} failed' happened without the ids fragmenting it into thousands of distinct messages. Interpolating first destroys that grouping and the field extraction with it. It also avoids the formatting cost entirely when the level is disabled, since the string is never built."
+   },
+   {
+    "q": "How much should be logged? The team worries about cost.",
+    "a": "Enough to reconstruct what happened, which is less than logging everything. The practical approach is to log business events and errors at full fidelity, sample the high-volume informational lines since the thousandth identical success adds nothing, and put verbose diagnostic detail behind a level you can raise temporarily during an investigation. Ingestion is billed per gigabyte, so the expensive habit is logging request and response bodies by default - which is also where the personal data problems come from."
+   },
+   {
+    "q": "Where do traces and metrics fit alongside logs?",
+    "a": "They answer different questions and the mistake is using one for all three. Metrics tell you something is wrong and how widely - error rate, latency percentiles, saturation - cheaply and continuously, which is what alerts should fire on. Traces show the path of one request across services and where the time went, which is how you localise it. Logs give the detail at a point, which is how you understand it. Starting an investigation in the logs is usually starting in the wrong place."
+   }
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Alerting",
+  "difficulty": "Hard",
+  "question": "The team ignores alerts because most are false alarms. A real outage was missed last month. How do you fix the alerting?",
+  "answer": "**The problem is not the missed alert — it is the noise**\n\nAlert fatigue is a predictable outcome of alerting on things that do not require action. Once the base rate of false alarms is high, humans correctly learn to ignore them, and the real one is lost in the stream. Adding an alert for the missed outage would make it worse.\n\n**The principle: alert on symptoms, not causes**\n\nAlert on what the user experiences — requests failing, requests slow, work not completing. Do not alert on CPU at 80%, which may be entirely fine, or on a single pod restarting, which the orchestrator handled.\n\nThe test for every alert: **if this fires at 3am, is there something a human must do right now?** If not, it is a dashboard item or a ticket, not a page.\n\n**What I would do**\n\n**1. Audit every existing alert.** For each, ask: when it last fired, was action taken? Alerts that have fired twenty times with no action are deleted. This usually removes most of them and is the single highest-value step.\n\n**2. Define SLOs and alert on burn rate.** Rather than 'error rate above 1%', alert when the error budget is being consumed fast enough to matter. This naturally suppresses brief blips while catching sustained degradation, and it ties the alert to something the business agreed.\n\n**3. Alert on multi-window, multi-burn-rate conditions** — a fast burn over five minutes pages immediately; a slow burn over hours creates a ticket. That distinction removes most of the noise while keeping the coverage.\n\n**4. Require a runbook per alert.** If nobody can write what to do when it fires, it should not page. Writing the runbook frequently reveals that the alert is not actionable.\n\n**5. Track the signal-to-noise ratio** as a metric the team owns, and review it. What is not measured returns to noise within months.\n\n**On the missed outage specifically**\n\nThe question is not 'what alert would have caught it' but 'why did the symptom-level alerts not fire'. If users were affected and no alert fired, the gap is in the user-facing coverage — which is a small number of alerts, done well, rather than more alerts.",
+  "tags": [
+   "observability",
+   "alerting",
+   "slo",
+   "alert-fatigue",
+   "on-call",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What makes an alert actionable?",
+    "a": "That there is a specific thing a human can do about it now, and that the alert says enough to start. An alert reading 'CPU high' is not actionable because the response depends entirely on why. An alert reading 'checkout error rate is 8% against a 1% objective, burning the monthly budget in four hours' tells you the impact, the urgency and where to look. The runbook requirement is a good forcing function because writing 'what should the responder do' is impossible for alerts that should not exist."
+   },
+   {
+    "q": "How does burn-rate alerting reduce noise compared with a threshold?",
+    "a": "A fixed threshold fires on any brief excursion, which for a five-minute window is mostly noise - a single bad deploy rollback, a dependency blip, a batch job. Burn rate asks how fast the error budget is being consumed relative to the period it must last, so a thirty-second spike barely registers while a sustained 2% error rate pages. Using two windows together, a short one for severity and a longer one for confirmation, filters transients without delaying genuine incidents. The result is far fewer pages for the same coverage."
+   },
+   {
+    "q": "The team is nervous about deleting alerts in case something is missed. How do you handle that?",
+    "a": "By moving them rather than deleting them - route the non-actionable ones to a low-priority channel or a dashboard for a month and see whether anyone misses them. That removes the fear of loss while ending the paging, and the evidence after a month usually settles the argument. It also helps to frame it as a swap: every alert kept has a cost paid by whoever is on call, and the currency is attention that will not be available for the real one."
+   }
+  ]
  }
 ]

@@ -1722,5 +1722,33 @@
    "governance",
    "operations"
   ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "MongoDB",
+  "difficulty": "Medium",
+  "question": "A MongoDB collection grew to 50GB and queries slowed dramatically. The team wants to shard. What would you check first?",
+  "answer": "**Sharding is a large commitment and rarely the first answer**\n\nIt adds operational complexity permanently: a config server replica set, routers, a shard key that cannot easily be changed, and queries that do not include the shard key become scatter-gather across every shard. Before accepting it, I would check whether the problem is something cheaper.\n\n**What I would check**\n\n**1. Are the queries using indexes?** `explain()` shows the winning plan. A `COLLSCAN` on 50GB is the whole explanation, and an index is a much smaller change than sharding.\n\n**2. Does the working set fit in RAM?** Mongo's performance depends heavily on the frequently-accessed data and indexes fitting in the WiredTiger cache. If the working set exceeds RAM, every query hits disk and performance falls off a cliff. Adding memory is often the entire fix, and it is far cheaper than sharding.\n\n**3. Is the schema right for the access pattern?** Unbounded array growth inside a document is a classic Mongo problem — documents grow, get moved, and queries against the array slow down. If the collection is 50GB because documents contain arrays of thousands of subdocuments, the fix is a schema change.\n\n**4. Is all the data hot?** Fifty gigabytes of which two are queried means archiving or a TTL index solves it. Old data in a separate collection or cold storage restores performance without architectural change.\n\n**5. Are the indexes themselves too large?** Indexes compete for the same cache. Unused indexes are pure cost, and `$indexStats` identifies them.\n\n**If sharding is genuinely needed**\n\nThe shard key decision dominates everything and is difficult to change later. It needs high cardinality, even distribution, and — critically — it should appear in the common queries, or every query fans out to all shards and you have added latency rather than removed it. A monotonically increasing key such as a timestamp creates a hot shard, because all new writes go to one place.\n\n**The order I would argue for**\n\nIndex, then memory, then schema and archival, then sharding. Fifty gigabytes is not large for a well-indexed replica set with adequate RAM — reaching for horizontal scale at that size usually means something more basic is wrong.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "indexing",
+   "working-set",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does the working set fitting in RAM matter so much?",
+    "a": "Because the difference between a memory read and a disk read is several orders of magnitude, and Mongo's cache holds both documents and index pages. While the working set fits, most operations are memory-speed; once it does not, the cache thrashes and nearly every query pays disk latency - so performance does not degrade gradually, it falls off a cliff at the point the set exceeds the cache. That non-linearity is why the symptom appears suddenly after months of steady growth."
+   },
+   {
+    "q": "What makes a bad shard key?",
+    "a": "Low cardinality, so the data cannot be divided finely - sharding on a status field with four values gives four chunks. Monotonically increasing, such as a timestamp or an ObjectId, so every insert goes to the highest chunk and one shard takes all the write load. And a key absent from your common queries, which forces scatter-gather to every shard and makes reads slower than before sharding. A hashed key fixes distribution but destroys range queries, so the choice has to come from the actual access patterns."
+   },
+   {
+    "q": "The documents contain arrays that grow unboundedly. Why is that a problem specifically?",
+    "a": "Because the document is the unit of storage and update - a growing array means the whole document is rewritten on each append and eventually exceeds the 16MB limit. Indexes on array fields grow with the number of elements, and reading one element means loading the entire document. The usual remedy is the bucket pattern, storing fixed-size groups per document, or moving the items to their own collection with a reference. Unbounded arrays inside documents are the most common schema mistake people bring from relational thinking."
+   }
+  ]
  }
 ]

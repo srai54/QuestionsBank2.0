@@ -10561,5 +10561,121 @@
     "a": "Express the schedule in UTC if the business rule is really 'every 24 hours', which is what most batch jobs actually mean. If the rule is genuinely local - 'after close of business in London' - then use a scheduler that applies timezone rules properly, such as Quartz with a time zone, or Hangfire's cron with one, and accept that the job runs twice or not at all unless the scheduler has explicit handling. Avoiding the 01:00-03:00 local window entirely is the cheap pragmatic answer, and it is what most teams end up doing."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Async",
+  "difficulty": "Hard",
+  "question": "An endpoint that calls three independent services takes 900ms. Each service takes about 300ms. A colleague says async/await should have made this faster. Why did it not?",
+  "answer": "**What's happening**\n\nThe calls are awaited sequentially. `await` does not start work in parallel — it starts one operation and suspends until it completes, then moves to the next. Three 300ms calls one after another is 900ms, exactly as observed.\n\n```csharp\n// Sequential: each await completes before the next begins\nvar user = await userClient.GetAsync(id);        // 300ms\nvar orders = await orderClient.GetAsync(id);     // +300ms\nvar prefs = await prefsClient.GetAsync(id);      // +300ms  = 900ms\n```\n\nAsync improves *scalability* — the thread is released while waiting, so the server handles more concurrent requests — but it does not by itself reduce the latency of one request.\n\n**The fix, when the calls are genuinely independent**\n\nStart them all, then await all:\n\n```csharp\nvar userTask = userClient.GetAsync(id);\nvar ordersTask = orderClient.GetAsync(id);\nvar prefsTask = prefsClient.GetAsync(id);\n\nawait Task.WhenAll(userTask, ordersTask, prefsTask);\n\nvar user = userTask.Result;   // safe here: already completed\n```\n\nNow the total is roughly the slowest call, about 300ms.\n\n**The conditions that must hold**\n\n**The calls must be independent.** If the second needs the first's result, sequential is required and the latency is inherent.\n\n**Each needs its own DbContext or unit of work** if they touch the database — a DbContext is not thread-safe, and running two queries concurrently on one is the 'second operation started on this context' error.\n\n**Exception handling changes.** `Task.WhenAll` throws only the first exception, though all are available on its `Exception` property. If three fail, a naive try/catch reports one and silently discards the rest.\n\n**Consider whether parallel is desirable.** Three concurrent calls per request multiply the load on downstream services — fine for three, worth thinking about for thirty.\n\n**The distinction worth stating**\n\nAsync is about not blocking threads. Concurrency is about doing things at the same time. `await` gives the first; `WhenAll` gives the second. Conflating them is why the colleague expected a speed-up that the code never asked for.",
+  "tags": [
+   "dotnet",
+   "async",
+   "task-whenall",
+   "latency",
+   "concurrency",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What exactly does async buy if not latency?",
+    "a": "Thread utilisation, and therefore throughput. A synchronous call blocks a thread for the whole wait, so a server with a hundred threads can serve a hundred concurrent slow requests and then queues. With async the thread is returned to the pool during the IO wait and picks up other work, so the same hardware handles far more concurrent requests. For a single user the request takes exactly as long either way - which is why a load test shows the benefit and a stopwatch on one request does not."
+   },
+   {
+    "q": "What goes wrong with exception handling under Task.WhenAll?",
+    "a": "Awaiting it rethrows only the first exception, so a catch block sees one failure when three occurred - the others are present on the task's Exception property as an AggregateException but are invisible to ordinary handling. That matters when the failures differ, because you log one and lose the others, and it matters more when one of the lost ones is the informative one. If all outcomes need handling, await the tasks individually inside try blocks, or inspect the completed tasks after WhenAll rather than relying on the throw."
+   },
+   {
+    "q": "Is Task.WhenAll always the right move for independent calls?",
+    "a": "Not always. It multiplies concurrent load on the dependencies, so fanning out thirty calls per request can overwhelm a downstream service or exhaust connection limits - Parallel.ForEachAsync with a bounded degree of parallelism is the controlled version. It also makes partial failure more likely, since you now fail if any of them do, which may argue for making some calls optional. For three independent calls it is straightforwardly right; the question is worth asking as the fan-out grows."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Memory",
+  "difficulty": "Hard",
+  "question": "A long-running service's memory climbs steadily and is never reclaimed, but there is no obvious leak — objects are not being stored anywhere. Where do you look?",
+  "answer": "**In .NET, a 'leak' means something is still reachable**\n\nThe collector reclaims everything unreachable, so growth means a live reference exists. The usual suspects:\n\n**1. Event handler subscriptions.** Subscribing to an event on a long-lived object from a short-lived one means the publisher holds a reference to the subscriber forever. The subscriber never dies, nor does anything it references. This is the most common managed leak and it looks exactly like 'not storing anything'.\n\n**2. Static collections.** A static cache, dictionary or list with no eviction grows without bound by design. `ConcurrentDictionary` used as a cache is the classic.\n\n**3. Timers and cancellation token registrations.** A `Timer` holds its callback; registering on a long-lived `CancellationToken` without disposing the registration accumulates.\n\n**4. Captured closures in long-lived delegates**, which capture more than people expect — the whole enclosing scope, not just the variable used.\n\n**5. Large Object Heap fragmentation.** Arrays over 85KB go on the LOH, which is not compacted by default. Steady allocation of large buffers fragments it, so memory is reserved but unusable — the process grows while the heap is mostly free space.\n\n**6. Unmanaged resources** not disposed — handles, native buffers, HttpClient instances. The managed heap looks fine while the process grows.\n\n**How to find it rather than guess**\n\nTake two heap snapshots several minutes apart under load and diff them. `dotnet-counters` shows the trend and which generation is growing; `dotnet-gcdump` plus a diff in Visual Studio or PerfView shows which types are accumulating and — critically — *what is holding them*. The retention path is the answer; the type alone is only a hint.\n\nGeneration 2 growing steadily while gen 0 and 1 stay flat indicates objects surviving collection, which is the signature of a retained reference rather than allocation pressure.\n\n**The point**\n\nGuessing at leaks wastes days. The tooling gives the retention chain directly, and it usually takes under an hour.",
+  "tags": [
+   "dotnet",
+   "memory-leak",
+   "gc",
+   "diagnostics",
+   "event-handlers",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why are event handlers such a common cause?",
+    "a": "Because the direction of the reference is the opposite of the direction of the dependency. Subscribing looks like the subscriber depending on the publisher, but the publisher is the one holding the delegate - so a short-lived component subscribing to a long-lived one is keeping itself alive. Nothing in the code reads as storage, which is why it fails the 'we do not store anything' intuition. Unsubscribing in Dispose is the fix, and the weak event pattern is the answer when lifetimes cannot be managed explicitly."
+   },
+   {
+    "q": "How do you tell an LOH problem from an ordinary retention leak?",
+    "a": "The counters distinguish them: LOH size growing while gen 2 stays flat points at large allocations, and a large gap between the heap size and the used bytes indicates fragmentation rather than retention. The fix also differs - retention needs the reference removed, while fragmentation needs the allocation pattern changed, typically by pooling buffers with ArrayPool so the same large arrays are reused rather than allocated and discarded. GCSettings.LargeObjectHeapCompactionMode can compact once as a mitigation, but it is expensive and does not address why the fragmentation occurs."
+   },
+   {
+    "q": "The service restarts nightly so memory never becomes critical. Is that acceptable?",
+    "a": "It is a mitigation that works and hides the cause, which is a legitimate short-term position and a poor permanent one. The problems are that the leak rate can change with traffic, so the safe margin is not stable; the restart itself is a small availability cost and a source of cold starts; and the underlying reference may also be causing subtler issues such as stale cached data being served. I would keep the restart while investigating and treat needing it as the signal rather than the solution."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "API",
+  "difficulty": "Medium",
+  "question": "A code review shows a public method taking twelve parameters, several of them booleans. What do you suggest and why?",
+  "answer": "**The specific problems**\n\n**Boolean parameters are unreadable at the call site.** `Process(order, true, false, true)` communicates nothing — the reader must open the signature to learn what each flag means. Worse, they are easy to transpose, and the compiler will not notice.\n\n**Twelve parameters usually means the method does several things.** Flags that change behaviour are often a sign that two or three operations have been merged, with the flags selecting between them.\n\n**Positional parameters of the same type** are an ordering bug waiting to happen. Three consecutive booleans or two consecutive strings can be swapped silently.\n\n**Every new requirement adds a parameter**, and existing callers must be updated or defaults chosen — the signature becomes a growing compatibility problem.\n\n**What I would suggest, in order**\n\n**1. Split the method.** If `includeArchived` selects fundamentally different behaviour, `GetActive()` and `GetAll()` are clearer than one method with a flag. This is usually the best fix and the one that reduces the parameter count most.\n\n**2. Introduce a parameter object.** Related parameters grouped into a type with named properties — which also gives you somewhere to put validation, and lets new options be added without changing the signature.\n\n**3. Replace booleans with enums** where splitting is not appropriate. `SortDirection.Descending` reads at the call site; `true` does not. An enum also extends to a third case later without breaking anything.\n\n**4. Use named arguments** as the minimum improvement if the signature cannot change — `Process(order, includeTax: true, notify: false)` is far more readable and costs nothing.\n\n**How I would put it in the review**\n\nNot as a rule about parameter counts, but with a concrete question: 'at the call site, can a reader tell what `true, false, true` means?' That usually makes the point without needing to invoke a guideline, and it leads naturally to which of the fixes fits.\n\n**The caveat**\n\nA constructor taking twelve dependencies is a different smell — that one says the class has too many responsibilities, and a parameter object would hide the problem rather than fix it.",
+  "tags": [
+   "dotnet",
+   "api-design",
+   "code-review",
+   "boolean-parameters",
+   "readability",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is a parameter object not always the right fix?",
+    "a": "Because it can disguise the real problem. If the parameters are unrelated and the method is doing several jobs, bundling them into a class makes the signature tidy while leaving a method that still does three things - now with a type whose properties are only sometimes relevant, which is its own confusion. The parameter object fits when the parameters genuinely travel together and represent a coherent concept, such as a query or a set of options. When they do not, splitting the method is the fix and the object is camouflage."
+   },
+   {
+    "q": "When is a boolean parameter acceptable?",
+    "a": "When it is genuinely a property of the thing rather than a mode switch, and the call site reads clearly - SetVisible(true) is fine because the parameter is the value being set, not a selector between behaviours. The test I use is whether the method body starts with an if on that parameter and the two branches share little code; if so, there are two methods hiding in one. Named arguments rescue readability in the borderline cases at no cost."
+   },
+   {
+    "q": "The method is public API used by other teams. Does that change the approach?",
+    "a": "It constrains the path rather than the destination. You cannot change the signature without breaking callers, so the new shape is added alongside and the old one marked Obsolete with a message pointing at the replacement, then removed after a deprecation period. Overloads let both exist without a version bump. What matters is that the old one is deprecated rather than left indefinitely, since an API with both shapes forever is worse than either alone."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Testing",
+  "difficulty": "Hard",
+  "question": "A class is impossible to unit test because it calls DateTime.Now, reads configuration statically and creates its own HttpClient. How would you make it testable without rewriting everything?",
+  "answer": "**Why each one blocks testing**\n\n**`DateTime.Now`** is a hidden dependency on the system clock. Any test involving a date boundary, an expiry or 'older than 30 days' is either non-deterministic or untestable, and will fail on a particular day of the month.\n\n**Static configuration access** binds the class to a global, so tests cannot vary it and they interfere with each other through shared state.\n\n**Creating its own `HttpClient`** means every test makes a real network call — slow, flaky, and dependent on something outside the test.\n\nAll three are the same problem: the class *acquires* its dependencies rather than *receiving* them, so the test has no seam to substitute at.\n\n**The changes, smallest first**\n\n**Time**: inject `TimeProvider` — built into .NET 8 and specifically designed for this, with `FakeTimeProvider` in the testing package for controlling it. Before .NET 8 the equivalent is a small `IClock` interface.\n\n**Configuration**: inject `IOptions<T>` rather than reading a static. A test then constructs the options directly, with no global state and no interference between tests.\n\n**HttpClient**: inject it, and register it through `IHttpClientFactory`. A test supplies a client with a stub message handler — which also fixes the socket exhaustion problem the original code has in production.\n\n```csharp\n// Before: acquires everything, testable only against the real world\npublic class ExpiryService\n{\n    public bool IsExpired(Order o) => o.CreatedAt < DateTime.Now.AddDays(-30);\n}\n\n// After: receives its dependencies, so a test controls them\npublic class ExpiryService(TimeProvider time, IOptions<Policy> policy)\n{\n    public bool IsExpired(Order o) =>\n        o.CreatedAt < time.GetUtcNow().AddDays(-policy.Value.ExpiryDays);\n}\n```\n\n**How to do it incrementally**\n\nYou do not need to rewrite everything. Each of these is an independent change that can ship separately, and each makes a slice of the class testable. Start with whichever blocks the test you actually want to write — usually the clock, because date logic is where the bugs are.\n\n**The general principle**\n\nUntestable usually means 'reaches out for what it needs'. Making it testable and making it correct tend to be the same change: the injected version also fixes the DST bug from using `Now` instead of `UtcNow`, and the socket exhaustion from the private `HttpClient`.",
+  "tags": [
+   "dotnet",
+   "testability",
+   "dependency-injection",
+   "timeprovider",
+   "refactoring",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is TimeProvider better than a hand-rolled IClock?",
+    "a": "Because it is in the framework, so libraries can take it without everyone inventing an incompatible abstraction, and it covers more than the current time - timers and delays go through it too, which means FakeTimeProvider can advance time instantly in a test rather than actually waiting. A test for a five-minute timeout runs in microseconds. A hand-rolled IClock typically only abstracts Now, so any code using Task.Delay remains untestable, which is usually where the slow tests are."
+   },
+   {
+    "q": "Is it worth injecting an abstraction for something as simple as the clock?",
+    "a": "Yes, and the clock is the clearest case because the alternative is tests that depend on when they run - passing all month and failing on the 31st, or on a DST boundary. The cost is one constructor parameter. Where I would resist abstraction is over things that do not vary in ways tests care about, such as string formatting or maths, because each abstraction is indirection a reader must follow. The clock, randomness and IO are the three that reliably repay it."
+   },
+   {
+    "q": "The class is used in fifty places. How do you introduce the constructor parameters safely?",
+    "a": "Add the dependencies with a constructor overload that defaults them to the current behaviour - TimeProvider.System, the real options - so existing callers compile unchanged, then migrate them over time and remove the old constructor. With DI registration, most call sites are the container rather than code, so the change is smaller than it looks. The important part is that the defaulted constructor is a migration step with a removal date, not a permanent escape hatch, or you keep the untestable path forever."
+   }
+  ]
  }
 ]

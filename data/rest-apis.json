@@ -1204,5 +1204,62 @@
     "a": "p95 and p99 latency, not the mean, because the mean hides the tail and the tail is what users complain about. Also the request count and error rate, since a change that improves latency by shedding load is not an improvement. For a caching change specifically, hit rate and the latency of the miss path both matter, because a 95 percent hit rate still leaves one request in twenty on the slow path. Measuring before and after with the same instrument is the part people skip."
    }
   ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "A client reports that retrying a failed POST created duplicate orders. The API returned a 500 on the first attempt. Whose problem is this and how is it fixed?",
+  "answer": "**Whose problem**\n\nBoth, but the API owns the fix. The client behaved reasonably — a 500 is ambiguous, the request may or may not have been processed, and retrying is the standard response. The API's contract gave the client no way to retry safely.\n\n**Why the ambiguity is unavoidable**\n\nA 500 means the server failed *somewhere*. It may have failed before creating the order, after creating it but before committing, or after committing but before the response reached the client. A network timeout is worse still: the client has no response at all. There is no way for the client to distinguish these from outside.\n\nSo 'do not retry' is not a solution — the client cannot know whether to.\n\n**The fix: idempotency keys**\n\nThe client generates a unique key per logical operation and sends it as a header. The server records it with the result of the first attempt. A retry with the same key returns the stored result rather than performing the operation again.\n\n```\nPOST /orders\nIdempotency-Key: 8f14e45f-ea9b-4c71-b2d7-2e5a0a1c9f33\n```\n\nThe implementation details that matter:\n\n**Store the key in the same transaction as the work**, or the same race exists one level down — a unique constraint on the key column is what makes the second attempt fail cleanly.\n\n**Store the response**, not just the fact of the key, so the retry returns the same order id rather than a bare acknowledgement.\n\n**Scope keys to the client** so two clients cannot collide, and expire them after a sensible window — 24 hours is typical.\n\n**Decide the concurrent case.** If a retry arrives while the first is still in flight, returning 409 and asking the client to retry is cleaner than attempting to wait.\n\n**What else the API should do**\n\nReturn 503 with `Retry-After` rather than 500 where the failure is known to be transient, so the client's retry behaviour can be informed rather than guessed. And ensure that whatever failed did not leave a partial write — a 500 following a committed order is a worse failure than the duplicate.",
+  "tags": [
+   "rest-api",
+   "idempotency",
+   "retries",
+   "distributed-systems",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why can the client not just check whether the order exists before retrying?",
+    "a": "Because the check and the retry are two operations with a gap, so the order can be created in between - and more practically, the client often has nothing to check by, since the order id was assigned by the server and was in the response that never arrived. A search by content is unreliable because two genuinely separate identical orders are legitimate. The idempotency key solves it by giving the client a way to name the operation before it happens, which is the piece the check-then-act approach is missing."
+   },
+   {
+    "q": "Is PUT inherently safe from this problem?",
+    "a": "PUT is idempotent by definition, so retrying it is safe in principle - but only if it truly replaces a resource at a client-chosen URL. Many APIs use PUT for operations that are not actually idempotent, such as one that appends or increments, and the verb then guarantees nothing. Where the client can choose the identifier, PUT to /orders/{clientGeneratedId} is a clean way to get idempotency without a separate header, because the id itself is the key."
+   },
+   {
+    "q": "How long should idempotency keys be retained?",
+    "a": "Long enough to cover any retry the client might reasonably make, which means longer than their maximum backoff window - 24 hours is the common choice and covers most automated retry policies plus a manual retry by a person. Keeping them forever is unnecessary storage and makes the uniqueness index large; expiring them too soon reopens the window, because a retry after expiry is processed as a new request. Whatever you choose belongs in the API documentation, since the client's retry policy needs to fit inside it."
+   }
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "A mobile team complains your API requires six calls to render one screen. Your team says the API is correctly designed around resources. Who is right?",
+  "answer": "**Both are describing real constraints**\n\nThe API team is right that resource-oriented design is coherent and maintainable. The mobile team is right that six round trips on a mobile network — where latency is 100–300ms and connections are unreliable — is a poor experience. Six calls is potentially two seconds before anything renders, and six chances to fail.\n\nThe disagreement is really about where the coupling should live: a general API with clients composing it, or an API shaped for its consumers.\n\n**Options, with their costs**\n\n**1. Backend for Frontend.** A thin service per client type that composes the underlying APIs and returns exactly what the screen needs. The mobile team gets one call; the core APIs stay resource-oriented. The cost is another deployable to own, and the BFF tends to accumulate logic that belongs elsewhere.\n\n**2. GraphQL.** The client specifies what it needs in one request. Genuinely solves over- and under-fetching. Costs: query complexity and cost-limiting become a real concern, caching is harder than with HTTP verbs, and the N+1 problem moves into the resolvers where it is easy to create and hard to see.\n\n**3. Compound documents or expansion parameters.** `GET /orders/123?expand=customer,items` — a pragmatic middle path that keeps REST semantics while letting the client reduce round trips. Much cheaper than either of the above and covers most cases.\n\n**4. Just add the endpoint.** A purpose-built `GET /screens/order-summary/123`. Purists object, but if one screen is critical and stable, a dedicated endpoint is simple, cacheable and honest about what it is.\n\n**What I would actually recommend**\n\nStart with expansion parameters, because it is the smallest change that addresses the complaint and requires no new infrastructure. If several clients diverge substantially in their needs, that is the signal for a BFF. Reach for GraphQL when there are many clients with genuinely varied and evolving needs — it is a significant platform commitment to solve a problem that expansion parameters often handle.\n\n**The framing that unblocks the argument**\n\n'Correctly designed' has to include the consumers. An API nobody can use efficiently is not well designed; it is well *modelled*. Those are different things, and the mobile team is raising a legitimate design input rather than asking for a shortcut.",
+  "tags": [
+   "rest-api",
+   "bff",
+   "graphql",
+   "chattiness",
+   "api-design",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What is the strongest argument against GraphQL here?",
+    "a": "That it moves the complexity rather than removing it, and the new complexity is less familiar. Arbitrary client queries mean you must implement depth and cost limiting or a single query can take down the service; HTTP caching largely stops working because everything is a POST to one endpoint; and resolvers make N+1 queries extremely easy to introduce, requiring DataLoader-style batching to be applied carefully. For a small number of known clients that is a lot of platform to adopt when an expand parameter would do."
+   },
+   {
+    "q": "Who should own a backend for frontend?",
+    "a": "The client team, which is the point of the pattern - it exists so the mobile team can shape their own payloads without negotiating with the API team for every screen. If the API team owns it, the coordination cost that motivated it comes straight back, and the BFF becomes another queue to wait in. The trade is that the client team now runs a service, which needs their capability to deploy, monitor and be on call for it."
+   },
+   {
+    "q": "The mobile team asks you to return everything in one big payload instead. Is that better?",
+    "a": "It fixes the round trips and creates over-fetching - a large payload parsed and transferred on a mobile connection where bandwidth and battery matter, most of which the screen does not use. It also couples the response to one screen's needs, so the next screen either gets its own bloated endpoint or reuses this one badly. Expansion parameters give the same round-trip saving while letting the client state what it wants, which is why they are usually the better answer than a fixed fat response."
+   }
+  ]
  }
 ]

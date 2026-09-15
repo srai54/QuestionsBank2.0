@@ -2905,5 +2905,34 @@
    "judgement",
    "effectiveness"
   ]
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "Two threads increment a shared counter a million times each. The final value is less than two million. Explain precisely why, and give three different fixes with their trade-offs.",
+  "answer": "**Why it happens**\n\n`count++` is not one operation. It compiles to three: read the value, add one, write it back. Two threads can interleave:\n\n1. Thread A reads 100\n2. Thread B reads 100\n3. Thread A writes 101\n4. Thread B writes 101\n\nTwo increments, one net change. Every such interleaving loses one, which is why the final total is short by a variable amount.\n\nThere is a second effect: without a memory barrier, a thread may not see another's write at all, because the value can be held in a register or a core's cache. So the count is not merely racy, it is unsynchronised.\n\n**Three fixes**\n\n**1. `Interlocked.Increment`**\n\n```csharp\nInterlocked.Increment(ref count);\n```\n\nA single atomic CPU instruction. Fastest by a wide margin, and it includes the necessary memory barrier. The limitation is that it only works for simple operations on single values — as soon as you need to update two fields consistently, it cannot help.\n\n**2. `lock`**\n\n```csharp\nlock (_gate) { count++; }\n```\n\nSlower — it is a monitor acquisition, roughly an order of magnitude more expensive uncontended and much worse under contention. But it generalises: any block of work can be made atomic, not just one operation. The costs are the risk of deadlock when multiple locks are involved, and that it serialises the contended section.\n\n**3. Remove the sharing**\n\nGive each thread its own counter and sum them at the end. No synchronisation at all, so no contention, and it scales linearly with cores. This is what `Parallel.For` with a thread-local accumulator does. It only applies when the operation is associative and the partial results can be combined — but when it applies, it is the fastest by a large margin.\n\n**Which I would choose**\n\nFor a counter, `Interlocked`. For anything involving several fields that must stay consistent together, a lock. For a hot aggregation over many items, partition and combine — the cheapest synchronisation is the kind you do not need.\n\n**The general point**\n\n`volatile` is not a fix here, and this is a common misconception. It addresses visibility, not atomicity: the read-modify-write remains three steps and can still interleave.",
+  "tags": [
+   "concurrency",
+   "race-condition",
+   "interlocked",
+   "locking",
+   "memory-model",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does volatile not fix this?",
+    "a": "Because it addresses a different problem. Volatile ensures reads and writes are not reordered or cached in ways that hide them from other threads - it guarantees visibility. It does nothing about atomicity, and count++ is still read, add, write, so two threads can interleave exactly as before. Declaring the field volatile makes the race slightly more likely to be observed rather than less. The confusion is common enough that it is worth stating explicitly in review."
+   },
+   {
+    "q": "How much slower is a lock than Interlocked in practice?",
+    "a": "Uncontended, roughly an order of magnitude - a lock involves a monitor acquisition and release where Interlocked is a single instruction. Under contention the gap widens dramatically, because threads block, context-switch and queue, and the cost becomes dominated by the scheduler rather than by the operation. That said, an uncontended lock is still only tens of nanoseconds, so the difference matters in a tight loop and is irrelevant if the protected work takes a millisecond. Measuring which regime you are in decides whether it is worth caring."
+   },
+   {
+    "q": "When would you reach for a concurrent collection instead of a lock?",
+    "a": "When the shared state is a collection and the operations map onto what the type offers - ConcurrentDictionary, ConcurrentQueue and the rest use fine-grained locking or lock-free algorithms internally and are usually faster and safer than wrapping a plain collection in one lock. The trap is composite operations: checking ContainsKey and then adding is two atomic operations with a race between them, so you need the atomic methods such as GetOrAdd or TryAdd. A concurrent collection makes each operation safe, not any sequence of them."
+   }
+  ]
  }
 ]
