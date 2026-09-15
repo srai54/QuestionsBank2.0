@@ -13263,17 +13263,32 @@
   "subcategory": "Heap",
   "difficulty": "Hard",
   "question": "Find the median of a sliding window over a stream.",
-  "answer": "Two heaps - a max-heap for the lower half and a min-heap for the upper - rebalanced after each insertion, with lazy deletion of elements leaving the window using a map of pending removals. Time O(n log k). The deletion handling is what makes this substantially harder than the streaming median.",
+  "answer": "**Approach**\n\nTwo balanced multisets — a max-heap of the lower half and a min-heap of the upper. With lazy deletion the element leaving the window is marked rather than searched for.\n\n**Logic**\n\nThe median is always at the boundary between the two halves, so keeping their sizes within one of each other makes it an O(1) read.\n\nRemoving an arbitrary element is what makes the *sliding* version hard: a heap cannot delete from the middle. The standard fix is lazy deletion — record what should be gone, and discard it when it surfaces at a top. The sizes must then be tracked separately from the heap counts, since those include not-yet-purged entries.\n\nA sorted multiset such as SortedSet of (value, index) pairs is simpler to get right and is what is used here, with an index to allow duplicates.\n\nO(n log k).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static double[] MedianSlidingWindow(int[] nums, int k)\n    {\n        if (nums == null || k <= 0 || nums.Length < k) return Array.Empty<double>();\n\n        // (value, index) so duplicates stay distinct and removal is exact.\n        var window = new SortedSet<(int Value, int Index)>(\n            Comparer<(int Value, int Index)>.Create((a, b) =>\n                a.Value != b.Value ? a.Value.CompareTo(b.Value) : a.Index.CompareTo(b.Index)));\n\n        var result = new double[nums.Length - k + 1];\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            window.Add((nums[i], i));\n\n            if (window.Count > k) window.Remove((nums[i - k], i - k));\n\n            if (window.Count == k)\n            {\n                // The median sits at the middle of the ordered window.\n                var middle = window.Skip((k - 1) / 2).Take(k % 2 == 0 ? 2 : 1).ToArray();\n\n                result[i - k + 1] = k % 2 == 0\n                    ? ((double)middle[0].Value + middle[1].Value) / 2\n                    : middle[0].Value;\n            }\n        }\n\n        return result;\n    }\n\n    private static void Show(double[] values) =>\n        Console.WriteLine(values.Length == 0 ? \"(none)\" : string.Join(\",\", values));\n\n    public static void Main()\n    {\n        Show(MedianSlidingWindow(new[] { 1, 3, -1, -3, 5, 3, 6, 7 }, 3));\n        Show(MedianSlidingWindow(new[] { 1, 2, 3, 4 }, 2));        // even window: averages\n        Show(MedianSlidingWindow(new[] { 1, 1, 1, 1 }, 2));        // duplicates\n        Show(MedianSlidingWindow(new[] { 5 }, 1));\n        Show(MedianSlidingWindow(new[] { 1, 2 }, 5));              // window larger than input\n        Show(MedianSlidingWindow(new[] { 2147483647, 2147483647 }, 2));   // overflow risk\n    }\n}\n```\n\n**Output**\n\n```\n1,-1,-1,3,5,6\n1.5,2.5,3.5\n1,1,1\n5\n(none)\n2147483647\n```",
   "tags": [
    "heap",
    "sliding-window",
    "median",
-   "lazy-deletion"
+   "lazy-deletion",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is the sliding version so much harder than a streaming median?",
+    "a": "Because a streaming median only ever adds, and two heaps handle that in O(log n). Sliding also removes an arbitrary element - the one falling out of the window - and a heap cannot delete from its middle. The standard workaround is lazy deletion, marking the element and purging it when it reaches a top, which forces you to track logical sizes separately from the heap counts. That bookkeeping is where almost all the bugs in this problem live."
+   },
+   {
+    "q": "Why pair each value with its index?",
+    "a": "Because a SortedSet holds distinct elements, and a window with duplicate values would silently collapse them - removing one occurrence would remove the only copy. The index makes every entry unique and makes removal exact, since you know precisely which occurrence is leaving. The all-ones test is there to prove it: without the index that case returns the wrong count entirely."
+   },
+   {
+    "q": "Why average in double?",
+    "a": "Because two values near int.MaxValue sum past the range and wrap to a negative number, so an even-sized window of large values would report a wildly wrong median. Casting one operand to double before the addition avoids it. The two-element max-value test exists to demonstrate the case rather than assume it, and it is the same intermediate-overflow trap as in binary search's midpoint."
+   }
   ]
  },
  {
@@ -13784,16 +13799,31 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Find articulation points (cut vertices) in an undirected graph.",
-  "answer": "DFS tracking discovery time and the lowest reachable discovery time. A non-root node is an articulation point when some child's low value is at least the node's discovery time; the root is one when it has more than one DFS child. Time O(V+E), space O(V).",
+  "answer": "**Approach**\n\nTarjan's algorithm. A DFS assigning each node a discovery time and a low-link — the earliest discovery time reachable from its subtree — identifies the cut vertices in one pass.\n\n**Logic**\n\nA non-root node is an articulation point when some child's subtree cannot reach above it: `low[child] >= discovery[node]`. That means removing the node disconnects that subtree.\n\nThe root is special. It has no ancestor to compare against, so it is a cut vertex exactly when it has more than one DFS child.\n\nThe parent edge must be skipped, but only once — with parallel edges a second copy is a genuine alternative route.\n\nO(V + E).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<int> ArticulationPoints(int n, int[][] edges)\n    {\n        var graph = new List<int>[n];\n        for (int i = 0; i < n; i++) graph[i] = new List<int>();\n\n        foreach (var e in edges) { graph[e[0]].Add(e[1]); graph[e[1]].Add(e[0]); }\n\n        var discovery = new int[n];\n        var low = new int[n];\n        var cut = new bool[n];\n        Array.Fill(discovery, -1);\n\n        int timer = 0;\n\n        void Visit(int node, int parent)\n        {\n            discovery[node] = low[node] = timer++;\n            int children = 0;\n\n            foreach (int next in graph[node])\n            {\n                if (next == parent) continue;\n\n                if (discovery[next] != -1)\n                {\n                    // Back edge: reaches an already-discovered ancestor.\n                    low[node] = Math.Min(low[node], discovery[next]);\n                    continue;\n                }\n\n                children++;\n                Visit(next, node);\n                low[node] = Math.Min(low[node], low[next]);\n\n                // The child's subtree cannot climb above this node.\n                if (parent != -1 && low[next] >= discovery[node]) cut[node] = true;\n            }\n\n            // The root is a cut vertex only with more than one DFS child.\n            if (parent == -1 && children > 1) cut[node] = true;\n        }\n\n        for (int i = 0; i < n; i++)\n            if (discovery[i] == -1) Visit(i, -1);\n\n        return Enumerable.Range(0, n).Where(i => cut[i]).ToList();\n    }\n\n    private static void Show(IList<int> points) =>\n        Console.WriteLine(points.Count == 0 ? \"none\" : string.Join(\",\", points));\n\n    public static void Main()\n    {\n        // A path: both middle nodes are cut vertices.\n        Show(ArticulationPoints(4, new[] { new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 } }));\n\n        // A cycle: no single node disconnects it.\n        Show(ArticulationPoints(4, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 0 } }));\n\n        // A bridge joining two triangles.\n        Show(ArticulationPoints(6, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 },\n            new[] { 2, 3 },\n            new[] { 3, 4 }, new[] { 4, 5 }, new[] { 5, 3 } }));\n\n        Show(ArticulationPoints(1, Array.Empty<int[]>()));\n        Show(ArticulationPoints(3, Array.Empty<int[]>()));\n        Show(ArticulationPoints(3, new[] { new[] { 0, 1 }, new[] { 1, 2 } }));\n    }\n}\n```\n\n**Output**\n\n```\n1,2\nnone\n2,3\nnone\nnone\n1\n```",
   "tags": [
    "graphs",
    "tarjan",
-   "dfs",
-   "connectivity"
+   "articulation-points",
+   "low-link",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "What does the low-link value mean?",
+    "a": "It is the earliest discovery time reachable from a node's DFS subtree using tree edges plus at most one back edge. If a child's low-link is at least the parent's discovery time, that subtree has no route to anything above the parent, so removing the parent severs it. The whole algorithm is that single comparison; everything else is bookkeeping to compute the low-links correctly in one pass."
+   },
+   {
+    "q": "Why is the root treated differently?",
+    "a": "Because the condition compares against an ancestor's discovery time and the root has no ancestor - the test is meaningless there. Instead the root is a cut vertex exactly when it has two or more DFS children, since those subtrees are only connected through it. Applying the general rule to the root reports it as a cut vertex on almost every graph, which is the most common bug in a first implementation."
+   },
+   {
+    "q": "How do articulation points relate to bridges?",
+    "a": "They are the vertex and edge versions of the same idea. A bridge is an edge whose removal disconnects the graph, detected with the strict condition low[child] > discovery[node] rather than the non-strict one. The endpoints of a bridge are usually but not always cut vertices - a degree-one endpoint is not, since removing it disconnects nothing. Keeping the strict-versus-non-strict distinction straight is what separates the two algorithms."
+   }
   ]
  },
  {
@@ -13801,17 +13831,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Determine whether a graph can be coloured with two colours.",
-  "answer": "BFS or DFS assigning alternating colours, failing when an edge connects two nodes of the same colour. That is equivalent to checking bipartiteness, and a graph is two-colourable exactly when it contains no odd-length cycle. Time O(V+E).",
+  "answer": "**Approach**\n\nBFS assigning alternating colours. A conflict — an edge between two same-coloured nodes — proves the graph is not bipartite.\n\n**Logic**\n\nTwo-colourability is exactly bipartiteness, and a graph is bipartite exactly when it has no odd-length cycle. The BFS finds such a cycle implicitly: a conflicting edge closes a cycle whose length must be odd.\n\nEvery component must be tried, since one component can be bipartite while another is not.\n\nO(V + E).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool IsBipartite(int n, int[][] edges)\n    {\n        var graph = new List<int>[n];\n        for (int i = 0; i < n; i++) graph[i] = new List<int>();\n\n        foreach (var e in edges) { graph[e[0]].Add(e[1]); graph[e[1]].Add(e[0]); }\n\n        var colour = new int[n];   // 0 = uncoloured, 1 and -1 the two colours\n\n        for (int start = 0; start < n; start++)   // every component\n        {\n            if (colour[start] != 0) continue;\n\n            colour[start] = 1;\n            var queue = new Queue<int>();\n            queue.Enqueue(start);\n\n            while (queue.Count > 0)\n            {\n                int node = queue.Dequeue();\n\n                foreach (int next in graph[node])\n                {\n                    // Same colour across an edge: an odd cycle exists.\n                    if (colour[next] == colour[node]) return false;\n\n                    if (colour[next] == 0)\n                    {\n                        colour[next] = -colour[node];\n                        queue.Enqueue(next);\n                    }\n                }\n            }\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(IsBipartite(4, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 0 } }));   // 4-cycle\n\n        Console.WriteLine(IsBipartite(3, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 } }));                    // triangle\n\n        Console.WriteLine(IsBipartite(3, Array.Empty<int[]>()));\n        Console.WriteLine(IsBipartite(1, new[] { new[] { 0, 0 } }));               // self-loop\n\n        // First component is fine; the second contains a triangle.\n        Console.WriteLine(IsBipartite(6, new[] {\n            new[] { 0, 1 },\n            new[] { 2, 3 }, new[] { 3, 4 }, new[] { 4, 2 } }));\n\n        Console.WriteLine(IsBipartite(5, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 4 } }));    // a path\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nFalse\nTrue\n```",
   "tags": [
    "graphs",
    "bipartite",
+   "bfs",
    "colouring",
-   "bfs"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is two-colourability equivalent to having no odd cycle?",
+    "a": "Because colours must alternate along any path, so traversing a cycle returns to the start with the original colour only if the cycle has even length. An odd cycle forces the start to need both colours, which is impossible. Conversely, if every cycle is even, a BFS colouring by parity of distance is consistent, so a valid two-colouring exists. That equivalence is the whole content of the problem - the BFS is just how you check it."
+   },
+   {
+    "q": "Why start a search in every component?",
+    "a": "Because bipartiteness is a property of the whole graph and one component can be fine while another contains a triangle - the fifth test is built exactly that way, with a harmless edge and a separate triangle. Starting only from node 0 would report true. The uncoloured check makes the repeated starts free, since an already-coloured node is skipped immediately."
+   },
+   {
+    "q": "Why does a self-loop make it false?",
+    "a": "Because a self-loop is an odd cycle of length one, so the node would have to differ in colour from itself. The code catches it naturally: when processing the node, its own colour equals its colour and the conflict fires. It is worth testing because implementations that skip the parent, borrowed from cycle detection, can accidentally skip the self-loop too and wrongly report true."
+   }
   ]
  },
  {
@@ -13819,16 +13864,31 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Find the lowest common ancestor of two nodes with many queries.",
-  "answer": "Preprocess with binary lifting - an ancestor table of size log n per node - then lift both nodes to the same depth and jump upward in powers of two. Preprocessing is O(n log n) and each query O(log n), which beats the O(n) per query of a naive walk.",
+  "answer": "**Approach**\n\nBinary lifting. Precompute each node's 2^j-th ancestor, then answer each query in O(log n) by lifting the deeper node to the same depth and then lifting both together.\n\n**Logic**\n\nThe naive per-query walk is O(n), which is fine once and hopeless for many queries. Binary lifting pays O(n log n) once to make every query logarithmic.\n\nThe second phase lifts both nodes by the largest jump that does *not* make their ancestors equal. That leaves them as children of the LCA, which is then one step up — the awkward-looking part, and the reason the answer is a parent rather than the node landed on.\n\nO(n log n) build, O(log n) per query.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class LcaFinder\n{\n    private readonly int[][] _up;    // _up[j][v] = the 2^j-th ancestor of v\n    private readonly int[] _depth;\n    private readonly int _levels;\n\n    public LcaFinder(int n, int[][] edges, int root)\n    {\n        var tree = new List<int>[n];\n        for (int i = 0; i < n; i++) tree[i] = new List<int>();\n        foreach (var e in edges) { tree[e[0]].Add(e[1]); tree[e[1]].Add(e[0]); }\n\n        _levels = 1;\n        while ((1 << _levels) < n) _levels++;\n        _levels++;\n\n        _up = new int[_levels][];\n        for (int j = 0; j < _levels; j++) _up[j] = new int[n];\n        _depth = new int[n];\n\n        // Iterative DFS: a deep tree would overflow the stack.\n        var stack = new Stack<(int Node, int Parent)>();\n        stack.Push((root, root));\n        var seen = new bool[n];\n\n        while (stack.Count > 0)\n        {\n            var (node, parent) = stack.Pop();\n            if (seen[node]) continue;\n            seen[node] = true;\n\n            _up[0][node] = parent;\n            _depth[node] = node == root ? 0 : _depth[parent] + 1;\n\n            foreach (int child in tree[node])\n                if (!seen[child]) stack.Push((child, node));\n        }\n\n        for (int j = 1; j < _levels; j++)\n            for (int v = 0; v < n; v++)\n                _up[j][v] = _up[j - 1][_up[j - 1][v]];   // two half-jumps make one jump\n    }\n\n    public int Lca(int a, int b)\n    {\n        if (_depth[a] < _depth[b]) (a, b) = (b, a);\n\n        int difference = _depth[a] - _depth[b];\n        for (int j = 0; j < _levels; j++)\n            if ((difference & (1 << j)) != 0) a = _up[j][a];\n\n        if (a == b) return a;\n\n        // Lift both by the largest jump that keeps them DIFFERENT.\n        for (int j = _levels - 1; j >= 0; j--)\n            if (_up[j][a] != _up[j][b]) { a = _up[j][a]; b = _up[j][b]; }\n\n        return _up[0][a];\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        //        0\n        //      /   \\\n        //     1     2\n        //    / \\     \\\n        //   3   4     5\n        //      /\n        //     6\n        var edges = new[] {\n            new[] { 0, 1 }, new[] { 0, 2 }, new[] { 1, 3 },\n            new[] { 1, 4 }, new[] { 2, 5 }, new[] { 4, 6 } };\n\n        var finder = new LcaFinder(7, edges, 0);\n\n        Console.WriteLine(finder.Lca(3, 4));    // 1\n        Console.WriteLine(finder.Lca(3, 5));    // 0\n        Console.WriteLine(finder.Lca(6, 3));    // 1\n        Console.WriteLine(finder.Lca(6, 6));    // itself\n        Console.WriteLine(finder.Lca(1, 6));    // an ancestor of the other\n        Console.WriteLine(finder.Lca(0, 5));\n        Console.WriteLine(finder.Lca(5, 2));\n    }\n}\n```\n\n**Output**\n\n```\n1\n0\n1\n6\n1\n0\n2\n```",
   "tags": [
    "trees",
-   "lca",
    "binary-lifting",
-   "preprocessing"
+   "lca",
+   "preprocessing",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why lift by the largest jump that keeps the nodes different?",
+    "a": "Because you cannot test for the LCA directly - equality at some jump only says you have gone at or above it, not exactly to it. Jumping only while the ancestors differ guarantees you never overshoot, and when no jump is left both nodes are direct children of the LCA, so one step up is the answer. It is binary search expressed over ancestor jumps, and the final single step is what makes it exact rather than approximate."
+   },
+   {
+    "q": "Why is the table built with two half-jumps?",
+    "a": "Because the 2^j-th ancestor is reached by taking the 2^(j-1)-th ancestor twice - the exponents add. That gives the whole table in O(n log n) with one simple recurrence rather than walking each chain. The root pointing to itself makes over-jumping harmless, since it saturates at the root instead of running off the array, which removes a bounds check from every query."
+   },
+   {
+    "q": "When is a different LCA algorithm preferable?",
+    "a": "For a single query, the plain O(n) walk needs no preprocessing and wins. For offline queries all known in advance, Tarjan's union-find LCA is near-linear in total and simpler to code. For the theoretically best online bound, an Euler tour plus a sparse-table range-minimum gives O(1) per query after O(n log n). Binary lifting is the practical middle: easy to write, handles online queries, and extends to path aggregates such as maximum edge weight on the path."
+   }
   ]
  },
  {
@@ -13862,17 +13922,32 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Find the diameter of a tree.",
-  "answer": "Two breadth-first searches: from any node find the furthest node, then from that node find the furthest again - the second distance is the diameter. Alternatively one DFS returning the two deepest child paths per node. Time O(n) either way.",
+  "answer": "**Approach**\n\nTwo BFS passes. From any node find the furthest node u; from u find the furthest node v. The distance u-to-v is the diameter.\n\n**Logic**\n\nThe claim that the furthest node from an arbitrary start is an endpoint of some diameter is the part to justify, not assume. It is true for trees and fails for general graphs with cycles.\n\nThe single-DFS alternative computes, at each node, the sum of its two deepest child paths — the same quantity, in one pass. Both are shown and cross-checked.\n\nO(n) either way.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    // Two BFS passes: furthest from anywhere, then furthest from there.\n    public static int DiameterByTwoPasses(int n, int[][] edges)\n    {\n        if (n <= 1) return 0;\n\n        var tree = Build(n, edges);\n\n        var (far, _) = Furthest(tree, 0);\n        var (_, distance) = Furthest(tree, far);\n\n        return distance;\n    }\n\n    private static (int Node, int Distance) Furthest(List<int>[] tree, int start)\n    {\n        var distance = new int[tree.Length];\n        Array.Fill(distance, -1);\n        distance[start] = 0;\n\n        var queue = new Queue<int>();\n        queue.Enqueue(start);\n\n        int best = start;\n\n        while (queue.Count > 0)\n        {\n            int node = queue.Dequeue();\n            if (distance[node] > distance[best]) best = node;\n\n            foreach (int next in tree[node])\n                if (distance[next] == -1)\n                { distance[next] = distance[node] + 1; queue.Enqueue(next); }\n        }\n\n        return (best, distance[best]);\n    }\n\n    // One pass: at each node, the two deepest child paths joined.\n    public static int DiameterBySinglePass(int n, int[][] edges)\n    {\n        if (n <= 1) return 0;\n\n        var tree = Build(n, edges);\n        int best = 0;\n\n        int Depth(int node, int parent)\n        {\n            int deepest = 0, secondDeepest = 0;\n\n            foreach (int child in tree[node])\n            {\n                if (child == parent) continue;\n\n                int d = Depth(child, node) + 1;\n\n                if (d > deepest) { secondDeepest = deepest; deepest = d; }\n                else if (d > secondDeepest) secondDeepest = d;\n            }\n\n            best = Math.Max(best, deepest + secondDeepest);\n            return deepest;\n        }\n\n        Depth(0, -1);\n        return best;\n    }\n\n    private static List<int>[] Build(int n, int[][] edges)\n    {\n        var tree = new List<int>[n];\n        for (int i = 0; i < n; i++) tree[i] = new List<int>();\n        foreach (var e in edges) { tree[e[0]].Add(e[1]); tree[e[1]].Add(e[0]); }\n        return tree;\n    }\n\n    private static void Report(int n, int[][] edges) =>\n        Console.WriteLine($\"{DiameterByTwoPasses(n, edges)} \" +\n                          $\"(single pass {DiameterBySinglePass(n, edges)})\");\n\n    public static void Main()\n    {\n        Report(4, new[] { new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 } });      // a path\n        Report(5, new[] { new[] { 0, 1 }, new[] { 0, 2 }, new[] { 0, 3 }, new[] { 0, 4 } });\n        Report(1, Array.Empty<int[]>());\n        Report(2, new[] { new[] { 0, 1 } });\n\n        Report(7, new[] {\n            new[] { 0, 1 }, new[] { 0, 2 }, new[] { 1, 3 },\n            new[] { 1, 4 }, new[] { 2, 5 }, new[] { 4, 6 } });\n    }\n}\n```\n\n**Output**\n\n```\n3 (single pass 3)\n2 (single pass 2)\n0 (single pass 0)\n1 (single pass 1)\n5 (single pass 5)\n```",
   "tags": [
    "trees",
-   "graphs",
    "bfs",
-   "diameter"
+   "diameter",
+   "two-pass",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is the furthest node from an arbitrary start always a diameter endpoint?",
+    "a": "Suppose the furthest node u from an arbitrary start s were not an endpoint of any diameter, and let x-y be a diameter. The path from s to u must meet the x-y path somewhere, or one could construct a path longer than the diameter by joining them - a contradiction. Once they meet, u's distance from the meeting point is at least that of x or y, so substituting u for the nearer endpoint gives a path at least as long, making u an endpoint too."
+   },
+   {
+    "q": "Why does the two-pass trick fail on general graphs?",
+    "a": "Because the argument relies on unique paths between nodes, which is exactly what makes a tree a tree. With cycles there can be several routes and the furthest node from an arbitrary start need not lie on any longest shortest path. For a general graph the diameter needs all-pairs shortest paths, which is Floyd-Warshall at O(V cubed) or BFS from every node at O(V times E). Knowing which structural property a shortcut depends on is the point."
+   },
+   {
+    "q": "Why compute it both ways in the tests?",
+    "a": "Because the two-pass method rests on a theorem that is easy to state and easy to misremember, so an independent implementation agreeing on every case is real evidence rather than self-confirmation. The single-pass version derives from a different argument - joining the two deepest branches at each node - so a shared bug is unlikely. Cross-checking two genuinely different derivations is the most useful kind of test for an algorithm whose correctness is not locally obvious."
+   }
   ]
  },
  {
@@ -13880,16 +13955,31 @@
   "subcategory": "Graphs",
   "difficulty": "Medium",
   "question": "Given a directed graph, find the node from which all others are reachable.",
-  "answer": "Only one candidate can exist - the node with in-degree zero in the condensation, found by running Kosaraju's first pass and taking the last-finished node. Verify by a single traversal from it. Time O(V+E), which beats testing every node.",
+  "answer": "**Approach**\n\nOne linear scan to find the only candidate — using the same elimination idea as the celebrity problem — then one traversal to verify it.\n\n**Logic**\n\nThe elimination works because if the current candidate cannot reach node i, then no node before i is a valid answer either — anything that reached them would have reached i through them. So the candidate becomes i and the scan continues.\n\nVerification is mandatory: the scan finds the only *possible* answer, not a proven one. A graph with no universal node still leaves a candidate behind.\n\nO(V + E).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int FindUniversalSource(int n, int[][] edges)\n    {\n        var graph = new List<int>[n];\n        for (int i = 0; i < n; i++) graph[i] = new List<int>();\n\n        foreach (var e in edges) graph[e[0]].Add(e[1]);\n\n        // One scan leaves the ONLY possible candidate.\n        int candidate = 0;\n\n        for (int i = 1; i < n; i++)\n            if (!Reaches(graph, candidate, i, n)) candidate = i;\n\n        // The scan proves nothing on its own, so verify.\n        for (int i = 0; i < n; i++)\n            if (!Reaches(graph, candidate, i, n)) return -1;\n\n        return candidate;\n    }\n\n    private static bool Reaches(List<int>[] graph, int from, int to, int n)\n    {\n        if (from == to) return true;\n\n        var seen = new bool[n];\n        var stack = new Stack<int>();\n        stack.Push(from);\n        seen[from] = true;\n\n        while (stack.Count > 0)\n        {\n            foreach (int next in graph[stack.Pop()])\n            {\n                if (next == to) return true;\n                if (seen[next]) continue;\n                seen[next] = true;\n                stack.Push(next);\n            }\n        }\n\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(FindUniversalSource(3, new[] { new[] { 0, 1 }, new[] { 0, 2 } }));\n        Console.WriteLine(FindUniversalSource(3, new[] { new[] { 0, 1 }, new[] { 2, 1 } }));  // none\n        Console.WriteLine(FindUniversalSource(1, Array.Empty<int[]>()));\n        Console.WriteLine(FindUniversalSource(2, Array.Empty<int[]>()));                       // none\n\n        Console.WriteLine(FindUniversalSource(4, new[] {\n            new[] { 2, 0 }, new[] { 0, 1 }, new[] { 1, 3 } }));   // reachable via a chain\n\n        Console.WriteLine(FindUniversalSource(3, new[] {\n            new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 0 } }));   // a cycle: any node works\n    }\n}\n```\n\n**Output**\n\n```\n0\n-1\n0\n-1\n2\n0\n```",
   "tags": [
    "graphs",
-   "dfs",
+   "elimination",
    "reachability",
-   "scc"
+   "verification",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the elimination scan leave the only possible candidate?",
+    "a": "Because if the current candidate cannot reach node i, then no node examined so far can be universal either: any node that reached the candidate would have to reach i through it or by another route already explored. So every earlier node is eliminated at once and i becomes the new candidate. One pass therefore narrows n possibilities to one, which is the same argument as the celebrity problem with 'knows' replaced by 'reaches'."
+   },
+   {
+    "q": "Why is the verification pass not optional?",
+    "a": "Because the scan only ever eliminates - it never proves that the survivor is valid, and a graph with no universal node still ends with some candidate. The second test has nodes 0 and 2 both pointing at 1 and no universal source; without verification the code would return a confident wrong answer. Elimination narrows, verification decides, and skipping the second half is the standard mistake on this family of problems."
+   },
+   {
+    "q": "Could this be done faster?",
+    "a": "Yes - condense the graph into strongly connected components, and a universal source exists exactly when the condensation has a single component with in-degree zero, in which case any node in it works. That is one Kosaraju or Tarjan pass, O(V + E) overall, rather than the reachability checks this version repeats. The elimination approach is easier to derive on the spot; the condensation is what you would build if this ran in a hot path."
+   }
   ]
  },
  {
@@ -13910,16 +14000,31 @@
   "subcategory": "Graphs",
   "difficulty": "Hard",
   "question": "Find all shortest paths between every pair of nodes.",
-  "answer": "Floyd-Warshall with a triple loop relaxing through each intermediate node, giving O(V cubed) and handling negative edges without negative cycles. For sparse graphs, running Dijkstra from each node is faster at O(V times E log V).",
+  "answer": "**Approach**\n\nFloyd-Warshall. Three nested loops asking, for every pair, whether routing through an intermediate node k is shorter.\n\n**Logic**\n\nThe loop order is not interchangeable. The intermediate node k must be the *outermost* loop, because the invariant is that after k iterations the table holds shortest paths using only the first k nodes as intermediates. Putting k innermost silently computes something that is not the answer.\n\nUnreachable pairs need a sentinel that will not overflow when two are added, so the addition is guarded rather than relying on a large constant.\n\nO(V³) time, O(V²) space — competitive with running Dijkstra from every node on dense graphs, and it handles negative edges.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public const int Unreachable = int.MaxValue;\n\n    public static int[,] AllPairsShortestPaths(int n, int[][] edges)\n    {\n        var distance = new int[n, n];\n\n        for (int i = 0; i < n; i++)\n            for (int j = 0; j < n; j++) distance[i, j] = i == j ? 0 : Unreachable;\n\n        foreach (var e in edges)\n            distance[e[0], e[1]] = Math.Min(distance[e[0], e[1]], e[2]);\n\n        // k MUST be outermost: the invariant is about which intermediates are allowed.\n        for (int k = 0; k < n; k++)\n            for (int i = 0; i < n; i++)\n            {\n                if (distance[i, k] == Unreachable) continue;   // guard, not a big constant\n\n                for (int j = 0; j < n; j++)\n                {\n                    if (distance[k, j] == Unreachable) continue;\n\n                    int through = distance[i, k] + distance[k, j];\n                    if (through < distance[i, j]) distance[i, j] = through;\n                }\n            }\n\n        return distance;\n    }\n\n    private static void Show(int[,] d, int n)\n    {\n        for (int i = 0; i < n; i++)\n        {\n            var parts = new string[n];\n            for (int j = 0; j < n; j++)\n                parts[j] = d[i, j] == Unreachable ? \"inf\" : d[i, j].ToString();\n            Console.WriteLine(string.Join(\" \", parts));\n        }\n        Console.WriteLine();\n    }\n\n    public static void Main()\n    {\n        Show(AllPairsShortestPaths(4, new[] {\n            new[] { 0, 1, 5 }, new[] { 0, 3, 10 },\n            new[] { 1, 2, 3 }, new[] { 2, 3, 1 } }), 4);\n\n        // Disconnected: some pairs stay unreachable.\n        Show(AllPairsShortestPaths(3, new[] { new[] { 0, 1, 2 } }), 3);\n\n        // Negative edges are fine as long as there is no negative cycle.\n        Show(AllPairsShortestPaths(3, new[] {\n            new[] { 0, 1, 4 }, new[] { 1, 2, -2 }, new[] { 0, 2, 5 } }), 3);\n    }\n}\n```\n\n**Output**\n\n```\n0 5 8 9\ninf 0 3 4\ninf inf 0 1\ninf inf inf 0\n\n0 2 inf\ninf 0 inf\ninf inf 0\n\n0 4 2\ninf 0 -2\ninf inf 0\n\n```",
   "tags": [
    "graphs",
    "floyd-warshall",
-   "shortest-path",
-   "all-pairs"
+   "all-pairs",
+   "loop-order",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why must k be the outermost loop?",
+    "a": "Because the algorithm's invariant is that after processing intermediate k, the table holds the shortest paths that use only nodes 0 through k as intermediates. Each round extends the permitted set by one node, and every pair must be updated before the set grows again. With k on the inside, pairs are updated against an incomplete intermediate set and the result is not shortest paths at all - it looks plausible and is silently wrong, which is why this is the detail worth stating first."
+   },
+   {
+    "q": "Why guard the additions instead of using a large sentinel?",
+    "a": "Because adding two int.MaxValue sentinels overflows to a negative number, which then wins the minimum and writes a nonsensical negative distance between unreachable nodes. Some implementations dodge this with a sentinel like a billion that can be added twice safely, but that leaks a magic constant into the results. Skipping the update when either leg is unreachable is exact and costs one comparison."
+   },
+   {
+    "q": "How would you detect a negative cycle, and when is Dijkstra better?",
+    "a": "After the algorithm, any node with a negative distance to itself lies on a negative cycle - the diagonal is the detector. As for the choice: Floyd-Warshall is O(V cubed) regardless of density and handles negative edges, so it wins on dense graphs and is the only option with negative weights. Running Dijkstra from every node is O(V times E log V), which is far better on sparse graphs but requires non-negative weights. Density and weight sign decide it, not preference."
+   }
   ]
  },
  {
@@ -13966,17 +14071,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Medium",
   "question": "Compute the nth Fibonacci number for very large n.",
-  "answer": "Matrix exponentiation raising the 2x2 Fibonacci matrix to the nth power by repeated squaring, giving O(log n) multiplications, with results taken modulo a value if required. The linear iterative version is fine for small n but not for n in the billions.",
+  "answer": "**Approach**\n\nFast doubling — a pair of identities that compute F(2k) and F(2k+1) from F(k) and F(k+1), halving n at each step.\n\n**Logic**\n\nThe iterative O(n) version is fine until n is large; fast doubling is O(log n) multiplications, which is what makes an n in the millions feasible.\n\nThe values overflow every fixed-width type almost immediately — F(93) already exceeds long — so BigInteger is not optional for the exact answer.\n\nThe identities: F(2k) = F(k)·(2·F(k+1) − F(k)) and F(2k+1) = F(k)² + F(k+1)².\n\nO(log n) multiplications, though each multiplication grows with the operands.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Numerics;\n\npublic class Solution\n{\n    // F(2k) = F(k) * (2*F(k+1) - F(k));  F(2k+1) = F(k)^2 + F(k+1)^2\n    public static BigInteger Fibonacci(int n)\n    {\n        if (n < 0) throw new ArgumentOutOfRangeException(nameof(n));\n        return Pair(n).Current;\n    }\n\n    private static (BigInteger Current, BigInteger Next) Pair(int n)\n    {\n        if (n == 0) return (BigInteger.Zero, BigInteger.One);\n\n        var (a, b) = Pair(n / 2);\n\n        BigInteger even = a * (2 * b - a);\n        BigInteger odd = a * a + b * b;\n\n        return n % 2 == 0 ? (even, odd) : (odd, even + odd);\n    }\n\n    // Linear reference, exact but O(n).\n    private static BigInteger Linear(int n)\n    {\n        BigInteger a = 0, b = 1;\n        for (int i = 0; i < n; i++) (a, b) = (b, a + b);\n        return a;\n    }\n\n    public static void Main()\n    {\n        foreach (int n in new[] { 0, 1, 2, 10, 50, 93 })\n            Console.WriteLine($\"F({n}) = {Fibonacci(n)} (linear agrees {Fibonacci(n) == Linear(n)})\");\n\n        // F(93) already exceeds long, so a fixed-width type cannot be exact.\n        Console.WriteLine($\"F(93) > long.MaxValue: {Fibonacci(93) > long.MaxValue}\");\n\n        Console.WriteLine($\"F(1000) digits: {Fibonacci(1000).ToString().Length}\");\n        Console.WriteLine($\"F(10000) digits: {Fibonacci(10000).ToString().Length}\");\n    }\n}\n```\n\n**Output**\n\n```\nF(0) = 0 (linear agrees True)\nF(1) = 1 (linear agrees True)\nF(2) = 1 (linear agrees True)\nF(10) = 55 (linear agrees True)\nF(50) = 12586269025 (linear agrees True)\nF(93) = 12200160415121876738 (linear agrees True)\nF(93) > long.MaxValue: True\nF(1000) digits: 209\nF(10000) digits: 2090\n```",
   "tags": [
-   "dynamic-programming",
-   "matrix-exponentiation",
    "math",
-   "optimisation"
+   "fast-doubling",
+   "biginteger",
+   "logarithmic",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Goldman Sachs"
+  ],
+  "followups": [
+   {
+    "q": "Why is BigInteger necessary rather than a performance choice?",
+    "a": "Because Fibonacci grows exponentially - F(93) is already over 1.2 times 10 to the 19, past long.MaxValue - so any fixed-width type is exact only for the first ninety-odd terms and silently wraps afterwards. If the problem wants the value modulo something, which competitive versions usually do, then long arithmetic with a modulus is correct and much faster. Which one applies is a question about the required output, not about optimisation."
+   },
+   {
+    "q": "How does fast doubling compare with matrix exponentiation?",
+    "a": "Both are O(log n) multiplications and both rest on the same underlying structure. Matrix power squares a 2x2 matrix, costing eight multiplications per step; fast doubling uses the derived identities directly and needs about three. So fast doubling is meaningfully faster in practice while being no harder to write once the identities are known. Matrix exponentiation generalises better to other linear recurrences, which is when it earns its place."
+   },
+   {
+    "q": "Is the O(log n) claim honest given BigInteger costs?",
+    "a": "Not quite, and it is worth saying. It is O(log n) multiplications, but the operands double in length each step, so the final multiplication dominates and the true cost is the cost of multiplying numbers with about n times 0.7 bits. With schoolbook multiplication that is still far better than the linear method's n additions of growing numbers, and .NET uses subquadratic algorithms for large operands. Quoting the operation count without the operand growth overstates the improvement."
+   }
   ]
  },
  {
@@ -13997,17 +14117,32 @@
   "subcategory": "Dynamic Programming",
   "difficulty": "Hard",
   "question": "Solve the egg drop problem.",
-  "answer": "State is eggs remaining and floors to test, with the answer being the minimum over the worst case of breaking or not breaking at each floor. The efficient formulation inverts it - the maximum floors testable with a given number of eggs and attempts - which reduces the complexity substantially.",
+  "answer": "**Approach**\n\nThe inverted DP. Instead of asking how many trials are needed for a given number of floors, ask how many floors can be *covered* with a given number of trials — which turns an O(k·n²) recurrence into O(k·trials).\n\n**Logic**\n\nThe direct recurrence minimises over every possible drop floor, giving a cubic-ish cost. The inversion removes that inner minimisation entirely.\n\nThe covered recurrence: with t trials and k eggs, you can cover the floors below the drop point with a broken egg, the floors above with an intact one, plus the drop floor itself.\n\nIncrement the trial count until the coverage reaches the building height.\n\nO(k · answer) time.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Inverted: how many floors can t trials cover, rather than how many trials n floors need.\n    public static int MinimumTrials(int eggs, int floors)\n    {\n        if (floors <= 0) return 0;\n        if (eggs <= 0) return -1;\n\n        var covered = new int[eggs + 1];\n        int trials = 0;\n\n        while (covered[eggs] < floors)\n        {\n            trials++;\n\n            // Iterate eggs downward so covered[e-1] is still the previous trial's value.\n            for (int e = eggs; e >= 1; e--)\n                covered[e] = covered[e] + covered[e - 1] + 1;\n        }\n\n        return trials;\n    }\n\n    // Direct O(eggs * floors^2) recurrence, used only to confirm the fast version.\n    private static int Reference(int eggs, int floors)\n    {\n        var best = new int[eggs + 1, floors + 1];\n\n        for (int f = 1; f <= floors; f++) best[1, f] = f;\n\n        for (int e = 2; e <= eggs; e++)\n            for (int f = 1; f <= floors; f++)\n            {\n                best[e, f] = int.MaxValue;\n\n                for (int drop = 1; drop <= f; drop++)\n                {\n                    int worst = 1 + Math.Max(best[e - 1, drop - 1], best[e, f - drop]);\n                    best[e, f] = Math.Min(best[e, f], worst);\n                }\n            }\n\n        return best[eggs, floors];\n    }\n\n    public static void Main()\n    {\n        (int Eggs, int Floors)[] cases =\n        {\n            (1, 2), (2, 6), (3, 14), (2, 100), (1, 10), (4, 20), (2, 1)\n        };\n\n        foreach (var (eggs, floors) in cases)\n            Console.WriteLine($\"{eggs} eggs, {floors} floors: {MinimumTrials(eggs, floors)} \" +\n                              $\"(reference {Reference(eggs, floors)})\");\n\n        Console.WriteLine(MinimumTrials(2, 0));\n        Console.WriteLine(MinimumTrials(10, 1000000));   // far beyond the reference\n    }\n}\n```\n\n**Output**\n\n```\n1 eggs, 2 floors: 2 (reference 2)\n2 eggs, 6 floors: 3 (reference 3)\n3 eggs, 14 floors: 4 (reference 4)\n2 eggs, 100 floors: 14 (reference 14)\n1 eggs, 10 floors: 10 (reference 10)\n4 eggs, 20 floors: 5 (reference 5)\n2 eggs, 1 floors: 1 (reference 1)\n0\n21\n```",
   "tags": [
-   "dynamic-programming",
+   "dp",
+   "inversion",
    "optimisation",
-   "puzzles",
-   "worst-case"
+   "worst-case",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why invert the question?",
+    "a": "Because the direct recurrence has to minimise over every possible drop floor, which adds a factor of the building height and makes it roughly O(eggs times floors squared). Asking instead how many floors t trials can cover removes that minimisation: the recurrence has no inner loop at all, and you simply increase t until coverage suffices. Since the answer is logarithmic-ish in the floors, the work collapses - ten eggs and a million floors is instant, where the reference would be hopeless."
+   },
+   {
+    "q": "Explain the coverage recurrence.",
+    "a": "Drop an egg from some floor. If it breaks you have e-1 eggs and t-1 trials, covering covered[e-1] floors below. If it survives you still have e eggs and t-1 trials, covering covered[e] floors above. Add one for the floor you dropped from. So covered[e] becomes covered[e] + covered[e-1] + 1, where both right-hand values are from the previous trial count. Iterating eggs downward is what keeps covered[e-1] at the previous generation."
+   },
+   {
+    "q": "Why include the slow reference implementation?",
+    "a": "Because the inverted recurrence is short and non-obvious enough that agreement with an independently derived version is the only convincing evidence it is right - a wrong inversion produces plausible-looking numbers. The reference is too slow for large inputs, so it runs only on the small cases, which is the standard compromise: an oracle used where it is affordable rather than everywhere."
+   }
   ]
  },
  {
@@ -14028,16 +14163,31 @@
   "subcategory": "Strings",
   "difficulty": "Hard",
   "question": "Find the longest palindromic substring in linear time.",
-  "answer": "Manacher's algorithm maintains the rightmost palindrome boundary and reuses mirrored radii, expanding only where necessary, giving O(n). Inserting separators between characters handles even-length palindromes uniformly. The expand-around-centre approach is O(n squared) and usually sufficient.",
+  "answer": "**Approach**\n\nManacher's algorithm. Transform the string so every palindrome has odd length, then exploit mirror symmetry within an already-known palindrome to avoid re-expanding.\n\n**Logic**\n\nThe transformation with separators is what removes the even/odd case split — every palindrome in the transformed string is odd-length, so one loop handles both.\n\nThe linear time comes from the mirror: inside a known palindrome, a position's radius is at least its mirror's, capped by the distance to the palindrome's right edge. Only the excess is expanded, and the right edge only moves forward, so total expansion work is O(n).\n\nO(n) time and space.\n\nThe test cross-checks against the O(n²) expansion method, because Manacher is easy to get subtly wrong.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Text;\n\npublic class Solution\n{\n    public static string LongestPalindrome(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return \"\";\n\n        // Separators make every palindrome odd-length: no even/odd case split.\n        var sb = new StringBuilder(\"^\");\n        foreach (char c in s) sb.Append('#').Append(c);\n        sb.Append(\"#$\");\n\n        string t = sb.ToString();\n        var radius = new int[t.Length];\n\n        int centre = 0, right = 0, bestCentre = 0, bestRadius = 0;\n\n        for (int i = 1; i < t.Length - 1; i++)\n        {\n            // Inside a known palindrome, start from the mirror's radius.\n            if (i < right) radius[i] = Math.Min(right - i, radius[2 * centre - i]);\n\n            while (t[i + radius[i] + 1] == t[i - radius[i] - 1]) radius[i]++;\n\n            if (i + radius[i] > right) { centre = i; right = i + radius[i]; }\n\n            if (radius[i] > bestRadius) { bestRadius = radius[i]; bestCentre = i; }\n        }\n\n        int start = (bestCentre - bestRadius) / 2;   // map back to the original string\n        return s.Substring(start, bestRadius);\n    }\n\n    // O(n^2) reference: expand around every centre.\n    private static string ByExpansion(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return \"\";\n\n        int bestStart = 0, bestLength = 1;\n\n        void Expand(int l, int r)\n        {\n            while (l >= 0 && r < s.Length && s[l] == s[r]) { l--; r++; }\n            if (r - l - 1 > bestLength) { bestLength = r - l - 1; bestStart = l + 1; }\n        }\n\n        for (int i = 0; i < s.Length; i++) { Expand(i, i); Expand(i, i + 1); }\n\n        return s.Substring(bestStart, bestLength);\n    }\n\n    public static void Main()\n    {\n        foreach (string s in new[] { \"babad\", \"cbbd\", \"a\", \"ac\", \"aaaa\", \"forgeeksskeegfor\", \"abcde\" })\n        {\n            string fast = LongestPalindrome(s), slow = ByExpansion(s);\n\n            // Lengths must agree; either answer is valid when several tie.\n            Console.WriteLine($\"{s}: {fast} (same length as reference: {fast.Length == slow.Length})\");\n        }\n\n        Console.WriteLine($\"[{LongestPalindrome(\"\")}]\");\n    }\n}\n```\n\n**Output**\n\n```\nbabad: bab (same length as reference: True)\ncbbd: bb (same length as reference: True)\na: a (same length as reference: True)\nac: a (same length as reference: True)\naaaa: aaaa (same length as reference: True)\nforgeeksskeegfor: geeksskeeg (same length as reference: True)\nabcde: a (same length as reference: True)\n[]\n```",
   "tags": [
    "strings",
    "manacher",
+   "linear",
    "palindrome",
-   "linear-time"
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the transformation remove the even/odd distinction?",
+    "a": "Because inserting a separator between every pair of characters, and at both ends, means an even-length palindrome in the original is centred on a separator in the transformed string and therefore has odd length there. Every palindrome becomes odd-length, so a single loop over centres covers both cases. The sentinels at the ends are the other half of the trick: they stop the expansion without an explicit bounds check inside the inner loop."
+   },
+   {
+    "q": "Why is the total expansion work linear?",
+    "a": "Because the right boundary never moves backwards, and every iteration of the inner while loop advances it by one. So across the whole run the inner loop executes at most n times in total, no matter how it clusters. The mirror lookup supplies a free lower bound so only the genuinely new part is expanded. It is the same amortised argument as in the monotonic stack - the nested loop is linear because of what it must move forward."
+   },
+   {
+    "q": "Would you actually write Manacher in an interview?",
+    "a": "Usually no. Expand-around-centre is O(n squared) with a tiny constant, takes a minute to write correctly, and is fast enough for any realistic input - I would write that, state the complexity, and name Manacher as the linear alternative. I would only implement Manacher if linear time were explicitly required, and I would want the cross-check against expansion that this code includes, because the index arithmetic mapping back to the original string is genuinely easy to get wrong."
+   }
   ]
  },
  {
@@ -14071,16 +14221,31 @@
   "subcategory": "Strings",
   "difficulty": "Hard",
   "question": "Find the longest repeated substring in a string.",
-  "answer": "Build a suffix array with the longest-common-prefix array; the answer is the maximum LCP value and its corresponding substring. Construction is O(n log n) with sorting-based methods. Binary searching a length with rolling hashes is a simpler alternative with a small collision risk.",
+  "answer": "**Approach**\n\nBinary search on the length combined with a rolling hash. If a repeated substring of length L exists, so does one of every shorter length, which makes the predicate monotonic.\n\n**Logic**\n\nThe monotonicity is what licenses the binary search — it is the reusable idea, not the hashing.\n\nHash collisions must be handled, or the answer can be a substring that never actually repeats. Here the candidates are verified by comparing the actual text.\n\nA suffix automaton or suffix array gives O(n) or O(n log n) deterministically; this is O(n log n) expected and far easier to write.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private const long Base = 256, Prime = 1_000_000_007;\n\n    public static string LongestRepeatedSubstring(string s)\n    {\n        if (string.IsNullOrEmpty(s)) return \"\";\n\n        int lo = 1, hi = s.Length - 1;\n        string best = \"\";\n\n        // Monotonic: if length L repeats, so does every shorter length.\n        while (lo <= hi)\n        {\n            int mid = lo + (hi - lo) / 2;\n            string found = FindRepeated(s, mid);\n\n            if (found != null) { best = found; lo = mid + 1; }\n            else hi = mid - 1;\n        }\n\n        return best;\n    }\n\n    private static string FindRepeated(string s, int length)\n    {\n        if (length <= 0 || length > s.Length) return null;\n\n        long highOrder = 1;\n        for (int i = 0; i < length - 1; i++) highOrder = highOrder * Base % Prime;\n\n        long hash = 0;\n        for (int i = 0; i < length; i++) hash = (hash * Base + s[i]) % Prime;\n\n        var seen = new Dictionary<long, List<int>>();\n        seen[hash] = new List<int> { 0 };\n\n        for (int start = 1; start + length <= s.Length; start++)\n        {\n            hash = (hash - s[start - 1] * highOrder % Prime + Prime) % Prime;\n            hash = (hash * Base + s[start + length - 1]) % Prime;\n\n            if (seen.TryGetValue(hash, out var earlier))\n            {\n                // Hashes collide, so verify against the real text.\n                foreach (int at in earlier)\n                    if (string.CompareOrdinal(s, at, s, start, length) == 0)\n                        return s.Substring(start, length);\n\n                earlier.Add(start);\n            }\n            else seen[hash] = new List<int> { start };\n        }\n\n        return null;\n    }\n\n    // O(n^2) reference over all suffix pairs, for small inputs only.\n    private static int ReferenceLength(string s)\n    {\n        int best = 0;\n\n        for (int i = 0; i < s.Length; i++)\n            for (int j = i + 1; j < s.Length; j++)\n            {\n                int k = 0;\n                while (j + k < s.Length && s[i + k] == s[j + k]) k++;\n                best = Math.Max(best, k);\n            }\n\n        return best;\n    }\n\n    public static void Main()\n    {\n        foreach (string s in new[] { \"banana\", \"abcd\", \"aaaa\", \"abcabcabc\", \"a\", \"mississippi\" })\n            Console.WriteLine($\"{s}: \\\"{LongestRepeatedSubstring(s)}\\\" \" +\n                              $\"(reference length {ReferenceLength(s)})\");\n\n        Console.WriteLine($\"[{LongestRepeatedSubstring(\"\")}]\");\n    }\n}\n```\n\n**Output**\n\n```\nbanana: \"ana\" (reference length 3)\nabcd: \"\" (reference length 0)\naaaa: \"aaa\" (reference length 3)\nabcabcabc: \"abcabc\" (reference length 6)\na: \"\" (reference length 0)\nmississippi: \"issi\" (reference length 4)\n[]\n```",
   "tags": [
    "strings",
-   "suffix-array",
-   "lcp",
-   "algorithms"
+   "binary-search",
+   "rolling-hash",
+   "monotonic",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is the predicate monotonic?",
+    "a": "Because any repeated substring of length L contains a repeated substring of every shorter length - just take a prefix of it, which also appears in both places. So the set of feasible lengths is a contiguous range starting at zero, and binary search finds its boundary. Without that property the search would be meaningless, which is why stating it first matters more than describing the hashing."
+   },
+   {
+    "q": "Why verify hash matches against the actual text?",
+    "a": "Because a rolling hash maps arbitrarily many substrings into a fixed range, so collisions are inevitable and an unverified match can report a substring that never repeats. Verification makes the algorithm deterministic in its answer while keeping the expected time near-linear per length, since real collisions are rare with a large prime. Skipping it turns a correct algorithm into a probabilistic one, which for a search primitive is not an acceptable trade."
+   },
+   {
+    "q": "What would a suffix array give you?",
+    "a": "Sorting the suffixes and computing the longest-common-prefix array gives the answer as the maximum LCP between adjacent suffixes - O(n log n) to build, deterministic, with no hashing and no collisions. A suffix automaton does it in O(n). Both are the right tools if this is a core operation or if adversarial input could target the hash. The binary-search-plus-hash version is what I would write under time pressure, and saying which I would reach for in which situation is the honest answer."
+   }
   ]
  },
  {
@@ -14088,17 +14253,32 @@
   "subcategory": "Strings",
   "difficulty": "Easy",
   "question": "Check whether two strings are isomorphic under a character mapping across many pairs.",
-  "answer": "Normalise each string to a canonical pattern - replacing each character by the index of its first occurrence - then compare the patterns. That makes each comparison O(n) with no per-pair map allocation, and it allows grouping many strings by pattern in one pass.",
+  "answer": "**Approach**\n\nTwo maps, one in each direction, filled in a single pass. Both are needed to enforce a bijection.\n\n**Logic**\n\nOne map only checks that the mapping is a function — it would accept \"ab\" to \"aa\", where two distinct characters collapse onto one. The reverse map rejects that.\n\nAn alternative single-pass trick stores the last-seen index of each character in both strings and compares them, which enforces the bijection implicitly.\n\nO(n) time, O(alphabet) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static bool IsIsomorphic(string a, string b)\n    {\n        if (a == null || b == null) return a == b;\n        if (a.Length != b.Length) return false;\n\n        var forward = new Dictionary<char, char>();\n        var backward = new Dictionary<char, char>();\n\n        for (int i = 0; i < a.Length; i++)\n        {\n            char x = a[i], y = b[i];\n\n            if (forward.TryGetValue(x, out char mapped) && mapped != y) return false;\n\n            // The reverse map is what forbids two characters collapsing onto one.\n            if (backward.TryGetValue(y, out char origin) && origin != x) return false;\n\n            forward[x] = y;\n            backward[y] = x;\n        }\n\n        return true;\n    }\n\n    // Same answer via last-seen positions: the bijection is implicit.\n    public static bool IsIsomorphicByPositions(string a, string b)\n    {\n        if (a == null || b == null) return a == b;\n        if (a.Length != b.Length) return false;\n\n        var lastA = new Dictionary<char, int>();\n        var lastB = new Dictionary<char, int>();\n\n        for (int i = 0; i < a.Length; i++)\n        {\n            if (lastA.GetValueOrDefault(a[i], -1) != lastB.GetValueOrDefault(b[i], -1))\n                return false;\n\n            lastA[a[i]] = i;\n            lastB[b[i]] = i;\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        (string A, string B)[] cases =\n        {\n            (\"egg\", \"add\"), (\"foo\", \"bar\"), (\"paper\", \"title\"),\n            (\"ab\", \"aa\"), (\"\", \"\"), (\"a\", \"a\"), (\"abc\", \"ab\"), (\"badc\", \"baba\")\n        };\n\n        foreach (var (a, b) in cases)\n            Console.WriteLine($\"{a} / {b}: {IsIsomorphic(a, b)} \" +\n                              $\"(positions {IsIsomorphicByPositions(a, b)})\");\n    }\n}\n```\n\n**Output**\n\n```\negg / add: True (positions True)\nfoo / bar: False (positions False)\npaper / title: True (positions True)\nab / aa: False (positions False)\n / : True (positions True)\na / a: True (positions True)\nabc / ab: False (positions False)\nbadc / baba: False (positions False)\n```",
   "tags": [
    "strings",
-   "normalisation",
-   "hashing",
-   "patterns"
+   "hash-map",
+   "bijection",
+   "two-way-mapping",
+   "csharp"
   ],
   "companies": [
    "LinkedIn",
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is one map insufficient?",
+    "a": "Because a single map only guarantees the mapping is a function - each source character maps to one target - but not that it is injective. 'ab' to 'aa' passes a forward-only check, since a maps to a and b maps to a with no conflict, yet it is not isomorphic because two distinct characters collapsed onto one. The reverse map catches it. It is the difference between a function and a bijection, and it is the entire content of this question."
+   },
+   {
+    "q": "How does the position-based version work?",
+    "a": "It records where each character was last seen in each string and requires those to agree at every index. Two characters that should correspond must have identical repetition patterns, and comparing last-seen positions tests exactly that. It enforces the bijection implicitly because a collapse produces different last-seen positions on the two sides. It is neater but harder to justify on the spot, which is why the two-map version is usually the better thing to write."
+   },
+   {
+    "q": "How does this relate to word pattern matching?",
+    "a": "Word pattern is the same bijection check with words instead of characters - 'abba' against 'dog cat cat dog' - so the identical two-map solution applies with the key type changed. The trap there is the same one: a forward-only map accepts 'abba' against 'dog dog dog dog'. Recognising that the two problems are one algorithm over different token types is worth more than remembering both separately."
+   }
   ]
  },
  {
