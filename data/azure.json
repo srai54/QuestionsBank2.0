@@ -5279,5 +5279,351 @@
     "a": "Whenever the bottleneck is not CPU, which for a typical API is most of the time. An API waiting on a database is IO-bound, so CPU stays low while latency climbs and the service never scales out. Queue length or requests-per-instance are better proxies for load, and scaling on p95 latency is closest to what users experience. For queue-driven workers, scaling on queue depth is the only sensible signal, which is what KEDA provides for Container Apps."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "App Service",
+  "difficulty": "Hard",
+  "question": "Your App Service is healthy but users intermittently get 503s. Scaling out does not help. CPU and memory look fine. Where do you look?",
+  "answer": "**What to check, in order**\n\n**1. SNAT port exhaustion.** This is the classic cause of this exact symptom set. Outbound connections from App Service share a limited pool of SNAT ports per instance — roughly 128 preallocated. Code that creates a new `HttpClient` per request leaves sockets in `TIME_WAIT` for four minutes each, so under load the pool empties and outbound calls fail while CPU stays flat. Scaling out gives more ports, which is why it *sometimes* helps and often does not if the leak rate scales with traffic.\n\nCheck the `SocketOutboundAll` and `SnatConnectionCount` metrics in Diagnose and Solve Problems.\n\n**2. Thread pool starvation.** Blocking on async calls with `.Result` or `.Wait()` consumes thread pool threads that are waiting on IO. The pool grows only slowly — roughly one thread per second past the minimum — so a burst produces queued requests, rising latency and then timeouts, with low CPU because everything is blocked rather than working.\n\n**3. Health check flapping.** If a health endpoint touches a slow dependency, instances get marked unhealthy and removed while they are actually fine, reducing capacity exactly when load is highest.\n\n**4. Always On / cold starts.** With Always On disabled the app unloads after idle and the next request pays the full startup, which for an EF Core app with a large model can be tens of seconds.\n\n**5. App Service plan limits** rather than instance limits — the plan's total connection limit, or another app on the same plan consuming the resources.\n\n**The fix for the usual culprit**\n\nUse `IHttpClientFactory` and inject typed clients. It pools handlers and rotates them on a timer, which fixes both socket exhaustion and the stale-DNS problem that a single static `HttpClient` has.\n\n```csharp\n// Wrong: a new handler and a new socket pool per request\nusing var client = new HttpClient();\n\n// Right: registered once, injected, pooled and rotated\nbuilder.Services.AddHttpClient<IPaymentClient, PaymentClient>(c =>\n    c.BaseAddress = new Uri(\"https://payments.internal\"));\n```",
+  "tags": [
+   "azure",
+   "app-service",
+   "snat-exhaustion",
+   "httpclient",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does a static HttpClient fix sockets but introduce a different bug?",
+    "a": "A single long-lived HttpClient reuses connections, so it solves the socket exhaustion - but it also caches DNS resolution for the lifetime of the handler. If the endpoint fails over to a new IP, the client keeps dialling the old one until the process restarts, which turns a routine failover into an outage for your service only. IHttpClientFactory solves both by pooling handlers and recycling them every two minutes by default, so DNS is re-resolved without churning sockets. Setting PooledConnectionLifetime on a SocketsHttpHandler achieves the same thing if you manage the client yourself."
+   },
+   {
+    "q": "How would you confirm thread pool starvation specifically?",
+    "a": "The ThreadPool queue length and thread count counters are the direct evidence - a queue that grows while CPU stays low means work is arriving faster than threads are freed, and a thread count climbing by roughly one per second is the pool's injection rate trying to catch up. A memory dump analysed with dotnet-dump shows the stacks, and if most threads are sitting in a Wait beneath a .Result call, that is conclusive. The tell that distinguishes it from a slow dependency is that latency degrades non-linearly: fine until a threshold, then a cliff."
+   },
+   {
+    "q": "Why does scaling out sometimes help and sometimes not?",
+    "a": "Because SNAT ports are allocated per instance, so more instances means more ports and the symptom eases - but only if the consumption rate per instance is roughly fixed. If the leak scales with traffic, each new instance leaks proportionally and you have bought a little headroom rather than a fix. Scaling also does nothing for thread pool starvation caused by blocking code, since each instance blocks in the same way. That scaling helps a bit and then stops helping is itself diagnostic: it points at a per-instance resource limit rather than at raw capacity."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Service Bus",
+  "difficulty": "Hard",
+  "question": "Messages are being processed more than once and a few have landed in the dead-letter queue with 'MaxDeliveryCountExceeded'. The handler looks correct. What is going on?",
+  "answer": "**What's happening**\n\nAlmost certainly lock expiry. Service Bus delivers a message with a lock held for a fixed duration — 30 seconds by default, 5 minutes maximum. If the handler takes longer than that without renewing, the lock expires, the broker assumes the consumer died, and it redelivers the message to someone else. The original handler then finishes and tries to complete a message whose lock it no longer owns.\n\nSo the message is processed twice, and after `MaxDeliveryCount` attempts it dead-letters — even though every attempt actually succeeded.\n\n**How to confirm**\n\nCompare the handler's duration against the lock duration. A `MessageLockLostException` on completion is conclusive. The dead-lettered message's `DeliveryCount` and the absence of any application error in the logs is the pattern: failures with no exceptions.\n\n**The fixes**\n\n**Renew the lock** for genuinely long work — the modern SDK's processor does this automatically via `MaxAutoLockRenewalDuration`, which should exceed your worst-case handler time.\n\n**Shorten the handler.** If it takes minutes, it probably should hand off to a durable workflow rather than hold a message lock.\n\n**Make the handler idempotent regardless.** At-least-once delivery is the guarantee Service Bus offers; duplicates are not an anomaly to be eliminated but a condition to be designed for. Deduplicate on a business key, or make the operation naturally idempotent — set a status rather than increment a counter.\n\n**The broader point**\n\n'Exactly once' is not available end-to-end. Service Bus has duplicate detection on the send side within a window, and sessions for ordering, but the consumer must still be idempotent because a crash after processing and before completing is always possible. Designing for at-least-once and making the handler idempotent is the only arrangement that survives every failure mode.\n\n```csharp\nvar processor = client.CreateProcessor(queue, new ServiceBusProcessorOptions\n{\n    MaxAutoLockRenewalDuration = TimeSpan.FromMinutes(10),  // > worst-case handler\n    MaxConcurrentCalls = 10,\n    AutoCompleteMessages = false       // complete explicitly, after the work succeeds\n});\n```",
+  "tags": [
+   "azure",
+   "service-bus",
+   "messaging",
+   "idempotency",
+   "lock-expiry",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is AutoCompleteMessages set to false here?",
+    "a": "Because with auto-complete the message is settled when the handler returns, which means a handler that swallows an exception silently completes a message whose work failed - the failure is lost and the message is gone. Completing explicitly after the work succeeds makes the settle a deliberate statement that processing finished. It also lets you choose to abandon immediately on a known-transient failure, which returns the message for redelivery without waiting out the lock."
+   },
+   {
+    "q": "How do you make a handler idempotent when the operation is 'send an email'?",
+    "a": "You cannot make the side effect itself idempotent, so you make the decision to perform it idempotent: record that this message id has been handled, in the same transaction as whatever else it does, and check that record before sending. The race between checking and sending remains, so the store must be the arbiter - an insert of the message id with a unique constraint that fails on the second attempt is the usual pattern. It reduces duplicates to the window between sending and recording, which is the best available without transactional email."
+   },
+   {
+    "q": "When would you use sessions rather than a plain queue?",
+    "a": "When ordering matters within a partition of the data - all messages for one order, one customer, one device must be processed in sequence. A session locks the whole session to one consumer, which gives ordering at the cost of concurrency, since that session's messages can no longer be spread across instances. The trap is choosing too coarse a session key, such as a tenant id, which serialises far more than the business rule requires and destroys throughput."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Cost",
+  "difficulty": "Medium",
+  "question": "Your Azure bill jumped 40% with no change in traffic. How do you find out why?",
+  "answer": "**The approach**\n\n**1. Cost Analysis, grouped by service, comparing the two months.** This is the first step and usually the last — it shows immediately which resource type moved. Do not start by guessing.\n\n**2. Then group by resource within that service**, then by tag if you have them. The lack of a tagging policy is what makes this painful, and it is worth fixing as a consequence of this exercise.\n\n**Common causes, in rough order of frequency**\n\n**Egress and cross-region traffic.** Moving a service to a different region from its database means every query now crosses a paid boundary. This is invisible in traffic terms and expensive.\n\n**Something left running.** A test environment scaled up for a load test and never scaled back, a VM someone created for an investigation, an APIM or Application Gateway instance from a spike. Non-production environments are the usual home for this.\n\n**Log Analytics ingestion.** Someone turned on verbose logging or added a diagnostic setting. Log ingestion is billed per GB and a chatty service can produce a genuinely surprising bill with no traffic change at all.\n\n**Storage growth.** Blob storage with no lifecycle policy grows forever, and moving from Hot to Cool is often a large saving on data nobody reads. Snapshots and soft-delete retention also accumulate silently.\n\n**Autoscale that scaled and did not come back**, or a scale rule with a min instance count that was raised during an incident.\n\n**Reserved instance or savings plan expiry.** A one-year reservation ending pushes everything back to pay-as-you-go overnight. This produces exactly the described symptom — same usage, sharply higher bill.\n\n**What I would put in place afterwards**\n\nBudgets with alerts at 50/80/100% so the next one is caught in days rather than at invoice. A tagging policy enforced by Azure Policy so costs can be attributed to a team or feature. And an Advisor review, which flags idle and under-utilised resources directly.",
+  "tags": [
+   "azure",
+   "cost-management",
+   "finops",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is reservation expiry worth checking early?",
+    "a": "Because it matches the symptom exactly - identical usage, sharply higher cost, on a date boundary - and it is invisible in every metric you would normally look at. It also has a fast fix, since re-reserving restores the discount immediately, whereas most other causes require investigation and a code or configuration change. Checking it takes thirty seconds in the Reservations blade, so it is cheap to rule out before starting a deeper analysis."
+   },
+   {
+    "q": "How would you make log ingestion cheaper without losing observability?",
+    "a": "Separate the signals by value. Keep errors, warnings and business events at full fidelity; sample the high-volume informational logs, since the hundredth identical success line adds nothing. Use the Basic logs tier for verbose data you query rarely, which is far cheaper per GB with reduced query features. Set retention deliberately per table rather than accepting one policy for everything. And check what is being ingested at all - a diagnostic setting sending every platform metric to Log Analytics is a common and largely useless expense."
+   },
+   {
+    "q": "The team wants to move everything to consumption-based pricing to save money. Is that sound?",
+    "a": "Only for genuinely spiky or low-volume workloads. Consumption pricing wins when the resource would otherwise sit idle, and loses badly for steady high throughput, where a reserved instance is typically half the cost or less. It also brings cold starts and scaling latency that a always-warm plan does not have. The right analysis is to look at the utilisation curve per service and pick per service - a blanket move in either direction is how teams end up paying more for a worse experience."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Identity",
+  "difficulty": "Hard",
+  "question": "A service reads a connection string with a password from App Configuration. A security review says to remove it. What do you replace it with and what changes operationally?",
+  "answer": "**The replacement: managed identity**\n\nThe service gets an identity in Entra ID that Azure manages — no secret is stored anywhere, no secret is rotated, and nothing can be leaked from configuration because there is nothing to leak. The resource being accessed grants permission to that identity via RBAC.\n\n```csharp\n// Before: a secret that must be stored, rotated and protected\nvar connection = configuration[\"Sql:ConnectionString\"];   // contains a password\n\n// After: no credential in the application at all\nvar credential = new DefaultAzureCredential();\nvar client = new BlobServiceClient(new Uri(accountUri), credential);\n\n// SQL with managed identity: no password in the connection string\n\"Server=tcp:srv.database.windows.net;Database=app;Authentication=Active Directory Default;\"\n```\n\n**What changes operationally**\n\n**Permissions move from the connection string to RBAC.** The identity needs an explicit role assignment — `Storage Blob Data Contributor`, not `Contributor`, which is a common mistake that grants management-plane rights without granting data-plane access. That distinction confuses people the first time.\n\n**Local development needs a story.** `DefaultAzureCredential` falls back through a chain: managed identity in Azure, then Azure CLI, Visual Studio and environment credentials locally. So developers sign in with `az login` and the same code works both places — but it must be tested, because the chain failing is a confusing error.\n\n**Role assignments take time to propagate**, sometimes several minutes, which makes first-deployment failures look like code bugs.\n\n**Not everything supports it.** A third-party API with an API key still needs a secret — that goes in Key Vault, accessed *using* the managed identity, so there is still exactly one thing without a stored credential at the bottom of the chain.\n\n**The remaining decision: system-assigned or user-assigned**\n\nSystem-assigned is tied to the resource lifecycle and is simpler — it disappears when the resource does. User-assigned is a separate object that can be shared across several resources and survives redeployment, which matters when infrastructure is recreated frequently or when several services need identical permissions. For anything deployed by IaC that gets torn down and rebuilt, user-assigned avoids reassigning roles every time.",
+  "tags": [
+   "azure",
+   "managed-identity",
+   "security",
+   "key-vault",
+   "rbac",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is the control plane versus data plane distinction the usual stumbling block?",
+    "a": "Because being Owner or Contributor on a storage account lets you manage the account - change its settings, read its keys, delete it - but does not by itself grant permission to read a blob. Data access needs a data-plane role such as Storage Blob Data Reader. So an engineer with full administrative rights gets a 403 reading a file and reasonably concludes the identity is broken. Once you know the two planes are separate it is obvious; before that it is genuinely baffling."
+   },
+   {
+    "q": "What do you do about the secrets that genuinely cannot be removed?",
+    "a": "Put them in Key Vault and read them with the managed identity, so the only credential in the system is the one Azure manages for you. Turn on rotation where the provider supports it, and make the application re-read rather than cache forever, or a rotation becomes an outage. The goal is not zero secrets, which is rarely achievable, but zero secrets in configuration and source control - reducing the number of places a secret exists to one auditable store with access logging."
+   },
+   {
+    "q": "How does this work for a service running outside Azure?",
+    "a": "Managed identity is only available to Azure resources, so an on-premises or third-party-cloud service needs something else - workload identity federation is the modern answer, where an external token from a trusted issuer such as GitHub Actions or a Kubernetes cluster is exchanged for an Entra token, again with no stored secret. Failing that, a service principal with a certificate is preferable to one with a client secret, since certificates are harder to exfiltrate accidentally and their expiry is more visible."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Functions",
+  "difficulty": "Hard",
+  "question": "An Azure Function on the Consumption plan processes a queue. Under a burst it scales to many instances and overwhelms a downstream API with a rate limit. How do you control this?",
+  "answer": "**What's happening**\n\nConsumption-plan Functions scale on queue depth, not on downstream capacity. A burst produces instances, each with its own concurrency, and the effective parallelism is instances × batch size — which can be hundreds of concurrent calls against an API that permits ten per second.\n\nThe Function is behaving correctly; the system has no backpressure.\n\n**The levers, from most to least direct**\n\n**1. Cap the concurrency in `host.json`.** `batchSize` and `newBatchThreshold` control per-instance concurrency for the queue trigger. This is the first knob and it is often enough.\n\n```json\n{\n  \"extensions\": {\n    \"queues\": { \"batchSize\": 4, \"newBatchThreshold\": 0 }\n  }\n}\n```\n\n`newBatchThreshold: 0` means the instance finishes its current batch before fetching another, which makes the concurrency ceiling exactly `batchSize`.\n\n**2. Cap the instance count.** `functionAppScaleLimit` bounds how far it scales out, so total concurrency is bounded rather than elastic. Without this, per-instance limits are multiplied by an unbounded number of instances.\n\n**3. Rate-limit on the client side** with a shared token bucket, if the limit must be respected globally rather than per instance. This needs coordination — usually Redis — because instances do not know about each other.\n\n**4. Handle the rate limit properly when it happens.** Respect `Retry-After` on a 429 rather than retrying immediately, and use exponential backoff with jitter. Polly makes this declarative.\n\n**5. Reconsider the trigger.** If the downstream is the real constraint, a timer-triggered Function pulling a fixed batch at a fixed rate is a simpler and more predictable design than trying to throttle an event-driven one.\n\n**The design point**\n\nElastic scale on the input side with a fixed-capacity dependency downstream is a mismatch that will always need a governor somewhere. The queue is doing its job by absorbing the burst — the fix is to consume it at a rate the whole system can sustain, rather than as fast as messages arrive.",
+  "tags": [
+   "azure",
+   "functions",
+   "scaling",
+   "backpressure",
+   "rate-limiting",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does capping per-instance concurrency alone not solve it?",
+    "a": "Because the platform multiplies it by the instance count, which on Consumption is elastic and driven by queue depth - so limiting each instance to four concurrent calls still allows four hundred if it scales to a hundred instances. You need both a per-instance limit and a scale limit for the product to be bounded. That interaction is the thing people miss, and it is why the symptom appears only during bursts large enough to trigger significant scale-out."
+   },
+   {
+    "q": "When is the Premium or Dedicated plan the better answer?",
+    "a": "When you need predictable concurrency, no cold starts, VNet integration, or runs longer than the Consumption timeout. Premium also gives pre-warmed instances, which matters when the burst is latency-sensitive. For this problem specifically it helps mainly because the scaling behaviour is easier to reason about and bound. The cost is that you pay for reserved capacity continuously rather than per execution, which only makes sense if utilisation is reasonably steady."
+   },
+   {
+    "q": "The downstream API owner says just retry on 429. Is that sufficient?",
+    "a": "Not on its own. Retrying without reducing the send rate means you keep generating the same load plus the retries, which makes the situation worse and can look like a denial of service from the provider's perspective. Retries must be paired with backoff, jitter so the instances do not synchronise, and ideally a circuit breaker so a sustained rejection stops the traffic rather than amplifying it. The retry handles the individual failure; something else has to handle the rate."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Networking",
+  "difficulty": "Medium",
+  "question": "A newly deployed service cannot reach the database, but the same code works from a developer machine. Both are configured identically. Where do you start?",
+  "answer": "**The first question: is it DNS, routing, firewall or auth?**\n\nThese produce different errors and it is worth reading the exact message before touching anything.\n\n- **Name resolution failure** — DNS. In a VNet with a private endpoint, the record must resolve to the private IP, which requires the private DNS zone to be linked to that VNet. From a developer machine over the public internet it resolves to the public IP, which is why it works there.\n- **Timeout with no response** — routing or NSG. Traffic is leaving but nothing is coming back. Check the NSG rules, the route table, and whether the subnet has the service endpoint or private endpoint it needs.\n- **Connection refused or reset quickly** — firewall rule. The database's own firewall is rejecting the source IP. The developer machine's IP was probably added individually at some point, which is exactly why it works and the service does not.\n- **Login failed** — authentication, not networking. Different problem.\n\n**The most common cause for this exact description**\n\nThe database firewall allows the developer's IP but not the service's outbound addresses. 'Allow Azure services' is off — correctly, since it is extremely broad — and nothing granted the new service access. With a private endpoint, it is usually the DNS zone link.\n\n**How to confirm from inside**\n\nApp Service has a console and a network troubleshooting tool: `nameresolver` for DNS and `tcpping` for reachability. Those two commands distinguish all four causes in under a minute.\n\n```\nnameresolver sqlsrv.database.windows.net\ntcpping sqlsrv.database.windows.net:1433\n```\n\nIf the name resolves to a public IP when you expect a private one, it is the DNS zone. If it resolves correctly and `tcpping` fails, it is network or firewall.\n\n**What I would fix structurally**\n\nIndividual developer IPs in a database firewall are a maintenance problem and a security one — they accumulate, nobody removes them, and they grant broad access from home networks. Private endpoints with VNet integration, plus a jump path for developers, is the arrangement that scales.",
+  "tags": [
+   "azure",
+   "networking",
+   "private-endpoint",
+   "dns",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does the private DNS zone catch so many people?",
+    "a": "Because creating a private endpoint gives the resource a private IP, but the public DNS name still resolves to the public IP unless a private DNS zone overrides it for that VNet - and the zone has to be linked to each VNet that needs it. So the endpoint exists, the network path exists, and the client still dials the public address and is blocked. The symptom is a firewall-looking failure with a correctly configured private endpoint, which sends people to inspect NSGs for an hour. nameresolver returning a public IP is the instant diagnosis."
+   },
+   {
+    "q": "Is 'Allow Azure services and resources to access this server' acceptable?",
+    "a": "It is convenient and it is very broad - it permits traffic from any Azure subscription, including other tenants, not just yours. For anything holding real data that is too wide a grant. The alternatives are a VNet rule scoped to your subnet, a private endpoint with public access disabled entirely, or specific outbound IPs where the service has stable ones. The checkbox is reasonable for a throwaway environment and hard to justify for production."
+   },
+   {
+    "q": "The service works intermittently rather than never. Does that change the diagnosis?",
+    "a": "Substantially - intermittent suggests something that varies per connection or per instance. Outbound IPs can differ across instances in a scale set, so a firewall allowing some but not all produces exactly that pattern. DNS caching can mean some instances hold a stale record while others resolve correctly. And SNAT exhaustion presents as intermittent connection failures under load. The distinguishing question is whether failures correlate with a particular instance, which the logs will show if the instance id is recorded."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "A nightly job that uploads thousands of small blobs takes hours. The files total only a few hundred megabytes. What would you change?",
+  "answer": "**What's happening**\n\nThe cost is per-operation, not per-byte. Thousands of small uploads means thousands of round trips, each paying TLS negotiation, request overhead and latency. A few hundred megabytes transferred as one stream would take seconds; as fifty thousand separate PUTs it takes hours.\n\nThis is the same round-trip-count problem as an N+1 query, in a different layer.\n\n**What I would change**\n\n**1. Parallelise.** Sequential uploads waste almost all the available bandwidth waiting on latency. Uploading with a bounded degree of parallelism — twenty to fifty concurrent operations — usually collapses the time by an order of magnitude on its own.\n\n```csharp\nawait Parallel.ForEachAsync(files,\n    new ParallelOptions { MaxDegreeOfParallelism = 32 },\n    async (file, ct) => await container.UploadBlobAsync(file.Name, file.Content, ct));\n```\n\n**2. Reuse the client.** `BlobServiceClient` is thread-safe and designed to be a singleton. Creating one per file re-establishes connections and destroys any pooling benefit.\n\n**3. Reconsider the shape.** If these files are only ever read together, upload one archive instead of thousands of blobs. Storage bills per operation as well as per gigabyte, so many small blobs is more expensive to write, more expensive to list, and slower to read.\n\n**4. Use AzCopy or the Data Movement library** if this is a bulk transfer rather than application logic. They implement parallelism, chunking and retry properly and will beat hand-written code.\n\n**5. Check where the job runs.** If it runs outside Azure or in a different region from the storage account, every operation pays internet latency and egress. Moving the job next to the data is often the single largest win.\n\n**The diagnostic question**\n\nDivide the total time by the number of files. If it comes to roughly one network round trip each, the problem is the count of operations and not the size of the data — which tells you to batch or parallelise rather than to compress.",
+  "tags": [
+   "azure",
+   "blob-storage",
+   "throughput",
+   "parallelism",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is a singleton BlobServiceClient important?",
+    "a": "Because the client holds the HTTP pipeline and its connection pool, so creating one per operation means a new connection and a new TLS handshake each time - the same socket-churn problem as constructing HttpClient per request, with the same risk of port exhaustion under load. The Azure SDK clients are explicitly documented as thread-safe and intended to be long-lived and shared, which is why they register cleanly as singletons in DI via AddAzureClients."
+   },
+   {
+    "q": "How do you choose the degree of parallelism?",
+    "a": "By measuring, starting around the number of cores times four for IO-bound work and increasing until throughput stops improving or errors appear. Too low wastes bandwidth waiting on latency; too high causes throttling from the storage account, SNAT port pressure, and memory growth from buffered content. The signal you have gone too far is 503 ServerBusy responses, which means the account's request rate limit has been hit - at which point more concurrency makes it slower, not faster."
+   },
+   {
+    "q": "Does compressing the files help?",
+    "a": "Only if bandwidth is the constraint, and here it is not - a few hundred megabytes is nothing. Compressing thousands of files individually adds CPU and leaves the operation count unchanged, so it would barely move the total. Combining them into one compressed archive helps enormously, but the benefit comes from going to one operation rather than from the compression. Identifying whether you are limited by bytes or by round trips decides which of the two matters."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Deployment",
+  "difficulty": "Medium",
+  "question": "A deployment to production succeeded but the app is serving the previous version. Restarting fixes it. What went wrong and how do you prevent it?",
+  "answer": "**Likely causes**\n\n**1. A swap that completed before warm-up.** With deployment slots, the swap moves traffic when the platform considers the slot ready. If the application does meaningful work on first request — JIT, EF model building, cache priming — the new instance can be serving while not yet fully initialised, or the old worker can still be draining requests. The restart resolves it because it forces a clean start.\n\n**2. Files updated but the process not recycled.** Deploying to the file system without triggering a restart can leave the old assemblies loaded. `WEBSITE_RUN_FROM_PACKAGE` avoids this by mounting an immutable package and restarting atomically.\n\n**3. Aggressive caching in front.** A CDN or Front Door serving the old `index.html` — which then references old asset hashes — looks exactly like a failed deployment. The app is new; what users receive is not.\n\n**4. Multiple instances, partial deployment.** If only some instances took the new code, users get whichever they land on, so the app appears to be both versions at once depending on who asks.\n\n**How to confirm**\n\nExpose the build version on a health or info endpoint and check it per instance. That turns 'which version is running' from a guess into an observation, and it is the single most useful thing to add after an incident like this.\n\n**How to prevent it**\n\n- **Warm up before the swap.** Set `WEBSITE_SWAP_WARMUP_PING_PATH` to a health endpoint that touches the real dependencies, so the swap waits for genuine readiness.\n- **Run from package**, so deployment is atomic rather than a file copy.\n- **Version your static assets** with content hashes and set `index.html` to no-cache, so a CDN cannot serve a stale shell.\n- **Include the commit SHA in the health response** and verify it as a deployment gate, so a deployment that did not take is a failed pipeline rather than a support ticket.",
+  "tags": [
+   "azure",
+   "deployment",
+   "slots",
+   "caching",
+   "warm-up",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is a health endpoint that returns 200 unconditionally worse than no health check?",
+    "a": "Because it provides false assurance and actively causes harm - the swap proceeds, the load balancer routes traffic, and the orchestrator believes the instance is fine while it cannot reach its database. A check that does not touch the dependencies it needs is testing only that the web server can serve a constant. The trade is that a health check touching everything makes you fail when any dependency blips, so the usual split is a liveness check that is nearly unconditional and a readiness check that verifies the dependencies needed to serve traffic."
+   },
+   {
+    "q": "How do you tell an application caching problem from a CDN one?",
+    "a": "Request with cache-busting - a unique query string, or curl with a no-cache header - and compare with a normal browser request. If the cache-busted response is the new version and the normal one is not, the staleness is in front of the app. The response headers usually say so directly: age, x-cache, and the CDN's own headers indicate a hit. It is worth checking before investigating the deployment at all, because the fix is a purge rather than a redeploy."
+   },
+   {
+    "q": "Is restarting after every deployment a reasonable belt-and-braces measure?",
+    "a": "It works but it throws away the benefit of a zero-downtime deployment - a restart drops in-flight requests and incurs a cold start, which is exactly what slot swaps exist to avoid. If a restart is genuinely needed for the deployment to take effect, that is a signal the deployment mechanism is wrong rather than a routine to formalise. Run-from-package plus a warmed swap gives you atomic replacement without the restart, which is the outcome the workaround is approximating."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Resilience",
+  "difficulty": "Hard",
+  "question": "A dependency starts responding slowly rather than failing. Your service's latency climbs and eventually it stops responding entirely, even for requests that do not use that dependency. Explain the mechanism and the fix.",
+  "answer": "**The mechanism: resource exhaustion cascading**\n\nA slow dependency is more dangerous than a failed one. A failure returns immediately and frees the resource; slowness holds it.\n\nEach request waiting on the slow dependency occupies a thread or a connection for the duration. As requests arrive faster than they complete, the occupied resources accumulate. Eventually the thread pool, the connection pool or the request queue is fully consumed by requests blocked on that one dependency — and requests that would not have touched it at all cannot get a resource either.\n\nThat is why healthy endpoints go down: they are competing for a pool that a slow dependency has monopolised. The failure propagates through shared resources, not through the call graph.\n\n**The fixes, which are complementary**\n\n**1. Timeouts on everything.** A call with no timeout waits forever, which is the root enabler. The timeout should be shorter than the caller's patience — if the user gives up at 10 seconds, a 30-second timeout is pointless and harmful.\n\n**2. A circuit breaker.** After a threshold of failures or timeouts, stop calling for a period and fail fast. This is what stops the accumulation: broken requests return immediately rather than occupying a resource. Without it, timeouts alone still let every request wait the full timeout duration.\n\n**3. Bulkheads.** Cap the concurrency allowed to each dependency, so one dependency can consume at most its share of the pool and never all of it. This is what protects the unrelated endpoints specifically.\n\n**4. Fallbacks where the business allows** — cached data, a degraded response, a default. Decided with the product owner, not by the engineer at 3am.\n\n```csharp\nbuilder.Services.AddHttpClient<IPricingClient, PricingClient>()\n    .AddStandardResilienceHandler(o =>\n    {\n        o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(2);\n        o.CircuitBreaker.FailureRatio = 0.5;\n        o.CircuitBreaker.MinimumThroughput = 10;\n        o.Retry.MaxRetryAttempts = 2;\n    });\n```\n\n**The principle**\n\nDesign for the dependency being slow, not just for it being down. Every outbound call needs a bounded worst case, and the bound has to be enforced by you rather than hoped for from the other side.",
+  "tags": [
+   "azure",
+   "resilience",
+   "circuit-breaker",
+   "bulkhead",
+   "timeouts",
+   "cascading-failure",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why are timeouts alone insufficient?",
+    "a": "Because a two-second timeout under heavy load still means every request occupies a thread for two seconds before failing - so at high arrival rates the pool still fills, just more slowly. The timeout bounds the damage per request; it does not stop the accumulation. A circuit breaker changes the arithmetic by making subsequent requests fail in microseconds instead of seconds once the dependency is known to be unhealthy, which is what actually stops the cascade."
+   },
+   {
+    "q": "How do you choose the circuit breaker thresholds?",
+    "a": "From the dependency's normal behaviour rather than from a default. The minimum throughput must be high enough that a couple of unlucky requests cannot trip it - breaking a circuit on two failures out of three during a quiet period causes an outage the dependency did not have. The failure ratio should sit clearly above the normal error rate. And the break duration should reflect how long the dependency typically takes to recover, since reopening too eagerly hammers a service that is still struggling. All three are measurements, not guesses, and they are worth revisiting after any incident."
+   },
+   {
+    "q": "Retries interact badly with this. How?",
+    "a": "They multiply the load on a struggling dependency at exactly the wrong moment, and each retry occupies a resource for another timeout period - so naive retries turn a slow dependency into a self-inflicted denial of service. Retries must sit inside the circuit breaker, so that once the breaker is open no retries happen at all, and they need jitter so callers do not synchronise into waves. The ordering matters: retry the individual transient blip, break the circuit on sustained failure, and never let the retry policy defeat the breaker."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Observability",
+  "difficulty": "Medium",
+  "question": "Application Insights shows a request took 4 seconds but the dependency calls inside it add up to 300ms. Where did the rest of the time go?",
+  "answer": "**Candidates for unaccounted time**\n\n**1. Queueing before your code ran.** If the thread pool is saturated, the request waits to be dispatched. That time is inside the request duration but outside any code you instrumented — it is the gap between arrival and execution. This is the most common answer and it usually accompanies low CPU.\n\n**2. Uninstrumented work.** Application Insights auto-collects HTTP, SQL and a few Azure SDKs. CPU-bound work, file IO, serialisation of a large payload, or a call through a library it does not recognise are all invisible. Four seconds of JSON serialisation looks exactly like this.\n\n**3. Waiting on a lock or a semaphore.** A `SemaphoreSlim`, a `lock`, or a connection pool with nothing available — the request is blocked, doing nothing measurable, against no dependency.\n\n**4. Sequential awaits that are individually fast.** Ten calls at 30ms each is 300ms of dependency time, but if there are hundreds the sum stops matching intuition. Check the *count* of dependency calls, not just the total duration.\n\n**5. Client-side or network time** included in the measurement, such as reading a large request body over a slow connection.\n\n**How to find it**\n\nAdd custom spans around the suspicious regions — `using var activity = source.StartActivity(\"Serialisation\")` — and the gap moves from unknown to attributed. That is a fifteen-minute change that converts guessing into measurement, and it is what I would do before theorising further.\n\nFor thread pool queueing specifically, correlate against the thread pool queue length counter. If long requests coincide with a growing queue, the time is being spent waiting to start.\n\n**The general point**\n\nA gap between total duration and the sum of instrumented children is information, not noise — it says the interesting work is somewhere you are not looking. The fix is always to instrument it rather than to reason about what it might be.",
+  "tags": [
+   "azure",
+   "application-insights",
+   "observability",
+   "profiling",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "How would you distinguish thread pool queueing from slow uninstrumented code?",
+    "a": "Queueing shows as a delay before any of your code runs, so a custom span at the very start of the handler will itself start late relative to the request's begin time - and the gap will correlate with the thread pool queue length counter and with load. Slow uninstrumented code shows as a gap in the middle, between two spans you do add. Adding one span at the top of the handler distinguishes them immediately, which is why it is the first instrumentation I would add."
+   },
+   {
+    "q": "Is the Application Insights Profiler the right tool here?",
+    "a": "It is, and it is underused - it samples call stacks on live traffic and attributes wall-clock time to methods, which is exactly the question being asked and requires no code change. The limitation is that it samples, so it finds things that happen often or take long and can miss a rare slow path. For a request that is consistently four seconds it will usually point straight at the cause. I would run it in parallel with adding a span or two, since the span is cheap and permanent while the profiler session is temporary."
+   },
+   {
+    "q": "The sampling rate is set to 5%. Does that affect this investigation?",
+    "a": "It affects whether you can find the specific slow request, since adaptive sampling may have discarded the ones you care about - though Application Insights samples whole operations together, so a retained request keeps its dependencies and does not produce this mismatch by itself. What sampling does hurt is rare-event investigation and exact counts. For a targeted investigation it is reasonable to raise the rate temporarily or add a sampling override that always keeps requests over a duration threshold, so slow ones are never the ones thrown away."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Architecture",
+  "difficulty": "Hard",
+  "question": "A team wants to move a working monolith to microservices because 'it will scale better'. You are asked for a technical opinion. What do you say?",
+  "answer": "**What I would ask first**\n\n**What specifically does not scale?** If one endpoint is CPU-bound, that is an argument for extracting that one thing, not for decomposing everything. If the database is the bottleneck, microservices will not help — they usually make it worse by removing the ability to join.\n\n**Is the real problem deployment coupling rather than scale?** 'We cannot ship independently' is the strongest genuine argument for services, and it is a different problem from throughput. Worth naming honestly, because the fix differs.\n\n**Can you already deploy the monolith multiple times a day?** If not, splitting it into twelve services multiplies a deployment problem you have not solved.\n\n**What are the transaction boundaries?** If the business requires operations that span what would become several services, you are trading a database transaction for a saga with compensating actions — significantly more complex, and a permanent cost.\n\n**What is the operational maturity?** Distributed tracing, centralised logging, service discovery, contract testing and on-call coverage all become mandatory rather than optional. Without them, debugging goes from 'read a stack trace' to 'correlate across six services'.\n\n**What I would actually recommend**\n\nA modular monolith first: enforce module boundaries inside the single deployable, with no cross-module database access and explicit interfaces between them. That delivers most of the coupling benefit, costs almost nothing operationally, and — crucially — reveals whether the proposed boundaries are right while they are still cheap to move.\n\nThen extract services where there is a specific reason: a genuinely different scaling profile, a different team ownership boundary, a different technology requirement, or a compliance isolation need. Extraction from a well-modularised monolith is a manageable piece of work. Decomposing a tangled one is a multi-year project that frequently fails.\n\n**How I would frame it**\n\nNot as 'no', but as 'what problem are we solving, and is this the cheapest thing that solves it'. Microservices trade in-process complexity for network complexity. That trade is worth it for specific reasons — independent deployment, independent scaling, team autonomy at a size where coordination is the bottleneck — and not worth it as a default.",
+  "tags": [
+   "azure",
+   "architecture",
+   "microservices",
+   "modular-monolith",
+   "trade-offs",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What is the single strongest argument for microservices?",
+    "a": "Independent deployability at organisational scale. Once enough teams share one deployable, the coordination cost of releasing dominates everything and the release cadence collapses to the slowest team. Splitting along team boundaries lets each ship on its own schedule, which is an organisational win that no amount of in-process modularity provides. Notice that the argument is about people and release cadence rather than about throughput, which is why 'it will scale better' is usually the wrong justification even when the conclusion happens to be right."
+   },
+   {
+    "q": "The team says a modular monolith will just rot back into a tangle. Are they wrong?",
+    "a": "Not automatically - it will, unless the boundaries are enforced by something other than discipline. That means architecture tests that fail the build on a forbidden reference, separate projects or assemblies so a cross-boundary call does not compile, and one schema per module with no foreign keys across them. With enforcement it holds; without it, they are right. The honest version of the argument is that microservices enforce boundaries by making violations impossible, at a large operational price - and you can buy most of that enforcement much more cheaply."
+   },
+   {
+    "q": "If you do extract a service, which one goes first?",
+    "a": "Something with a clear boundary, low coupling and a real reason to be separate - often a genuinely different scaling profile such as report generation or image processing, or a piece with different compliance requirements. Not the core domain, which is the most entangled and the most costly to get wrong. The first extraction is as much about building the operational capability - tracing, deployment, contract testing, on-call - as about the service itself, so choosing one where a mistake is survivable matters more than choosing the one with the biggest theoretical payoff."
+   }
+  ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Key Vault",
+  "difficulty": "Medium",
+  "question": "After a secret rotation in Key Vault, the application keeps using the old value until it is restarted. Why, and how should this work?",
+  "answer": "**What's happening**\n\nThe configuration provider read Key Vault once at startup and cached the values in `IConfiguration`. Nothing polls for changes by default, so a rotated secret is invisible until the process restarts and re-reads.\n\nThis is the same caching question as `IOptions` versus `IOptionsMonitor`, one layer down: the value was bound once and the application has no mechanism to learn it changed.\n\n**How it should work**\n\n**1. Enable reload.** `AddAzureKeyVault` accepts a `ReloadInterval`, which polls and updates the configuration. Combined with `IOptionsMonitor<T>`, the application picks up a rotated secret without a restart.\n\n```csharp\nbuilder.Configuration.AddAzureKeyVault(\n    new Uri(vaultUri),\n    new DefaultAzureCredential(),\n    new AzureKeyVaultConfigurationOptions { ReloadInterval = TimeSpan.FromMinutes(5) });\n```\n\nNote the cost: polling means every instance calls Key Vault on that interval, and Key Vault is rate-limited per vault. With many instances and a short interval you can throttle yourself.\n\n**2. Better, remove the secret entirely.** Most Azure resources support managed identity, which needs no secret and therefore no rotation. Rotation problems are best solved by not having the secret.\n\n**3. For secrets that must exist**, handle the rotation window. A well-run rotation has two valid values for a period — the old and the new — so consumers have time to pick up the change. If the rotation invalidates the old value instantly, any caching at all causes an outage, and no reload interval is short enough to guarantee safety.\n\n**4. Handle failure at the point of use.** A credential that is rejected should trigger a configuration refresh and one retry, rather than failing until someone restarts the app. That turns rotation from an outage into a blip.\n\n**The design point**\n\nSecrets are not static configuration; they change on a schedule set by someone else. Treat them as values with a lifecycle, and make sure the failure path re-reads rather than assuming the cached value is still valid.",
+  "tags": [
+   "azure",
+   "key-vault",
+   "secret-rotation",
+   "configuration",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What is the risk of setting a very short reload interval?",
+    "a": "Throttling. Key Vault has a request limit per vault, and the cost is multiplied by every instance of every application reading it - fifty instances polling every thirty seconds is a hundred requests a minute from one app alone. When you hit the limit the vault returns 429 and the application may fail to start or fail to refresh, which is a worse outage than the stale secret. A few minutes is usually the right order, and the real answer is to reduce the number of secrets rather than to poll harder."
+   },
+   {
+    "q": "How should a rotation be performed so consumers are not disrupted?",
+    "a": "With an overlap: create the new secret, leave the old one valid, let consumers pick up the new value over their refresh interval, then revoke the old one. Most services support two active keys precisely for this - storage accounts have two, Service Bus has primary and secondary. Rotating by invalidating and replacing in one step guarantees a window where some instances hold a dead credential. The overlap window needs to be longer than the longest refresh interval across all consumers, which is a reason to keep those intervals uniform and documented."
+   },
+   {
+    "q": "Is caching secrets in memory a security concern in itself?",
+    "a": "It is a consideration rather than a blocker - the secret is in the process memory either way while it is being used, and a memory dump exposes it regardless. What matters more is not writing it to logs, not including it in exception messages or telemetry, and limiting its lifetime where practical. The genuine improvement is reducing exposure: managed identity means the token is short-lived and automatically rotated, so even a captured value is useful for a much shorter window than a static password."
+   }
+  ]
  }
 ]

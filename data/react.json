@@ -3343,5 +3343,266 @@
     "a": "When the render itself is cheap, which it usually is. React's reconciliation on a small subtree is microseconds, so eliminating it buys nothing while adding complexity. The costs worth chasing are large lists, which should be virtualised rather than memoised, expensive computation inside render, which should be memoised or moved out, and layout thrashing from reading DOM measurements during render. Profiling first is what distinguishes these, and it is why the DevTools Profiler is step one rather than step four."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Hooks",
+  "difficulty": "Hard",
+  "question": "A component fetches data in useEffect and the network tab shows the same request firing in an infinite loop. The dependency array is not empty. What is happening?",
+  "answer": "**What's happening**\n\nA dependency is being recreated on every render, so the effect's comparison always fails and it re-runs. The effect then sets state, which causes a render, which recreates the dependency, which re-runs the effect.\n\nReact compares dependencies with `Object.is`. Objects, arrays and functions declared in the component body are new references on every render, so they never compare equal to the previous value:\n\n```jsx\n// options is a new object every render, so the effect runs every render\nconst options = { pageSize: 20, filter };\n\nuseEffect(() => {\n  fetchData(options).then(setData);   // setData -> render -> new options -> repeat\n}, [options]);\n```\n\n**How to confirm**\n\nLog the identity of each dependency across renders, or temporarily reduce the array to primitives only. If the loop stops, the culprit was a reference type.\n\n**The fixes, in order of preference**\n\n**1. Depend on primitives.** `[filter, pageSize]` rather than `[options]`. Primitives compare by value, so this is stable and needs no memoisation at all. Usually the right answer.\n\n**2. Move the object inside the effect.** If it is only used there, it does not belong in the render body.\n\n**3. `useMemo` the object / `useCallback` the function**, if it genuinely must be shared and identity must be stable. Note this only works if *its* dependencies are themselves stable — memoising an object whose dependency is another unstable object fixes nothing.\n\n**4. Check the parent.** If the unstable value arrives as a prop, the fix belongs in the parent, and `useMemo` in the child cannot help.\n\n**The underlying point**\n\nThe dependency array is a correctness mechanism, not an optimisation. The habit of removing a dependency to stop a loop produces a stale closure instead — the effect captures old values and silently uses them. The right move is to make the dependency stable, never to hide it.",
+  "tags": [
+   "react",
+   "hooks",
+   "useeffect",
+   "referential-equality",
+   "infinite-loop",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is removing the dependency to silence the loop a bad fix?",
+    "a": "Because the effect then closes over the values from the render in which it was created and keeps using them forever - so it fetches with a stale filter and never notices the user changed it. The loop becomes a silent wrong-data bug, which is harder to find than the loop was. The exhaustive-deps lint rule exists to stop exactly this, and disabling it with a comment is the point at which a temporary workaround becomes permanent. Make the dependency stable, or restructure so it is not needed."
+   },
+   {
+    "q": "Does useMemo guarantee the identity is preserved?",
+    "a": "No - React documents useMemo as a performance hint, and it may discard cached values, for instance to free memory. So code whose correctness depends on the identity never changing is relying on something not guaranteed. In practice it holds, but the honest design is to depend on primitives so identity is irrelevant, and treat useMemo as an optimisation for expensive computations rather than as a mechanism for stability."
+   },
+   {
+    "q": "How does this change with React 18 Strict Mode in development?",
+    "a": "Strict Mode deliberately mounts, unmounts and remounts components in development, so effects run twice - which surfaces missing cleanup immediately. That is often mistaken for this bug, but it is distinguishable: Strict Mode gives exactly two runs, not an unbounded loop, and only in development. Its purpose is to expose effects that are not idempotent or that leak subscriptions, which is the same discipline that makes an aborted fetch necessary in the cleanup function."
+   }
+  ]
+ },
+ {
+  "category": "React",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "Clicking a counter button twice quickly only increments by one. The handler calls setCount(count + 1) twice. Explain.",
+  "answer": "**What's happening**\n\n`count` is a value captured by the closure for that render — not a live reference. Both calls read the same `count`, compute the same result, and the second overwrites the first with an identical value.\n\n```jsx\n// Both read count as 0, both set 1\nconst handleClick = () => {\n  setCount(count + 1);\n  setCount(count + 1);   // still 0 + 1\n};\n```\n\nThis is the same reason the value does not update immediately after a `setState` call: state is a snapshot for the current render, and the new value only exists in the next one.\n\n**The fix: the updater form**\n\nPassing a function gives React the *previous* state at the moment it applies the update, so the calls compose:\n\n```jsx\nconst handleClick = () => {\n  setCount(c => c + 1);\n  setCount(c => c + 1);   // receives 1, returns 2\n};\n```\n\n**When it matters**\n\nAny time the new state is derived from the old one *and* the update might be batched with another, or happens asynchronously after an await. That includes:\n\n- multiple updates in one handler, as above\n- updates inside a `setTimeout` or after `await`, where the captured value is definitely stale\n- updates in an effect whose dependencies do not include the state\n\n**The rule I use**\n\nIf the next state depends on the previous, use the updater form — always, not only when a bug appears. It costs nothing and removes an entire class of race.\n\n**Related in React 18**\n\nAutomatic batching now applies to updates in promises, timeouts and native handlers, not just React event handlers. That is a performance improvement but it means code that previously happened to work because updates were flushed separately may now batch — so the updater form matters in more places than it used to.",
+  "tags": [
+   "react",
+   "state",
+   "closures",
+   "batching",
+   "updater-function",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does reading the state straight after setState show the old value?",
+    "a": "Because the state variable is a const bound to this render's snapshot - setState schedules a re-render with a new value, it does not mutate the existing binding. So the line after it still sees the old value, by design. That immutability is what makes a render deterministic and what allows React to compare and to replay. Code that needs the new value immediately should compute it into a local variable and use that, rather than trying to read it back from state."
+   },
+   {
+    "q": "Does the updater form fix stale state inside a setTimeout too?",
+    "a": "For the state being set, yes - the updater receives the current value at apply time rather than the captured one, so an increment inside a timeout composes correctly. It does not fix other captured values in the same closure, such as a prop or another piece of state read directly. Those need a ref, or the effect needs to be structured so the timeout is recreated when they change. The distinction is that the updater form solves staleness for the one value you are updating, not for everything the closure captured."
+   },
+   {
+    "q": "When would you reach for useReducer instead?",
+    "a": "When several pieces of state change together according to rules, or when the next state depends on the previous in more than a trivial way - a form with validation, a wizard with steps, anything where you find yourself calling three setters in sequence. The reducer puts the transition logic in one testable function and guarantees the updates are applied atomically against the same previous state. It also makes the set of legal transitions explicit, which is usually where the bugs were hiding."
+   }
+  ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "A list of 500 rows re-renders entirely whenever anything changes. The team wrapped every row in React.memo and it made no difference. Why?",
+  "answer": "**What's happening**\n\n`React.memo` compares props shallowly. If any prop is a new reference on every parent render, the comparison fails and the memo does nothing — which is the usual outcome, because handlers and objects are recreated by default.\n\n```jsx\n// Every render creates a new function, so every Row sees a new prop\n{rows.map(row => (\n  <Row key={row.id} row={row} onSelect={() => select(row.id)} />\n))}\n```\n\nThe arrow function is new each time, so `React.memo` correctly concludes the props changed. Memoising the child without stabilising the props is the most common wasted optimisation in React.\n\n**How to confirm**\n\nThe React DevTools Profiler shows why each component rendered, including which props changed. That turns the question from a guess into a reading.\n\n**The fixes**\n\n**1. Stabilise the handler.** `useCallback` on a handler that takes the id as an argument, rather than closing over it:\n\n```jsx\nconst handleSelect = useCallback(id => select(id), [select]);\n// Row calls onSelect(row.id) itself\n```\n\n**2. Make sure `select` itself is stable** — if it comes from context or a parent and is recreated, `useCallback` here changes nothing. This is where these efforts usually fail: one unstable value at the top invalidates everything below it.\n\n**3. Check the keys.** Using the array index as a key means React reuses the wrong DOM nodes when the list is reordered or filtered — which causes both incorrect state and unnecessary work. A stable id is required.\n\n**4. Consider whether memoisation is the right tool at all.** For 500 rows, virtualisation renders only the visible dozen and makes the memo question irrelevant. That is usually the bigger win.\n\n**The order I would actually work in**\n\nProfile first. Then check keys, because an index key is a correctness bug as well as a performance one. Then virtualise if the list is long. Memoise last, and only where the profiler shows it matters — every `memo` and `useCallback` has its own cost, and applying them uniformly makes the code harder to read while frequently achieving nothing.",
+  "tags": [
+   "react",
+   "performance",
+   "react-memo",
+   "usecallback",
+   "virtualisation",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is an index key a correctness problem and not just a performance one?",
+    "a": "Because React uses the key to decide which DOM node and which component state belongs to which item. With index keys, deleting the first row shifts everything up, so React believes row 0 changed its content rather than that it was removed - and any internal state, such as a half-typed input or a focus position, stays with the index instead of following the item. The visible symptom is text appearing against the wrong row after a delete, which looks like a data bug and is a key bug."
+   },
+   {
+    "q": "When is React.memo genuinely worth applying?",
+    "a": "When the component is expensive to render, its props are genuinely stable, and the profiler shows it re-rendering without cause. That combination is less common than the reflex to apply it suggests. For a cheap component, the shallow comparison can cost as much as the render it avoids, and every memo adds a maintenance obligation to keep the props stable. The React team's guidance is to fix the cause of the re-render first and memoise only where measurement justifies it."
+   },
+   {
+    "q": "How much does virtualisation actually change?",
+    "a": "It changes the problem from O(list length) to O(visible rows), so a five-hundred-row list renders about fifteen components and a fifty-thousand-row list renders the same fifteen. That makes the memoisation question largely moot and is why it is the right first move for long lists. The costs are real: variable row heights need measurement, scroll restoration and find-in-page stop working naturally, and accessibility needs care because most of the list is not in the DOM. For a few dozen rows it is not worth it; past a few hundred it usually is."
+   }
+  ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Effects",
+  "difficulty": "Hard",
+  "question": "A search box fires a request on every keystroke and results sometimes display for a previous query rather than the current one. How do you fix both problems?",
+  "answer": "**Two distinct bugs**\n\n**Too many requests** — no debouncing, so every keystroke is a round trip.\n\n**Out-of-order responses** — a race. Request for 'ab' is sent, then 'abc'; if 'ab' resolves second, its results overwrite the newer ones. The UI shows results for a query the user has moved past. This is not a timing fluke; it is guaranteed to happen eventually because responses have no ordering guarantee.\n\n**The fix**\n\nDebounce the input, and cancel or ignore superseded requests. `AbortController` does both jobs — it stops the wasted work and prevents the stale response from being applied:\n\n```jsx\nuseEffect(() => {\n  if (!query) return;\n\n  const controller = new AbortController();\n  const timer = setTimeout(() => {\n    fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })\n      .then(r => r.json())\n      .then(setResults)\n      .catch(e => { if (e.name !== 'AbortError') setError(e); });\n  }, 300);\n\n  return () => {\n    clearTimeout(timer);       // cancel a pending debounce\n    controller.abort();        // cancel an in-flight request\n  };\n}, [query]);\n```\n\nThe cleanup function is the important part. React runs it before the effect re-runs, so each new keystroke cancels the previous attempt — which is exactly the ordering guarantee that was missing.\n\n**Why the cleanup solves the race**\n\nIt is not only that the request is aborted. Even if a response arrives after abort, the `.then` does not run because the promise rejects. So there is no path by which a superseded query can call `setResults`. An alternative when cancellation is unavailable is a sequence number or an `ignore` flag set in the cleanup, which achieves the same by discarding the result rather than the request.\n\n**What I would consider beyond this**\n\nA data library — React Query, SWR — handles debouncing, cancellation, caching, retry and stale-while-revalidate as a matter of course. Hand-rolling this in every component is how teams end up with twelve subtly different implementations, three of which have the race.",
+  "tags": [
+   "react",
+   "useeffect",
+   "race-condition",
+   "debounce",
+   "abortcontroller",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is the cleanup function the key to the race rather than the debounce?",
+    "a": "Because debouncing only reduces how many requests are sent - it does not order the ones that are. A user typing slowly still produces overlapping requests, and a slow network makes the overlap likely regardless of the delay. The cleanup guarantees that when the query changes, the previous attempt cannot produce a state update, which is what actually enforces 'only the newest query may write results'. Debouncing is a performance measure; the cleanup is the correctness measure."
+   },
+   {
+    "q": "The API does not support cancellation. What then?",
+    "a": "Use a flag captured by the closure: set `let cancelled = false` in the effect, check it before calling setState, and set it true in the cleanup. The request still completes and its bandwidth is still spent, but the stale result cannot be applied. A sequence number compared against the latest issued works equally well and is easier to reason about when several requests are in flight. Either way the principle is the same - the component decides what to accept, rather than trusting arrival order."
+   },
+   {
+    "q": "Where should the debounce delay come from?",
+    "a": "From the interaction, not from habit. Around 300ms is the usual compromise for search-as-you-type - short enough to feel responsive, long enough to skip most intermediate keystrokes. For an expensive query or a rate-limited API it should be longer, and for a local filter it should be zero because there is nothing to debounce. It is also worth firing immediately on paste or on Enter, since those signal the user has finished rather than mid-word."
+   }
+  ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Context",
+  "difficulty": "Hard",
+  "question": "After moving auth state into a Context, unrelated components across the app started re-rendering on every keystroke in a form. What went wrong?",
+  "answer": "**What's happening**\n\nEvery consumer of a context re-renders when the context *value* changes, and the value is compared by reference. Two things commonly cause this:\n\n**1. The value object is recreated every render.**\n\n```jsx\n// New object identity on every provider render: every consumer re-renders\n<AuthContext.Provider value={{ user, login, logout }}>\n```\n\n**2. Unrelated state lives in the same provider.** If the provider component also holds form state, every keystroke re-renders the provider, which recreates the value, which re-renders every consumer in the tree — including components that only care about `user`.\n\nContext has no selector mechanism. A consumer subscribes to the whole value, not to the part it reads, so there is no way for it to opt out of an unrelated change.\n\n**The fixes**\n\n**1. Memoise the value.**\n\n```jsx\nconst value = useMemo(() => ({ user, login, logout }), [user, login, logout]);\n```\n\nThis only helps if `login` and `logout` are themselves stable — wrap them in `useCallback`, or define them outside the component.\n\n**2. Split the contexts by change frequency.** Rarely-changing identity in one, frequently-changing UI state in another. This is the structural fix and usually the right one: a value that changes on every keystroke should not share a provider with one that changes on login.\n\n**3. Separate value and dispatch.** A common pattern is one context for the state and one for the setters — the setters are stable, so components that only dispatch never re-render when the state changes.\n\n**4. Keep the provider's own state minimal.** If the provider component holds unrelated state, move it elsewhere. The provider should hold what it provides.\n\n**The broader point**\n\nContext is a dependency-injection mechanism, not a state manager optimised for frequent updates. For high-frequency state shared widely, a store with selector subscriptions — Zustand, Redux with `useSelector`, Jotai — lets components subscribe to slices rather than to everything. Reaching for Context for all shared state is what produces this symptom.",
+  "tags": [
+   "react",
+   "context",
+   "re-renders",
+   "memoisation",
+   "state-management",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does splitting contexts help more than memoising?",
+    "a": "Because memoising stops the value changing when nothing it depends on changed, but it cannot stop a consumer re-rendering when something it does not care about genuinely did change - if user and theme share a context, a theme change re-renders every component reading user. Splitting by change frequency removes that coupling structurally, so the fix survives future edits. Memoisation is a fix you have to keep maintaining; separation is one that keeps working."
+   },
+   {
+    "q": "When is Context the right tool despite this?",
+    "a": "For values that change rarely and are needed widely - the current user, theme, locale, a configured API client, feature flags. That is dependency injection, which is what Context was designed for, and the re-render cost is irrelevant when the value changes once a session. It becomes the wrong tool when the value changes many times a second and the tree is large, because there is no way to subscribe to part of it."
+   },
+   {
+    "q": "Does the React compiler change this advice?",
+    "a": "It removes much of the manual useMemo and useCallback work by memoising automatically, so the first failure mode - an accidentally recreated value object - largely goes away. It does not change the second: a context whose value legitimately changes on every keystroke still notifies every consumer, because that is the semantics of context rather than a missed optimisation. So the structural advice about splitting by change frequency survives, while the boilerplate advice becomes less important."
+   }
+  ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Forms",
+  "difficulty": "Medium",
+  "question": "A controlled input loses focus after every character typed. What causes this and how do you find it?",
+  "answer": "**What's happening**\n\nThe component is being unmounted and a new one mounted in its place, rather than re-rendered. React only preserves DOM nodes and state when it can match the element between renders — and two things break that match:\n\n**1. The component is defined inside another component.**\n\n```jsx\nfunction Parent() {\n  // A NEW component type on every render, so React unmounts and remounts it\n  const Field = () => <input value={value} onChange={onChange} />;\n  return <Field />;\n}\n```\n\nEach render creates a new function, and a different component type means React discards the old subtree entirely — taking the focused DOM node with it.\n\n**2. The key changed.** If a key is derived from something that changes as you type — including the value itself — React treats it as a different element and remounts it.\n\n**How to confirm**\n\nThe React DevTools shows the component unmounting and remounting rather than updating. A `useEffect` with an empty dependency array logging on mount will fire on every keystroke, which is conclusive and takes ten seconds to add.\n\n**The fix**\n\nDefine components at module scope, never inside a render. Pass what they need as props. If a nested definition is there to capture something from the closure, that is what props are for.\n\nFor keys, derive them from a stable identity, never from the value or the index during editing.\n\n**Why this is worth recognising instantly**\n\nThe symptom is distinctive — focus loss, lost cursor position, and any internal state resetting — and the cause is always remounting. Once you know to look for a component defined in a render body, you find it in seconds. It also degrades performance badly, since the entire subtree is destroyed and rebuilt on every keystroke, so it is not only a focus bug.",
+  "tags": [
+   "react",
+   "forms",
+   "remounting",
+   "component-identity",
+   "keys",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does React discard the subtree instead of reconciling it?",
+    "a": "Because reconciliation matches elements by type and key at each position. A component defined inline is a new function object each render, and function identity is the type - so React sees type A replaced by type B, which by its rules means the old tree is unmountable and the new one must be mounted fresh. It cannot know the two functions are equivalent. That rule is what makes reconciliation fast and predictable; the cost is that accidentally changing a type is destructive rather than merely slow."
+   },
+   {
+    "q": "The nested component captures props from the parent. How do you restructure it?",
+    "a": "Lift it to module scope and pass what it captured as props - that is the mechanical fix and it is almost always straightforward. If the component is only used once and the indirection adds nothing, inlining the JSX directly rather than wrapping it in a component is simpler still. The nested definition usually exists because someone wanted to avoid threading props, and the cost of that convenience is a full remount per render, which is a bad trade."
+   },
+   {
+    "q": "When is deliberately changing the key the right technique?",
+    "a": "When you actually want a component reset - switching a form to edit a different record, where leftover state from the previous record would be wrong. Keying the form on the record id means changing records remounts it with clean state, which is more reliable than trying to reset every field in an effect. So the same mechanism that causes this bug is a legitimate tool; the difference is whether the remount is intended and whether the key changes on identity or on every keystroke."
+   }
+  ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Data Fetching",
+  "difficulty": "Medium",
+  "question": "A page shows a loading spinner, then data, then flashes back to the spinner when the user navigates away and back. Users complain it feels slow even though the API is fast. What would you change?",
+  "answer": "**What's happening**\n\nEvery mount refetches from scratch and shows a loading state while it does. The data is discarded on unmount, so returning to the page repeats the full cycle even though the answer has not changed.\n\nThe API being fast is beside the point — the perceived slowness comes from the layout shifting to a spinner and back, which reads as slower than a brief stale value would.\n\n**What I would change**\n\n**1. Cache the response** so a revisit renders immediately from cache. This alone removes the spinner on return.\n\n**2. Stale-while-revalidate.** Render the cached data instantly, fetch in the background, and update if it changed. The user sees content immediately and correctness follows. This is what makes well-built apps feel fast — not faster requests, but not blocking on them.\n\n**3. Do not show a spinner for fast responses.** A spinner that appears for 80ms is worse than no spinner: the flash is noticed as jank. Delay it by 200–300ms so quick responses never trigger it.\n\n**4. Preserve layout.** A skeleton matching the final layout prevents the content jumping when data arrives, which is a large part of the perceived slowness.\n\n**Concretely**\n\nThis is what React Query and SWR do by default, which is why reaching for one is usually the answer rather than building it per component:\n\n```jsx\nconst { data, isLoading } = useQuery({\n  queryKey: ['orders', customerId],\n  queryFn: fetchOrders,\n  staleTime: 30_000,          // do not refetch for 30s\n  placeholderData: keepPreviousData,   // show the old page while the new one loads\n});\n```\n\n**The principle**\n\nPerceived performance is about what the user sees while waiting, not about the wait. Showing stale data immediately and correcting it quietly almost always feels faster than showing nothing accurately.",
+  "tags": [
+   "react",
+   "data-fetching",
+   "caching",
+   "perceived-performance",
+   "react-query",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Is showing stale data ever unacceptable?",
+    "a": "Yes, and the decision is domain-specific rather than technical. An account balance, a stock level at checkout, or a medication dose should not be shown stale without a clear indication, because the user may act on it. A list of past orders or a product catalogue is fine. The usual compromise is to show the cached value immediately with a subtle refreshing indicator, so it is fast and honest at once. Deciding which category the data is in belongs with the product owner, not with the default settings of a library."
+   },
+   {
+    "q": "Why does a spinner that appears briefly feel worse than none?",
+    "a": "Because it is a visible state change the eye registers as a flash, and the layout usually shifts twice - to the spinner and back. The user perceives two transitions rather than one quick load. Delaying the spinner past the point where most responses complete means fast paths look instantaneous and only genuinely slow ones show feedback. Nielsen's threshold of about 100ms for feeling instantaneous is the usual reference, which is why 200-300ms is a common delay."
+   },
+   {
+    "q": "What are the costs of adopting a data-fetching library?",
+    "a": "A bundle-size increase, a new set of concepts for the team, and cache-invalidation decisions that now have to be made explicitly - stale times, query keys, what a mutation invalidates. That last one is real work and getting it wrong shows stale data after an update, which is worse than the problem you started with. The trade is usually worth it because the alternative is reimplementing caching, deduplication, retry and cancellation per component, inconsistently. For an app with two fetches, it is not worth it."
+   }
+  ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "A React test suite passes locally and fails intermittently in CI with 'not wrapped in act(...)' warnings and timeouts. What is wrong with the tests?",
+  "answer": "**What's happening**\n\nThe tests are asserting before asynchronous updates have settled. Locally the machine is fast enough that the state update happens to land before the assertion; CI is slower and more contended, so the race is lost.\n\nThe `act` warning specifically means a state update occurred outside React's knowledge — typically a promise resolving after the test moved on. That is a real signal, not noise: it means the test is not deterministic.\n\n**The usual causes**\n\n**1. Asserting immediately after an action that triggers an async update.** `getByText` throws at once if the element is not there yet.\n\n**2. Using arbitrary waits.** `await new Promise(r => setTimeout(r, 100))` passes on a fast machine and fails on a loaded one. It encodes a guess about timing rather than a condition.\n\n**3. Real timers with fake time, or fake timers left installed** between tests.\n\n**4. No cleanup between tests**, so a pending request from a previous test resolves during the next one.\n\n**The fix**\n\nWait for the *condition*, not for a duration. Testing Library's `findBy` queries and `waitFor` retry until the assertion passes or the timeout expires:\n\n```jsx\n// Fragile: asserts before the fetch resolves\nfireEvent.click(button);\nexpect(screen.getByText('Saved')).toBeInTheDocument();\n\n// Deterministic: waits for the condition, whatever the machine speed\nawait userEvent.click(button);\nexpect(await screen.findByText('Saved')).toBeInTheDocument();\n```\n\n`userEvent` is also preferable to `fireEvent` — it is async, it wraps interactions in `act`, and it simulates the full event sequence a real user produces rather than dispatching one synthetic event.\n\n**The principle**\n\nA test that depends on timing is a test that will fail eventually — CI is just where it shows up first, because CI is slower and runs things in parallel. Fixing it by increasing the timeout makes the suite slower without making it deterministic. Wait for observable conditions, and the speed of the machine stops mattering.",
+  "tags": [
+   "react",
+   "testing",
+   "flaky-tests",
+   "testing-library",
+   "act-warning",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is raising the timeout the wrong response to a flaky test?",
+    "a": "Because it changes the probability of failure without changing the cause - the race is still there and will resurface under a slower or more contended runner. It also slows the whole suite, since the timeout applies to failures and to any test that legitimately takes time. Worse, it teaches the team that flakiness is managed by tuning numbers, which is how suites end up with retries wrapped around everything and no trust in a red build. Waiting for a condition removes the race rather than reducing its frequency."
+   },
+   {
+    "q": "What is the act warning actually telling you?",
+    "a": "That a state update happened outside a scope where React could flush it and let effects settle, so the DOM you are about to assert on may not reflect it. It is usually a symptom of asserting on a component whose async work has not completed, or of a test that finished while a request was still in flight - which can then update an unmounted component in the next test. Treating it as noise to be silenced is how a suite becomes unreliable; it is pointing at a genuine synchronisation gap."
+   },
+   {
+    "q": "How would you stop a pending request from one test affecting the next?",
+    "a": "Clean up explicitly: Testing Library unmounts components automatically between tests, which triggers effect cleanups and should abort in-flight requests - provided the effects actually implement that cleanup. A component that does not abort its fetch will still resolve into nothing. Resetting mock handlers and clearing timers between tests matters too. If tests share a mock server such as MSW, resetting its handlers in afterEach prevents one test's overrides leaking into another, which is a common source of order-dependent failures."
+   }
+  ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Architecture",
+  "difficulty": "Hard",
+  "question": "A React app's bundle has grown to 4MB and initial load is slow. The team wants to switch to a different framework. What would you do instead?",
+  "answer": "**First, find out what is in it**\n\n`webpack-bundle-analyzer` or `vite-bundle-visualizer` produces a treemap in minutes. Almost always a handful of dependencies dominate, and the answer is specific rather than architectural.\n\n**Common findings**\n\n**A date library imported wholesale.** Moment is ~300KB and not tree-shakeable; `date-fns` or `Temporal` with individual imports is a fraction of that.\n\n**A component library imported as a namespace.** `import * as Icons` or `import { Button } from 'library'` can pull the entire library if it is not properly tree-shakeable or if the import path is wrong.\n\n**Lodash imported as a whole.** `import _ from 'lodash'` versus `import debounce from 'lodash/debounce'` — or just writing the four lines yourself.\n\n**Duplicated dependencies** at different versions, often two copies of React or of a UI library, which also causes subtle runtime bugs.\n\n**Polyfills for browsers you do not support.** Check the browserslist target — shipping ES5 with full polyfills to modern browsers is a large, invisible cost.\n\n**Then, split what remains**\n\n**Route-level code splitting** with `React.lazy` and `Suspense` is usually the single biggest win — the user downloads the page they asked for, not the whole application.\n\n**Split heavy, rarely-used features**: a rich text editor, a charting library, a PDF viewer. These are often the largest chunks and used by a minority of sessions.\n\n**Why switching frameworks is the wrong response**\n\nThe bundle is large because of what was put in it, and those dependencies would come along to the new framework. A rewrite costs months, introduces new bugs, and does not address the cause. If the analysis showed that React itself was the problem — which at ~45KB gzipped it is not — that would be a different conversation.\n\n**What I would commit to**\n\nA bundle-size budget enforced in CI, so the build fails when a PR adds more than an agreed amount. That is what stops it happening again, and it is the part teams skip after cleaning up.",
+  "tags": [
+   "react",
+   "bundle-size",
+   "code-splitting",
+   "tree-shaking",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does a CI bundle budget matter more than the one-off cleanup?",
+    "a": "Because bundle growth is incremental and invisible - no single pull request adds four megabytes, but a hundred of them each adding forty kilobytes do. Without a gate, the cleanup buys you a year and the problem returns. A budget makes the cost visible at the moment it is incurred, when the author still has context and the alternative is cheap to choose. It also turns a vague quality goal into a build failure someone must consciously override, which is a much stronger control than a wiki page."
+   },
+   {
+    "q": "How do you decide what to code-split?",
+    "a": "By how many sessions need it. Route splitting is nearly always right because most users visit a few pages. Beyond that, look for large dependencies used by a minority - an admin area, an export-to-PDF feature, a chart on one dashboard. What not to split is anything on the critical path of the first render, because you convert one download into two round trips and make LCP worse. The measurement to watch is not total bundle size but the size of the initial chunk."
+   },
+   {
+    "q": "When would switching to something like Next.js or Astro genuinely be justified?",
+    "a": "When the problem is architectural rather than dependency weight - a content-heavy site that should be server-rendered or statically generated but is shipping a client-side SPA, where the cost is not the bundle but that nothing renders until JavaScript runs. That is a structural mismatch no amount of splitting fixes. The distinction is whether the first paint is blocked on JavaScript by design. If the app is genuinely interactive and the bundle is merely bloated, that is a cleanup, not a migration."
+   }
+  ]
  }
 ]

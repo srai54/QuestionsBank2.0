@@ -2083,5 +2083,92 @@
    "code-review",
    "practices"
   ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "Lighthouse gives a poor Largest Contentful Paint score. The team's proposal is to add more caching. What would you check first?",
+  "answer": "**What LCP actually measures**\n\nThe time until the largest element in the viewport is rendered — usually a hero image, a heading, or a block of text. Caching helps repeat visits; LCP is usually judged on the first visit, so caching may not move it at all.\n\n**What I would check, in order**\n\n**1. What the LCP element actually is.** Lighthouse names it. Optimising the wrong thing is the most common waste of effort here — if it is a heading, image optimisation is irrelevant.\n\n**2. Is it blocked by something?** A render-blocking stylesheet or a synchronous script in the head delays everything. Fonts are a frequent culprit: a web font without `font-display: swap` hides the text until the font loads.\n\n**3. Is the resource discovered late?** An image referenced from CSS, or inserted by JavaScript after hydration, cannot be fetched until that code runs. A `<link rel=preload>` or a plain `<img>` in the HTML lets the preload scanner find it immediately.\n\n**4. Is the image right for the job?** Correct dimensions, a modern format such as WebP or AVIF, `srcset` for the viewport, no lazy-loading on the LCP image — lazy-loading the hero image is a common own-goal that directly delays LCP.\n\n**5. Is the server slow to first byte?** LCP includes TTFB. If the HTML takes 800ms to arrive, nothing in the front end recovers that. This is where caching genuinely helps — a CDN in front of the document.\n\n**6. Is it client-rendered?** If the page is a blank shell until a JavaScript bundle downloads, parses and fetches data, the LCP element cannot appear until all of that finishes. Server-side rendering or static generation addresses the cause; nothing else will.\n\n**The order matters**\n\nMeasure, identify the element, find what delays it, fix that. 'Add caching' is a solution looking for a problem — worth doing for repeat visits, largely irrelevant to a first-visit LCP problem, and it would leave the actual cause in place.",
+  "tags": [
+   "frontend",
+   "core-web-vitals",
+   "lcp",
+   "performance",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is lazy-loading the hero image counterproductive?",
+    "a": "Because lazy loading defers the fetch until the browser determines the image is near the viewport, and the hero is in the viewport immediately - so you have added a delay to the one image that must appear fastest. It also removes it from the preload scanner's early discovery. The rule is to lazy-load everything below the fold and eagerly load, ideally with fetchpriority high, the LCP candidate. Applying loading=lazy uniformly across a codebase is how this happens."
+   },
+   {
+    "q": "How do fonts delay LCP specifically?",
+    "a": "With the default font-display behaviour the browser hides text for up to three seconds while the web font loads, so if your LCP element is text it simply does not render during that block period. font-display swap renders immediately in a fallback and swaps when the font arrives, which fixes LCP at the cost of a visible reflow - and that reflow can hurt Cumulative Layout Shift, so the two metrics trade off. Preloading the font and matching the fallback metrics with size-adjust reduces both problems."
+   },
+   {
+    "q": "Lighthouse scores well in the lab but field data is poor. Why the difference?",
+    "a": "Because the lab test runs on a specific simulated device and network from one location, while field data comes from real users on real devices and connections - low-end Android phones on mobile networks, which are much slower than a throttled desktop simulation. Field data also includes cold caches, contended CPUs and third-party scripts that behave differently in the wild. Lab data is for debugging because it is reproducible; field data from the Chrome UX Report or your own RUM is what you should actually be judged on."
+   }
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Security",
+  "difficulty": "Hard",
+  "question": "A code review shows dangerouslySetInnerHTML being used to render content from an API. The author says it is safe because the content comes from their own backend. How do you respond?",
+  "answer": "**Why 'it is our own backend' is not sufficient**\n\nThe question is not where the content comes from but where it *originated*. If any part of that content was ever user-supplied — a comment, a profile field, a product description, a support ticket — then the backend is relaying attacker-controlled data, and being first-party does not sanitise it.\n\nThis is stored XSS: the payload is persisted, then served to every viewer with the application's own origin. That means it runs with full access to the session, can read any token in `localStorage`, can call your API as the user, and can rewrite the page.\n\n**The specific risks with `dangerouslySetInnerHTML`**\n\nReact escapes everything by default, which is why XSS is rare in React apps. This API exists specifically to opt out of that protection, and the name is a deliberate warning.\n\n**What I would ask in the review**\n\n- Can any part of this content be influenced by a user, now or later?\n- Is it sanitised, and where — on write, on read, or not at all?\n- If it is sanitised on the server, what stops a future endpoint returning the same field unsanitised?\n\n**What I would want instead**\n\n**1. Do not render HTML if you do not need to.** Most cases only need line breaks and links, which can be handled with a Markdown renderer configured to disallow HTML, or by rendering structured data rather than markup.\n\n**2. Sanitise client-side at the point of rendering** with DOMPurify, so protection is adjacent to the danger rather than trusted from a distance.\n\n**3. Sanitise on write as well**, so the stored data is clean — but treat that as defence in depth, not as a reason to skip the render-time sanitisation.\n\n**4. Add a Content Security Policy** so that even a successful injection cannot execute inline script or exfiltrate to an arbitrary host. That is the control that limits the damage when the other layers fail.\n\n**The framing I would use**\n\nNot 'this is wrong' but 'what is the full path this data takes, and what happens if any step is compromised'. The answer determines whether the current code is acceptable — and it usually is not, because the path almost always includes a user somewhere.",
+  "tags": [
+   "frontend",
+   "security",
+   "xss",
+   "sanitisation",
+   "code-review",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is a Content Security Policy worth adding if the content is sanitised?",
+    "a": "Because sanitisation is a filter and filters have bypasses - new DOM APIs, parser differentials and mutation XSS have all defeated sanitisers that were considered sound. CSP is a different layer: even if markup is injected, a policy without unsafe-inline prevents inline script from running, and a restrictive connect-src prevents stolen data being sent anywhere useful. Defence in depth means assuming each control will eventually fail, and the value of CSP is precisely that it does not depend on the sanitiser being perfect."
+   },
+   {
+    "q": "The content is Markdown rendered to HTML. Does that make it safe?",
+    "a": "No - most Markdown renderers allow raw HTML by default, because the spec permits it, so a comment containing a script tag passes straight through. Even with HTML disabled, link syntax can carry a javascript URL unless the renderer blocks that scheme. The safe configuration is HTML disabled, a URL scheme allowlist, and the output still passed through a sanitiser. Markdown is a convenience for authors, not a security boundary."
+   },
+   {
+    "q": "Where should tokens be stored if XSS can read localStorage?",
+    "a": "In an httpOnly, Secure, SameSite cookie, which JavaScript cannot read at all - so an XSS payload can still make requests as the user while the page is open, but it cannot exfiltrate a long-lived token for later use. That is a meaningful reduction even though it is not complete protection. The cookie approach brings CSRF back into scope, which SameSite and an anti-forgery token address. Storing a bearer token in localStorage is convenient and means any XSS is a full account takeover with persistence."
+   }
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Accessibility",
+  "difficulty": "Medium",
+  "question": "An accessibility audit flags a custom dropdown built from divs. The team says it looks and works fine. What is actually broken and what does fixing it involve?",
+  "answer": "**What is broken**\n\n'Works fine' means works fine with a mouse and full vision. A div-based dropdown typically fails in several ways at once:\n\n**No keyboard operation.** A `div` is not focusable, so it cannot be reached by Tab and cannot be opened with Enter or Space. A keyboard-only user simply cannot use the control at all.\n\n**No announced role or state.** A screen reader sees a group of divs with text. It cannot say 'combobox, collapsed' or announce the selected value or that options are available.\n\n**No arrow-key navigation** within the options, which is the expected behaviour for a listbox and is what users of assistive technology will attempt.\n\n**Focus is not managed.** Opening the list should move or constrain focus; closing should return it to the trigger. Otherwise focus is lost into the page and the user has no idea where they are.\n\n**No escape.** Escape should close it. Clicking outside should close it.\n\n**What fixing it involves**\n\nThe honest answer first: **use the native `<select>` if the requirement allows it.** It gets all of the above for free, plus platform conventions, mobile pickers and forms integration. Custom dropdowns are usually built to satisfy a design that could be relaxed.\n\nIf a custom control is genuinely required, implement the ARIA combobox or listbox pattern properly: `role`, `aria-expanded`, `aria-controls`, `aria-activedescendant` or roving tabindex, full keyboard support including Home/End and type-ahead, and focus return on close. That is a substantial amount of behaviour, which is why the better answer is usually to adopt a tested headless library — Radix, React Aria, Headless UI — rather than to write it.\n\n**How I would frame it in the review**\n\nNot as a checklist item but as a user: a keyboard-only user cannot complete this form at all. That is not a styling concern, it is a functional defect, and in many jurisdictions a legal one. 'It works fine' was true for the people who tested it.",
+  "tags": [
+   "frontend",
+   "accessibility",
+   "aria",
+   "keyboard-navigation",
+   "code-review",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is adding role=button and tabindex=0 to a div not equivalent to a button?",
+    "a": "Because those two attributes give you focusability and an announced role, but not behaviour - a real button fires its handler on both Enter and Space, participates in form submission, and is exposed to the accessibility tree with the correct default states. With a div you must implement the key handling yourself and people routinely implement only Enter, so Space silently does nothing for screen reader users who expect it. It is a reasonable pattern when you truly cannot use a button, and it is more work than it appears."
+   },
+   {
+    "q": "The designer insists on styling that a native select cannot do. How do you handle that conversation?",
+    "a": "By making the cost explicit rather than treating it as a styling preference: a custom control means implementing and maintaining a dozen keyboard and ARIA behaviours, testing with a screen reader, and accepting the accessibility risk. Often the design can be satisfied on the closed state, which is stylable, while the open list uses the native picker - especially on mobile, where the native picker is better than anything custom. If a custom control is genuinely needed, the answer is a tested library rather than a bespoke build, and that has a cost the design decision should own."
+   },
+   {
+    "q": "How do you test this beyond an automated audit?",
+    "a": "Automated tools catch perhaps a third of issues - missing labels, contrast, invalid ARIA - and cannot judge whether the interaction makes sense. The irreplaceable tests are unplugging the mouse and completing the flow with the keyboard alone, and then doing it with a screen reader, NVDA or VoiceOver, listening to what is announced. Both take minutes and find things no linter will. Adding keyboard-only assertions to the component test suite is how you stop regressions after the fix."
+   }
+  ]
  }
 ]
