@@ -4,12 +4,27 @@
   "subcategory": "DSA",
   "difficulty": "Easy",
   "question": "What is Big O notation?",
-  "answer": "Big O describes how an algorithm's time or space grows relative to input size n in the worst case, ignoring constants. Common classes: O(1) constant, O(log n) logarithmic (binary search), O(n) linear, O(n log n) (efficient sorts), O(n^2) quadratic (nested loops), O(2^n)/O(n!) exponential/factorial. It lets you compare scalability. Also consider average case and space complexity, not just worst-case time.",
+  "answer": "**Approach**\n\nBig O describes how an algorithm's cost grows with input size, discarding constants and lower-order terms. The program makes it concrete by *counting operations* rather than timing, so the growth is visible and reproducible.\n\n**Logic**\n\nIt is an upper bound on growth rate, not a measurement. O(n) means the cost grows at most proportionally to n — it says nothing about whether one O(n) algorithm is faster than another on real data.\n\nConstants are dropped because they do not change the shape of growth, which is why an O(n) algorithm with a large constant can lose to an O(n²) one on small inputs. That is a real effect, not a technicality: it is why .NET's sort switches to insertion sort for small partitions.\n\nΩ is the lower bound and Θ is a tight bound; \"O\" is often used loosely where Θ is meant.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    // Counting operations rather than timing: deterministic and reproducible.\n    private static long LinearSearchSteps(int n)\n    {\n        long steps = 0;\n        for (int i = 0; i < n; i++) steps++;\n        return steps;\n    }\n\n    private static long QuadraticSteps(int n)\n    {\n        long steps = 0;\n        for (int i = 0; i < n; i++)\n            for (int j = 0; j < n; j++) steps++;\n        return steps;\n    }\n\n    private static long BinarySearchSteps(int n)\n    {\n        long steps = 0;\n        for (int size = n; size > 0; size /= 2) steps++;\n        return steps;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine($\"{\"n\",8}{\"O(log n)\",12}{\"O(n)\",12}{\"O(n^2)\",16}\");\n\n        foreach (int n in new[] { 10, 100, 1000, 10000 })\n            Console.WriteLine($\"{n,8}{BinarySearchSteps(n),12}{LinearSearchSteps(n),12}\" +\n                              $\"{QuadraticSteps(n),16}\");\n\n        // Ten times the input: the multiplier is what the notation names.\n        Console.WriteLine();\n        Console.WriteLine($\"n to 10n, linear grows by: {LinearSearchSteps(1000) / LinearSearchSteps(100)}x\");\n        Console.WriteLine($\"n to 10n, quadratic grows by: {QuadraticSteps(1000) / QuadraticSteps(100)}x\");\n\n        // Constants are dropped, but they are real: 100n beats n^2 only past n = 100.\n        Console.WriteLine();\n        foreach (int n in new[] { 50, 100, 200 })\n            Console.WriteLine($\"n={n}: 100n = {100L * n}, n^2 = {(long)n * n}, \" +\n                              $\"linear wins: {100L * n < (long)n * n}\");\n    }\n}\n```\n\n**Output**\n\n```\n       n    O(log n)        O(n)          O(n^2)\n      10           4          10             100\n     100           7         100           10000\n    1000          10        1000         1000000\n   10000          14       10000       100000000\n\nn to 10n, linear grows by: 10x\nn to 10n, quadratic grows by: 100x\n\nn=50: 100n = 5000, n^2 = 2500, linear wins: False\nn=100: 100n = 10000, n^2 = 10000, linear wins: False\nn=200: 100n = 20000, n^2 = 40000, linear wins: True\n```",
   "tags": [
-   "dsa",
-   "big-o",
    "complexity",
-   "algorithms"
+   "big-o",
+   "fundamentals",
+   "growth-rates",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "If O(n) beats O(n squared) asymptotically, why does the constant matter?",
+    "a": "Because asymptotic means 'eventually', and real inputs are often below the crossover. The output shows 100n losing to n squared until n passes 100. That is why .NET's sort switches to insertion sort for partitions under sixteen elements despite insertion sort being quadratic, and why a hash table can lose to a linear scan over a few dozen items. The notation tells you the shape of growth, not which implementation to pick for your data."
+   },
+   {
+    "q": "What is the difference between O, Omega and Theta?",
+    "a": "O is an upper bound on growth, Omega a lower bound, and Theta both at once - a tight characterisation. Saying quicksort is O(n squared) is true and describes its worst case; saying it is Theta(n log n) on average is the more informative statement. In practice people say O where they mean Theta, which is usually harmless but occasionally hides the distinction between 'no worse than' and 'exactly'."
+   },
+   {
+    "q": "Why count operations instead of timing the code?",
+    "a": "Because timings depend on the machine, the JIT, cache state and what else is running, so they are neither reproducible nor comparable - and a demonstration whose output changes between runs teaches nothing. Counting the operations the algorithm actually performs is exact and shows the growth ratio directly: ten times the input gives ten times the work for linear and a hundred times for quadratic, which is the definition made visible."
+   }
   ]
  },
  {
@@ -17,12 +32,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is the difference between an array and a linked list?",
-  "answer": "An array stores elements contiguously—O(1) random access by index, cache-friendly, but O(n) insert/delete in the middle (shifting) and fixed/resizable-with-copy size. A linked list stores nodes with pointers—O(1) insert/delete given the node, dynamic size, but O(n) access and poor cache locality. Use arrays for indexed access and iteration; linked lists for frequent insertions/deletions at known positions.",
+  "answer": "**Approach**\n\nThe difference is contiguous storage versus linked nodes, and everything else follows from it. The program counts the actual element moves and pointer hops each structure needs, so the trade-off is visible rather than asserted.\n\n**Logic**\n\nAn array stores elements adjacently, so indexing is arithmetic — O(1) — but inserting at the front shifts everything after it.\n\nA linked list stores a pointer per node, so inserting at a known position is O(1), but reaching position k requires k hops.\n\nThe usually-unmentioned factor is cache locality: an array's sequential scan is dramatically faster in practice than a linked list's, because each cache line brings in several elements while pointer chasing does not. That often outweighs the asymptotic advantage for middling sizes.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    // Element moves needed to insert at the front of an array n times.\n    private static long ArrayFrontInsertMoves(int n)\n    {\n        long moves = 0;\n        var list = new List<int>();\n\n        for (int i = 0; i < n; i++)\n        {\n            moves += list.Count;   // everything after the insertion point shifts\n            list.Insert(0, i);\n        }\n\n        return moves;\n    }\n\n    // A linked list relinks a constant number of pointers per front insert.\n    private static long ListFrontInsertLinks(int n) => n * 2L;\n\n    // Hops needed to reach index k.\n    private static long ArrayIndexHops(int k) => 1;\n    private static long ListIndexHops(int k) => k;\n\n    public static void Main()\n    {\n        Console.WriteLine($\"{\"n\",8}{\"array moves\",16}{\"list pointer writes\",22}\");\n\n        foreach (int n in new[] { 10, 100, 1000 })\n            Console.WriteLine($\"{n,8}{ArrayFrontInsertMoves(n),16}{ListFrontInsertLinks(n),22}\");\n\n        Console.WriteLine();\n        Console.WriteLine($\"{\"index\",8}{\"array hops\",14}{\"list hops\",14}\");\n\n        foreach (int k in new[] { 0, 100, 5000 })\n            Console.WriteLine($\"{k,8}{ArrayIndexHops(k),14}{ListIndexHops(k),14}\");\n\n        Console.WriteLine();\n        Console.WriteLine(\"array: O(1) index, O(n) front insert, contiguous and cache friendly\");\n        Console.WriteLine(\"list:  O(n) index, O(1) insert at a known node, a pointer per element\");\n    }\n}\n```\n\n**Output**\n\n```\n       n     array moves   list pointer writes\n      10              45                    20\n     100            4950                   200\n    1000          499500                  2000\n\n   index    array hops     list hops\n       0             1             0\n     100             1           100\n    5000             1          5000\n\narray: O(1) index, O(n) front insert, contiguous and cache friendly\nlist:  O(n) index, O(1) insert at a known node, a pointer per element\n```",
   "tags": [
-   "dsa",
-   "array",
-   "linked-list",
-   "data-structures"
+   "data-structures",
+   "arrays",
+   "linked-lists",
+   "trade-offs",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "If linked lists insert in O(1), why are arrays the usual default?",
+    "a": "Because that O(1) assumes you already hold the node - if you have to find the position first, the search is O(n) and dominates, so a front-or-back insert is the only case that really benefits. Add the cache advantage of contiguous memory, the per-node pointer overhead, and the allocation cost of every insert, and arrays win for most workloads. The honest summary is that linked lists win for splicing at known positions and for structures that must never reallocate."
+   },
+   {
+    "q": "Why is the array move count exactly n(n-1)/2?",
+    "a": "Because inserting at the front of a list that already holds k elements shifts all k of them, so the total over n insertions is 0 + 1 + ... + (n-1) - which is 499500 for n of 1000, as the output shows. That is the quadratic growth made concrete. Inserting at the BACK instead is amortised O(1), which is why appending to a List is cheap and prepending is not."
+   },
+   {
+    "q": "What does cache locality change in practice?",
+    "a": "A cache line of 64 bytes holds sixteen ints, so a sequential array scan gets fifteen of every sixteen elements for free once the line is loaded. A linked list's nodes may be scattered, so each hop can be a cache miss costing a hundred-odd cycles. In benchmarks a linked list traversal is often an order of magnitude slower than an array scan of the same length, which is why the theoretical bounds alone are a poor guide to the choice."
+   }
   ]
  },
  {
@@ -30,12 +60,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "How does a hash table work and what causes collisions?",
-  "answer": "A hash table maps keys to buckets via a hash function for average O(1) lookup/insert/delete. Collisions occur when different keys hash to the same bucket; they're resolved by chaining (linked list/tree per bucket) or open addressing (probing for the next slot). A good hash function and low load factor (resize/rehash when full) keep operations near O(1); poor hashing degrades to O(n). It underpins Dictionary/HashSet.",
+  "answer": "**Approach**\n\nA hash function maps a key to a bucket index; collisions happen when distinct keys land in the same bucket. The program implements a small table with chaining and *counts* the collisions produced by a good hash against a deliberately poor one.\n\n**Logic**\n\nCollisions are unavoidable by pigeonhole — there are more possible keys than buckets — so the question is never whether they happen but how well they are spread.\n\nA poor hash concentrates keys into a few buckets, degrading lookups from O(1) to O(n) as chains grow. The demonstration uses a hash that only looks at the first character, which is exactly the shape of a real-world mistake.\n\nLoad factor drives resizing: once entries per bucket rise past a threshold, the table grows and rehashes, which is why insertion is amortised rather than worst-case O(1).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    private class TinyHashTable\n    {\n        private readonly List<(string Key, int Value)>[] _buckets;\n        private readonly Func<string, int> _hash;\n        public int Collisions { get; private set; }\n\n        public TinyHashTable(int buckets, Func<string, int> hash)\n        {\n            _buckets = new List<(string, int)>[buckets];\n            for (int i = 0; i < buckets; i++) _buckets[i] = new List<(string, int)>();\n            _hash = hash;\n        }\n\n        public void Put(string key, int value)\n        {\n            var bucket = _buckets[Index(key)];\n\n            // A collision is a NEW key landing in an already-occupied bucket.\n            if (bucket.Count > 0 && !bucket.Any(e => e.Key == key)) Collisions++;\n\n            for (int i = 0; i < bucket.Count; i++)\n                if (bucket[i].Key == key) { bucket[i] = (key, value); return; }\n\n            bucket.Add((key, value));\n        }\n\n        public int Get(string key, out int probes)\n        {\n            var bucket = _buckets[Index(key)];\n            probes = 0;\n\n            foreach (var entry in bucket)\n            {\n                probes++;\n                if (entry.Key == key) return entry.Value;\n            }\n\n            return -1;\n        }\n\n        private int Index(string key) => (_hash(key) & 0x7fffffff) % _buckets.Length;\n\n        public string Shape => string.Join(\",\", _buckets.Select(b => b.Count));\n    }\n\n    private static int GoodHash(string key)\n    {\n        int h = 17;\n        foreach (char c in key) h = h * 31 + c;   // every character contributes\n        return h;\n    }\n\n    private static int PoorHash(string key) => key.Length == 0 ? 0 : key[0];\n\n    public static void Main()\n    {\n        // Deliberately clustered first letters, which is what the poor hash keys on.\n        var keys = new[] { \"apple\", \"avocado\", \"apricot\", \"almond\", \"apex\",\n                           \"banana\", \"blueberry\", \"basil\", \"beet\",\n                           \"cherry\", \"cranberry\", \"cumin\" };\n\n        var good = new TinyHashTable(16, GoodHash);\n        var poor = new TinyHashTable(16, PoorHash);\n\n        for (int i = 0; i < keys.Length; i++) { good.Put(keys[i], i); poor.Put(keys[i], i); }\n\n        Console.WriteLine($\"good hash: {good.Collisions} collision(s), buckets [{good.Shape}]\");\n        Console.WriteLine($\"poor hash: {poor.Collisions} collision(s), buckets [{poor.Shape}]\");\n\n        good.Get(\"apricot\", out int goodProbes);\n        poor.Get(\"apricot\", out int poorProbes);\n\n        Console.WriteLine($\"probes to find apricot - good: {goodProbes}, poor: {poorProbes}\");\n\n        Console.WriteLine($\"missing key returns: {good.Get(\"kiwi\", out _)}\");\n\n        good.Put(\"apple\", 99);\n        Console.WriteLine($\"overwrite is not a collision: {good.Get(\"apple\", out _)}, \" +\n                          $\"collisions still {good.Collisions}\");\n    }\n}\n```\n\n**Output**\n\n```\ngood hash: 3 collision(s), buckets [0,1,1,2,1,0,2,0,0,2,1,1,0,0,0,1]\npoor hash: 9 collision(s), buckets [0,5,4,3,0,0,0,0,0,0,0,0,0,0,0,0]\nprobes to find apricot - good: 1, poor: 3\nmissing key returns: -1\noverwrite is not a collision: 99, collisions still 3\n```",
   "tags": [
-   "dsa",
    "hash-table",
    "collisions",
-   "hashing"
+   "chaining",
+   "load-factor",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why are collisions unavoidable?",
+    "a": "By pigeonhole: the key space is effectively unbounded while the bucket count is finite, so some keys must share a bucket. A hash function can only spread them well, never eliminate collisions. That is why every real implementation pairs a hash with a resolution strategy, and why the interesting question is the distribution rather than the existence of collisions."
+   },
+   {
+    "q": "What does a poor hash actually cost?",
+    "a": "It concentrates keys into a few buckets, so chains grow and lookups degrade from O(1) toward O(n). The output makes it visible: the same twelve keys give three collisions spread across sixteen buckets with a good hash, and nine collisions crammed into three buckets with one that only reads the first character - thirteen of the sixteen buckets sit empty. The probe count follows, three instead of one. At scale that is the difference between a constant-time map and a linear scan, and it is also a denial-of-service vector, which is why frameworks randomise string hashing per process."
+   },
+   {
+    "q": "How do chaining and open addressing differ?",
+    "a": "Chaining stores a list per bucket, so it tolerates a load factor above one and deletion is trivial. Open addressing stores entries in the array itself and probes for the next free slot, which is more cache friendly and avoids per-node allocation, but it degrades sharply as the table fills and deletion needs tombstones. .NET's Dictionary uses chaining over an entry array; many high-performance maps use open addressing with a low load factor."
+   }
   ]
  },
  {
@@ -43,13 +88,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is a stack vs a queue?",
-  "answer": "A stack is LIFO (last-in-first-out)—push/pop at one end—used for call stacks, undo, expression evaluation, backtracking, DFS. A queue is FIFO (first-in-first-out)—enqueue at the back, dequeue at the front—used for scheduling, buffering, BFS. Variants: deque (both ends), priority queue (ordered by priority). Both support O(1) core operations. Choose by whether you need last-in or first-in ordering.",
+  "answer": "**Approach**\n\nA stack is last-in-first-out, a queue is first-in-first-out. Feeding both the same input and printing the output order makes the difference concrete, along with where each one is the natural fit.\n\n**Logic**\n\nThe distinction is purely the removal order — both support push and pop in O(1), and both can be backed by an array or a linked list.\n\nWhere it matters is in traversals: a stack gives depth-first, a queue gives breadth-first, and that single substitution turns one graph algorithm into the other.\n\nThe call stack, undo history and expression evaluation are stacks; job scheduling, BFS and producer-consumer buffers are queues.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    // The same graph walk: only the container changes.\n    private static string Traverse(Dictionary<int, List<int>> graph, int start, bool useStack)\n    {\n        var seen = new HashSet<int> { start };\n        var order = new List<int>();\n\n        var stack = new Stack<int>();\n        var queue = new Queue<int>();\n\n        if (useStack) stack.Push(start); else queue.Enqueue(start);\n\n        while (useStack ? stack.Count > 0 : queue.Count > 0)\n        {\n            int node = useStack ? stack.Pop() : queue.Dequeue();\n            order.Add(node);\n\n            foreach (int next in graph[node])\n            {\n                if (!seen.Add(next)) continue;\n                if (useStack) stack.Push(next); else queue.Enqueue(next);\n            }\n        }\n\n        return string.Join(\",\", order);\n    }\n\n    public static void Main()\n    {\n        var stack = new Stack<int>();\n        var queue = new Queue<int>();\n\n        foreach (int v in new[] { 1, 2, 3 }) { stack.Push(v); queue.Enqueue(v); }\n\n        var fromStack = new List<int>();\n        while (stack.Count > 0) fromStack.Add(stack.Pop());\n\n        var fromQueue = new List<int>();\n        while (queue.Count > 0) fromQueue.Add(queue.Dequeue());\n\n        Console.WriteLine($\"pushed 1,2,3 - stack out: {string.Join(\",\", fromStack)} (LIFO)\");\n        Console.WriteLine($\"pushed 1,2,3 - queue out: {string.Join(\",\", fromQueue)} (FIFO)\");\n\n        //     1\n        //    / \\\n        //   2   3\n        //  /\n        // 4\n        var graph = new Dictionary<int, List<int>>\n        {\n            [1] = new() { 2, 3 },\n            [2] = new() { 4 },\n            [3] = new(),\n            [4] = new()\n        };\n\n        Console.WriteLine($\"stack gives depth first:   {Traverse(graph, 1, useStack: true)}\");\n        Console.WriteLine($\"queue gives breadth first: {Traverse(graph, 1, useStack: false)}\");\n    }\n}\n```\n\n**Output**\n\n```\npushed 1,2,3 - stack out: 3,2,1 (LIFO)\npushed 1,2,3 - queue out: 1,2,3 (FIFO)\nstack gives depth first:   1,3,2,4\nqueue gives breadth first: 1,2,3,4\n```",
   "tags": [
-   "dsa",
+   "data-structures",
    "stack",
    "queue",
-   "lifo",
-   "fifo"
+   "traversal-order",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does swapping the container turn DFS into BFS?",
+    "a": "Because the container decides which discovered-but-unvisited node is explored next. A stack returns the most recently discovered, so the walk plunges down one branch before backtracking; a queue returns the earliest, so it finishes each level before descending. Everything else - the visited set, the neighbour loop - is identical, which is why the demonstration runs one function with a flag rather than two functions."
+   },
+   {
+    "q": "Why does the stack traversal visit 3 before 2?",
+    "a": "Because the neighbours are pushed in order 2 then 3, so 3 is on top and comes off first. That is a genuine property of the iterative form, not a bug: recursive DFS visits 2 first because it recurses immediately rather than pushing both. If a specific order is required, push the neighbours in reverse. It is worth knowing because an iterative DFS and a recursive DFS on the same graph can produce different valid orders."
+   },
+   {
+    "q": "Where does a deque fit?",
+    "a": "A double-ended queue supports insertion and removal at both ends, so it is a superset of both - and that is what 0-1 BFS uses, pushing zero-weight edges to the front and one-weight edges to the back to keep the frontier sorted without a heap. It is also the structure behind the monotonic queue for sliding-window maximum. When a problem needs both orders, reaching for a deque rather than maintaining two structures is usually the right move."
+   }
   ]
  },
  {
@@ -57,13 +116,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is a binary search tree and its complexity?",
-  "answer": "A BST is a tree where each node's left subtree holds smaller keys and right subtree larger keys, enabling O(log n) search/insert/delete when balanced. If it becomes unbalanced (sorted inserts), it degrades to O(n) (a linked list). Self-balancing variants (AVL, Red-Black) maintain O(log n) by rotations. BSTs support ordered operations (in-order traversal gives sorted output, range queries).",
+  "answer": "**Approach**\n\nA BST keeps every left descendant below a node and every right descendant above it, so search descends by comparison. The program builds a balanced and a degenerate tree from the same values and counts the comparisons each needs.\n\n**Logic**\n\nThe O(log n) figure quoted for BSTs is the *balanced* case. Inserting sorted data produces a chain, where every operation is O(n) — and sorted input is common, which is why unbalanced BSTs fail in practice rather than in theory.\n\nThat is what self-balancing trees exist to prevent: AVL, red-black and treaps all guarantee O(log n) by restructuring on insertion.\n\nIn-order traversal yields sorted values, which is the property that makes a BST more than a lookup structure.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private class Node\n    {\n        public int Value;\n        public Node Left, Right;\n        public Node(int v) { Value = v; }\n    }\n\n    private static Node Insert(Node root, int value)\n    {\n        if (root == null) return new Node(value);\n\n        if (value < root.Value) root.Left = Insert(root.Left, value);\n        else if (value > root.Value) root.Right = Insert(root.Right, value);\n\n        return root;\n    }\n\n    private static bool Search(Node root, int value, out int comparisons)\n    {\n        comparisons = 0;\n\n        while (root != null)\n        {\n            comparisons++;\n            if (value == root.Value) return true;\n            root = value < root.Value ? root.Left : root.Right;\n        }\n\n        return false;\n    }\n\n    private static int Height(Node root) =>\n        root == null ? 0 : 1 + Math.Max(Height(root.Left), Height(root.Right));\n\n    private static void InOrder(Node root, List<int> into)\n    {\n        if (root == null) return;\n        InOrder(root.Left, into);\n        into.Add(root.Value);\n        InOrder(root.Right, into);\n    }\n\n    public static void Main()\n    {\n        // Same seven values, two very different shapes.\n        Node balanced = null;\n        foreach (int v in new[] { 4, 2, 6, 1, 3, 5, 7 }) balanced = Insert(balanced, v);\n\n        Node degenerate = null;\n        foreach (int v in new[] { 1, 2, 3, 4, 5, 6, 7 }) degenerate = Insert(degenerate, v);\n\n        Console.WriteLine($\"balanced height: {Height(balanced)}, \" +\n                          $\"degenerate height: {Height(degenerate)}\");\n\n        Search(balanced, 7, out int balancedProbes);\n        Search(degenerate, 7, out int degenerateProbes);\n\n        Console.WriteLine($\"comparisons to find 7 - balanced: {balancedProbes}, \" +\n                          $\"degenerate: {degenerateProbes}\");\n\n        Search(balanced, 99, out int missProbes);\n        Console.WriteLine($\"comparisons for a miss in the balanced tree: {missProbes}\");\n\n        // In-order is sorted in BOTH, whatever the shape.\n        var fromBalanced = new List<int>();\n        var fromDegenerate = new List<int>();\n        InOrder(balanced, fromBalanced);\n        InOrder(degenerate, fromDegenerate);\n\n        Console.WriteLine($\"in-order balanced:   {string.Join(\",\", fromBalanced)}\");\n        Console.WriteLine($\"in-order degenerate: {string.Join(\",\", fromDegenerate)}\");\n    }\n}\n```\n\n**Output**\n\n```\nbalanced height: 3, degenerate height: 7\ncomparisons to find 7 - balanced: 3, degenerate: 7\ncomparisons for a miss in the balanced tree: 3\nin-order balanced:   1,2,3,4,5,6,7\nin-order degenerate: 1,2,3,4,5,6,7\n```",
   "tags": [
-   "dsa",
    "bst",
-   "tree",
-   "balanced",
-   "complexity"
+   "complexity",
+   "balance",
+   "fundamentals",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is quoting O(log n) for a BST misleading?",
+    "a": "Because that is the balanced case, and nothing about a plain BST enforces balance. Inserting sorted values produces a chain of height n, so every operation becomes O(n) - a linked list with extra pointers. The output shows seven comparisons instead of three on only seven values, and the gap widens with size. Since sorted or nearly sorted input is extremely common, this is a routine failure rather than a pathological one."
+   },
+   {
+    "q": "What do self-balancing trees do differently?",
+    "a": "They restructure during insertion and deletion to keep the height logarithmic. AVL trees maintain a strict height-difference invariant and rebalance with rotations, giving faster lookups; red-black trees keep a looser invariant and rebalance less, giving faster modifications. Treaps and skip lists achieve the same bound probabilistically with simpler code. All of them pay a constant-factor cost on writes to guarantee the bound that a plain BST only hopes for."
+   },
+   {
+    "q": "When would you choose a BST over a hash table?",
+    "a": "When order matters. A hash table gives O(1) average lookup but no ordering at all, whereas a balanced BST supports in-order traversal, range queries, and finding the predecessor or successor of a key - all in O(log n). That is why SortedDictionary exists alongside Dictionary. If you only ever look up by exact key, the hash table wins; the moment you need 'all keys between x and y', it cannot help you."
+   }
   ]
  },
  {
@@ -71,13 +144,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is the difference between BFS and DFS?",
-  "answer": "Breadth-First Search explores level by level using a queue—finds shortest paths in unweighted graphs and explores nearest nodes first. Depth-First Search goes deep along a branch using a stack/recursion—good for topological sort, cycle detection, connected components, and backtracking. Both are O(V+E). Choose BFS for shortest paths/level-order and DFS for exhaustive/deep exploration or when recursion fits the problem.",
+  "answer": "**Approach**\n\nBoth visit every reachable node; they differ in the order and in what that order guarantees. The program runs both on one graph and shows where the shortest-path guarantee holds and where it does not.\n\n**Logic**\n\nBFS explores level by level using a queue, so the first time it reaches a node is by a path with the fewest edges — that is the guarantee, and it holds only when every edge costs the same.\n\nDFS plunges down one branch using a stack or recursion, so it reaches nodes by whatever path it happened to take. It is the right tool for cycle detection, topological sorting, and anything about the structure of the exploration tree.\n\nMemory differs too: BFS holds a frontier proportional to the graph's width; DFS holds a path proportional to its depth.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private static readonly Dictionary<int, List<int>> Graph = new()\n    {\n        [1] = new() { 2, 3 },\n        [2] = new() { 4 },\n        [3] = new() { 4 },\n        [4] = new() { 5 },\n        [5] = new()\n    };\n\n    private static (string Order, int Distance) Bfs(int start, int target)\n    {\n        var order = new List<int>();\n        var distance = new Dictionary<int, int> { [start] = 0 };\n        var queue = new Queue<int>();\n        queue.Enqueue(start);\n\n        while (queue.Count > 0)\n        {\n            int node = queue.Dequeue();\n            order.Add(node);\n\n            foreach (int next in Graph[node])\n            {\n                if (distance.ContainsKey(next)) continue;\n                distance[next] = distance[node] + 1;\n                queue.Enqueue(next);\n            }\n        }\n\n        return (string.Join(\",\", order), distance.GetValueOrDefault(target, -1));\n    }\n\n    private static (string Order, int Distance) Dfs(int start, int target)\n    {\n        var order = new List<int>();\n        var distance = new Dictionary<int, int> { [start] = 0 };\n        var stack = new Stack<int>();\n        stack.Push(start);\n\n        while (stack.Count > 0)\n        {\n            int node = stack.Pop();\n            order.Add(node);\n\n            foreach (int next in Graph[node])\n            {\n                if (distance.ContainsKey(next)) continue;\n                distance[next] = distance[node] + 1;   // NOT a shortest distance\n                stack.Push(next);\n            }\n        }\n\n        return (string.Join(\",\", order), distance.GetValueOrDefault(target, -1));\n    }\n\n    public static void Main()\n    {\n        var bfs = Bfs(1, 5);\n        var dfs = Dfs(1, 5);\n\n        Console.WriteLine($\"BFS order: {bfs.Order}\");\n        Console.WriteLine($\"DFS order: {dfs.Order}\");\n        Console.WriteLine($\"BFS distance to 5: {bfs.Distance} (guaranteed shortest)\");\n        Console.WriteLine($\"DFS distance to 5: {dfs.Distance} (whatever path it took)\");\n\n        Console.WriteLine();\n        Console.WriteLine(\"BFS: queue, level by level, shortest path on unweighted graphs\");\n        Console.WriteLine(\"     memory proportional to the widest level\");\n        Console.WriteLine(\"DFS: stack or recursion, one branch to the end\");\n        Console.WriteLine(\"     memory proportional to the deepest path\");\n    }\n}\n```\n\n**Output**\n\n```\nBFS order: 1,2,3,4,5\nDFS order: 1,3,4,5,2\nBFS distance to 5: 3 (guaranteed shortest)\nDFS distance to 5: 3 (whatever path it took)\n\nBFS: queue, level by level, shortest path on unweighted graphs\n     memory proportional to the widest level\nDFS: stack or recursion, one branch to the end\n     memory proportional to the deepest path\n```",
   "tags": [
-   "dsa",
+   "graphs",
    "bfs",
    "dfs",
-   "graph",
-   "traversal"
+   "traversal",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does BFS guarantee the shortest path and DFS not?",
+    "a": "Because BFS settles nodes in non-decreasing distance order - it cannot reach a node at distance three before exhausting everything at distance two - so the first arrival is by a fewest-edge path. DFS reaches a node by whatever branch it happened to descend, which may be far longer. In this small graph both happen to report three, which is exactly why the guarantee matters: DFS being right sometimes is not the same as being right always, and a larger graph exposes the difference."
+   },
+   {
+    "q": "When is DFS clearly the better choice?",
+    "a": "When the question is about structure rather than distance: cycle detection, topological sorting, strongly connected components, articulation points and bridges all depend on the DFS tree and its back edges, which BFS does not produce. It is also better on very wide graphs, where BFS's frontier can exhaust memory while DFS only holds one path. Backtracking search - sudoku, n-queens - is DFS by nature."
+   },
+   {
+    "q": "Why does the BFS guarantee break with weighted edges?",
+    "a": "Because fewest edges stops meaning lowest cost - a two-edge path of weight ten loses to a five-edge path of weight five. BFS has no way to express that, so the answer becomes Dijkstra, which settles nodes in cost order using a priority queue. The special case worth knowing is weights of only zero and one, where a deque with front and back insertion recovers linear time without a heap."
+   }
   ]
  },
  {
@@ -85,12 +172,27 @@
   "subcategory": "DSA",
   "difficulty": "Hard",
   "question": "What is dynamic programming?",
-  "answer": "Dynamic programming solves problems by breaking them into overlapping subproblems and storing subproblem results to avoid recomputation—via memoization (top-down recursion + cache) or tabulation (bottom-up table). It applies when a problem has optimal substructure and overlapping subproblems (Fibonacci, knapsack, longest common subsequence, edit distance). It turns exponential brute force into polynomial time by trading memory for speed.",
+  "answer": "**Approach**\n\nDP solves problems with overlapping subproblems by computing each subproblem once and reusing the result. The program counts the recursive calls with and without memoisation, so the saving is a number rather than a claim.\n\n**Logic**\n\nTwo conditions must hold. *Overlapping subproblems* means the same subproblem recurs — otherwise caching saves nothing, which is why merge sort is divide and conquer rather than DP. *Optimal substructure* means an optimal solution is built from optimal solutions to subproblems.\n\nTop-down memoisation and bottom-up tabulation compute the same values; the difference is that memoisation only visits subproblems that are actually needed, while tabulation avoids recursion and is usually easier to space-optimise.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private static long _naiveCalls, _memoCalls;\n\n    private static long NaiveFib(int n)\n    {\n        _naiveCalls++;\n        return n <= 1 ? n : NaiveFib(n - 1) + NaiveFib(n - 2);\n    }\n\n    private static long MemoFib(int n, Dictionary<int, long> memo)\n    {\n        _memoCalls++;\n        if (n <= 1) return n;\n        if (memo.TryGetValue(n, out long cached)) return cached;\n\n        return memo[n] = MemoFib(n - 1, memo) + MemoFib(n - 2, memo);\n    }\n\n    // Bottom-up: the same values, no recursion, O(1) space.\n    private static long TableFib(int n)\n    {\n        long a = 0, b = 1;\n        for (int i = 0; i < n; i++) (a, b) = (b, a + b);\n        return a;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine($\"{\"n\",5}{\"naive calls\",14}{\"memo calls\",13}{\"value\",12}\");\n\n        foreach (int n in new[] { 10, 20, 30 })\n        {\n            _naiveCalls = _memoCalls = 0;\n            long naive = NaiveFib(n);\n            long memo = MemoFib(n, new Dictionary<int, long>());\n\n            Console.WriteLine($\"{n,5}{_naiveCalls,14}{_memoCalls,13}{naive,12}\");\n\n            if (naive != memo || naive != TableFib(n))\n                Console.WriteLine(\"  MISMATCH between the three methods\");\n        }\n\n        Console.WriteLine();\n        Console.WriteLine(\"overlapping subproblems: the same n is recomputed exponentially often\");\n        Console.WriteLine(\"optimal substructure: F(n) is built from F(n-1) and F(n-2)\");\n        Console.WriteLine($\"tabulated F(90) = {TableFib(90)}\");\n    }\n}\n```\n\n**Output**\n\n```\n    n   naive calls   memo calls       value\n   10           177           19          55\n   20         21891           39        6765\n   30       2692537           59      832040\n\noverlapping subproblems: the same n is recomputed exponentially often\noptimal substructure: F(n) is built from F(n-1) and F(n-2)\ntabulated F(90) = 2880067194370816120\n```",
   "tags": [
-   "dsa",
-   "dynamic-programming",
-   "memoization",
-   "tabulation"
+   "dp",
+   "memoisation",
+   "tabulation",
+   "fundamentals",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "What makes a problem suitable for DP?",
+    "a": "Two properties together. Overlapping subproblems - the same subproblem is reached by many paths, so caching pays; without it you have divide and conquer, which is why merge sort gains nothing from a cache. And optimal substructure - an optimal answer is composed of optimal answers to subproblems, which is what lets you combine them without re-examining the whole space. Shortest paths have it; longest simple paths do not, which is why that problem is NP-hard."
+   },
+   {
+    "q": "Memoisation or tabulation?",
+    "a": "Memoisation only computes the subproblems actually reachable from the query, which matters when the state space is large and sparsely used, and it follows the recurrence directly so it is easier to write from the definition. Tabulation has no recursion overhead or stack-depth risk and makes space optimisation obvious - the Fibonacci table collapses to two variables, as the third method here shows. I usually derive with memoisation and convert to a table if the space or depth matters."
+   },
+   {
+    "q": "Why does the call count grow so fast without a cache?",
+    "a": "Because the naive recursion recomputes the same values along every branch - the number of calls follows the Fibonacci numbers themselves, so it is exponential at roughly 1.6 to the n. The output shows 2.7 million calls for n of 30 against 59 with a cache. That ratio is the entire value of DP made concrete, and it is why the naive version is unusable by n of 50 while the tabulated one reaches 90 instantly."
+   }
   ]
  },
  {
@@ -98,12 +200,27 @@
   "subcategory": "DSA",
   "difficulty": "Medium",
   "question": "What is the difference between a greedy algorithm and dynamic programming?",
-  "answer": "A greedy algorithm makes the locally optimal choice at each step hoping for a global optimum—fast and simple but only correct when the problem has the greedy-choice property (e.g., Dijkstra, Huffman, interval scheduling). DP considers all subproblem combinations to guarantee optimality when greedy fails (e.g., 0/1 knapsack). Use greedy when a proof of optimality exists; otherwise DP for guaranteed correctness at higher cost.",
+  "answer": "**Approach**\n\nGreedy commits to a locally best choice and never reconsiders; DP explores the consequences of every choice and keeps the best. The program runs both on coin change, where greedy is right for one denomination set and wrong for another.\n\n**Logic**\n\nGreedy is correct only when the problem has the *greedy choice property* — a locally optimal choice is part of some globally optimal solution. That has to be proved, usually by an exchange argument, not assumed because the algorithm looks reasonable.\n\nWhen it holds, greedy is faster and simpler: no table, often no memory at all. When it does not, greedy produces a plausible wrong answer rather than failing loudly, which is the dangerous part.\n\nActivity selection and Huffman coding have the property; general coin change and 0/1 knapsack do not.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    private static int Greedy(int[] coins, int amount)\n    {\n        int used = 0;\n\n        foreach (int coin in coins.OrderByDescending(c => c))\n        {\n            used += amount / coin;\n            amount %= coin;\n        }\n\n        return amount == 0 ? used : -1;\n    }\n\n    private static int Optimal(int[] coins, int amount)\n    {\n        var best = new int[amount + 1];\n        Array.Fill(best, int.MaxValue);\n        best[0] = 0;\n\n        for (int total = 1; total <= amount; total++)\n            foreach (int coin in coins)\n                if (coin <= total && best[total - coin] != int.MaxValue)\n                    best[total] = Math.Min(best[total], best[total - coin] + 1);\n\n        return best[amount] == int.MaxValue ? -1 : best[amount];\n    }\n\n    private static void Compare(int[] coins, int amount)\n    {\n        int greedy = Greedy(coins, amount), optimal = Optimal(coins, amount);\n\n        Console.WriteLine($\"coins [{string.Join(\",\", coins)}] amount {amount}: \" +\n                          $\"greedy {greedy}, optimal {optimal}\" +\n                          (greedy == optimal ? \"\" : \"   <-- greedy is WRONG\"));\n    }\n\n    public static void Main()\n    {\n        // A canonical system: greedy is provably optimal.\n        Compare(new[] { 1, 5, 10, 25 }, 30);\n        Compare(new[] { 1, 5, 10, 25 }, 63);\n\n        // Not canonical: greedy takes the 4 and strands the remainder.\n        Compare(new[] { 1, 3, 4 }, 6);\n        Compare(new[] { 1, 7, 10 }, 14);\n\n        Compare(new[] { 2 }, 3);      // impossible either way\n        Compare(new[] { 1, 2, 5 }, 0);\n\n        Console.WriteLine();\n        Console.WriteLine(\"greedy: one pass, no table, correct only with the greedy choice property\");\n        Console.WriteLine(\"dp:     explores every choice, always correct, costs time and memory\");\n    }\n}\n```\n\n**Output**\n\n```\ncoins [1,5,10,25] amount 30: greedy 2, optimal 2\ncoins [1,5,10,25] amount 63: greedy 6, optimal 6\ncoins [1,3,4] amount 6: greedy 3, optimal 2   <-- greedy is WRONG\ncoins [1,7,10] amount 14: greedy 5, optimal 2   <-- greedy is WRONG\ncoins [2] amount 3: greedy -1, optimal -1\ncoins [1,2,5] amount 0: greedy 0, optimal 0\n\ngreedy: one pass, no table, correct only with the greedy choice property\ndp:     explores every choice, always correct, costs time and memory\n```",
   "tags": [
-   "dsa",
    "greedy",
-   "dynamic-programming",
-   "optimization"
+   "dp",
+   "correctness",
+   "trade-offs",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "How do you know whether greedy is valid for a given problem?",
+    "a": "You prove the greedy choice property, usually with an exchange argument: take any optimal solution, show that replacing its first choice with the greedy one keeps it valid and no worse, then induct. If the argument fails, look for a counterexample - which is exactly what coins [1,3,4] with amount 6 is. The dangerous part is that greedy never announces its failure; it returns three coins where two suffice, and only a comparison against the optimum reveals it."
+   },
+   {
+    "q": "If DP is always correct, why use greedy?",
+    "a": "Because when the property holds, greedy is dramatically cheaper - one pass, often O(n log n) for the sort and O(1) memory, against a table proportional to the state space. For coin change with amount in the millions, the DP table is millions of entries while greedy is a handful of divisions. Greedy also handles unbounded or continuous inputs where a table cannot be built, such as fractional knapsack."
+   },
+   {
+    "q": "Give examples on each side of the line.",
+    "a": "Greedy works for activity selection by earliest end time, Huffman coding, Dijkstra, minimum spanning trees, and fractional knapsack - each with a proof behind it. DP is needed for 0/1 knapsack, general coin change, edit distance, and longest common subsequence. The instructive pair is fractional versus 0/1 knapsack: allowing fractions makes the greedy ratio choice provably optimal, and forbidding them destroys the property entirely."
+   }
   ]
  },
  {

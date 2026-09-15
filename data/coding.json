@@ -15593,17 +15593,32 @@
   "subcategory": "Trees",
   "difficulty": "Medium",
   "question": "Convert a binary search tree into a sorted doubly linked list in place.",
-  "answer": "In-order traversal relinking each node's left pointer to the previous node and the previous node's right to the current, tracking the head. Time O(n), space O(h) for the recursion. Building a list and relinking afterwards defeats the in-place requirement.",
+  "answer": "**Approach**\n\nIn-order traversal, relinking each node to its predecessor as it is visited. `left` becomes the previous pointer and `right` the next.\n\n**Logic**\n\nIn-order is what makes it sorted — that is the only ordering that visits a BST's values ascending, so the link order falls out of the traversal rather than needing a sort.\n\nThe relinking must happen *after* recursing left, or the left subtree is unreachable by the time it is needed. Holding a running `previous` node is what lets each visit close the link backwards.\n\nFor the circular variant, the head and tail are joined at the end.\n\nO(n) time, O(height) stack.\n\nThe test walks the list both ways, because a one-directional check would pass an implementation that got the previous pointers wrong.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Node\n{\n    public int val;\n    public Node left, right;\n    public Node(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static Node ToDoublyLinkedList(Node root, bool circular = false)\n    {\n        if (root == null) return null;\n\n        Node head = null, previous = null;\n\n        void Visit(Node node)\n        {\n            if (node == null) return;\n\n            Visit(node.left);   // must come FIRST: relinking destroys node.left\n\n            if (previous == null) head = node;\n            else { previous.right = node; node.left = previous; }\n\n            previous = node;\n\n            Visit(node.right);\n        }\n\n        Visit(root);\n\n        if (circular) { head.left = previous; previous.right = head; }\n\n        return head;\n    }\n\n    private static Node Insert(Node root, int value)\n    {\n        if (root == null) return new Node(value);\n\n        if (value < root.val) root.left = Insert(root.left, value);\n        else root.right = Insert(root.right, value);\n\n        return root;\n    }\n\n    // Walk BOTH ways: a forward-only check misses broken previous pointers.\n    private static void Show(Node head)\n    {\n        if (head == null) { Console.WriteLine(\"(empty)\"); return; }\n\n        var forward = new List<int>();\n        Node tail = head;\n\n        for (var n = head; n != null; n = n.right)\n        {\n            forward.Add(n.val);\n            tail = n;\n            if (forward.Count > 50) break;\n        }\n\n        var backward = new List<int>();\n        for (var n = tail; n != null; n = n.left)\n        {\n            backward.Add(n.val);\n            if (backward.Count > 50) break;\n        }\n\n        backward.Reverse();\n        Console.WriteLine($\"{string.Join(\",\", forward)} | reverse matches: \" +\n                          $\"{string.Join(\",\", forward) == string.Join(\",\", backward)}\");\n    }\n\n    public static void Main()\n    {\n        Node tree = null;\n        foreach (int v in new[] { 4, 2, 5, 1, 3 }) tree = Insert(tree, v);\n        Show(ToDoublyLinkedList(tree));\n\n        Node single = Insert(null, 7);\n        Show(ToDoublyLinkedList(single));\n\n        Show(ToDoublyLinkedList(null));\n\n        Node chain = null;\n        foreach (int v in new[] { 1, 2, 3 }) chain = Insert(chain, v);   // degenerate\n        Show(ToDoublyLinkedList(chain));\n\n        Node circularTree = null;\n        foreach (int v in new[] { 2, 1, 3 }) circularTree = Insert(circularTree, v);\n        var circle = ToDoublyLinkedList(circularTree, circular: true);\n        Console.WriteLine($\"circular: {circle.val} -> {circle.right.val} -> \" +\n                          $\"{circle.right.right.val} -> {circle.right.right.right.val}\");\n    }\n}\n```\n\n**Output**\n\n```\n1,2,3,4,5 | reverse matches: True\n7 | reverse matches: True\n(empty)\n1,2,3 | reverse matches: True\ncircular: 1 -> 2 -> 3 -> 1\n```",
   "tags": [
-   "trees",
    "bst",
+   "in-order",
    "linked-list",
-   "in-place"
+   "in-place",
+   "csharp"
   ],
   "companies": [
    "Facebook",
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why must the relinking happen after the left recursion?",
+    "a": "Because the conversion overwrites node.left with the previous pointer, so once a node is relinked its left subtree is unreachable. Recursing left first means the subtree is fully converted before its parent's left pointer is repurposed. Doing it before, or capturing the child into a local and relinking early, both lose the subtree - and the symptom is a list that silently drops half the tree rather than an exception."
+   },
+   {
+    "q": "Why does the test walk the list in both directions?",
+    "a": "Because a forward-only check passes an implementation that sets the next pointers correctly and the previous pointers wrongly or not at all, which is a real and common half-finished state. Walking from the tail back and comparing to the reversed forward sequence tests the doubly linked invariant rather than just the ordering. It is the same instinct as checking the prev pointers in the flatten-a-multilevel-list problem."
+   },
+   {
+    "q": "Could this be done without recursion?",
+    "a": "Yes - an iterative in-order with an explicit stack does the same relinking and avoids the stack-depth risk on a degenerate tree, which is a genuine concern since a BST built from sorted input is a chain. Morris traversal goes further and uses O(1) space by temporarily threading the tree, though it is fiddly and it mutates during traversal, which interacts awkwardly with the relinking this problem also wants."
+   }
   ]
  },
  {
@@ -15611,16 +15626,31 @@
   "subcategory": "Trees",
   "difficulty": "Hard",
   "question": "Count the number of inversions using a balanced tree or Fenwick tree.",
-  "answer": "Process elements right to left, querying how many already-inserted values are smaller and then inserting - with coordinate compression when values are large. Time O(n log n). The merge sort formulation counts them during the merge step and is often simpler to write.",
+  "answer": "**Approach**\n\nWalk right to left, and for each element count how many already-seen values are strictly smaller using a Fenwick tree over compressed ranks.\n\n**Logic**\n\nAn inversion is a pair where a larger value precedes a smaller one. Scanning right to left means everything already inserted lies to the right, so the count of smaller values is exactly the inversions contributed by the current element.\n\nCoordinate compression is what makes the Fenwick tree viable: values may be arbitrary ints, but only their relative order matters, so mapping them to ranks 1..n bounds the tree size.\n\nO(n log n), against O(n²) for the brute force the test compares against.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    private class Fenwick\n    {\n        private readonly int[] _tree;\n        public Fenwick(int size) { _tree = new int[size + 1]; }\n\n        public void Add(int at, int delta)\n        {\n            for (; at < _tree.Length; at += at & -at) _tree[at] += delta;\n        }\n\n        public int PrefixSum(int at)\n        {\n            int total = 0;\n            for (; at > 0; at -= at & -at) total += _tree[at];\n            return total;\n        }\n    }\n\n    public static long CountInversions(int[] nums)\n    {\n        if (nums == null || nums.Length < 2) return 0;\n\n        // Compression: only the ORDER matters, so ranks 1..n bound the tree.\n        var ranks = nums.Distinct().OrderBy(v => v).ToArray();\n        var rankOf = ranks.Select((v, i) => (v, i)).ToDictionary(p => p.v, p => p.i + 1);\n\n        var tree = new Fenwick(ranks.Length);\n        long inversions = 0;\n\n        // Right to left: everything inserted is to the right of the current element.\n        for (int i = nums.Length - 1; i >= 0; i--)\n        {\n            int rank = rankOf[nums[i]];\n            inversions += tree.PrefixSum(rank - 1);   // strictly smaller, already seen\n            tree.Add(rank, 1);\n        }\n\n        return inversions;\n    }\n\n    private static long BruteForce(int[] nums)\n    {\n        long count = 0;\n\n        for (int i = 0; i < nums.Length; i++)\n            for (int j = i + 1; j < nums.Length; j++)\n                if (nums[i] > nums[j]) count++;\n\n        return count;\n    }\n\n    public static void Main()\n    {\n        int[][] cases =\n        {\n            new[] { 2, 4, 1, 3, 5 },\n            new[] { 5, 4, 3, 2, 1 },      // every pair inverted\n            new[] { 1, 2, 3 },            // none\n            new[] { 1 },\n            Array.Empty<int>(),\n            new[] { 2, 2, 2 },            // equal values are not inversions\n            new[] { -5, 100000, -5, 7 }\n        };\n\n        foreach (var nums in cases)\n            Console.WriteLine($\"[{string.Join(\",\", nums)}]: {CountInversions(nums)} \" +\n                              $\"(brute {BruteForce(nums)})\");\n\n        var random = new Random(8080);\n        var many = Enumerable.Range(0, 600).Select(_ => random.Next(-1000, 1000)).ToArray();\n        Console.WriteLine($\"600 random values agree: {CountInversions(many) == BruteForce(many)}\");\n    }\n}\n```\n\n**Output**\n\n```\n[2,4,1,3,5]: 3 (brute 3)\n[5,4,3,2,1]: 10 (brute 10)\n[1,2,3]: 0 (brute 0)\n[1]: 0 (brute 0)\n[]: 0 (brute 0)\n[2,2,2]: 0 (brute 0)\n[-5,100000,-5,7]: 2 (brute 2)\n600 random values agree: True\n```",
   "tags": [
-   "trees",
    "fenwick-tree",
    "inversions",
-   "counting"
+   "coordinate-compression",
+   "counting",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why scan right to left?",
+    "a": "Because it makes the Fenwick tree contain exactly the elements to the right of the current position, so a prefix sum below the current rank counts values that are both smaller and later - which is the definition of an inversion with this element as the larger one. Scanning left to right works too but counts the complement, requiring a subtraction from the number seen so far. The right-to-left form reads directly as the quantity wanted."
+   },
+   {
+    "q": "Why is coordinate compression necessary?",
+    "a": "Because a Fenwick tree is indexed by value, so raw ints would need an array spanning the whole value range - four billion entries for arbitrary input. Only the relative order matters for inversions, so mapping the distinct values to ranks 1 through n preserves every comparison while bounding the tree by the input size. The test with -5 and 100000 exercises exactly that sparsity."
+   },
+   {
+    "q": "How does merge sort compare as a solution?",
+    "a": "Merge sort counts inversions during the merge step - when an element is taken from the right half, it is inverted with every remaining element in the left half - giving the same O(n log n) with no compression and no extra structure. It is arguably the cleaner answer for this exact problem. The Fenwick version wins when you also need other order statistics, or when elements arrive incrementally, since it supports updates while merge sort is a one-shot pass."
+   }
   ]
  },
  {
@@ -15628,17 +15658,32 @@
   "subcategory": "Trees",
   "difficulty": "Easy",
   "question": "Given a binary tree, determine whether it is a mirror of itself iteratively.",
-  "answer": "A queue or stack holding pairs of nodes to compare - push left with right and right with left of each pair, checking values and null structure. Time O(n), space O(width). The recursive version is shorter but this variant tests whether the candidate can convert recursion to iteration.",
+  "answer": "**Approach**\n\nA queue holding node *pairs*. Each pair is compared, then their children are enqueued crosswise — outer with outer, inner with inner.\n\n**Logic**\n\nThe crosswise enqueue is the whole algorithm. Symmetry means the left subtree's left child mirrors the right subtree's right child, so the pairs must be formed across the axis rather than within each side.\n\nNulls must be enqueued, not skipped, because the *shape* has to match as well as the values — one side having a child where the other has none is exactly an asymmetry.\n\nO(n) time, O(width) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static bool IsSymmetric(TreeNode root)\n    {\n        if (root == null) return true;\n\n        var queue = new Queue<(TreeNode A, TreeNode B)>();\n        queue.Enqueue((root.left, root.right));\n\n        while (queue.Count > 0)\n        {\n            var (a, b) = queue.Dequeue();\n\n            if (a == null && b == null) continue;\n\n            // A child on one side and not the other is an asymmetry of shape.\n            if (a == null || b == null || a.val != b.val) return false;\n\n            // Crosswise: outer with outer, inner with inner.\n            queue.Enqueue((a.left, b.right));\n            queue.Enqueue((a.right, b.left));\n        }\n\n        return true;\n    }\n\n    public static void Main()\n    {\n        var symmetric = new TreeNode(1)\n        {\n            left = new TreeNode(2) { left = new TreeNode(3), right = new TreeNode(4) },\n            right = new TreeNode(2) { left = new TreeNode(4), right = new TreeNode(3) }\n        };\n        Console.WriteLine(IsSymmetric(symmetric));\n\n        // Same values, same shape, but not mirrored.\n        var notMirrored = new TreeNode(1)\n        {\n            left = new TreeNode(2) { right = new TreeNode(3) },\n            right = new TreeNode(2) { right = new TreeNode(3) }\n        };\n        Console.WriteLine(IsSymmetric(notMirrored));\n\n        Console.WriteLine(IsSymmetric(new TreeNode(1)));\n        Console.WriteLine(IsSymmetric(null));\n\n        var lopsided = new TreeNode(1) { left = new TreeNode(2) };\n        Console.WriteLine(IsSymmetric(lopsided));\n\n        var valuesDiffer = new TreeNode(1) { left = new TreeNode(2), right = new TreeNode(3) };\n        Console.WriteLine(IsSymmetric(valuesDiffer));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nFalse\nFalse\n```",
   "tags": [
    "trees",
-   "iterative",
+   "bfs",
    "symmetry",
-   "traversal"
+   "pairwise",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "LinkedIn"
+  ],
+  "followups": [
+   {
+    "q": "Why enqueue the children crosswise?",
+    "a": "Because a mirror reflects across the vertical axis, so the outermost nodes correspond to each other and the innermost do - the left child's left pairs with the right child's right. Enqueuing them straight would compare the two subtrees for equality rather than for mirroring, which is a different and weaker property. The second test is built to expose it: two identical subtrees, equal but not mirrored, so the straight comparison would wrongly say true."
+   },
+   {
+    "q": "Why enqueue nulls instead of skipping them?",
+    "a": "Because symmetry constrains the shape as well as the values, and a missing child on one side facing a present child on the other is precisely an asymmetry. Skipping nulls would silently pair up nodes at different positions and accept lopsided trees. The pair of nulls is then the base case that simply continues, so the null handling costs one line and covers both requirements."
+   },
+   {
+    "q": "Why write this iteratively at all?",
+    "a": "The recursive version is shorter and reads better, so it is what I would normally write. The iterative form matters when the tree can be deep enough to overflow the call stack - a degenerate tree of tens of thousands of nodes - and it is often asked specifically to see whether you can convert a two-argument recursion into a queue of pairs. That conversion, pairing the arguments into a single queue element, is the transferable part."
+   }
   ]
  },
  {
@@ -15659,18 +15704,33 @@
   "subcategory": "Bits",
   "difficulty": "Easy",
   "question": "Swap two numbers without a temporary variable, and why is it a bad idea?",
-  "answer": "XOR each into the other three times, or use arithmetic. It is a bad idea because it fails when both operands are the same variable, is slower than a temporary on modern compilers, and is harder to read. It is worth knowing as a puzzle and not worth using.",
+  "answer": "**Approach**\n\nThe XOR trick and the arithmetic trick both work, and both are worse than the obvious version. The program demonstrates the trick, the aliasing bug that breaks it, and the overflow that breaks the arithmetic variant.\n\n**Logic**\n\nXOR swapping relies on XOR being its own inverse. It fails catastrophically when both operands are the *same* storage location — `x ^ x` is zero, so the value is destroyed rather than swapped. That is not a hypothetical: it happens whenever a swap helper is called with the same index twice, which is common inside sorting code.\n\nThe arithmetic version has the same aliasing flaw plus signed overflow.\n\nModern compilers implement a temporary swap with register renaming, so the trick is not faster either.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private static void XorSwap(ref int a, ref int b)\n    {\n        a ^= b;\n        b ^= a;\n        a ^= b;\n    }\n\n    private static void SwapInArrayByXor(int[] values, int i, int j)\n    {\n        values[i] ^= values[j];\n        values[j] ^= values[i];\n        values[i] ^= values[j];\n    }\n\n    private static void SwapInArrayProperly(int[] values, int i, int j) =>\n        (values[i], values[j]) = (values[j], values[i]);\n\n    public static void Main()\n    {\n        int a = 3, b = 7;\n        XorSwap(ref a, ref b);\n        Console.WriteLine($\"xor swap: {a},{b}\");\n\n        // The aliasing bug: the same index twice DESTROYS the value.\n        var broken = new[] { 5, 6, 7 };\n        SwapInArrayByXor(broken, 1, 1);\n        Console.WriteLine($\"xor with i == j: {string.Join(\",\", broken)}\");\n\n        var fine = new[] { 5, 6, 7 };\n        SwapInArrayProperly(fine, 1, 1);\n        Console.WriteLine($\"tuple with i == j: {string.Join(\",\", fine)}\");\n\n        // The arithmetic variant overflows as well.\n        int big = 2000000000, alsoBig = 2000000000;\n        unchecked { big += alsoBig; alsoBig = big - alsoBig; big -= alsoBig; }\n        Console.WriteLine($\"arithmetic swap of two large values: {big},{alsoBig}\");\n\n        int x = 2000000000, y = 2000000000;\n        (x, y) = (y, x);\n        Console.WriteLine($\"tuple swap of the same values: {x},{y}\");\n\n        // The version to actually ship.\n        int p = 1, q = 2;\n        (p, q) = (q, p);\n        Console.WriteLine($\"tuple swap: {p},{q}\");\n    }\n}\n```\n\n**Output**\n\n```\nxor swap: 7,3\nxor with i == j: 5,0,7\ntuple with i == j: 5,6,7\narithmetic swap of two large values: 2000000000,2000000000\ntuple swap of the same values: 2000000000,2000000000\ntuple swap: 2,1\n```",
   "tags": [
-   "bits",
-   "xor",
-   "puzzles",
-   "practices"
+   "bit-manipulation",
+   "aliasing",
+   "code-quality",
+   "pitfalls",
+   "csharp"
   ],
   "companies": [
    "TCS",
    "Infosys",
    "Wipro",
    "Cognizant"
+  ],
+  "followups": [
+   {
+    "q": "Why exactly does XOR swapping fail when both operands are the same location?",
+    "a": "Because the first step computes a ^ a, which is zero, and writes it to the single storage location both names refer to - the original value is gone and the remaining two steps just shuffle zeros. The output shows index 1 becoming 0 rather than staying 6. It is not an edge case you can argue away: a swap helper inside a sort routine is routinely called with equal indices, and the corruption is silent."
+   },
+   {
+    "q": "Is the trick at least faster?",
+    "a": "No. It is three dependent operations that must execute in sequence, whereas a temporary swap is typically resolved by the compiler into register renaming with no instructions at all, or a pair of independent moves that pipeline. So the trick is slower, harder to read, and has a correctness trap. Its historical justification was saving a register on tiny embedded targets, which is not a constraint in a C# application."
+   },
+   {
+    "q": "What would you say if an interviewer asked for it?",
+    "a": "Write it, since that is what was asked, then say what it costs: the aliasing failure, the overflow in the arithmetic variant, and that it is not faster on any modern compiler. Demonstrating the trick and then explaining why you would not ship it answers the question and the question behind the question. Refusing to write it, or writing it without the caveat, each miss half the point."
+   }
   ]
  },
  {
