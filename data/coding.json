@@ -14286,16 +14286,31 @@
   "subcategory": "Strings",
   "difficulty": "Medium",
   "question": "Given a dictionary, find the longest word that can be built by deleting characters from a string.",
-  "answer": "For each candidate, run a two-pointer subsequence check against the string, keeping the longest and lexicographically smallest match. Time O(total dictionary length). Sorting the dictionary first lets you return on the first match rather than scanning all of it.",
+  "answer": "**Approach**\n\nFor each candidate word, a two-pointer subsequence check against the source. Keep the longest, breaking ties by the lexicographically smaller word.\n\n**Logic**\n\nDeleting characters without reordering is exactly the subsequence relation, so the check is a single forward walk — advance in the source always, advance in the candidate only on a match.\n\nSorting the dictionary first would cost O(n log n · L); comparing as you go is O(n · L) and expresses the tie-break explicitly rather than relying on a comparator.\n\nO(n · L).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static string LongestBuildable(string source, string[] dictionary)\n    {\n        string best = \"\";\n\n        foreach (string word in dictionary)\n        {\n            if (!IsSubsequence(word, source)) continue;\n\n            // Longer wins; on a tie the lexicographically smaller word wins.\n            if (word.Length > best.Length ||\n                (word.Length == best.Length && string.CompareOrdinal(word, best) < 0))\n                best = word;\n        }\n\n        return best;\n    }\n\n    // Deleting characters without reordering IS the subsequence relation.\n    private static bool IsSubsequence(string candidate, string source)\n    {\n        int i = 0;\n\n        foreach (char c in source)\n        {\n            if (i < candidate.Length && candidate[i] == c) i++;\n            if (i == candidate.Length) return true;\n        }\n\n        return i == candidate.Length;\n    }\n\n    private static void Show(string s) => Console.WriteLine(s.Length == 0 ? \"(none)\" : s);\n\n    public static void Main()\n    {\n        Show(LongestBuildable(\"abpcplea\", new[] { \"ale\", \"apple\", \"monkey\", \"plea\" }));\n\n        // Same length: \"a\" beats \"b\" alphabetically.\n        Show(LongestBuildable(\"abpcplea\", new[] { \"a\", \"b\", \"c\" }));\n\n        Show(LongestBuildable(\"abc\", new[] { \"xyz\" }));\n        Show(LongestBuildable(\"\", new[] { \"a\" }));\n        Show(LongestBuildable(\"abc\", new[] { \"abc\" }));\n        Show(LongestBuildable(\"aaa\", new[] { \"aaaa\" }));      // not enough characters\n\n        // Order matters: \"cb\" is not a subsequence of \"abc\".\n        Show(LongestBuildable(\"abc\", new[] { \"cb\", \"ab\" }));\n    }\n}\n```\n\n**Output**\n\n```\napple\na\n(none)\n(none)\nabc\n(none)\nab\n```",
   "tags": [
    "strings",
-   "two-pointers",
    "subsequence",
-   "greedy"
+   "two-pointers",
+   "tie-break",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why is this a subsequence check rather than an anagram or substring check?",
+    "a": "Because deleting characters leaves the survivors in their original order, which is precisely the definition of a subsequence. A substring would additionally require them to be contiguous, and an anagram check would allow reordering. The 'cb' against 'abc' test pins it down: the characters are all present but in the wrong order, so it fails. Naming the relation correctly is most of the work here."
+   },
+   {
+    "q": "Why compare as you go rather than sorting the dictionary?",
+    "a": "Because sorting by length descending then alphabetically lets you return the first match, but costs O(n log n) comparisons of whole words on top of the scan. Tracking the best during a single pass is O(n times L) and puts the tie-break rule in one visible place rather than hiding it in a comparator. Both are fine; the running comparison is easier to change if the tie-break rule turns out to be different from what you assumed."
+   },
+   {
+    "q": "How would you speed this up for many queries against one source string?",
+    "a": "Precompute, for each position in the source and each letter, the next occurrence of that letter at or after that position - an O(length times alphabet) table. Then each candidate is checked by jumping through the table in O(word length) with no scanning of the source at all. That turns repeated queries from O(source) each into O(word), which matters when the source is long and the dictionary large. It is the standard automaton-style preprocessing for subsequence queries."
+   }
   ]
  },
  {
@@ -14303,17 +14318,32 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Compute modular exponentiation efficiently.",
-  "answer": "Square and multiply - repeatedly square the base and multiply into the result when the corresponding exponent bit is set, taking the modulus at each step to bound the size. Time O(log exponent). Computing the power then taking the modulus overflows immediately for realistic inputs.",
+  "answer": "**Approach**\n\nSquare and multiply. Process the exponent bit by bit, squaring the base each step and multiplying into the result when the bit is set.\n\n**Logic**\n\nRepeated multiplication is O(exponent), which is unusable for the exponents used in cryptography. Binary exponentiation is O(log exponent).\n\nThe modulus is applied at every step, so no intermediate ever grows — that is the point, and it is why naive `Math.Pow` followed by a modulo is wrong rather than merely slow: the intermediate overflows long before the modulo runs.\n\nMultiplication must happen in a wider type, since two values just under the modulus multiply to nearly its square.\n\nO(log exponent).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Numerics;\n\npublic class Solution\n{\n    public static long ModPow(long value, long exponent, long modulus)\n    {\n        if (modulus == 1) return 0;\n        if (exponent < 0) throw new ArgumentOutOfRangeException(nameof(exponent));\n\n        long result = 1;\n        value %= modulus;\n        if (value < 0) value += modulus;\n\n        while (exponent > 0)\n        {\n            // Multiply in a wider type: two values near the modulus square past long.\n            if ((exponent & 1) == 1) result = (long)((BigInteger)result * value % modulus);\n\n            value = (long)((BigInteger)value * value % modulus);\n            exponent >>= 1;\n        }\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(ModPow(2, 10, 1000));\n        Console.WriteLine(ModPow(2, 0, 7));            // anything to the zero\n        Console.WriteLine(ModPow(0, 0, 7));            // conventionally 1\n        Console.WriteLine(ModPow(5, 3, 13));\n        Console.WriteLine(ModPow(7, 1, 1));            // modulus 1 is always 0\n        Console.WriteLine(ModPow(-3, 3, 7));           // negative base normalised\n\n        // Cryptographic scale: a naive loop would never finish.\n        Console.WriteLine(ModPow(123456789, 987654321, 1000000007));\n\n        // Cross-check against BigInteger.ModPow.\n        Console.WriteLine(ModPow(123456789, 987654321, 1000000007) ==\n                          (long)BigInteger.ModPow(123456789, 987654321, 1000000007));\n    }\n}\n```\n\n**Output**\n\n```\n24\n1\n1\n8\n0\n1\n652541198\nTrue\n```",
   "tags": [
    "math",
    "modular-arithmetic",
-   "exponentiation",
-   "number-theory"
+   "binary-exponentiation",
+   "overflow",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why not compute the power first and then take the modulus?",
+    "a": "Because the power is astronomically large - 2 to the thousandth has over three hundred digits - so it overflows any fixed type long before the modulo runs, and in floating point it loses all precision. Reducing modulo at every step keeps every intermediate below the modulus squared. That is not an optimisation, it is what makes the computation possible at all, which is why the naive formulation is wrong rather than slow."
+   },
+   {
+    "q": "Why is the multiplication done in BigInteger?",
+    "a": "Because two values just under a modulus near 10 to the 18 multiply to nearly 10 to the 36, which overflows long silently and gives a wrong residue. For moduli below about 3 billion, plain long multiplication is safe and much faster. The alternatives for large moduli are Int128 on modern .NET, or Russian-peasant multiplication using only additions. Knowing the threshold at which plain long stops being safe is the practical point."
+   },
+   {
+    "q": "Where does this actually get used?",
+    "a": "It is the core operation of RSA and Diffie-Hellman, where exponents are hundreds of bits and a linear loop is not merely slow but physically impossible. It also underlies primality tests such as Miller-Rabin and Fermat, and modular inverse via Fermat's little theorem - raising to the power modulus minus two. In competitive programming it is how binomial coefficients are computed under a prime modulus."
+   }
   ]
  },
  {
@@ -14347,16 +14377,31 @@
   "subcategory": "Math",
   "difficulty": "Medium",
   "question": "Find all prime factors of a number efficiently.",
-  "answer": "Trial division up to the square root, dividing out each factor as it is found, leaves at most one prime above the root. For many queries on a bounded range, a sieve storing the smallest prime factor gives factorisation in O(log n) per number.",
+  "answer": "**Approach**\n\nTrial division up to the square root, dividing out each factor completely before moving on. Whatever remains above one is itself prime.\n\n**Logic**\n\nThe square-root bound is the key fact: a composite number must have a factor at or below its square root, so once the divisor passes that point the remainder cannot be factored further.\n\nDividing out each factor fully as it is found means every divisor tested is automatically prime — all smaller primes have already been removed.\n\nThe final remainder check is what catches a large prime factor, which is easy to forget and silently drops the largest factor.\n\nO(sqrt(n)).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static IList<(long Prime, int Power)> Factorise(long n)\n    {\n        var factors = new List<(long, int)>();\n        if (n < 2) return factors;\n\n        // 2 separately, then only odd divisors: halves the work.\n        int twos = 0;\n        while (n % 2 == 0) { n /= 2; twos++; }\n        if (twos > 0) factors.Add((2, twos));\n\n        // Only up to the square root: a composite must have a factor there.\n        for (long d = 3; d * d <= n; d += 2)\n        {\n            int power = 0;\n            while (n % d == 0) { n /= d; power++; }   // divide out fully, so d is always prime\n            if (power > 0) factors.Add((d, power));\n        }\n\n        // Anything left above 1 is itself a prime factor.\n        if (n > 1) factors.Add((n, 1));\n\n        return factors;\n    }\n\n    private static void Show(long n)\n    {\n        var factors = Factorise(n);\n\n        Console.WriteLine(factors.Count == 0\n            ? $\"{n}: (none)\"\n            : $\"{n}: \" + string.Join(\" * \", factors.Select(f =>\n                  f.Power == 1 ? f.Prime.ToString() : $\"{f.Prime}^{f.Power}\")));\n    }\n\n    public static void Main()\n    {\n        Show(360);\n        Show(97);                    // prime\n        Show(1);\n        Show(2);\n        Show(1024);\n        Show(999999937);             // a large prime: the remainder check catches it\n        Show(600851475143);\n\n        // The product of the factors must equal the original.\n        long n = 600851475143, product = 1;\n        foreach (var (prime, power) in Factorise(n))\n            for (int i = 0; i < power; i++) product *= prime;\n        Console.WriteLine($\"factors multiply back: {product == n}\");\n    }\n}\n```\n\n**Output**\n\n```\n360: 2^3 * 3^2 * 5\n97: 97\n1: (none)\n2: 2\n1024: 2^10\n999999937: 999999937\n600851475143: 71 * 839 * 1471 * 6857\nfactors multiply back: True\n```",
   "tags": [
    "math",
-   "factorisation",
    "primes",
-   "number-theory"
+   "trial-division",
+   "square-root-bound",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why is the square root a valid stopping point?",
+    "a": "Because if n has a factor larger than its square root, the cofactor must be smaller than the square root and would already have been found. So once the divisor exceeds the square root of what remains, no factor pair is left and the remainder is prime. Note the bound shrinks as factors are divided out, which is why the loop condition re-evaluates against the current n rather than the original - that alone speeds it up substantially."
+   },
+   {
+    "q": "Why is every divisor found guaranteed to be prime?",
+    "a": "Because factors are divided out completely in increasing order, so by the time d is tested, every prime below d has been removed from n entirely. If d were composite, its prime factors would have divided n earlier and d could not divide the remainder. So no separate primality test is needed, which is what keeps the loop a single division check."
+   },
+   {
+    "q": "When does trial division stop being good enough?",
+    "a": "Around 10 to the 18, where the square root is a billion iterations - fine for one number, hopeless in a loop. Pollard's rho with Brent's improvement handles those in roughly the fourth root, and for cryptographic semiprimes of hundreds of digits nothing practical works, which is exactly what RSA relies on. If many numbers in a fixed range need factorising, a smallest-prime-factor sieve preprocesses once and factorises each in O(log n)."
+   }
   ]
  },
  {
@@ -14364,16 +14409,31 @@
   "subcategory": "Math",
   "difficulty": "Easy",
   "question": "Determine the winner of a Nim game.",
-  "answer": "The first player loses exactly when the XOR of all pile sizes is zero, and otherwise wins by moving to make it zero. It generalises through the Sprague-Grundy theorem, where each position gets a Grundy number and a compound game's value is the XOR of its components.",
+  "answer": "**Approach**\n\nThe Sprague-Grundy result: the first player loses exactly when the XOR of all pile sizes is zero. Both the one-line answer and a brute-force game search are shown, because the theorem is the sort of thing worth verifying rather than trusting.\n\n**Logic**\n\nThe XOR of the pile sizes — the *nim-sum* — is the position's Grundy value. A zero nim-sum is a losing position for the player to move; anything else is winning, and there is always a move reducing it to zero.\n\nThe single-pile version often asked as a warm-up (\"stones, take 1 to 3\") is a different game: there the answer is n mod 4 != 0.\n\nO(piles).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    // The first player loses exactly when the nim-sum is zero.\n    public static bool FirstPlayerWins(int[] piles) => piles.Aggregate(0, (x, y) => x ^ y) != 0;\n\n    // Exhaustive game search, used only to confirm the theorem on small positions.\n    private static bool BruteForceWins(int[] piles, Dictionary<string, bool> memo)\n    {\n        var key = string.Join(\",\", piles.OrderBy(p => p));\n        if (memo.TryGetValue(key, out bool known)) return known;\n\n        bool win = false;\n\n        for (int i = 0; i < piles.Length && !win; i++)\n            for (int take = 1; take <= piles[i] && !win; take++)\n            {\n                var next = (int[])piles.Clone();\n                next[i] -= take;\n\n                // A position wins if some move leaves the opponent losing.\n                if (!BruteForceWins(next, memo)) win = true;\n            }\n\n        memo[key] = win;\n        return win;\n    }\n\n    public static void Main()\n    {\n        int[][] cases =\n        {\n            new[] { 1, 1 }, new[] { 1, 2 }, new[] { 3, 4, 5 },\n            new[] { 1, 1, 1 }, new[] { 0, 0 }, new[] { 7 }, new[] { 2, 2, 3, 3 }\n        };\n\n        var memo = new Dictionary<string, bool>();\n\n        foreach (var piles in cases)\n            Console.WriteLine($\"[{string.Join(\",\", piles)}] first player wins: \" +\n                              $\"{FirstPlayerWins(piles)} (brute force {BruteForceWins(piles, memo)})\");\n    }\n}\n```\n\n**Output**\n\n```\n[1,1] first player wins: False (brute force False)\n[1,2] first player wins: True (brute force True)\n[3,4,5] first player wins: True (brute force True)\n[1,1,1] first player wins: True (brute force True)\n[0,0] first player wins: False (brute force False)\n[7] first player wins: True (brute force True)\n[2,2,3,3] first player wins: False (brute force False)\n```",
   "tags": [
-   "math",
    "game-theory",
    "nim",
-   "grundy"
+   "xor",
+   "grundy",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the nim-sum decide the game?",
+    "a": "Two facts. From a non-zero nim-sum there is always a move making it zero: find a pile whose high bit matches the nim-sum's highest set bit and reduce it to that pile XOR the nim-sum, which is smaller. And from a zero nim-sum every move makes it non-zero, since changing one pile changes the XOR. So a player handed zero must hand back non-zero, and the opponent can always restore zero - until the all-empty position, which is zero and a loss."
+   },
+   {
+    "q": "Why include a brute-force check for a one-line answer?",
+    "a": "Because the one-liner is a theorem someone else proved, and it is easy to misremember - taking the sum, or the count of non-empty piles, or the parity. An exhaustive search over small positions confirms the rule independently, and it would immediately expose a misremembered variant. For a result you are asserting rather than deriving, an independent oracle is worth the twenty lines."
+   },
+   {
+    "q": "How does this generalise to other impartial games?",
+    "a": "The Sprague-Grundy theorem says every impartial game under normal play is equivalent to a single nim pile whose size is its Grundy value - the smallest non-negative integer not among the Grundy values of its options. A sum of independent games has the XOR of their Grundy values, so nim's rule is the general rule. That is why computing Grundy numbers for a game like Kayles or subtraction games, then XORing, solves the whole family."
+   }
   ]
  },
  {
@@ -14381,16 +14441,31 @@
   "subcategory": "Math",
   "difficulty": "Hard",
   "question": "Given a stream of numbers, maintain a running median without a heap.",
-  "answer": "An order-statistic tree or a Fenwick tree over the value range supports insertion and rank queries in logarithmic time, giving the median by finding the element of rank n over two. The two-heap approach is simpler but the indexed structure also answers arbitrary quantiles.",
+  "answer": "**Approach**\n\nAn order-statistic structure — here a sorted list with binary-search insertion, which gives O(log n) location and O(n) insertion but a direct O(1) median read.\n\n**Logic**\n\nThe constraint rules out the two-heap answer, so the question is really about what else supports a median. A balanced BST augmented with subtree sizes gives O(log n) for both, and that is the answer to state; a sorted array is the practical version when n is moderate, since the memory move is a fast block copy.\n\nThe median is then simply the middle index, or the mean of the two middle ones.\n\nInsertion O(n) with a tiny constant, query O(1).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class RunningMedian\n{\n    private readonly List<int> _sorted = new();\n\n    public void Add(int value)\n    {\n        // BinarySearch returns the complement of the insertion point when absent.\n        int at = _sorted.BinarySearch(value);\n        if (at < 0) at = ~at;\n\n        _sorted.Insert(at, value);\n    }\n\n    public double Median\n    {\n        get\n        {\n            if (_sorted.Count == 0) throw new InvalidOperationException(\"No values yet.\");\n\n            int middle = _sorted.Count / 2;\n\n            // Average in double: two large ints would overflow.\n            return _sorted.Count % 2 == 1\n                ? _sorted[middle]\n                : ((double)_sorted[middle - 1] + _sorted[middle]) / 2;\n        }\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var median = new RunningMedian();\n\n        foreach (int v in new[] { 5, 15, 1, 3 })\n        {\n            median.Add(v);\n            Console.WriteLine(median.Median);\n        }\n\n        var duplicates = new RunningMedian();\n        foreach (int v in new[] { 2, 2, 2 }) duplicates.Add(v);\n        Console.WriteLine(duplicates.Median);\n\n        var negatives = new RunningMedian();\n        foreach (int v in new[] { -5, -1 }) negatives.Add(v);\n        Console.WriteLine(negatives.Median);\n\n        var extremes = new RunningMedian();\n        extremes.Add(2147483647);\n        extremes.Add(2147483645);\n        Console.WriteLine(extremes.Median);   // would overflow if averaged in int\n    }\n}\n```\n\n**Output**\n\n```\n5\n10\n5\n4\n2\n-3\n2147483646\n```",
   "tags": [
-   "math",
-   "fenwick-tree",
+   "design",
    "order-statistics",
-   "streaming"
+   "binary-search",
+   "streaming",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "What is the right answer if O(log n) insertion is required?",
+    "a": "A balanced BST augmented with subtree sizes - an order-statistic tree - which supports insertion and select-the-kth both in O(log n). A skip list with width counters gives the same bounds and is easier to implement. The sorted list here trades O(n) insertion for simplicity and an O(1) median, and it wins in practice up to surprisingly large n because the shift is a contiguous memory move rather than pointer chasing."
+   },
+   {
+    "q": "Why does BinarySearch need the complement?",
+    "a": "Because .NET's List.BinarySearch returns the index when the value is present, and the bitwise complement of the insertion point when it is not - a negative number encoding where it would go. Applying the complement recovers that position. Treating the negative return as 'not found, give up' is the usual misuse; the negative value is the useful part for insertion."
+   },
+   {
+    "q": "How would you handle a window rather than the whole stream?",
+    "a": "Add removal: find the outgoing value with a binary search and remove it, which is another O(n) shift. That gives the sliding-window median with O(n) per step. The heap-based version needs lazy deletion for the same job, and an order-statistic tree does both in O(log n). Which structure is right depends on whether you also need removal, which is the question worth asking before choosing."
+   }
   ]
  },
  {
@@ -14398,16 +14473,31 @@
   "subcategory": "Geometry",
   "difficulty": "Hard",
   "question": "Compute the convex hull of a set of points.",
-  "answer": "Andrew's monotone chain sorts by coordinate then builds the lower and upper hulls, removing points that make a non-left turn using the cross product. Time O(n log n) dominated by the sort. Graham scan is equivalent with an angular sort.",
+  "answer": "**Approach**\n\nAndrew's monotone chain. Sort the points, then sweep once building the lower hull and once the upper, popping whenever the last three points do not turn the right way.\n\n**Logic**\n\nThe cross product is the whole primitive. Its sign says whether three points turn left, turn right, or are collinear, and the hull is maintained by rejecting any non-left turn.\n\nUsing `<= 0` rather than `< 0` in the pop condition drops collinear points from the hull edges, which is usually what is wanted; keeping them requires the strict comparison and is a real specification difference.\n\nThe cross product must be computed in a wide type, since coordinate differences multiply.\n\nO(n log n), dominated by the sort.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    // > 0 left turn, < 0 right turn, 0 collinear. long: the products can be large.\n    private static long Cross((long X, long Y) o, (long X, long Y) a, (long X, long Y) b) =>\n        (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);\n\n    public static IList<(long X, long Y)> ConvexHull(IList<(long X, long Y)> points)\n    {\n        if (points.Count < 3) return points.Distinct().OrderBy(p => p.X).ThenBy(p => p.Y).ToList();\n\n        var sorted = points.Distinct().OrderBy(p => p.X).ThenBy(p => p.Y).ToList();\n        if (sorted.Count < 3) return sorted;\n\n        var hull = new List<(long X, long Y)>();\n\n        // Lower hull, then upper hull; <= 0 drops collinear points.\n        foreach (var p in sorted)\n        {\n            while (hull.Count >= 2 && Cross(hull[^2], hull[^1], p) <= 0) hull.RemoveAt(hull.Count - 1);\n            hull.Add(p);\n        }\n\n        int lowerSize = hull.Count + 1;\n\n        for (int i = sorted.Count - 2; i >= 0; i--)\n        {\n            var p = sorted[i];\n            while (hull.Count >= lowerSize && Cross(hull[^2], hull[^1], p) <= 0)\n                hull.RemoveAt(hull.Count - 1);\n            hull.Add(p);\n        }\n\n        hull.RemoveAt(hull.Count - 1);   // the start point is repeated at the end\n        return hull;\n    }\n\n    private static void Show(IList<(long X, long Y)> hull) =>\n        Console.WriteLine(hull.Count == 0\n            ? \"(none)\"\n            : string.Join(\" \", hull.Select(p => $\"({p.X},{p.Y})\")));\n\n    public static void Main()\n    {\n        Show(ConvexHull(new[] { (0L, 0L), (4L, 0L), (4L, 4L), (0L, 4L), (2L, 2L) }));   // interior dropped\n\n        Show(ConvexHull(new[] { (0L, 0L), (1L, 1L), (2L, 2L) }));       // all collinear\n        Show(ConvexHull(new[] { (0L, 0L), (1L, 0L) }));\n        Show(ConvexHull(new[] { (0L, 0L) }));\n\n        // A point on an edge is not a hull vertex under the <= rule.\n        Show(ConvexHull(new[] { (0L, 0L), (2L, 0L), (4L, 0L), (4L, 4L), (0L, 4L) }));\n\n        Show(ConvexHull(new[] { (0L, 0L), (3L, 1L), (1L, 3L), (4L, 4L), (2L, 2L), (1L, 1L) }));\n    }\n}\n```\n\n**Output**\n\n```\n(0,0) (4,0) (4,4) (0,4)\n(0,0) (2,2)\n(0,0) (1,0)\n(0,0)\n(0,0) (4,0) (4,4) (0,4)\n(0,0) (3,1) (4,4) (1,3)\n```",
   "tags": [
    "geometry",
    "convex-hull",
-   "sorting",
-   "algorithms"
+   "cross-product",
+   "monotone-chain",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "What does the cross product sign actually tell you?",
+    "a": "It is twice the signed area of the triangle formed by the three points, so its sign says which way the path turns: positive for a left turn, negative for a right turn, zero for collinear. That single primitive drives the whole algorithm - the hull is built by refusing any non-left turn. It is also the primitive behind segment intersection and point-in-polygon, which is why getting comfortable with it pays off across all the geometry questions."
+   },
+   {
+    "q": "Why does the comparison use <= rather than <?",
+    "a": "Because <= pops collinear points, so a point lying exactly on a hull edge is not reported as a vertex - which is the usual requirement, since it adds nothing to the shape. Using < keeps them, which some problems want, for instance when counting lattice points on the boundary. The fifth test has a point at (2,0) sitting on the bottom edge and it is correctly dropped; flipping the operator would include it."
+   },
+   {
+    "q": "Why compute the cross product in long?",
+    "a": "Because it multiplies coordinate differences, so with coordinates near a billion the products approach 10 to the 18 - past int immediately and near the edge of long. Doing it in int silently wraps and produces a wrong turn direction, which corrupts the hull rather than throwing. For truly large or floating-point coordinates you need exact predicates or careful epsilon handling, which is where robust computational geometry becomes its own subject."
+   }
   ]
  },
  {
@@ -14415,17 +14505,32 @@
   "subcategory": "Geometry",
   "difficulty": "Medium",
   "question": "Determine whether two line segments intersect.",
-  "answer": "Use the sign of the cross product to test whether each segment's endpoints lie on opposite sides of the other, plus collinear overlap checks for the degenerate case. Avoid computing the intersection point and slopes, which introduce division by zero and floating point error.",
+  "answer": "**Approach**\n\nThe orientation test on four triples, plus explicit collinear-overlap handling.\n\n**Logic**\n\nThe general case is clean: the segments cross when each straddles the other's line, which means the two orientation pairs have opposite signs.\n\nThe collinear case is where implementations go wrong. When an orientation is zero the points are on one line, and intersection then depends on whether a point lies within the other segment's bounding box — a separate check, not a special case of the general rule.\n\nAll arithmetic is integer, so there is no epsilon question.\n\nO(1).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private static int Orientation((long X, long Y) a, (long X, long Y) b, (long X, long Y) c)\n    {\n        long cross = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);\n        return cross == 0 ? 0 : cross > 0 ? 1 : -1;\n    }\n\n    // Only called when the three points are known collinear.\n    private static bool OnSegment((long X, long Y) a, (long X, long Y) p, (long X, long Y) b) =>\n        Math.Min(a.X, b.X) <= p.X && p.X <= Math.Max(a.X, b.X) &&\n        Math.Min(a.Y, b.Y) <= p.Y && p.Y <= Math.Max(a.Y, b.Y);\n\n    public static bool Intersect((long X, long Y) p1, (long X, long Y) q1,\n                                 (long X, long Y) p2, (long X, long Y) q2)\n    {\n        int o1 = Orientation(p1, q1, p2);\n        int o2 = Orientation(p1, q1, q2);\n        int o3 = Orientation(p2, q2, p1);\n        int o4 = Orientation(p2, q2, q1);\n\n        // General case: each segment straddles the other's line.\n        if (o1 != o2 && o3 != o4) return true;\n\n        // Collinear cases need a containment test, not the straddle rule.\n        if (o1 == 0 && OnSegment(p1, p2, q1)) return true;\n        if (o2 == 0 && OnSegment(p1, q2, q1)) return true;\n        if (o3 == 0 && OnSegment(p2, p1, q2)) return true;\n        if (o4 == 0 && OnSegment(p2, q1, q2)) return true;\n\n        return false;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(Intersect((0, 0), (4, 4), (0, 4), (4, 0)));     // a clean cross\n        Console.WriteLine(Intersect((0, 0), (1, 1), (2, 2), (3, 3)));     // collinear, apart\n        Console.WriteLine(Intersect((0, 0), (2, 2), (1, 1), (3, 3)));     // collinear, overlapping\n        Console.WriteLine(Intersect((0, 0), (1, 1), (1, 1), (2, 0)));     // touching at an endpoint\n        Console.WriteLine(Intersect((0, 0), (1, 0), (0, 1), (1, 1)));     // parallel\n        Console.WriteLine(Intersect((0, 0), (4, 0), (2, 0), (2, 5)));     // T junction\n        Console.WriteLine(Intersect((0, 0), (1, 1), (3, 0), (4, 1)));     // parallel, offset\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\n```",
   "tags": [
    "geometry",
+   "orientation",
    "segments",
-   "cross-product",
-   "edge-cases"
+   "edge-cases",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why are the collinear cases handled separately?",
+    "a": "Because the straddle rule assumes each segment has points strictly on both sides of the other's line, which is exactly what fails when the orientation is zero. Collinear segments either overlap or do not, and that is a containment question answered by the bounding box, not by signs. Implementations that omit the four collinear checks pass every generic test and fail on overlapping or touching segments, which are the cases that actually occur in real data."
+   },
+   {
+    "q": "Why is the bounding-box check enough for collinear points?",
+    "a": "Because the points are already known to be on the same line, so the only remaining question is whether the point lies between the two endpoints - and on a line, being within both coordinate ranges is exactly that. The check would be wrong as a general containment test, since a point can be inside a bounding box without being on the segment. That precondition is why the helper is only ever called after an orientation of zero."
+   },
+   {
+    "q": "What changes with floating-point coordinates?",
+    "a": "The exact comparison against zero stops being reliable - rounding makes nearly-collinear points read as one side or the other inconsistently, so the four orientations can disagree in ways no real configuration allows. You then need an epsilon, which introduces its own inconsistencies, or exact predicates such as Shewchuk's adaptive arithmetic. Keeping the coordinates integral when you can is the practical advice, and it is why this implementation stays in long."
+   }
   ]
  },
  {
@@ -14433,16 +14538,31 @@
   "subcategory": "Geometry",
   "difficulty": "Medium",
   "question": "Determine whether a point lies inside a polygon.",
-  "answer": "Ray casting counts how many edges a ray from the point crosses - odd means inside. Handle vertices and collinear edges carefully to avoid double counting. For convex polygons, checking the point is on the same side of every edge is simpler and faster.",
+  "answer": "**Approach**\n\nRay casting. Count how many polygon edges a ray from the point crosses; odd means inside. Boundary points are tested explicitly first, since ray casting gives no consistent answer for them.\n\n**Logic**\n\nThe crossing test uses a half-open rule on the y comparison — one endpoint strictly above and the other at or below — so a ray passing exactly through a vertex is counted once rather than twice or zero times. That single asymmetry is what makes the algorithm robust for vertex-grazing rays.\n\nBoundary handling is a specification question, not a detail: \"on the edge\" is neither clearly in nor out, so the code decides it explicitly.\n\nO(vertices).\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static bool IsInside((double X, double Y)[] polygon, (double X, double Y) point,\n                                bool boundaryCountsAsInside = true)\n    {\n        int n = polygon.Length;\n        if (n < 3) return false;\n\n        // Boundary first: ray casting has no consistent answer there.\n        for (int i = 0, j = n - 1; i < n; j = i++)\n            if (OnEdge(polygon[j], polygon[i], point)) return boundaryCountsAsInside;\n\n        bool inside = false;\n\n        for (int i = 0, j = n - 1; i < n; j = i++)\n        {\n            // Half-open on y: a ray through a vertex is counted exactly once.\n            bool straddles = (polygon[i].Y > point.Y) != (polygon[j].Y > point.Y);\n\n            if (!straddles) continue;\n\n            double crossingX = polygon[i].X +\n                (point.Y - polygon[i].Y) * (polygon[j].X - polygon[i].X) /\n                (polygon[j].Y - polygon[i].Y);\n\n            if (point.X < crossingX) inside = !inside;\n        }\n\n        return inside;\n    }\n\n    private static bool OnEdge((double X, double Y) a, (double X, double Y) b,\n                               (double X, double Y) p)\n    {\n        double cross = (b.X - a.X) * (p.Y - a.Y) - (b.Y - a.Y) * (p.X - a.X);\n        if (Math.Abs(cross) > 1e-9) return false;\n\n        return Math.Min(a.X, b.X) - 1e-9 <= p.X && p.X <= Math.Max(a.X, b.X) + 1e-9 &&\n               Math.Min(a.Y, b.Y) - 1e-9 <= p.Y && p.Y <= Math.Max(a.Y, b.Y) + 1e-9;\n    }\n\n    public static void Main()\n    {\n        var square = new[] { (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0) };\n\n        Console.WriteLine(IsInside(square, (2, 2)));\n        Console.WriteLine(IsInside(square, (5, 2)));\n        Console.WriteLine(IsInside(square, (0, 2)));                      // on an edge\n        Console.WriteLine(IsInside(square, (0, 2), boundaryCountsAsInside: false));\n        Console.WriteLine(IsInside(square, (0, 0)));                      // a vertex\n\n        // Concave: the point sits in the notch, outside the polygon.\n        var arrow = new[] { (0.0, 0.0), (4.0, 0.0), (2.0, 2.0), (4.0, 4.0), (0.0, 4.0) };\n        Console.WriteLine(IsInside(arrow, (3, 2)));\n        Console.WriteLine(IsInside(arrow, (1, 2)));\n\n        // A ray passing exactly through a vertex.\n        var diamond = new[] { (0.0, 0.0), (2.0, 2.0), (4.0, 0.0), (2.0, -2.0) };\n        Console.WriteLine(IsInside(diamond, (2, 0)));\n        Console.WriteLine(IsInside(diamond, (-1, 0)));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nTrue\nFalse\n```",
   "tags": [
    "geometry",
-   "point-in-polygon",
    "ray-casting",
-   "edge-cases"
+   "parity",
+   "boundary-cases",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the half-open y comparison matter?",
+    "a": "Because a horizontal ray that passes exactly through a vertex touches two edges, and a naive test counts the crossing twice - flipping the parity back and reporting an interior point as outside. Requiring one endpoint strictly above and the other at or below counts each vertex for exactly one of its two edges. It is one asymmetric comparison and it is the difference between an algorithm that works on real polygons and one that works only on generic inputs."
+   },
+   {
+    "q": "Why handle the boundary separately?",
+    "a": "Because ray casting's parity is undefined on the boundary - the answer depends on floating-point rounding and on which direction the ray happens to go, so the same point can come out differently for two edges. Whether an edge point counts as inside is a specification decision, so the code makes it explicitly and exposes it as a parameter. Silently letting rounding decide is the worst option, since it is inconsistent rather than merely arbitrary."
+   },
+   {
+    "q": "How does the winding number method compare?",
+    "a": "It sums the signed angles subtended by the edges, giving zero for outside and a non-zero multiple of 2 pi for inside, and it handles self-intersecting polygons correctly - where ray casting's parity rule declares some genuinely enclosed regions outside. Winding is more robust but costlier, since the standard formulation involves trigonometry, though an integer version using orientation tests exists. For simple polygons, which is most cases, ray casting is faster and equivalent."
+   }
   ]
  },
  {
@@ -14450,16 +14570,31 @@
   "subcategory": "Geometry",
   "difficulty": "Hard",
   "question": "Find the closest pair of points in a plane.",
-  "answer": "Divide and conquer: sort by x, recurse on halves, then check only points within the current best distance of the dividing line, sorted by y - where a constant number of comparisons per point suffices. Time O(n log n) against the quadratic all-pairs approach.",
+  "answer": "**Approach**\n\nDivide and conquer. Sort by x, split, recurse on each half, then check the strip near the dividing line — where a point need only be compared with the next seven in y order.\n\n**Logic**\n\nThe seven-point bound is the theorem that makes it O(n log n). Within the strip, any two points closer than the current best must lie in a small rectangle, and geometry limits how many points can fit there without already violating the best distance.\n\nComparing squared distances avoids square roots entirely until the final answer, which is both faster and exact for integer inputs.\n\nO(n log n) time.\n\nThe test cross-checks against the O(n²) brute force, because the strip logic is easy to get subtly wrong.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static double ClosestPair((double X, double Y)[] points)\n    {\n        if (points.Length < 2) return double.PositiveInfinity;\n\n        var byX = points.OrderBy(p => p.X).ThenBy(p => p.Y).ToArray();\n        return Math.Sqrt(Solve(byX, 0, byX.Length - 1));\n    }\n\n    // Works in SQUARED distances: no square roots, and exact for integral input.\n    private static double Solve((double X, double Y)[] byX, int lo, int hi)\n    {\n        if (hi - lo < 3)\n        {\n            double small = double.PositiveInfinity;\n            for (int i = lo; i <= hi; i++)\n                for (int j = i + 1; j <= hi; j++) small = Math.Min(small, SquaredDistance(byX[i], byX[j]));\n            return small;\n        }\n\n        int mid = lo + (hi - lo) / 2;\n        double midX = byX[mid].X;\n\n        double best = Math.Min(Solve(byX, lo, mid), Solve(byX, mid + 1, hi));\n\n        // The strip: only points within the current best distance of the split line.\n        var strip = new List<(double X, double Y)>();\n        for (int i = lo; i <= hi; i++)\n            if ((byX[i].X - midX) * (byX[i].X - midX) < best) strip.Add(byX[i]);\n\n        strip.Sort((a, b) => a.Y.CompareTo(b.Y));\n\n        // At most seven later points can be close enough in y.\n        for (int i = 0; i < strip.Count; i++)\n            for (int j = i + 1; j < strip.Count && j <= i + 7; j++)\n            {\n                double dy = strip[j].Y - strip[i].Y;\n                if (dy * dy >= best) break;\n\n                best = Math.Min(best, SquaredDistance(strip[i], strip[j]));\n            }\n\n        return best;\n    }\n\n    private static double SquaredDistance((double X, double Y) a, (double X, double Y) b)\n    {\n        double dx = a.X - b.X, dy = a.Y - b.Y;\n        return dx * dx + dy * dy;\n    }\n\n    private static double BruteForce((double X, double Y)[] points)\n    {\n        double best = double.PositiveInfinity;\n\n        for (int i = 0; i < points.Length; i++)\n            for (int j = i + 1; j < points.Length; j++)\n                best = Math.Min(best, SquaredDistance(points[i], points[j]));\n\n        return Math.Sqrt(best);\n    }\n\n    public static void Main()\n    {\n        (double, double)[][] cases =\n        {\n            new[] { (0.0, 0.0), (3.0, 4.0) },\n            new[] { (0.0, 0.0), (1.0, 1.0), (4.0, 4.0), (5.0, 5.0), (2.0, 2.0) },\n            new[] { (1.0, 1.0), (1.0, 1.0) },                      // coincident\n            new[] { (0.0, 0.0), (10.0, 0.0), (5.0, 1.0), (5.0, -1.0) },\n            new[] { (-3.0, -3.0), (2.0, 2.0), (-2.0, -2.0) }\n        };\n\n        foreach (var points in cases)\n            Console.WriteLine($\"{ClosestPair(points):F4} (brute {BruteForce(points):F4})\");\n\n        // A larger random set, checked against brute force.\n        var random = new Random(4242);\n        var many = Enumerable.Range(0, 400)\n            .Select(_ => (random.Next(0, 10000) * 1.0, random.Next(0, 10000) * 1.0)).ToArray();\n\n        Console.WriteLine($\"400 points agree: \" +\n            $\"{Math.Abs(ClosestPair(many) - BruteForce(many)) < 1e-9}\");\n    }\n}\n```\n\n**Output**\n\n```\n5.0000 (brute 5.0000)\n1.4142 (brute 1.4142)\n0.0000 (brute 0.0000)\n2.0000 (brute 2.0000)\n1.4142 (brute 1.4142)\n400 points agree: True\n```",
   "tags": [
    "geometry",
    "divide-and-conquer",
    "closest-pair",
-   "algorithms"
+   "strip",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "Why is comparing seven later points in the strip sufficient?",
+    "a": "Because any point closer than the current best must lie within a rectangle of width twice the best distance and height the best distance, centred on the split line. Since every point within each half is already at least the best distance from its neighbours, only a bounded number - the classical proof gives at most seven others - can fit in that rectangle. So the inner loop is O(1) rather than O(n), which is what keeps the recursion at O(n log n) instead of degenerating."
+   },
+   {
+    "q": "Why work in squared distances?",
+    "a": "Because the square root is monotonic, so comparisons give identical results without it, and it is both slower and a source of rounding error. Taking it once at the very end keeps every intermediate exact for integral coordinates. The same reasoning applies to almost every distance comparison in geometry and graphics - the square root is needed only when the magnitude itself is the output."
+   },
+   {
+    "q": "Why cross-check against brute force on 400 random points?",
+    "a": "Because the strip logic has several places to go subtly wrong - the width test, the break condition, the seven-point bound - and each produces an answer that is right on most inputs and wrong on a few. Small hand-made cases will not find that. Comparing against an obviously correct quadratic implementation on a few hundred random points does, and it costs milliseconds. That is the right use of a slow reference: as an oracle on inputs where it is still affordable."
+   }
   ]
  },
  {
@@ -14467,16 +14602,31 @@
   "subcategory": "Data Structures",
   "difficulty": "Hard",
   "question": "Implement a segment tree with lazy propagation.",
-  "answer": "Each node stores an aggregate over a range plus a pending update applied to it but not yet to its children. A range update marks the covering nodes and defers; a query pushes pending updates down as it descends. Both operations are O(log n) with range updates rather than only point updates.",
+  "answer": "**Approach**\n\nA segment tree over sums, with a pending-addition value at each node. A range update stops at the nodes covering the range and records the addition there rather than descending to the leaves.\n\n**Logic**\n\nWithout laziness a range update touches every element, so it is O(n) and the tree buys nothing over an array. The pending value is the whole point: it says \"everyone below me also needs this\", applied only when a later query actually descends.\n\nPushing down before descending is what keeps the invariant. Forgetting it is the classic bug, and it produces correct answers for a while — until a query descends into a node whose pending value was never applied.\n\nO(log n) per update and query.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class SegmentTree\n{\n    private readonly long[] _sum;\n    private readonly long[] _pending;   // an addition owed to this node's whole range\n    private readonly int _n;\n\n    public SegmentTree(int[] values)\n    {\n        _n = values.Length;\n        _sum = new long[4 * Math.Max(1, _n)];\n        _pending = new long[4 * Math.Max(1, _n)];\n        if (_n > 0) Build(values, 1, 0, _n - 1);\n    }\n\n    private void Build(int[] values, int node, int lo, int hi)\n    {\n        if (lo == hi) { _sum[node] = values[lo]; return; }\n\n        int mid = lo + (hi - lo) / 2;\n        Build(values, node * 2, lo, mid);\n        Build(values, node * 2 + 1, mid + 1, hi);\n        _sum[node] = _sum[node * 2] + _sum[node * 2 + 1];\n    }\n\n    private void Apply(int node, int lo, int hi, long delta)\n    {\n        _sum[node] += delta * (hi - lo + 1);   // every element in the range gains delta\n        _pending[node] += delta;\n    }\n\n    // Hand the pending addition to the children before descending past this node.\n    private void PushDown(int node, int lo, int hi)\n    {\n        if (_pending[node] == 0) return;\n\n        int mid = lo + (hi - lo) / 2;\n        Apply(node * 2, lo, mid, _pending[node]);\n        Apply(node * 2 + 1, mid + 1, hi, _pending[node]);\n        _pending[node] = 0;\n    }\n\n    public void AddRange(int from, int to, long delta) => AddRange(1, 0, _n - 1, from, to, delta);\n\n    private void AddRange(int node, int lo, int hi, int from, int to, long delta)\n    {\n        if (to < lo || hi < from) return;\n\n        if (from <= lo && hi <= to) { Apply(node, lo, hi, delta); return; }   // stop here\n\n        PushDown(node, lo, hi);\n\n        int mid = lo + (hi - lo) / 2;\n        AddRange(node * 2, lo, mid, from, to, delta);\n        AddRange(node * 2 + 1, mid + 1, hi, from, to, delta);\n        _sum[node] = _sum[node * 2] + _sum[node * 2 + 1];\n    }\n\n    public long SumRange(int from, int to) => _n == 0 ? 0 : SumRange(1, 0, _n - 1, from, to);\n\n    private long SumRange(int node, int lo, int hi, int from, int to)\n    {\n        if (to < lo || hi < from) return 0;\n        if (from <= lo && hi <= to) return _sum[node];\n\n        PushDown(node, lo, hi);\n\n        int mid = lo + (hi - lo) / 2;\n        return SumRange(node * 2, lo, mid, from, to) +\n               SumRange(node * 2 + 1, mid + 1, hi, from, to);\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var values = new[] { 1, 2, 3, 4, 5 };\n        var tree = new SegmentTree(values);\n\n        Console.WriteLine(tree.SumRange(0, 4));\n        Console.WriteLine(tree.SumRange(1, 3));\n\n        tree.AddRange(1, 3, 10);\n        Console.WriteLine(tree.SumRange(1, 3));\n        Console.WriteLine(tree.SumRange(0, 4));\n        Console.WriteLine(tree.SumRange(2, 2));\n\n        tree.AddRange(0, 4, -1);\n        Console.WriteLine(tree.SumRange(0, 4));\n\n        // Randomised cross-check against a plain array.\n        var random = new Random(31337);\n        var plain = Enumerable.Range(0, 60).Select(_ => random.Next(-50, 50)).ToArray();\n        var checkTree = new SegmentTree(plain);\n        bool agrees = true;\n\n        for (int step = 0; step < 500 && agrees; step++)\n        {\n            int a = random.Next(60), b = random.Next(60);\n            if (a > b) (a, b) = (b, a);\n\n            if (random.Next(2) == 0)\n            {\n                int delta = random.Next(-20, 20);\n                checkTree.AddRange(a, b, delta);\n                for (int i = a; i <= b; i++) plain[i] += delta;\n            }\n            else\n            {\n                long expected = 0;\n                for (int i = a; i <= b; i++) expected += plain[i];\n                if (checkTree.SumRange(a, b) != expected) agrees = false;\n            }\n        }\n\n        Console.WriteLine($\"500 random operations agree with a plain array: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\n15\n9\n39\n45\n13\n40\n500 random operations agree with a plain array: True\n```",
   "tags": [
-   "data-structures",
    "segment-tree",
    "lazy-propagation",
-   "range-queries"
+   "range-update",
+   "invariants",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon"
+  ],
+  "followups": [
+   {
+    "q": "What does the pending value mean, and why is laziness necessary?",
+    "a": "It means every element in this node's range still owes this addition, but the descendants have not been told. Without it a range update must reach every leaf, which is O(n) and makes the tree pointless for range updates. With it the update stops at the O(log n) nodes that exactly cover the range, and the work is deferred until a query actually needs to look inside. That deferral is the entire reason the structure supports range updates in logarithmic time."
+   },
+   {
+    "q": "What breaks if you forget to push down?",
+    "a": "The node's own sum stays correct, because it was updated when the pending value was recorded, so many queries still return the right answer. The failure appears only when a later query or update descends into a child whose ancestor had a pending value - the child's sum is stale and the result is silently wrong. It is the worst kind of bug: correct on simple tests, wrong under a specific interleaving, which is exactly why the randomised cross-check is here."
+   },
+   {
+    "q": "How would you support range assignment rather than addition?",
+    "a": "The pending value becomes 'set to v' rather than 'add v', which changes the composition rule: a later assignment overwrites an earlier pending one instead of summing with it, so you need a flag distinguishing 'no pending assignment' from 'assign zero'. Supporting both together needs an ordered pair of lazy values with a defined composition. The general requirement is that the lazy operations form a monoid that acts on the node values - get that right and the rest of the code is unchanged."
+   }
   ]
  },
  {
@@ -14497,17 +14647,32 @@
   "subcategory": "Data Structures",
   "difficulty": "Hard",
   "question": "Implement a monotonic queue for sliding window maximum.",
-  "answer": "A deque holding indices in decreasing value order - pop from the back while the incoming value is larger, pop from the front when the index leaves the window, and the front is the maximum. Each index enters and leaves once, giving O(n) overall.",
+  "answer": "**Approach**\n\nA deque of indices whose values are strictly decreasing. The front is always the window's maximum.\n\n**Logic**\n\nThe invariant is that an element is worth keeping only if nothing larger arrived after it — a smaller earlier element can never be the maximum again once a bigger one is in the window, so it is discarded permanently.\n\nStoring indices rather than values is what lets the front be expired when it falls out of the window; values alone carry no position.\n\nEach index is pushed and popped once, so despite the inner loop it is O(n) amortised.\n\nO(n) time, O(k) space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[] MaxSlidingWindow(int[] nums, int k)\n    {\n        if (nums == null || k <= 0 || nums.Length < k) return Array.Empty<int>();\n\n        // Indices, values strictly decreasing front to back.\n        var deque = new LinkedList<int>();\n        var result = new int[nums.Length - k + 1];\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            // Expire the front once it leaves the window. Indices make this possible.\n            if (deque.Count > 0 && deque.First.Value <= i - k) deque.RemoveFirst();\n\n            // Anything smaller than the incoming value can never be a maximum again.\n            while (deque.Count > 0 && nums[deque.Last.Value] <= nums[i]) deque.RemoveLast();\n\n            deque.AddLast(i);\n\n            if (i >= k - 1) result[i - k + 1] = nums[deque.First.Value];\n        }\n\n        return result;\n    }\n\n    private static int[] BruteForce(int[] nums, int k)\n    {\n        if (nums.Length < k || k <= 0) return Array.Empty<int>();\n\n        var result = new int[nums.Length - k + 1];\n        for (int i = 0; i + k <= nums.Length; i++) result[i] = nums.Skip(i).Take(k).Max();\n        return result;\n    }\n\n    private static void Show(int[] values) =>\n        Console.WriteLine(values.Length == 0 ? \"(none)\" : string.Join(\",\", values));\n\n    public static void Main()\n    {\n        Show(MaxSlidingWindow(new[] { 1, 3, -1, -3, 5, 3, 6, 7 }, 3));\n        Show(MaxSlidingWindow(new[] { 1 }, 1));\n        Show(MaxSlidingWindow(new[] { 9, 8, 7, 6 }, 2));        // already decreasing\n        Show(MaxSlidingWindow(new[] { 1, 2, 3, 4 }, 2));        // already increasing\n        Show(MaxSlidingWindow(new[] { 2, 2, 2 }, 2));           // duplicates\n        Show(MaxSlidingWindow(new[] { 1, 2 }, 5));              // window too large\n\n        var random = new Random(777);\n        var many = Enumerable.Range(0, 500).Select(_ => random.Next(-100, 100)).ToArray();\n\n        Console.WriteLine($\"500 values, k=7 agree: \" +\n            $\"{MaxSlidingWindow(many, 7).SequenceEqual(BruteForce(many, 7))}\");\n    }\n}\n```\n\n**Output**\n\n```\n3,3,5,5,6,7\n1\n9,8,7\n2,3,4\n2,2\n(none)\n500 values, k=7 agree: True\n```",
   "tags": [
-   "data-structures",
+   "deque",
    "monotonic-queue",
    "sliding-window",
-   "deque"
+   "amortised",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is discarding smaller elements safe?",
+    "a": "Because a smaller element that arrived earlier will leave the window no later than the larger one that followed it, so while it remains in the window the larger is also there and dominates it. It can never be the maximum again, so removing it loses nothing. That domination argument is the invariant, and it is what allows a permanent discard rather than a temporary one."
+   },
+   {
+    "q": "Why store indices rather than values?",
+    "a": "Because the front must be expired when it falls outside the window, and that is a question about position, not value. With values alone there is no way to tell whether the front is still in range. Storing indices and reading nums[index] when the value is needed costs nothing and makes the expiry a single comparison. It is the same reason the k-way merge heap stores array positions rather than the values themselves."
+   },
+   {
+    "q": "Why is this O(n) despite the while loop?",
+    "a": "Because every index is added to the deque exactly once and removed at most once, so the total number of removals across the whole run is bounded by n. A single step can pop many elements, but only by doing work that other steps then avoid. That amortised argument is the same one behind the monotonic stack and the streaming first-non-repeating-character queue - a nested loop that moves a pointer forward monotonically is still linear."
+   }
   ]
  },
  {
@@ -14515,17 +14680,32 @@
   "subcategory": "Data Structures",
   "difficulty": "Medium",
   "question": "Implement a trie supporting deletion.",
-  "answer": "Track a child count or an end-of-word flag per node, then deletion walks to the terminal node, unmarks it, and removes nodes upward while they have no children and are not word ends. Removing without the count leaves orphaned branches or deletes shared prefixes.",
+  "answer": "**Approach**\n\nA standard trie plus a child count per node, so deletion can prune nodes that become unreachable without re-scanning.\n\n**Logic**\n\nDeletion is where naive tries go wrong. Clearing the terminal flag is not enough — the nodes become garbage that inflates memory and slows prefix walks. But nodes cannot be removed blindly either, since a node may be shared by a longer word or be a word itself.\n\nThe rule: unwind from the leaf, removing a node only when it has no children and is not itself a word. The child counter makes that test O(1) rather than a scan of 26 slots.\n\nO(word length) for every operation.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Trie\n{\n    private class Node\n    {\n        public readonly Node[] Children = new Node[26];\n        public int ChildCount;     // makes \"has no children\" O(1) rather than a 26-slot scan\n        public bool IsWord;\n    }\n\n    private readonly Node _root = new();\n\n    public void Insert(string word)\n    {\n        var node = _root;\n\n        foreach (char c in word)\n        {\n            int i = c - 'a';\n            if (node.Children[i] == null) { node.Children[i] = new Node(); node.ChildCount++; }\n            node = node.Children[i];\n        }\n\n        node.IsWord = true;\n    }\n\n    public bool Contains(string word)\n    {\n        var node = Find(word);\n        return node != null && node.IsWord;\n    }\n\n    public bool StartsWith(string prefix) => Find(prefix) != null;\n\n    private Node Find(string text)\n    {\n        var node = _root;\n\n        foreach (char c in text)\n        {\n            node = node.Children[c - 'a'];\n            if (node == null) return null;\n        }\n\n        return node;\n    }\n\n    public bool Delete(string word) => Delete(_root, word, 0);\n\n    private bool Delete(Node node, string word, int at)\n    {\n        if (at == word.Length)\n        {\n            if (!node.IsWord) return false;   // the word was never here\n            node.IsWord = false;\n            return true;\n        }\n\n        int i = word[at] - 'a';\n        var child = node.Children[i];\n        if (child == null) return false;\n\n        if (!Delete(child, word, at + 1)) return false;\n\n        // Prune only if the child is now unreachable: no children and not a word itself.\n        if (child.ChildCount == 0 && !child.IsWord)\n        {\n            node.Children[i] = null;\n            node.ChildCount--;\n        }\n\n        return true;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var trie = new Trie();\n        foreach (string w in new[] { \"car\", \"card\", \"care\", \"dog\" }) trie.Insert(w);\n\n        Console.WriteLine(trie.Contains(\"car\"));\n        Console.WriteLine(trie.Delete(\"car\"));\n        Console.WriteLine(trie.Contains(\"car\"));\n        Console.WriteLine(trie.Contains(\"card\"));      // the shared prefix survives\n        Console.WriteLine(trie.StartsWith(\"car\"));\n\n        Console.WriteLine(trie.Delete(\"cat\"));         // never inserted\n        Console.WriteLine(trie.Delete(\"card\"));\n        Console.WriteLine(trie.Contains(\"care\"));\n\n        Console.WriteLine(trie.Delete(\"care\"));\n        Console.WriteLine(trie.StartsWith(\"car\"));     // whole branch now pruned\n        Console.WriteLine(trie.Contains(\"dog\"));\n\n        Console.WriteLine(trie.Delete(\"dog\"));\n        Console.WriteLine(trie.StartsWith(\"d\"));\n    }\n}\n```\n\n**Output**\n\n```\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\n```",
   "tags": [
-   "data-structures",
    "trie",
    "deletion",
-   "edge-cases"
+   "pruning",
+   "reference-counting",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why is clearing the terminal flag insufficient?",
+    "a": "Because the nodes remain allocated, so memory grows monotonically with every word ever inserted and prefix walks traverse dead branches. In a long-running service with a churning dictionary that is a real leak. Pruning reclaims the nodes that no word needs any more. The flag-only version is correct in its answers and wrong in its resource behaviour, which is a failure mode that never shows up in a functional test."
+   },
+   {
+    "q": "Why can a node not be pruned just because the word was deleted?",
+    "a": "Because it may lie on the path to a longer word, or be a shorter word in its own right - deleting 'car' must not disturb 'card', and deleting 'card' must not disturb 'car'. So the condition is both: no remaining children and not itself a terminal. The tests exercise both directions deliberately, since an implementation that checks only one passes half of them."
+   },
+   {
+    "q": "Why keep a child count rather than scanning the array?",
+    "a": "Because the emptiness test runs once per node on the unwind path of every deletion, and scanning 26 slots each time makes deletion 26 times more expensive than it needs to be. The counter makes it a single comparison, at the cost of keeping it in sync at every insertion and pruning - a small invariant to maintain. With a dictionary-based child map the Count property gives it for free, which is another argument for that representation when the alphabet is not tiny."
+   }
   ]
  },
  {
