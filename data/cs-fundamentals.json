@@ -2934,5 +2934,35 @@
     "a": "When the shared state is a collection and the operations map onto what the type offers - ConcurrentDictionary, ConcurrentQueue and the rest use fine-grained locking or lock-free algorithms internally and are usually faster and safer than wrapping a plain collection in one lock. The trap is composite operations: checking ContainsKey and then adding is two atomic operations with a race between them, so you need the atomic methods such as GetOrAdd or TryAdd. A concurrent collection makes each operation safe, not any sequence of them."
    }
   ]
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Networking",
+  "difficulty": "Medium",
+  "question": "A developer reports that their API call 'sometimes takes 3 seconds and sometimes 30ms' with no pattern. The server logs show a consistent 20ms. Where is the time going?",
+  "answer": "**The server logs measure from when it received the request to when it wrote the response.** Everything outside that is invisible to it. The candidates:\n\n**1. DNS resolution.** A cold lookup can take hundreds of milliseconds; a cached one is free. That alone explains a bimodal pattern with no obvious trigger, and it happens on the first call after a TTL expires.\n\n**2. TCP and TLS handshake.** A new connection costs a round trip for TCP and one or two more for TLS. On a high-latency link that is easily 300ms before a byte of request is sent. A reused connection pays none of it — so whether the connection pool had a warm connection determines the result.\n\n**3. Connection pool exhaustion on the client.** Waiting for a free connection is time spent before the request is issued.\n\n**4. Queueing on the server before the handler ran.** If the server's timing starts in the handler, the wait in the thread pool queue is excluded from its own measurement.\n\n**5. The client's own scheduling** — a blocked UI thread, a saturated thread pool, garbage collection on the client side.\n\n**6. Proxies, gateways and load balancers** between the two, each of which can add its own connection setup and queueing.\n\n**How to find it**\n\nMeasure at the client with the phases broken out — `HttpClient` with `SocketsHttpHandler` metrics, or a trace that records DNS, connect, TLS, send, wait and receive separately. That immediately separates connection setup from server time. Browser devtools show exactly this breakdown for a web client, which is often the fastest route to the answer.\n\nThe distinctive signature of connection setup is that the *first* request to a host is slow and subsequent ones are fast, resetting after an idle period — which matches 'no pattern' from someone not looking for it.\n\n**The likely fix**\n\nReuse connections. A single `HttpClient` via `IHttpClientFactory` with a sensible `PooledConnectionLifetime` keeps connections warm, so the handshake is amortised. Creating a client per call is the most common cause of this exact symptom.",
+  "tags": [
+   "networking",
+   "latency",
+   "tls-handshake",
+   "dns",
+   "connection-pooling",
+   "diagnosis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does the server's own timing exclude so much?",
+    "a": "Because instrumentation usually starts when the framework hands the request to your code and stops when you return - so the TCP accept, the TLS negotiation, the request body read over a slow link, the time queued waiting for a thread, and the response write back are all outside it. For a fast handler behind a slow network, the measured 20ms can be a small fraction of what the caller experienced. That gap is why client-side or end-to-end measurement is the honest number and server-side timing is a component of it."
+   },
+   {
+    "q": "How does HTTP/2 change this picture?",
+    "a": "It multiplexes many requests over one connection, so the handshake is paid once and concurrent requests do not queue behind each other as they do with HTTP/1.1's limited parallel connections. That removes a large part of the variance for a client making several calls. It does not help the first connection, and it introduces head-of-line blocking at the TCP layer if a packet is lost, which HTTP/3 over QUIC addresses. The practical implication is that connection reuse matters even more, because there is one connection doing all the work."
+   },
+   {
+    "q": "The developer says it only happens in the office, never at home. What does that suggest?",
+    "a": "Something in the corporate network path - a proxy, TLS inspection, or a DNS server behaving differently. TLS-inspecting middleboxes terminate and re-establish connections, adding a handshake and sometimes breaking connection reuse entirely, which produces exactly this variance. Split-horizon DNS resolving to a different address is another common one. The fastest confirmation is to compare the connection-phase timings from both networks, because the shape of the difference names the layer."
+   }
+  ]
  }
 ]

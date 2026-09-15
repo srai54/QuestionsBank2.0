@@ -609,5 +609,33 @@
    "benchmarking",
    "performance"
   ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "A Java service throws ConcurrentModificationException intermittently under load, in code that iterates a list and removes matching items. Explain and give the alternatives.",
+  "answer": "**Why it happens**\n\nMost `java.util` collections are fail-fast: the iterator records a modification count when created and checks it on every `next()`. Structurally modifying the collection during iteration changes that count, and the iterator throws rather than continuing with undefined behaviour.\n\n```java\nfor (Order o : orders) {\n    if (o.isCancelled()) orders.remove(o);   // throws\n}\n```\n\nNote the exception is a *best-effort* diagnostic, not a guarantee — it is thrown when detected, which is why it appears intermittently and not on every run. The name is also misleading: it occurs in single-threaded code, and 'concurrent' here means 'during iteration' rather than 'from another thread'.\n\n**The alternatives**\n\n**`Iterator.remove()`** — the only safe way to remove during an explicit iteration, because the iterator updates its own expectation:\n\n```java\nIterator<Order> it = orders.iterator();\nwhile (it.hasNext()) {\n    if (it.next().isCancelled()) it.remove();\n}\n```\n\n**`removeIf`** — clearer and the idiomatic modern answer:\n\n```java\norders.removeIf(Order::isCancelled);\n```\n\n**Collect and remove afterwards**, or build a new filtered list with a stream — appropriate when the original must not be mutated.\n\n**A concurrent collection** — `CopyOnWriteArrayList` if the real situation is multi-threaded access. Its iterator works on a snapshot so it never throws, at the cost of copying the array on every write. Suitable for read-heavy, write-rare cases and wrong for anything write-heavy.\n\n**If it really is multi-threaded**\n\nThen the exception is a symptom of a missing synchronisation strategy, and `removeIf` will not fix it — two threads mutating an `ArrayList` can corrupt it silently, which is worse than an exception. The answer there is a concurrent collection or explicit synchronisation, chosen based on the read-write ratio.\n\n**The distinction to draw**\n\nSingle-threaded modification during iteration is a code bug with a clean fix. Multi-threaded access to a non-thread-safe collection is a design problem, and the exception is a lucky early warning rather than the issue itself.",
+  "tags": [
+   "java",
+   "collections",
+   "concurrentmodificationexception",
+   "iterators",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is the exception described as best-effort?",
+    "a": "Because the modification count check is not synchronised, so in a multi-threaded setting a concurrent change may not be observed by the iterating thread - the collection can be corrupted without any exception being thrown. The documentation is explicit that fail-fast behaviour cannot be guaranteed and should be used only to detect bugs, not to control program flow. That is why catching it and continuing is always wrong: it means accepting an unknown state."
+   },
+   {
+    "q": "When is CopyOnWriteArrayList the right choice?",
+    "a": "When reads vastly outnumber writes and the collection is small - an event listener list, a configuration snapshot, a set of registered handlers. Every write copies the entire backing array, so it is O(n) per mutation and unusable for anything write-heavy. In exchange, reads and iteration need no locking at all and never throw. The decision is entirely about the read-to-write ratio, and getting it wrong produces quadratic behaviour that only appears at scale."
+   },
+   {
+    "q": "Does the enhanced for loop hide anything else worth knowing?",
+    "a": "It hides that an iterator is being created, which matters when you need iterator.remove or when the collection's iterator has particular semantics. It also means you cannot access the index without tracking it separately, and for a LinkedList a manual index loop is accidentally quadratic where the enhanced loop is linear. So the syntax sugar is good, and knowing what it compiles to explains both the exception and several performance surprises."
+   }
+  ]
  }
 ]

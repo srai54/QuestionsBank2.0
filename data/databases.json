@@ -1750,5 +1750,34 @@
     "a": "Because the document is the unit of storage and update - a growing array means the whole document is rewritten on each append and eventually exceeds the 16MB limit. Indexes on array fields grow with the number of elements, and reading one element means loading the entire document. The usual remedy is the bucket pattern, storing fixed-size groups per document, or moving the items to their own collection with a reference. Unbounded arrays inside documents are the most common schema mistake people bring from relational thinking."
    }
   ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "A multi-tenant SaaS is being designed. The team asks whether to use one database per tenant, a shared database with a tenant column, or separate schemas. How do you decide?",
+  "answer": "**The decision is driven by requirements, not preference**\n\n**Questions I would ask first**\n\n**How many tenants, and how do they grow?** Ten enterprise customers and ten thousand self-service accounts are different problems. Database-per-tenant does not scale to thousands — connection pools, migrations and backups all multiply.\n\n**What is the isolation requirement?** If a contract or regulation demands physical separation, that decides it. If not, do not pay for it.\n\n**How variable are tenant sizes?** One tenant with 80% of the data is a strong argument for isolating that one, possibly in a hybrid.\n\n**What is the operational capability?** Running a thousand databases means automating migrations, monitoring and backups across all of them. Without that automation it becomes unmanageable quickly.\n\n**The three options**\n\n**Shared database, tenant column.** Cheapest to operate, easiest to migrate, best resource utilisation, and the natural choice for many small tenants. The risks are that a missing `WHERE TenantId` leaks data across tenants — a single bug is a breach — and noisy-neighbour effects. Mitigations: global query filters, row-level security enforced by the database rather than the application, and the tenant id as the leading column of the clustered index.\n\n**Schema per tenant.** Middle ground: some logical separation, one database to operate. In practice it combines the disadvantages — migrations multiply like database-per-tenant, while isolation is weaker. I rarely find it the best answer.\n\n**Database per tenant.** Strongest isolation, per-tenant backup and restore, easy to move a tenant to dedicated hardware, and noisy neighbours cannot occur. Costs: migrations across n databases, connection pool pressure, higher per-tenant cost, and cross-tenant reporting becomes genuinely hard.\n\n**What I would usually propose**\n\nStart with a shared database and a tenant column, enforced by row-level security rather than by developer discipline, and design so a tenant *can* be moved out. Then isolate specific tenants when a contract, a size or a performance profile justifies it. That hybrid covers the common case cheaply and keeps the expensive option available where it is earned.\n\n**The thing to get right from day one**\n\nEvery table has the tenant id, every query is scoped by it at a level below the application code, and the test suite proves tenant A cannot read tenant B. Retrofitting tenancy into a schema that did not have it is one of the most painful migrations there is.",
+  "tags": [
+   "databases",
+   "multi-tenancy",
+   "isolation",
+   "trade-offs",
+   "system-design",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why enforce tenant scoping in the database rather than the application?",
+    "a": "Because application-level filtering depends on every query being written correctly forever, and one omission is a cross-tenant data breach rather than an ordinary bug. Row-level security enforces the predicate in the engine, so even a raw SQL query or a direct connection from a reporting tool is filtered. It moves the guarantee from discipline to mechanism. The cost is a performance consideration and a degree of operational complexity in managing the session context, which is small next to the failure it prevents."
+   },
+   {
+    "q": "What makes cross-tenant reporting hard with database-per-tenant?",
+    "a": "There is no single place to query - an aggregate across all tenants means fanning out to n databases and combining the results, which is slow, fragile and gets worse as tenants are added. The usual answer is a separate analytics store fed from all the tenant databases, which is another pipeline to build and keep consistent. That cost is frequently underestimated when the isolation decision is made, because reporting requirements tend to arrive after the architecture is settled."
+   },
+   {
+    "q": "How would you move one large tenant out of a shared database later?",
+    "a": "It is straightforward only if you designed for it: the schema is identical, so the move is an export of that tenant's rows into a new database, a connection-string switch keyed by tenant, and a cutover with a brief write freeze or a dual-write window. What makes it hard is anything that assumed a single database - cross-tenant joins, global sequences, shared reference data with tenant-specific overrides. Keeping the data access strictly tenant-scoped from the start is what preserves the option, which is why I would build it that way even while using a shared database."
+   }
+  ]
  }
 ]

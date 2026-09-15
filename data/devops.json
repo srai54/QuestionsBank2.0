@@ -3767,5 +3767,34 @@
     "a": "As a stopgap yes, and it may even be the correct final answer if the application genuinely needs that memory at peak - a limit set by guesswork is a common cause of this. What makes it unsatisfactory as the only response is that it does not distinguish 'needs more memory' from 'leaks memory', and those have very different futures. Measuring RSS at peak against the limit tells you which: a stable plateau below the new limit is a sizing fix, a continuing climb is a leak that will reach any ceiling."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Git",
+  "difficulty": "Medium",
+  "question": "A long-lived feature branch has diverged from main by 200 commits and merging is painful. How do you handle it, and how do you prevent a repeat?",
+  "answer": "**Handling it now**\n\n**Do not attempt one big merge.** The conflict surface is the product of both sides' changes and resolving 200 commits' worth at once is where mistakes are made silently.\n\n**Merge main into the branch incrementally.** Take main's commits in chunks, resolving conflicts in smaller, comprehensible steps. Each step is testable, so a mistake is caught near where it was made.\n\n**Or rebase in stages** if the branch is not shared, which gives a linear history — but never rebase a branch others have pulled, because it rewrites commits they have.\n\n**Prioritise getting it merged over getting it perfect.** A branch this diverged is accruing cost daily. If parts of it can be extracted and merged independently — a refactor, a utility, a schema change — do that first to shrink what remains.\n\n**Preventing a repeat**\n\nThe real answer is that the branch should not have lived this long. Two hundred commits of divergence is a process outcome, not an accident.\n\n**Merge main into the branch daily**, not at the end. The conflicts still exist but arrive in digestible pieces while the context is fresh.\n\n**Break the work into shippable increments.** Most large features can be decomposed into pieces that are individually mergeable — the schema change, the API, then the UI. Each merges within days.\n\n**Use feature flags** so incomplete work can merge to main without being visible. This is the mechanism that makes small increments possible for a feature that is not user-ready, and it is the single most effective change.\n\n**Trunk-based development** as the target — short-lived branches, merged daily, with flags gating incomplete behaviour.\n\n**The framing I would use**\n\nA long-lived branch is an unmerged inventory of work that decays. Its cost is invisible until the merge, which is why teams keep creating them. Making the cost visible — 'this branch is now 200 commits behind and will take days to land' — usually shifts the conversation more effectively than advocating a methodology.",
+  "tags": [
+   "devops",
+   "git",
+   "branching",
+   "trunk-based",
+   "feature-flags",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is rebasing a shared branch dangerous?",
+    "a": "Because it rewrites commit hashes, so anyone who has pulled the old commits now has a divergent history - their next pull produces duplicate commits or a confusing merge, and a careless force-push can discard work that was pushed in between. The rule is that rebase is for private history and merge is for shared history. Where a shared branch genuinely must be rebased, it needs coordination: everyone stops, the rebase happens, everyone re-clones or resets. That coordination cost is why it is rarely worth it."
+   },
+   {
+    "q": "How do feature flags enable short-lived branches specifically?",
+    "a": "They decouple merging from releasing. Incomplete work can be merged to main behind a flag that is off, so it is integrated continuously and conflicts never accumulate, while users see nothing until the flag is turned on. That removes the main reason people keep branches open - the belief that merging means shipping. The costs are the flag lifecycle and the combinatorial testing burden, which is why flags need owners and expiry dates rather than accumulating indefinitely."
+   },
+   {
+    "q": "The feature genuinely cannot be split - it is a rewrite of one subsystem. What then?",
+    "a": "Then the branch-by-abstraction pattern applies: introduce an interface over the existing implementation, merge that, then build the new implementation behind the same interface on main, switching over with a flag when it is ready. Both implementations coexist in main during the transition. It is more work than a long branch and it keeps integration continuous, which is the trade. If even that is impossible, merging main in daily is the minimum discipline, because the alternative is a merge nobody can review."
+   }
+  ]
  }
 ]

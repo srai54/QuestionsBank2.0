@@ -10735,5 +10735,92 @@
     "a": "Usually yes for a service under load - System.Text.Json is substantially faster and allocates far less, which shows up in throughput and GC pressure, and it is the default that the framework optimises for. For a low-traffic internal application, the migration risk may exceed the benefit, and Newtonsoft remains supported and is still better for some scenarios such as complex polymorphism. It is a judgement about the workload rather than an obligation to be on the newer library."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Async",
+  "difficulty": "Hard",
+  "question": "A library method is awaited from an ASP.NET Core app with no problem, but the same library deadlocks a WPF application. The library author says the bug is in the WPF app. Who is right?",
+  "answer": "**The library is at fault**\n\nThe deadlock happens when a caller blocks on an async method — `.Result` or `.Wait()` — that needs to resume on a captured `SynchronizationContext` which the blocked thread is holding.\n\nWPF has a `SynchronizationContext` bound to the UI thread. The UI thread calls `.Result`, blocking. The library's continuation is queued to that same thread. The thread cannot process it because it is blocked, and the continuation never completes: classic deadlock.\n\nASP.NET Core does not install a `SynchronizationContext`, so there is nothing to capture, the continuation runs on a thread-pool thread and the block is merely wasteful rather than fatal. That is why the same code behaves differently.\n\n**Both parties have something to fix**\n\n**The caller should not block on async code.** `.Result` in a UI event handler is the direct cause and async all the way up is the answer.\n\n**But the library must not assume a context.** A library has no idea who will call it. Applying `ConfigureAwait(false)` to every await inside library code means the continuation does not need the original context, so the deadlock cannot occur regardless of the caller:\n\n```csharp\n// Library code: do not capture the caller's context\nvar response = await httpClient.GetAsync(url).ConfigureAwait(false);\nvar body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);\n```\n\nThis is why `ConfigureAwait(false)` is standard practice in libraries and unnecessary in ASP.NET Core application code — the guidance differs by context, which is why it confuses people.\n\n**The nuance worth knowing**\n\nIn .NET 8, `ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing)` and related options were added, and `System.Threading.Tasks` has evolved — but the core rule stands: library code should not capture a context it knows nothing about.\n\n**How I would resolve it**\n\nFix both. The library adds `ConfigureAwait(false)` because it is shared code that cannot know its callers. The WPF app stops blocking, because the block is also causing a frozen UI even when it does not deadlock.",
+  "tags": [
+   "dotnet",
+   "async",
+   "deadlock",
+   "configureawait",
+   "synchronizationcontext",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does ASP.NET Core not have a SynchronizationContext when ASP.NET Framework did?",
+    "a": "Because the old framework needed one to flow HttpContext and thread identity to continuations, and that context marshalled work back to a request-specific context - which is precisely what made blocking deadlock-prone there too. ASP.NET Core redesigned this so context flows through AsyncLocal instead, removing the need. The practical consequence is that .Result in ASP.NET Core wastes a thread and risks pool starvation rather than deadlocking, which is better but still worth avoiding."
+   },
+   {
+    "q": "Is ConfigureAwait(false) needed everywhere in a library, or just once?",
+    "a": "On every await, because the context is captured per await point - one missed await is enough to reintroduce the deadlock, since that continuation will try to return to the caller's context. That repetitiveness is why analyzers exist to enforce it and why some teams reach for a project-wide setting. It is also why the guidance is stated as a blanket rule for libraries: partial application gives no guarantee."
+   },
+   {
+    "q": "The WPF developer says making it async all the way up is too big a change. What do you suggest?",
+    "a": "It is usually smaller than it looks, because the change is mechanical - event handlers become async void with a try/catch, and everything below becomes async Task. The genuinely hard cases are constructors and property getters, which cannot be async and need restructuring into an initialise method or a lazily-awaited task. What I would resist is the middle ground of blocking in a few places, because it reintroduces the deadlock non-deterministically and those are the hardest bugs to reproduce."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Records",
+  "difficulty": "Medium",
+  "question": "A team switched DTOs from classes to records and a caching layer started returning wrong results. What behaviour changed?",
+  "answer": "**What changed: equality semantics**\n\nA `class` uses reference equality by default — two instances with identical contents are different objects. A `record` generates value equality — two instances with the same property values are equal, and produce the same hash code.\n\nAnything keyed on these objects now behaves differently:\n\n**A dictionary or cache keyed on the DTO** now collapses entries that were previously distinct. Two requests with identical parameters share a cache entry, which is usually the intent — but if the DTO omits a field that actually distinguishes them, the cache now returns one user's result for another's request.\n\n**A `HashSet` of DTOs** silently de-duplicates where it previously did not.\n\n**`Distinct()`** returns fewer items.\n\n**`ReferenceEquals` checks** and identity-based tracking break.\n\n**The specific danger**\n\nValue equality includes *all* public properties — and only those. If the DTO does not carry the tenant id or the user id because it was never needed for serialisation, then two different tenants' requests are now equal, and the cache key cannot tell them apart. The record made the cache correct-looking and wrong.\n\n**Other behavioural differences worth knowing**\n\n**Records with mutable properties break as hash keys** in the same way any mutable key does — `record` does not imply immutable unless you use positional parameters or `init`.\n\n**`with` expressions** create copies, so code relying on shared mutation of a DTO stops working.\n\n**`ToString`** is generated and prints all properties — which can leak secrets into logs if a DTO carries a token.\n\n**What I would do**\n\nFind what is keyed on these types, and verify that the record's generated equality includes every field that distinguishes an entry. If it does not, add the field or use an explicit cache key rather than the object. And check `ToString` against what gets logged, because that one is quiet and appears in an audit rather than a bug report.",
+  "tags": [
+   "dotnet",
+   "records",
+   "value-equality",
+   "caching",
+   "breaking-change",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Does a record guarantee immutability?",
+    "a": "No - a record with ordinary settable properties is fully mutable, and only the positional form or explicit init accessors prevent mutation. That matters because the generated equality and hash code use the current property values, so a mutable record used as a dictionary key has exactly the orphaned-entry problem any mutable key has. The record keyword gives value semantics; immutability is a separate decision you still have to make, and the two are commonly conflated."
+   },
+   {
+    "q": "How does record equality interact with inheritance?",
+    "a": "Records include the runtime type in the comparison, so a base record and a derived one with identical values are not equal - which is usually what you want and is different from how a hand-written Equals often behaves. It is implemented via a protected EqualityContract property that derived records override. The practical consequence is that a derived record cannot be used interchangeably with its base in an equality check, which can surprise code that treats the hierarchy polymorphically."
+   },
+   {
+    "q": "Where are records clearly the right choice?",
+    "a": "For immutable data carriers where identity is the values - DTOs, domain value objects such as Money or DateRange, event payloads, and anything compared by content. They remove a great deal of boilerplate that is easy to get wrong by hand, particularly the Equals and GetHashCode contract. Where they are the wrong choice is entities with identity, such as an EF Core entity, where two rows with the same values are genuinely different things and the primary key is what equality should mean."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "LINQ",
+  "difficulty": "Medium",
+  "question": "A method returns IEnumerable<T> built with yield return. A caller reports that an exception thrown by argument validation only appears when they start iterating, not when they call the method. Why?",
+  "answer": "**What's happening**\n\nAn iterator method's body does not run when you call it. The compiler transforms it into a state machine; calling the method only constructs that state machine. The body — including any validation at the top — executes on the first `MoveNext`, which is when enumeration begins.\n\nSo `GetItems(null)` returns successfully and the `ArgumentNullException` appears later, possibly in a completely different part of the code, with a stack trace that points at a `foreach` rather than at the bad call.\n\n**Why that is a problem**\n\nThe exception surfaces far from its cause, making it much harder to diagnose. Worse, if the caller never enumerates, the invalid argument is never detected at all.\n\n**The fix: split the method**\n\nValidate eagerly in a normal method, and delegate to a private iterator:\n\n```csharp\npublic IEnumerable<Order> GetOrders(string customerId)\n{\n    // Runs immediately, at the call site\n    ArgumentException.ThrowIfNullOrEmpty(customerId);\n\n    return Iterate();\n\n    IEnumerable<Order> Iterate()\n    {\n        foreach (var order in _source)\n            if (order.CustomerId == customerId)\n                yield return order;\n    }\n}\n```\n\nThe outer method is not an iterator — it has no `yield` — so its body runs on call. The inner one carries the deferred behaviour.\n\n**The related surprises worth knowing**\n\n**Deferred execution means the source is read when enumerated**, not when the query is built — so a change to the source between the two is visible.\n\n**Enumerating twice runs the body twice**, which is the multiple-enumeration problem.\n\n**A `using` inside an iterator** is disposed when enumeration completes or the enumerator is disposed — so abandoning a `foreach` early disposes correctly, but holding the enumerable without enumerating leaves the resource unopened, which is usually fine but occasionally surprising.\n\n**The general principle**\n\nLaziness is a feature with a cost: the separation of when you ask from when it happens moves errors away from their cause. Validating eagerly restores the connection for the case that matters most.",
+  "tags": [
+   "dotnet",
+   "linq",
+   "iterators",
+   "deferred-execution",
+   "validation",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "How do you recognise an iterator method at a glance?",
+    "a": "It contains yield return or yield break anywhere in the body - that single keyword changes the entire compilation of the method into a state machine, and it is easy to miss in a long method. The consequence is that the method's contract changes silently: it now returns immediately and does nothing until enumerated. Because the signature looks identical to a method that builds a list and returns it, callers cannot tell the difference from the outside, which is why the eager-validation split matters."
+   },
+   {
+    "q": "When is the laziness actually valuable?",
+    "a": "When the consumer may not need all the results - a Take after a filter over a large source, a search that stops at the first match, or a sequence read from a file or network that should stream rather than buffer. In those cases building a list first does unnecessary work or uses unbounded memory. Where it is not valuable is a small collection that is always fully enumerated, and there returning a list is simpler and avoids every deferred-execution surprise."
+   },
+   {
+    "q": "The caller wants to be sure the method has actually run. What should they do?",
+    "a": "Materialise it with ToList or ToArray at the point they want the work done, which forces the whole sequence and makes subsequent enumeration cheap and stable. That is also the right move before returning a sequence across an API boundary, because handing a caller a lazy enumerable over a disposed DbContext or a closed file is a common source of confusing failures. If the producer knows the consumer will always enumerate fully, returning IReadOnlyList in the first place is clearer than expecting them to remember."
+   }
+  ]
  }
 ]

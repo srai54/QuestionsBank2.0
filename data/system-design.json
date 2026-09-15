@@ -2659,5 +2659,33 @@
     "a": "Substantially - if it is a prefix search rather than a substring one, LIKE 'term%' without the leading wildcard uses an index and needs nothing else. That single character is the difference between a seek and a 50-million-row scan. It is worth establishing what the users actually do before designing for the general case, because search-as-you-type on a name is usually a prefix problem, and building an Elasticsearch cluster to solve it would be a large amount of infrastructure for a query the database already answers in milliseconds."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Rate Limiting",
+  "difficulty": "Hard",
+  "question": "You need to rate-limit an API at 1000 requests per minute per customer. The service runs on six instances behind a load balancer. What are the design considerations?",
+  "answer": "**The core problem: the limit is global, the enforcement is distributed**\n\nSix instances each allowing 1000/minute permits 6000. Dividing by six — 167 each — fails when traffic is unevenly balanced or an instance is unhealthy, rejecting requests while capacity exists elsewhere.\n\nSo the counter has to be shared, or the imprecision has to be acceptable.\n\n**Algorithm choice**\n\n**Fixed window** is simplest — a counter per customer per minute — but allows a burst of 2000 across a window boundary: 1000 at 11:59:59 and 1000 at 12:00:00.\n\n**Sliding window log** is exact but stores a timestamp per request, which is expensive at volume.\n\n**Sliding window counter** approximates by weighting the previous window, which removes the boundary burst at a fraction of the cost. Usually the right default.\n\n**Token bucket** allows controlled bursts and enforces an average rate, which matches how people actually want APIs to behave — a client catching up after a pause should not be penalised.\n\n**Where to enforce it**\n\n**At the gateway** — APIM, an ingress controller, a CDN — which keeps the load off your service entirely and is usually right for coarse limits. The service still needs its own limit if it has other entry points.\n\n**In the service with a shared store**, typically Redis with an atomic increment-and-expire or a Lua script so the check-and-increment cannot race.\n\n**What else the design needs**\n\n**Correct responses.** `429 Too Many Requests` with `Retry-After`, and ideally `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers so clients can self-regulate instead of discovering the limit by hitting it.\n\n**A decision about Redis being unavailable.** Fail open — allow traffic, risking overload — or fail closed — reject, causing an outage from a cache failure. Usually fail open with an alert, because a rate limiter taking the API down is a worse outcome than briefly exceeding a limit.\n\n**Exemptions and tiers**, because the moment this ships someone will need a higher limit.\n\n**What I would build**\n\nGateway-level limiting with a sliding window counter, Redis-backed for the shared state, failing open with alerting, and the standard headers on every response. Approximation is fine here — the limit is a business policy, not a correctness boundary, so being 3% out is irrelevant while being down is not.",
+  "tags": [
+   "system-design",
+   "rate-limiting",
+   "distributed-systems",
+   "redis",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is the fixed window boundary burst a real problem?",
+    "a": "Because it permits double the intended rate over a two-window-spanning period - a client that sends its whole allowance at the end of one minute and again at the start of the next delivers 2000 requests in a couple of seconds, which is exactly the spike the limit was meant to prevent. Whether it matters depends on what you are protecting: for billing fairness it is noise, for protecting a downstream dependency from overload it defeats the purpose. That distinction decides whether the simplest algorithm is good enough."
+   },
+   {
+    "q": "How do you make the Redis check atomic?",
+    "a": "With a single operation rather than a read followed by a write - INCR combined with EXPIRE on first creation, or a Lua script that performs the whole check-and-increment server-side so no other client can interleave. Doing GET then SET from the application has a race that lets concurrent requests both see a count below the limit and both proceed. Redis's single-threaded execution model makes a script atomic by construction, which is why it is the standard approach for this."
+   },
+   {
+    "q": "The customer says the limit is unfair because one slow endpoint uses their whole quota. How do you respond?",
+    "a": "By asking what the limit is protecting. A request count treats a cheap lookup and an expensive report identically, which is a poor proxy for load - so if the goal is protecting capacity, weighting by cost or having separate limits per endpoint class is more honest. If the goal is commercial, a request count is simple and predictable for the customer to reason about, which has its own value. The complaint is usually legitimate and the fix is a second dimension rather than a higher number."
+   }
+  ]
  }
 ]

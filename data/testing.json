@@ -2272,5 +2272,34 @@
     "a": "Some of them, probably - there are usually many end-to-end tests verifying logic that a unit test could check, and those are pure cost. What should survive is a small number of genuine journey tests covering the critical paths, because they are the only tests that exercise the real wiring, the real configuration and the real deployment. Deleting those removes the only evidence the system works when assembled. The goal is a handful that are worth their runtime, not zero and not two hundred."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Integration",
+  "difficulty": "Medium",
+  "question": "Integration tests share a database and fail when run in parallel, but pass individually. The team's fix is to run them serially. What would you do instead?",
+  "answer": "**Why serial execution is a poor fix**\n\nIt makes the suite slow — which, as established elsewhere, leads to it being skipped — and it does not remove the shared state, so tests remain order-dependent and will still fail intermittently when data from one leaks into another's assertions. It treats the symptom.\n\n**What is actually wrong**\n\nTests are sharing mutable state: fixed ids, a seeded dataset both mutate, or assertions that count rows in a table another test is writing to. Any of these makes a test's outcome depend on what else is running.\n\n**The options, from best to worst**\n\n**1. Isolate the data per test.** Each test creates the data it needs with unique keys — a GUID in the name, a generated id — and asserts only on its own rows. No shared fixtures to collide over. This is usually the least work and it also makes each test readable, because the setup is visible rather than implied by a seed file.\n\n**2. A database per test or per class.** With containers this is cheap: Testcontainers spins up a real database per test class, so isolation is absolute. Slower per class, but parallelisable, and it tests against the real engine rather than an approximation.\n\n**3. Transaction rollback per test.** Begin a transaction in setup, roll it back in teardown. Fast and clean, but it breaks down when the code under test manages its own transactions, and it does not isolate anything outside the database.\n\n**4. Respawn or a truncate step between tests.** Works, but forces serial execution again unless combined with per-test databases.\n\n**What I would do here**\n\nUnique data per test as the default discipline, plus a container per test class for anything that genuinely cannot be isolated that way. Then enable parallelism, which will surface the remaining shared state as failures — and each of those is a real order-dependency worth fixing rather than hiding.\n\n**The broader point**\n\nTests that fail in parallel are telling you they are coupled. That coupling is usually mirrored in how people reason about the system, and removing it tends to improve the tests' clarity as much as their reliability.",
+  "tags": [
+   "testing",
+   "integration-tests",
+   "parallelism",
+   "test-isolation",
+   "testcontainers",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is a shared seeded dataset such a common source of this?",
+    "a": "Because it is convenient - one setup script, and every test has data to work with - and it silently couples every test to every other. A test that updates customer 1 changes what another test sees, and a test asserting on a row count breaks the moment anyone adds a row. It also makes tests hard to read, because the arrangement is in a file elsewhere rather than in the test. Creating what you need in the test is more lines and far less coupling."
+   },
+   {
+    "q": "Are Testcontainers fast enough to use per test class?",
+    "a": "Generally yes, once the image is cached locally - startup is a few seconds for most databases, and it is paid per class rather than per test. The costs are that CI runners need a Docker daemon, image pulls on a cold runner are slow, and resource limits matter when many containers run in parallel. Reusing a container across the whole test run with per-test schemas is the compromise when startup is genuinely a problem. The benefit is that you test against the real engine, so provider-specific behaviour is exercised rather than assumed."
+   },
+   {
+    "q": "Does an in-memory database avoid all this?",
+    "a": "It avoids the isolation problem and introduces a worse one: it is not the database you run in production. EF Core's in-memory provider does not enforce foreign keys, unique constraints or transactions properly, and it translates LINQ differently from a real provider - so tests pass against behaviour the real database does not have. SQLite in-memory is closer but still differs in types, collation and concurrency. For unit tests of logic it is fine; for tests whose purpose is to verify the data access works, it defeats the purpose."
+   }
+  ]
  }
 ]

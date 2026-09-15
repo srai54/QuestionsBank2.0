@@ -2170,5 +2170,34 @@
     "a": "Automated tools catch perhaps a third of issues - missing labels, contrast, invalid ARIA - and cannot judge whether the interaction makes sense. The irreplaceable tests are unplugging the mouse and completing the flow with the keyboard alone, and then doing it with a screen reader, NVDA or VoiceOver, listening to what is announced. Both take minutes and find things no linter will. Adding keyboard-only assertions to the component test suite is how you stop regressions after the fix."
    }
   ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "A form loses the user's input when a background refresh updates the underlying data. How do you think about this class of problem?",
+  "answer": "**The underlying issue: two sources of truth**\n\nThe form's state has diverged from the server's, and a refresh is overwriting the local edits with server values. The user's in-progress input is being treated as derived from the server data when it is actually newer and unsaved.\n\n**The distinction that matters**\n\n**Server state** is data you do not own — it lives elsewhere, can change without you, and is cached locally. It needs refresh, invalidation and staleness handling.\n\n**Client state** is data you own — the form's current contents, what is expanded, what is selected. Nothing else can change it.\n\nMost of these bugs come from managing both with the same mechanism. Once a form's in-progress values are stored in the same place as the fetched record, any refetch destroys them.\n\n**How to fix this case**\n\n**1. Keep the draft separate** from the fetched record. The form owns its own state, initialised once from the server value, and a refetch updates the cached record without touching the draft.\n\n**2. Suspend background refetching while the form is dirty.** React Query's `enabled` option, or simply not refetching a record being edited. This is the simplest correct behaviour for most forms.\n\n**3. If the underlying record genuinely changed**, tell the user rather than silently resolving it — 'this record was updated by someone else, review the changes' — and let them decide. Silently keeping either version is wrong: keeping theirs loses the other edit, keeping the server's loses theirs.\n\n**4. Detect the conflict at save time** with a version or rowversion, so even if the refresh does not happen, a concurrent edit is caught rather than overwritten.\n\n**The general principle**\n\nUnsaved user input is the most valuable state in the application — it cannot be recovered from anywhere else. Anything that can destroy it, including a well-intentioned refresh, needs to be deliberate rather than incidental. Design so that the only thing that overwrites a draft is the user.",
+  "tags": [
+   "frontend",
+   "state-management",
+   "forms",
+   "server-state",
+   "concurrency",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is separating server state from client state such a useful distinction?",
+    "a": "Because they have different requirements and mixing them produces exactly this bug. Server state needs caching, refetching, staleness policies and error handling for something you do not control; client state needs none of that and simply needs to not be destroyed. Libraries such as React Query exist because teams kept putting server state in Redux and reimplementing caching badly. Once the two are separate, questions like 'should this refetch' have obvious answers."
+   },
+   {
+    "q": "How do you decide between warning the user and merging automatically?",
+    "a": "By whether the fields conflict. If the other edit touched different fields, a field-level merge is usually safe and invisible - which is why collaborative editors work at all. If both edited the same field, no automatic resolution is correct, because the system cannot know which intent wins. The failure mode to avoid is a blanket last-write-wins, which silently discards work and is only noticed when someone asks why their change disappeared."
+   },
+   {
+    "q": "Should the app warn before navigating away from a dirty form?",
+    "a": "Yes, and it is one of the cheapest protections available - the beforeunload event for tab closes and a router guard for in-app navigation. The caveat is that browsers deliberately limit what you can say and require a prior interaction, so it cannot be relied on absolutely. Autosaving a draft locally is the stronger version, because it survives a crash and a closed tab rather than only a deliberate navigation, and it removes the dialogue entirely."
+   }
+  ]
  }
 ]

@@ -661,5 +661,33 @@
    "entry-point",
    "practices"
   ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Gotchas",
+  "difficulty": "Medium",
+  "question": "A Python function with a default argument of an empty list accumulates values across calls. Explain why and what else shares this behaviour.",
+  "answer": "**Why it happens**\n\nDefault arguments are evaluated **once**, when the function is defined — not on each call. So a mutable default is a single object shared by every invocation that does not supply its own.\n\n```python\ndef add_item(item, items=[]):      # the list is created ONCE\n    items.append(item)\n    return items\n\nadd_item('a')   # ['a']\nadd_item('b')   # ['a', 'b']  - same list\n```\n\nThis is a consequence of functions being objects whose defaults are attributes evaluated at definition time, which is consistent with the rest of the language but surprising here.\n\n**The fix**\n\nUse `None` as the sentinel and create the object inside:\n\n```python\ndef add_item(item, items=None):\n    if items is None:\n        items = []\n    items.append(item)\n    return items\n```\n\n**What else shares this behaviour**\n\n**Any mutable default** — `dict`, `set`, a custom object. The same trap.\n\n**Class attributes** versus instance attributes. A mutable assigned at class level is shared by every instance, which produces the same symptom one level up and is harder to spot:\n\n```python\nclass Basket:\n    items = []          # shared by ALL instances\n```\n\n**Defaults that call a function.** `def f(t=time.time())` captures one timestamp at import, not per call.\n\n**Closures in loops** capture the variable, not its value — the classic `[lambda: i for i in range(3)]` where all three return 2. The fix is a default argument, which does capture by value, which is the same mechanism used deliberately.\n\n**Why it is worth knowing beyond the trivia**\n\nIt is the visible case of a general rule: Python evaluates defaults and class bodies at definition time and closures at call time. Most of the surprising behaviours in this area follow from working out which applies. Recognising the pattern matters more than memorising the list.",
+  "tags": [
+   "python",
+   "mutable-defaults",
+   "gotchas",
+   "closures",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why does Python not just evaluate defaults on each call?",
+    "a": "Because defaults are stored on the function object at definition time, which makes calls cheap and keeps the model simple - the alternative would mean re-executing arbitrary expressions on every call, with the performance and surprise that implies. It also enables the deliberate use as a value capture, which is how the closure-in-a-loop problem is usually fixed. It is a defensible design choice that produces one famous trap, and Python's response has been documentation rather than a change, since changing it now would break code that relies on it."
+   },
+   {
+    "q": "How does the class-attribute version differ in symptom?",
+    "a": "It is harder to see because it looks like a normal field declaration, and it only bites when the attribute is mutated rather than reassigned - self.items.append shares, while self.items = [] creates an instance attribute that shadows the class one. So the same class can behave correctly in one method and share state in another, depending on whether it assigns or mutates. The fix is to initialise mutable attributes in __init__, which is also what dataclasses enforce via field(default_factory=list)."
+   },
+   {
+    "q": "Does a linter catch these?",
+    "a": "The mutable default is caught by most linters - pylint's dangerous-default-value and ruff's B006 flag it directly, so enabling them removes this class of bug mechanically. The class-attribute case and the closure capture are harder because they are legal and sometimes intentional, so tools flag them inconsistently or not at all. That asymmetry is worth knowing: turn the linter on for the one it catches reliably, and rely on review and understanding for the others."
+   }
+  ]
  }
 ]
