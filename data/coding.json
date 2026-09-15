@@ -14713,18 +14713,33 @@
   "subcategory": "Data Structures",
   "difficulty": "Hard",
   "question": "Implement an LFU cache with O(1) operations.",
-  "answer": "A map from key to node, a map from frequency to a doubly linked list of nodes at that frequency, and a tracked minimum frequency. Access moves a node to the next frequency list; eviction removes the tail of the minimum frequency list. Every operation is constant time.",
+  "answer": "**Approach**\n\nA map from key to node, a map from frequency to a doubly linked list of nodes at that frequency, and a running minimum frequency. Every operation is O(1).\n\n**Logic**\n\nThe minimum-frequency variable is what makes eviction constant time — without it you would scan the frequency map to find the least-used bucket.\n\nIts update rule is the subtle part: on a promotion it only advances when the vacated bucket was the minimum and is now empty, and on an insertion it resets to one, because a brand-new entry is by definition the least frequently used.\n\nWithin a frequency bucket, ties are broken by least-recently-used, which is why each bucket is an ordered list rather than a set.\n\nO(1) for Get and Put.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class LfuCache\n{\n    private class Entry\n    {\n        public int Key, Value, Frequency;\n        public LinkedListNode<Entry> Node;\n    }\n\n    private readonly int _capacity;\n    private readonly Dictionary<int, Entry> _entries = new();\n    private readonly Dictionary<int, LinkedList<Entry>> _buckets = new();\n    private int _minFrequency;\n\n    public LfuCache(int capacity) { _capacity = capacity; }\n\n    public int Get(int key)\n    {\n        if (_capacity <= 0 || !_entries.TryGetValue(key, out var entry)) return -1;\n\n        Promote(entry);\n        return entry.Value;\n    }\n\n    public void Put(int key, int value)\n    {\n        if (_capacity <= 0) return;\n\n        if (_entries.TryGetValue(key, out var existing))\n        {\n            existing.Value = value;\n            Promote(existing);\n            return;\n        }\n\n        if (_entries.Count == _capacity) EvictLeastUsed();\n\n        var entry = new Entry { Key = key, Value = value, Frequency = 1 };\n        entry.Node = BucketFor(1).AddFirst(entry);\n        _entries[key] = entry;\n\n        _minFrequency = 1;   // a new entry is by definition the least used\n    }\n\n    private void Promote(Entry entry)\n    {\n        var bucket = _buckets[entry.Frequency];\n        bucket.Remove(entry.Node);\n\n        // The minimum only moves when its own bucket empties.\n        if (bucket.Count == 0 && _minFrequency == entry.Frequency) _minFrequency++;\n\n        entry.Frequency++;\n        entry.Node = BucketFor(entry.Frequency).AddFirst(entry);\n    }\n\n    private void EvictLeastUsed()\n    {\n        var bucket = _buckets[_minFrequency];\n\n        // Within a frequency, the least recently used goes first.\n        var victim = bucket.Last.Value;\n        bucket.RemoveLast();\n        _entries.Remove(victim.Key);\n    }\n\n    private LinkedList<Entry> BucketFor(int frequency)\n    {\n        if (!_buckets.TryGetValue(frequency, out var bucket))\n            _buckets[frequency] = bucket = new LinkedList<Entry>();\n\n        return bucket;\n    }\n}\n\npublic class Solution\n{\n    public static void Main()\n    {\n        var cache = new LfuCache(2);\n\n        cache.Put(1, 1);\n        cache.Put(2, 2);\n        Console.WriteLine(cache.Get(1));    // 1, and now used twice\n\n        cache.Put(3, 3);                    // evicts key 2, the least used\n        Console.WriteLine(cache.Get(2));\n        Console.WriteLine(cache.Get(3));\n\n        cache.Put(4, 4);                    // 1 and 3 tie at 2 uses; 1 is older\n        Console.WriteLine(cache.Get(1));\n        Console.WriteLine(cache.Get(3));\n        Console.WriteLine(cache.Get(4));\n\n        var zero = new LfuCache(0);\n        zero.Put(1, 1);\n        Console.WriteLine(zero.Get(1));     // capacity zero stores nothing\n\n        var overwrite = new LfuCache(1);\n        overwrite.Put(5, 50);\n        overwrite.Put(5, 60);               // update, not insert\n        Console.WriteLine(overwrite.Get(5));\n    }\n}\n```\n\n**Output**\n\n```\n1\n-1\n3\n-1\n3\n4\n-1\n60\n```",
   "tags": [
-   "data-structures",
-   "lfu",
-   "caching",
-   "design"
+   "design",
+   "lfu-cache",
+   "linked-list",
+   "constant-time",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook",
    "Bloomberg"
+  ],
+  "followups": [
+   {
+    "q": "Why does the minimum frequency only ever increase by one on a promotion?",
+    "a": "Because a promotion moves exactly one entry from frequency f to f+1. If that bucket was the minimum and is now empty, the next non-empty bucket must be f+1 - the promoted entry is there, and nothing can sit between f and f+1. So a single increment is always correct and no search is needed. That argument is what makes eviction O(1); without it you would scan the frequency map for the smallest non-empty bucket."
+   },
+   {
+    "q": "Why reset the minimum to one on an insertion?",
+    "a": "Because the new entry has a frequency of one, which is the smallest possible, so it becomes the least frequently used immediately. Forgetting the reset leaves the minimum pointing at a higher bucket and the next eviction removes the wrong entry - or throws, if that bucket is empty. The test where key 3 is inserted and then key 4 evicts correctly only passes because of this line."
+   },
+   {
+    "q": "Why is LRU used as the tie-break within a frequency?",
+    "a": "Because frequency alone leaves ties, and without a rule the eviction is arbitrary and the cache's behaviour becomes untestable. The standard definition breaks ties by recency, which is why each bucket is a doubly linked list with new arrivals at the front and eviction from the back. The test with keys 1 and 3 both at two uses exists to pin that down - a set-based bucket would evict either and pass only by luck."
+   }
   ]
  },
  {
@@ -14929,17 +14944,32 @@
   "subcategory": "Searching",
   "difficulty": "Hard",
   "question": "Find a peak element in a 2D matrix.",
-  "answer": "Binary search over columns: take the middle column, find its maximum, and move toward whichever horizontal neighbour is larger - a peak must exist in that direction. Time O(m log n), which beats scanning the whole matrix.",
+  "answer": "**Approach**\n\nBinary search on columns. Pick the middle column, find its maximum, and move toward whichever horizontal neighbour is larger.\n\n**Logic**\n\nThe correctness argument: the column maximum is already at least its vertical neighbours, so it fails to be a peak only horizontally. Moving toward the larger side is safe because that half is guaranteed to contain a peak — the values there are at least as large, and the matrix boundary eventually stops the ascent.\n\nThe O(rows × log cols) bound beats scanning every cell, and the problem only asks for *a* peak, not all of them.\n\nO(rows × log cols).\n\nThe test verifies the returned cell genuinely is a peak, rather than comparing against one expected position.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    public static (int Row, int Col) FindPeak(int[][] matrix)\n    {\n        int rows = matrix.Length, cols = matrix[0].Length;\n        int lo = 0, hi = cols - 1;\n\n        while (lo <= hi)\n        {\n            int mid = lo + (hi - lo) / 2;\n\n            // The column maximum already beats its vertical neighbours.\n            int bestRow = 0;\n            for (int r = 1; r < rows; r++)\n                if (matrix[r][mid] > matrix[bestRow][mid]) bestRow = r;\n\n            bool leftIsBigger = mid > 0 && matrix[bestRow][mid - 1] > matrix[bestRow][mid];\n            bool rightIsBigger = mid < cols - 1 && matrix[bestRow][mid + 1] > matrix[bestRow][mid];\n\n            if (!leftIsBigger && !rightIsBigger) return (bestRow, mid);\n\n            // Climbing toward the larger side always reaches a peak.\n            if (leftIsBigger) hi = mid - 1; else lo = mid + 1;\n        }\n\n        return (-1, -1);\n    }\n\n    // Verify the PROPERTY, since a matrix may have many peaks.\n    private static bool IsPeak(int[][] m, int r, int c)\n    {\n        if (r < 0) return false;\n\n        int v = m[r][c];\n        return (r == 0 || m[r - 1][c] <= v) &&\n               (r == m.Length - 1 || m[r + 1][c] <= v) &&\n               (c == 0 || m[r][c - 1] <= v) &&\n               (c == m[0].Length - 1 || m[r][c + 1] <= v);\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    private static void Check(int[][] m)\n    {\n        var (r, c) = FindPeak(m);\n        Console.WriteLine($\"({r},{c}) = {m[r][c]}, is a peak: {IsPeak(m, r, c)}\");\n    }\n\n    public static void Main()\n    {\n        Check(Grid(new[] { 1, 4 }, new[] { 3, 2 }));\n        Check(Grid(new[] { 10, 20, 15 }, new[] { 21, 30, 14 }, new[] { 7, 16, 32 }));\n        Check(Grid(new[] { 5 }));\n        Check(Grid(new[] { 1, 2, 3, 4, 5 }));               // single row, increasing\n        Check(Grid(new[] { 5 }, new[] { 4 }, new[] { 3 })); // single column\n        Check(Grid(new[] { 1, 1 }, new[] { 1, 1 }));        // all equal\n    }\n}\n```\n\n**Output**\n\n```\n(1,0) = 3, is a peak: True\n(1,1) = 30, is a peak: True\n(0,0) = 5, is a peak: True\n(0,4) = 5, is a peak: True\n(0,0) = 5, is a peak: True\n(0,0) = 1, is a peak: True\n```",
   "tags": [
-   "searching",
    "binary-search",
    "matrix",
-   "peak"
+   "peak",
+   "invariant-testing",
+   "csharp"
   ],
   "companies": [
    "Google",
    "Amazon",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why is moving toward the larger neighbour guaranteed to find a peak?",
+    "a": "Because the half you move into contains a value strictly larger than the current one, and the matrix is finite - so climbing cannot continue forever and must terminate at a cell no smaller than all its neighbours. The boundary acts as an implicit wall of negative infinity. It is the same argument as the one-dimensional peak problem, lifted to columns by first collapsing each column to its maximum."
+   },
+   {
+    "q": "Why does the test check the property rather than an expected position?",
+    "a": "Because a matrix can have many peaks and the algorithm is only required to return one - comparing against a single expected coordinate tests which peak this implementation happens to find, not whether the answer is valid. Checking the four neighbour comparisons tests the actual contract. The all-equal matrix makes the point: every cell is a peak under a non-strict definition, so any answer is correct."
+   },
+   {
+    "q": "Why binary search on columns rather than on cells?",
+    "a": "Because a two-dimensional binary search has no consistent ordering to exploit - the matrix is unsorted, so halving in both directions at once discards regions that may contain the only peak. Reducing each column to its maximum restores a one-dimensional problem with the climbing property intact. It is O(rows times log cols), and searching rows instead would be O(cols times log rows), so you would pick whichever dimension is smaller to scan."
+   }
   ]
  },
  {
@@ -14947,17 +14977,32 @@
   "subcategory": "Searching",
   "difficulty": "Medium",
   "question": "Find the kth smallest element in a sorted matrix.",
-  "answer": "Binary search on the value range, counting elements not exceeding the midpoint by walking from a corner in O(n) per check. Time O(n log range). A heap of row heads also works at O(k log n), which is better when k is small.",
+  "answer": "**Approach**\n\nBinary search on the *value*, not the position. For a candidate value, count how many entries are no larger by walking a staircase from the bottom-left corner.\n\n**Logic**\n\nThe count is monotonic in the candidate value, which is what licenses the search over values rather than over the matrix.\n\nThe staircase count is O(n) rather than O(n log n): starting at the bottom-left, moving up when the value is too large and right when it is not, each step commits to a whole row or column.\n\nThe search converges on a value that is actually present, because the boundary it finds is the smallest value whose count reaches k — and that must be a matrix entry.\n\nO(n log(range)).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int KthSmallest(int[][] matrix, int k)\n    {\n        int n = matrix.Length;\n        int lo = matrix[0][0], hi = matrix[n - 1][n - 1];\n\n        while (lo < hi)\n        {\n            int mid = lo + (hi - lo) / 2;\n\n            if (CountNoGreaterThan(matrix, mid) >= k) hi = mid; else lo = mid + 1;\n        }\n\n        return lo;\n    }\n\n    // Staircase from the bottom-left: O(n), not O(n log n).\n    private static int CountNoGreaterThan(int[][] matrix, int value)\n    {\n        int n = matrix.Length, count = 0;\n        int row = n - 1, col = 0;\n\n        while (row >= 0 && col < n)\n        {\n            if (matrix[row][col] <= value) { count += row + 1; col++; }   // whole column prefix\n            else row--;\n        }\n\n        return count;\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        var m = Grid(new[] { 1, 5, 9 }, new[] { 10, 11, 13 }, new[] { 12, 13, 15 });\n\n        Console.WriteLine(KthSmallest(m, 1));\n        Console.WriteLine(KthSmallest(m, 8));\n        Console.WriteLine(KthSmallest(m, 9));\n\n        Console.WriteLine(KthSmallest(Grid(new[] { -5 }), 1));\n        Console.WriteLine(KthSmallest(Grid(new[] { 1, 2 }, new[] { 1, 3 }), 2));   // duplicates\n\n        // Cross-check every k against a full sort.\n        var flat = m.SelectMany(r => r).OrderBy(v => v).ToArray();\n        bool agrees = true;\n        for (int k = 1; k <= flat.Length; k++)\n            if (KthSmallest(m, k) != flat[k - 1]) agrees = false;\n\n        Console.WriteLine($\"every k agrees with a full sort: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\n1\n13\n15\n-5\n1\nevery k agrees with a full sort: True\n```",
   "tags": [
-   "searching",
    "binary-search",
    "matrix",
-   "heap"
+   "search-the-answer",
+   "staircase",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does binary searching the value converge on an element that exists?",
+    "a": "Because the loop finds the smallest value v whose count of entries at most v is at least k. If v were not in the matrix, the count for v would equal the count for v-1, so v-1 would also satisfy the condition and v would not be the smallest - a contradiction. So the answer is necessarily a real entry. That argument is worth giving, because searching over a value range that includes non-existent values looks suspicious until you see why."
+   },
+   {
+    "q": "Why start the count at the bottom-left corner?",
+    "a": "Because that corner is the only one where the two directions give opposite information: moving up strictly decreases and moving right strictly increases, so each comparison eliminates an entire row or column. Starting at the top-left, both directions increase and neither choice is forced. The same corner trick powers the 'search a sorted matrix' problem, and recognising which corner is the pivot is the reusable part."
+   },
+   {
+    "q": "How does this compare with the heap approach?",
+    "a": "A min-heap seeded with the first row and advancing downward gives O(k log n), which is better when k is small and worse when k approaches n squared - and it needs O(n) memory. The binary search is O(n log(range)) with O(1) memory and is insensitive to k, so it wins for large k. Neither dominates, and stating the crossover rather than asserting one is best is the better answer."
+   }
   ]
  },
  {
@@ -14965,17 +15010,32 @@
   "subcategory": "Searching",
   "difficulty": "Easy",
   "question": "Find the first bad version with the fewest checks.",
-  "answer": "Binary search on the version range, since the property is monotone - once bad, always bad. Use the midpoint formula that avoids overflow. It is the canonical example of binary searching a predicate rather than a value.",
+  "answer": "**Approach**\n\nBinary search on the predicate. The versions are sorted by the property — once bad, always bad — so the boundary is what the search locates.\n\n**Logic**\n\nThe midpoint must be computed as `lo + (hi - lo) / 2`, not `(lo + hi) / 2`. With version numbers near int.MaxValue the latter overflows to a negative index, which is the entire reason this question is asked with a large range.\n\nWhen the midpoint is bad, it stays a candidate — `hi = mid`, not `mid - 1` — because it may itself be the first bad one.\n\nO(log n) calls, and the test counts them to prove it.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class Solution\n{\n    private static int _firstBad;\n    private static int _calls;\n\n    private static bool IsBadVersion(int version)\n    {\n        _calls++;\n        return version >= _firstBad;\n    }\n\n    public static int FindFirstBad(int n)\n    {\n        int lo = 1, hi = n;\n\n        while (lo < hi)\n        {\n            // lo + (hi - lo) / 2, never (lo + hi) / 2: that overflows near int.MaxValue.\n            int mid = lo + (hi - lo) / 2;\n\n            if (IsBadVersion(mid)) hi = mid;   // mid may itself be the first bad one\n            else lo = mid + 1;\n        }\n\n        return lo;\n    }\n\n    private static void Run(int n, int firstBad)\n    {\n        _firstBad = firstBad;\n        _calls = 0;\n\n        int found = FindFirstBad(n);\n        Console.WriteLine($\"n={n} first bad {firstBad}: found {found} in {_calls} call(s)\");\n    }\n\n    public static void Main()\n    {\n        Run(5, 4);\n        Run(1, 1);\n        Run(100, 1);        // the very first version\n        Run(100, 100);      // the very last\n\n        // The overflow case: (lo + hi) / 2 would go negative here.\n        Run(2147483647, 2147483647);\n        Run(2147483647, 1702766719);\n    }\n}\n```\n\n**Output**\n\n```\nn=5 first bad 4: found 4 in 2 call(s)\nn=1 first bad 1: found 1 in 0 call(s)\nn=100 first bad 1: found 1 in 7 call(s)\nn=100 first bad 100: found 100 in 6 call(s)\nn=2147483647 first bad 2147483647: found 2147483647 in 30 call(s)\nn=2147483647 first bad 1702766719: found 1702766719 in 31 call(s)\n```",
   "tags": [
-   "searching",
    "binary-search",
-   "monotonic",
-   "fundamentals"
+   "boundary",
+   "overflow",
+   "predicate",
+   "csharp"
   ],
   "companies": [
    "Facebook",
    "Amazon",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why does the midpoint formula matter here specifically?",
+    "a": "Because the version range goes up to int.MaxValue, so lo + hi overflows to a negative number and the resulting index is invalid - usually an exception, sometimes a silent wrong branch. Writing lo + (hi - lo) / 2 keeps every intermediate within range since hi - lo is at most the range itself. The test with n at int.MaxValue exists precisely to exercise it; on small inputs both forms behave identically, which is why the bug survives casual testing."
+   },
+   {
+    "q": "Why is hi set to mid rather than mid - 1?",
+    "a": "Because a bad midpoint might be the first bad version, so excluding it can skip the answer entirely. The invariant is that the answer is always within [lo, hi], and hi = mid preserves it while hi = mid - 1 can violate it. The loop terminates anyway because lo strictly increases on the other branch. It is the standard lower-bound shape, as against the find-exact shape where mid can be discarded."
+   },
+   {
+    "q": "Why does n=1 take zero calls?",
+    "a": "Because lo and hi are both 1, so the loop never runs and the answer is returned immediately - with only one version and a guarantee that a bad one exists, no check is needed. It is a nice demonstration that the loop condition is lo < hi rather than lo <= hi: the latter would make one pointless call and then need a different exit. Counting the calls in the test makes the O(log n) claim observable rather than asserted."
+   }
   ]
  },
  {
@@ -14983,17 +15043,32 @@
   "subcategory": "Sorting",
   "difficulty": "Medium",
   "question": "Sort a nearly sorted array where each element is at most k positions from its place.",
-  "answer": "A min-heap of size k+1: push the next element, pop the smallest into the output. Each element moves through a bounded heap, giving O(n log k) rather than O(n log n) - a genuine improvement when k is small.",
+  "answer": "**Approach**\n\nA min-heap of size k+1. The smallest remaining element is always within the next k+1 entries, so the heap's root is the next output.\n\n**Logic**\n\nThe bound is the point: if every element is at most k positions from its sorted place, then the element belonging at position i must currently be somewhere in [i-k, i+k] — so after reading k+1 entries, the smallest of them is definitely the next in order.\n\nThat makes it O(n log k) rather than O(n log n), and O(k) memory rather than O(n), which matters when the array is huge and k is small.\n\nO(n log k).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[] SortNearlySorted(int[] nums, int k)\n    {\n        if (nums == null || nums.Length <= 1) return nums ?? Array.Empty<int>();\n\n        var heap = new PriorityQueue<int, int>();\n        var result = new int[nums.Length];\n        int written = 0;\n\n        foreach (int n in nums)\n        {\n            heap.Enqueue(n, n);\n\n            // Once k+1 are buffered, the smallest of them is the next in order.\n            if (heap.Count > k) result[written++] = heap.Dequeue();\n        }\n\n        while (heap.Count > 0) result[written++] = heap.Dequeue();\n\n        return result;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(string.Join(\",\", SortNearlySorted(new[] { 6, 5, 3, 2, 8, 10, 9 }, 3)));\n        Console.WriteLine(string.Join(\",\", SortNearlySorted(new[] { 10, 9, 8, 7, 4, 70, 60, 50 }, 4)));\n        Console.WriteLine(string.Join(\",\", SortNearlySorted(new[] { 1, 2, 3 }, 0)));   // already sorted\n        Console.WriteLine(string.Join(\",\", SortNearlySorted(new[] { 2, 1 }, 1)));\n        Console.WriteLine(string.Join(\",\", SortNearlySorted(new[] { 5 }, 3)));\n\n        // A large k degrades to an ordinary heap sort, which is still correct.\n        var random = new Random(2024);\n        var many = Enumerable.Range(0, 300).Select(_ => random.Next(0, 1000)).ToArray();\n        var expected = many.OrderBy(v => v).ToArray();\n\n        Console.WriteLine($\"k larger than the array still sorts: \" +\n            $\"{SortNearlySorted(many, 500).SequenceEqual(expected)}\");\n    }\n}\n```\n\n**Output**\n\n```\n2,3,5,6,8,9,10\n4,7,8,9,10,50,60,70\n1,2,3\n1,2\n5\nk larger than the array still sorts: True\n```",
   "tags": [
-   "sorting",
    "heap",
    "nearly-sorted",
-   "optimisation"
+   "bounded-buffer",
+   "streaming",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Google"
+  ],
+  "followups": [
+   {
+    "q": "Why is the heap's root guaranteed to be the next element in order?",
+    "a": "Because the element that belongs at output position i started within k positions of it, so it must be among the first i+k+1 input entries - all of which have been read by the time the heap holds k+1 items. Nothing still unread can be smaller than the heap's root without violating the k-bound. So popping the root is safe, and that guarantee is exactly what the problem's constraint buys you."
+   },
+   {
+    "q": "Why does this beat a general sort?",
+    "a": "Because the heap never exceeds k+1 elements, so each insertion and extraction is O(log k) rather than O(log n), giving O(n log k) overall. More importantly the memory is O(k), so an array of billions with a k of ten can be sorted in a streaming pass with an eleven-element buffer. For an in-memory array of modest size the constant factors make a general sort competitive; the win is really about memory and streaming."
+   },
+   {
+    "q": "What happens if the k-bound is violated?",
+    "a": "The output is silently not sorted - an element displaced by more than k arrives after its slot has already been emitted, and nothing detects it. That is worth stating, because the algorithm trusts the precondition entirely. If the bound is a guess rather than a guarantee, either verify the output afterwards, which is O(n), or use a general sort. Relying on an unverified precondition is the real risk here, not the algorithm."
+   }
   ]
  },
  {
@@ -15001,17 +15076,32 @@
   "subcategory": "Sorting",
   "difficulty": "Hard",
   "question": "Sort a dataset larger than memory.",
-  "answer": "External merge sort - read chunks that fit in memory, sort and write each as a run, then k-way merge the runs with a heap reading buffered blocks. The cost is dominated by IO passes, so the aim is maximising run size to minimise merge passes.",
+  "answer": "**Approach**\n\nExternal merge sort. Read chunks that fit in memory, sort each and write it out as a sorted run, then merge all the runs with a k-way heap in a single streaming pass.\n\n**Logic**\n\nThe two phases have different bottlenecks. The run-creation phase is CPU-bound sorting; the merge phase is I/O-bound and touches each record once, holding only one record per run in memory.\n\nThe merge is the same k-way merge used for sorted arrays, which is why the heap version matters — it is the only part that scales to hundreds of runs.\n\nO(n log n) comparisons, and crucially O(n) I/O per merge pass with only 2 passes over the data when the runs fit in one merge.\n\nThe code demonstrates it on real temporary files so the streaming is genuine, not simulated in memory.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.IO;\nusing System.Linq;\n\npublic class Solution\n{\n    // Phase 1: sorted runs small enough to fit in memory.\n    private static List<string> WriteSortedRuns(string inputPath, int recordsPerRun, string workDir)\n    {\n        var runs = new List<string>();\n        var buffer = new List<int>(recordsPerRun);\n\n        void Flush()\n        {\n            if (buffer.Count == 0) return;\n\n            buffer.Sort();\n            string path = Path.Combine(workDir, $\"run{runs.Count}.txt\");\n            File.WriteAllLines(path, buffer.Select(v => v.ToString()));\n            runs.Add(path);\n            buffer.Clear();\n        }\n\n        foreach (string line in File.ReadLines(inputPath))   // streamed, never fully loaded\n        {\n            buffer.Add(int.Parse(line));\n            if (buffer.Count == recordsPerRun) Flush();\n        }\n\n        Flush();\n        return runs;\n    }\n\n    // Phase 2: one streaming pass, holding a single record per run.\n    private static void MergeRuns(List<string> runs, string outputPath)\n    {\n        var readers = runs.Select(r => File.ReadLines(r).GetEnumerator()).ToList();\n        var heap = new PriorityQueue<int, (int Value, int Run)>(\n            Comparer<(int Value, int Run)>.Create((a, b) =>\n                a.Value != b.Value ? a.Value.CompareTo(b.Value) : a.Run.CompareTo(b.Run)));\n\n        try\n        {\n            for (int i = 0; i < readers.Count; i++)\n                if (readers[i].MoveNext())\n                    heap.Enqueue(i, (int.Parse(readers[i].Current), i));\n\n            using var output = new StreamWriter(outputPath);\n\n            while (heap.Count > 0)\n            {\n                heap.TryDequeue(out int run, out var entry);\n                output.WriteLine(entry.Value);\n\n                if (readers[run].MoveNext())\n                    heap.Enqueue(run, (int.Parse(readers[run].Current), run));\n            }\n        }\n        finally\n        {\n            foreach (var reader in readers) reader.Dispose();\n        }\n    }\n\n    public static void ExternalSort(string inputPath, string outputPath, int recordsPerRun, string workDir)\n    {\n        var runs = WriteSortedRuns(inputPath, recordsPerRun, workDir);\n        MergeRuns(runs, outputPath);\n        foreach (string run in runs) File.Delete(run);\n    }\n\n    public static void Main()\n    {\n        string workDir = Path.Combine(Path.GetTempPath(), \"extsort-\" + Guid.NewGuid().ToString(\"N\"));\n        Directory.CreateDirectory(workDir);\n\n        try\n        {\n            string input = Path.Combine(workDir, \"input.txt\");\n            string output = Path.Combine(workDir, \"output.txt\");\n\n            var random = new Random(99);\n            var values = Enumerable.Range(0, 5000).Select(_ => random.Next(-100000, 100000)).ToArray();\n            File.WriteAllLines(input, values.Select(v => v.ToString()));\n\n            // 250 records per run, so 20 runs are merged: memory never holds all 5000.\n            ExternalSort(input, output, recordsPerRun: 250, workDir);\n\n            var sorted = File.ReadLines(output).Select(int.Parse).ToArray();\n            var expected = values.OrderBy(v => v).ToArray();\n\n            Console.WriteLine($\"record count preserved: {sorted.Length == values.Length}\");\n            Console.WriteLine($\"output is sorted: {sorted.Zip(sorted.Skip(1), (a, b) => a <= b).All(x => x)}\");\n            Console.WriteLine($\"matches an in-memory sort: {sorted.SequenceEqual(expected)}\");\n            Console.WriteLine($\"runs used: {(int)Math.Ceiling(5000 / 250.0)}\");\n        }\n        finally\n        {\n            Directory.Delete(workDir, recursive: true);\n        }\n    }\n}\n```\n\n**Output**\n\n```\nrecord count preserved: True\noutput is sorted: True\nmatches an in-memory sort: True\nruns used: 20\n```",
   "tags": [
-   "sorting",
    "external-sort",
-   "io",
-   "algorithms"
+   "k-way-merge",
+   "streaming",
+   "io-bound",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why does the merge phase need so little memory?",
+    "a": "Because it holds exactly one record per run plus the heap that orders them - so memory is proportional to the number of runs, not to the data. Each run is read sequentially from disk, which is also the access pattern disks and page caches handle best. That is the whole trick: the data never has to be resident, only the merge frontier."
+   },
+   {
+    "q": "What if there are too many runs to merge at once?",
+    "a": "File handles and buffer memory bound how many runs you can merge in one pass - a few hundred is typical. Beyond that you merge in multiple passes, combining groups of runs into larger runs until one remains, which costs an extra full pass over the data per level. Choosing the run size to keep the merge to a single pass is the main tuning decision, and it is why larger memory for phase one pays off twice."
+   },
+   {
+    "q": "What would you change for real records rather than integers?",
+    "a": "Parse once into a comparable key and carry the raw record alongside, so the merge compares keys without re-parsing on every heap operation. Use buffered binary I/O rather than text lines, since parsing dominates otherwise. If records are variable length, the run files need a length prefix or a delimiter that cannot occur in the data. And stability matters if equal keys must retain input order, which the run index in the comparator here already provides."
+   }
   ]
  },
  {
@@ -15019,17 +15109,32 @@
   "subcategory": "Sorting",
   "difficulty": "Medium",
   "question": "Sort an array of strings by a custom alphabet order.",
-  "answer": "Build a rank map from the alphabet, then compare strings character by character using ranks with a length tiebreaker. Time O(total characters) per comparison in the worst case. Transforming each string into its rank sequence once avoids repeated map lookups during sorting.",
+  "answer": "**Approach**\n\nBuild a rank table from the custom alphabet, then sort with a comparator that compares ranks position by position, falling back to length.\n\n**Logic**\n\nThe rank lookup must be O(1), so the alphabet becomes an array indexed by character rather than a repeated IndexOf, which would make every comparison O(alphabet).\n\nThe prefix rule is the part that is easy to get wrong: when one string is a prefix of another, the shorter sorts first regardless of the alphabet, because there is no character to compare.\n\nO(n log n · L).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static string[] SortByAlphabet(string[] words, string alphabet)\n    {\n        // O(1) rank lookup rather than IndexOf inside every comparison.\n        var rank = new int[128];\n        for (int i = 0; i < alphabet.Length; i++) rank[alphabet[i]] = i;\n\n        var sorted = (string[])words.Clone();\n        Array.Sort(sorted, (a, b) => Compare(a, b, rank));\n        return sorted;\n    }\n\n    private static int Compare(string a, string b, int[] rank)\n    {\n        int shared = Math.Min(a.Length, b.Length);\n\n        for (int i = 0; i < shared; i++)\n            if (a[i] != b[i]) return rank[a[i]].CompareTo(rank[b[i]]);\n\n        // A prefix sorts first: there is no character left to compare.\n        return a.Length.CompareTo(b.Length);\n    }\n\n    // The companion question: is this array already in custom order?\n    public static bool IsSorted(string[] words, string alphabet)\n    {\n        var rank = new int[128];\n        for (int i = 0; i < alphabet.Length; i++) rank[alphabet[i]] = i;\n\n        for (int i = 1; i < words.Length; i++)\n            if (Compare(words[i - 1], words[i], rank) > 0) return false;\n\n        return true;\n    }\n\n    private static void Show(string[] words) => Console.WriteLine(string.Join(\",\", words));\n\n    public static void Main()\n    {\n        const string reversed = \"zyxwvutsrqponmlkjihgfedcba\";\n\n        Show(SortByAlphabet(new[] { \"apple\", \"banana\", \"cherry\" }, reversed));\n        Show(SortByAlphabet(new[] { \"word\", \"world\", \"row\" }, \"worldabcefghijkmnpqstuvxyz\"));\n\n        // \"app\" leads as a prefix; then the reversed alphabet puts y before e.\n        Show(SortByAlphabet(new[] { \"apply\", \"app\", \"apple\" }, reversed));\n\n        Show(SortByAlphabet(new[] { \"a\" }, reversed));\n        Show(SortByAlphabet(Array.Empty<string>(), reversed));\n\n        Console.WriteLine(IsSorted(new[] { \"hello\", \"leetcode\" }, \"hlabcdefgijkmnopqrstuvwxyz\"));\n        Console.WriteLine(IsSorted(new[] { \"word\", \"world\", \"row\" }, \"worldabcefghijkmnpqstuvxyz\"));\n        Console.WriteLine(IsSorted(new[] { \"apple\", \"app\" }, reversed));   // prefix comes second\n    }\n}\n```\n\n**Output**\n\n```\ncherry,banana,apple\nworld,word,row\napp,apply,apple\na\n\nTrue\nFalse\nFalse\n```",
   "tags": [
    "sorting",
-   "comparators",
-   "strings",
-   "custom-order"
+   "comparator",
+   "custom-order",
+   "prefix-rule",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does a prefix sort first regardless of the alphabet?",
+    "a": "Because comparison proceeds character by character and a prefix runs out of characters before any difference is found - there is nothing left to compare, so the shorter string is ordered first by convention. That rule is independent of the alphabet, since no character of the custom order is ever consulted. It is the case the alien-dictionary validity problem turns on too: 'apple' before 'app' is invalid in any alphabet."
+   },
+   {
+    "q": "Why build a rank table rather than calling IndexOf?",
+    "a": "Because IndexOf scans the alphabet on every character comparison, so a sort of n strings does O(n log n times L times alphabet) work - a factor of 26 or more for nothing. The table makes each lookup a single array read. It is a small change with a large constant-factor effect, and it is the kind of thing worth doing by reflex whenever a comparator is called inside a sort."
+   },
+   {
+    "q": "How does this relate to the alien dictionary problem?",
+    "a": "That problem is the inverse: given words already in order, deduce the alphabet - which is a topological sort over the character precedences implied by the first differing position in each adjacent pair. This one applies a known alphabet. The shared machinery is the adjacent-pair comparison and the prefix rule, which is why an implementation of either is a good warm-up for the other."
+   }
   ]
  },
  {
@@ -15323,17 +15428,32 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Find the shortest subarray with sum at least k where values may be negative.",
-  "answer": "Prefix sums with a monotonic increasing deque of indices - pop from the front while the current prefix minus the front satisfies the target, and pop from the back while the back's prefix is not smaller. Time O(n), and the sliding window does not work because negatives break monotonicity.",
+  "answer": "**Approach**\n\nPrefix sums with a monotonic deque of indices. The deque keeps candidate start points in increasing prefix-sum order.\n\n**Logic**\n\nNegative values break the sliding window used for the all-positive version: extending a window can decrease the sum, so the window has no monotonic property to shrink against.\n\nThe deque restores it. Two rules: pop from the front while the current prefix minus the front's prefix already reaches k — that start can never give a shorter answer later — and pop from the back while the back's prefix is at least the current one, since a later index with a smaller prefix dominates it as a start point.\n\nO(n).\n\nThe test cross-checks against the O(n²) reference.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int ShortestSubarray(int[] nums, long k)\n    {\n        int n = nums.Length;\n\n        var prefix = new long[n + 1];\n        for (int i = 0; i < n; i++) prefix[i + 1] = prefix[i] + nums[i];\n\n        var candidates = new LinkedList<int>();   // indices, prefix sums increasing\n        int best = int.MaxValue;\n\n        for (int i = 0; i <= n; i++)\n        {\n            // This start already reaches k, and can only get longer from here.\n            while (candidates.Count > 0 && prefix[i] - prefix[candidates.First.Value] >= k)\n            {\n                best = Math.Min(best, i - candidates.First.Value);\n                candidates.RemoveFirst();\n            }\n\n            // A later index with a smaller prefix dominates an earlier larger one.\n            while (candidates.Count > 0 && prefix[candidates.Last.Value] >= prefix[i])\n                candidates.RemoveLast();\n\n            candidates.AddLast(i);\n        }\n\n        return best == int.MaxValue ? -1 : best;\n    }\n\n    private static int Reference(int[] nums, long k)\n    {\n        int best = int.MaxValue;\n\n        for (int i = 0; i < nums.Length; i++)\n        {\n            long sum = 0;\n            for (int j = i; j < nums.Length; j++)\n            {\n                sum += nums[j];\n                if (sum >= k) { best = Math.Min(best, j - i + 1); break; }\n            }\n        }\n\n        return best == int.MaxValue ? -1 : best;\n    }\n\n    public static void Main()\n    {\n        (int[] Nums, long K)[] cases =\n        {\n            (new[] { 1 }, 1),\n            (new[] { 1, 2 }, 4),\n            (new[] { 2, -1, 2 }, 3),\n            (new[] { 84, -37, 32, 40, 95 }, 167),\n            (new[] { -1, -1, -1 }, 1),\n            (new[] { 5, -10, 20 }, 20)\n        };\n\n        foreach (var (nums, k) in cases)\n            Console.WriteLine($\"[{string.Join(\",\", nums)}] k={k}: {ShortestSubarray(nums, k)} \" +\n                              $\"(reference {Reference(nums, k)})\");\n\n        var random = new Random(555);\n        var many = Enumerable.Range(0, 300).Select(_ => random.Next(-30, 30)).ToArray();\n        bool agrees = true;\n\n        for (int k = -50; k <= 50 && agrees; k += 5)\n            if (ShortestSubarray(many, k) != Reference(many, k)) agrees = false;\n\n        Console.WriteLine($\"300 values across many k agree: {agrees}\");\n    }\n}\n```\n\n**Output**\n\n```\n[1] k=1: 1 (reference 1)\n[1,2] k=4: -1 (reference -1)\n[2,-1,2] k=3: 3 (reference 3)\n[84,-37,32,40,95] k=167: 3 (reference 3)\n[-1,-1,-1] k=1: -1 (reference -1)\n[5,-10,20] k=20: 1 (reference 1)\n300 values across many k agree: True\n```",
   "tags": [
-   "arrays",
-   "monotonic-deque",
+   "deque",
    "prefix-sum",
-   "hard"
+   "monotonic",
+   "negatives",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does the sliding window fail once values can be negative?",
+    "a": "Because the window's sum is no longer monotonic in its width - extending it can lower the sum, so 'shrink while the sum is too large' has no meaning and the two pointers cannot both move forward safely. The all-positive version relies entirely on that monotonicity. With negatives the problem becomes one about prefix sums, and the deque is what restores a usable ordering."
+   },
+   {
+    "q": "Why pop from the back when the back's prefix is at least the current one?",
+    "a": "Because a start point is better when its prefix sum is smaller and its index is later - smaller prefix means a larger subarray sum, and a later index means a shorter subarray. An earlier index with a larger prefix loses on both counts, so it can never be part of an optimal answer and is discarded permanently. That domination argument is the same shape as the monotonic queue for window maximum."
+   },
+   {
+    "q": "Why pop from the front once the condition is met?",
+    "a": "Because that start already achieves the target at the current index, and any later index only makes the subarray longer - so its best answer has been recorded and it will never do better. Keeping it would cost repeated comparisons for nothing. Together with the back rule, each index enters and leaves the deque once, which is what makes the whole scan linear despite two nested loops."
+   }
   ]
  },
  {
@@ -15341,17 +15461,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Rotate a matrix by 90 degrees without extra space, and generalise to any multiple of 90.",
-  "answer": "Transpose then reverse each row for clockwise, or transpose then reverse each column for anticlockwise; 180 degrees is reversing rows and columns. Doing it as layer-by-layer four-way swaps also works and is more error-prone. Time O(n squared), space O(1).",
+  "answer": "**Approach**\n\nTranspose, then reverse each row. That composition is a clockwise quarter turn, and every other multiple is built from it.\n\n**Logic**\n\nTranspose reflects across the main diagonal; reversing rows reflects across the vertical axis. Two reflections compose to a rotation, which is why the pair works and why the order matters — reversing first and then transposing gives the anticlockwise turn instead.\n\n180 degrees is better done as a single reverse of the flattened order than as two quarter turns, and 270 is one anticlockwise turn rather than three clockwise ones.\n\nO(n²) time, O(1) extra space.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static void Rotate(int[][] matrix, int degrees)\n    {\n        int turns = ((degrees / 90) % 4 + 4) % 4;   // normalise, including negatives\n\n        switch (turns)\n        {\n            case 1: Transpose(matrix); ReverseRows(matrix); break;         // clockwise\n            case 2: ReverseRows(matrix); ReverseColumns(matrix); break;    // half turn\n            case 3: Transpose(matrix); ReverseColumns(matrix); break;      // anticlockwise\n        }\n    }\n\n    private static void Transpose(int[][] m)\n    {\n        for (int r = 0; r < m.Length; r++)\n            for (int c = r + 1; c < m.Length; c++)\n                (m[r][c], m[c][r]) = (m[c][r], m[r][c]);\n    }\n\n    private static void ReverseRows(int[][] m)\n    {\n        foreach (var row in m) Array.Reverse(row);\n    }\n\n    private static void ReverseColumns(int[][] m)\n    {\n        for (int lo = 0, hi = m.Length - 1; lo < hi; lo++, hi--)\n            (m[lo], m[hi]) = (m[hi], m[lo]);\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    private static void Show(int[][] m) =>\n        Console.WriteLine(string.Join(\" | \", m.Select(r => string.Join(\",\", r))));\n\n    public static void Main()\n    {\n        var a = Grid(new[] { 1, 2, 3 }, new[] { 4, 5, 6 }, new[] { 7, 8, 9 });\n        Rotate(a, 90);\n        Show(a);\n\n        var b = Grid(new[] { 1, 2, 3 }, new[] { 4, 5, 6 }, new[] { 7, 8, 9 });\n        Rotate(b, 180);\n        Show(b);\n\n        var c = Grid(new[] { 1, 2, 3 }, new[] { 4, 5, 6 }, new[] { 7, 8, 9 });\n        Rotate(c, 270);\n        Show(c);\n\n        var d = Grid(new[] { 1, 2 }, new[] { 3, 4 });\n        Rotate(d, 360);\n        Show(d);                                  // a full turn changes nothing\n\n        var e = Grid(new[] { 1, 2 }, new[] { 3, 4 });\n        Rotate(e, -90);\n        Show(e);                                  // negative normalises to 270\n\n        // Four quarter turns must restore the original.\n        var f = Grid(new[] { 1, 2, 3 }, new[] { 4, 5, 6 }, new[] { 7, 8, 9 });\n        for (int i = 0; i < 4; i++) Rotate(f, 90);\n        Show(f);\n    }\n}\n```\n\n**Output**\n\n```\n7,4,1 | 8,5,2 | 9,6,3\n9,8,7 | 6,5,4 | 3,2,1\n3,6,9 | 2,5,8 | 1,4,7\n1,2 | 3,4\n2,4 | 1,3\n1,2,3 | 4,5,6 | 7,8,9\n```",
   "tags": [
-   "arrays",
    "matrix",
    "in-place",
-   "rotation"
+   "transpose",
+   "composition",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Microsoft",
    "Apple"
+  ],
+  "followups": [
+   {
+    "q": "Why does transpose plus row reversal produce a rotation?",
+    "a": "Because each step is a reflection - transpose across the main diagonal, row reversal across the vertical axis - and composing two reflections about intersecting lines gives a rotation by twice the angle between them. The diagonal and the vertical meet at 45 degrees, hence a 90-degree turn. Reversing before transposing reflects in the other order and produces the anticlockwise turn, which is why the sequence is not interchangeable."
+   },
+   {
+    "q": "Why not implement 180 and 270 as repeated 90-degree turns?",
+    "a": "Because each quarter turn is a full O(n squared) pass, so three of them is three times the work for a result one anticlockwise turn achieves. A half turn is even cheaper as a row reversal plus a column reversal, with no transpose at all. Composing operations is correct but wasteful when a direct form exists - the same reasoning as rotating an array by k using a triple reversal rather than k single rotations."
+   },
+   {
+    "q": "Why does the column reversal swap whole row references?",
+    "a": "Because a jagged int[][] is an array of row references, so reversing the outer array is O(n) pointer swaps rather than O(n squared) element moves. That is a real advantage of the jagged representation over a rectangular int[,]. The catch is that the caller now holds rows in a different order, which matters if they kept references to individual rows - worth knowing before relying on it."
+   }
   ]
  },
  {
@@ -15359,17 +15494,32 @@
   "subcategory": "Arrays",
   "difficulty": "Medium",
   "question": "Given an array of intervals and a new interval, insert and merge.",
-  "answer": "Copy intervals ending before the new one, merge everything overlapping by taking the minimum start and maximum end, then copy the rest. One pass over sorted input, O(n). Sorting first is unnecessary when the input is already sorted, which the problem usually guarantees.",
+  "answer": "**Approach**\n\nThree phases in one pass over the sorted intervals: copy everything strictly before, absorb everything that overlaps, then copy the rest.\n\n**Logic**\n\nThe phase boundaries are defined by comparisons against the new interval, and the middle phase is where the merging happens — each overlapping interval widens the new one rather than being emitted.\n\nOnly genuine overlaps merge: [1,2] and [3,5] stay separate, because the test is whether the next interval starts at or before the new one ends. That is the continuous reading, where 2 and 3 have a gap between them. For discrete values, where 1-2 and 3-5 together cover 1 through 5, the comparison becomes `intervals[i][0] <= end + 1`. It is a specification choice worth stating rather than leaving to the operator.\n\nO(n), since the input is already sorted.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[][] Insert(int[][] intervals, int[] newInterval)\n    {\n        var result = new List<int[]>();\n        int i = 0, n = intervals.Length;\n\n        int start = newInterval[0], end = newInterval[1];\n\n        // Everything strictly before, with no overlap.\n        while (i < n && intervals[i][1] < start) result.Add(intervals[i++]);\n\n        // Everything that touches or overlaps widens the new interval.\n        while (i < n && intervals[i][0] <= end)\n        {\n            start = Math.Min(start, intervals[i][0]);\n            end = Math.Max(end, intervals[i][1]);\n            i++;\n        }\n\n        result.Add(new[] { start, end });\n\n        while (i < n) result.Add(intervals[i++]);\n\n        return result.ToArray();\n    }\n\n    private static void Show(int[][] intervals) =>\n        Console.WriteLine(intervals.Length == 0\n            ? \"(none)\"\n            : string.Join(\" \", intervals.Select(v => $\"[{v[0]},{v[1]}]\")));\n\n    public static void Main()\n    {\n        Show(Insert(new[] { new[] { 1, 3 }, new[] { 6, 9 } }, new[] { 2, 5 }));\n\n        Show(Insert(new[] {\n            new[] { 1, 2 }, new[] { 3, 5 }, new[] { 6, 7 },\n            new[] { 8, 10 }, new[] { 12, 16 } }, new[] { 4, 8 }));\n\n        Show(Insert(Array.Empty<int[]>(), new[] { 5, 7 }));\n        Show(Insert(new[] { new[] { 1, 5 } }, new[] { 2, 3 }));       // fully contained\n        Show(Insert(new[] { new[] { 1, 5 } }, new[] { 0, 9 }));       // swallows everything\n        Show(Insert(new[] { new[] { 3, 5 } }, new[] { 1, 2 }));       // adjacent, but not overlapping\n        Show(Insert(new[] { new[] { 3, 5 } }, new[] { 1, 1 }));       // clearly apart\n    }\n}\n```\n\n**Output**\n\n```\n[1,5] [6,9]\n[1,2] [3,10] [12,16]\n[5,7]\n[1,5]\n[0,9]\n[1,2] [3,5]\n[1,1] [3,5]\n```",
   "tags": [
-   "arrays",
    "intervals",
-   "merging",
-   "one-pass"
+   "merge",
+   "single-pass",
+   "conventions",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "Why does [1,2] not merge with [3,5] here?",
+    "a": "Because the overlap test asks whether the next interval starts at or before the new one ends, and 3 is past 2 - so under the continuous reading there is a gap and they stay separate. That is the standard convention for this problem. For discrete values, where 1-2 and 3-5 together cover every integer from 1 to 5, you want them merged and the comparison becomes start <= end + 1. The two conventions differ on exactly the adjacent case, so it is worth stating which one you are implementing rather than letting an operator decide silently."
+   },
+   {
+    "q": "Why is one pass enough?",
+    "a": "Because the input is already sorted by start, so the intervals that overlap the new one form a contiguous block - everything before it ends too early, everything after starts too late. That lets the three phases run in sequence with a single index, no backtracking and no re-sorting. If the input were unsorted, the whole thing becomes the merge-intervals problem: sort first, then sweep, at O(n log n)."
+   },
+   {
+    "q": "How would you delete an interval instead of inserting one?",
+    "a": "Same three-phase shape, but the middle phase splits rather than merges: an interval that strictly contains the removed range produces two pieces, one that partially overlaps is trimmed, and one fully covered disappears. The output can therefore be longer than the input by one, which insertion never is. Recognising that both are sweeps over the same sorted structure, differing only in what the middle phase emits, makes the second one much easier once you have written the first."
+   }
   ]
  },
  {
@@ -15377,17 +15527,32 @@
   "subcategory": "Arrays",
   "difficulty": "Hard",
   "question": "Given k sorted arrays, find the smallest range covering at least one element from each.",
-  "answer": "A min-heap holding the current element from each array plus the running maximum; pop the minimum, compare the range against the best, and advance that array. Stop when any array is exhausted. Time O(n log k) over all elements.",
+  "answer": "**Approach**\n\nFlatten into (value, source) pairs, sort once, then run a sliding window that must contain at least one element from every source. This is the two-pointer alternative to the k-pointer heap solution.\n\n**Logic**\n\nOnce everything is in one sorted sequence, the problem becomes the smallest window containing all k \"colours\" — the same shape as minimum-window-substring, with sources in place of characters.\n\nThe window is valid whenever every source is represented, so expand until valid then contract while still valid, recording the span at each step.\n\nO(n log n) for the sort then O(n) for the sweep, against O(n log k) for the heap version. The heap wins asymptotically; this one is easier to reason about and reuses machinery you already have.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[] SmallestRange(IList<IList<int>> lists)\n    {\n        int k = lists.Count;\n\n        // One sorted sequence of (value, which list) - now it is a \"cover all colours\" window.\n        var flat = lists\n            .SelectMany((list, source) => list.Select(value => (Value: value, Source: source)))\n            .OrderBy(p => p.Value)\n            .ToArray();\n\n        var counts = new int[k];\n        int covered = 0, left = 0;\n        int bestLow = flat[0].Value, bestHigh = flat[^1].Value;\n\n        for (int right = 0; right < flat.Length; right++)\n        {\n            if (counts[flat[right].Source]++ == 0) covered++;\n\n            // Contract while every source is still represented.\n            while (covered == k)\n            {\n                if (flat[right].Value - flat[left].Value < bestHigh - bestLow)\n                {\n                    bestLow = flat[left].Value;\n                    bestHigh = flat[right].Value;\n                }\n\n                if (--counts[flat[left].Source] == 0) covered--;\n                left++;\n            }\n        }\n\n        return new[] { bestLow, bestHigh };\n    }\n\n    private static IList<IList<int>> Lists(params int[][] rows) =>\n        rows.Select(r => (IList<int>)new List<int>(r)).ToList();\n\n    private static void Show(int[] range) => Console.WriteLine($\"[{range[0]},{range[1]}]\");\n\n    public static void Main()\n    {\n        Show(SmallestRange(Lists(\n            new[] { 4, 10, 15, 24, 26 },\n            new[] { 0, 9, 12, 20 },\n            new[] { 5, 18, 22, 30 })));\n\n        Show(SmallestRange(Lists(new[] { 1, 2, 3 }, new[] { 1, 2, 3 }, new[] { 1, 2, 3 })));\n        Show(SmallestRange(Lists(new[] { 1 }, new[] { 2 }, new[] { 3 })));\n        Show(SmallestRange(Lists(new[] { 5, 5, 5 })));           // one list only\n        Show(SmallestRange(Lists(new[] { 1, 5 }, new[] { 4 })));\n        Show(SmallestRange(Lists(new[] { -10, -5 }, new[] { -7 })));\n    }\n}\n```\n\n**Output**\n\n```\n[20,24]\n[1,1]\n[1,3]\n[5,5]\n[4,5]\n[-7,-5]\n```",
   "tags": [
-   "arrays",
-   "heap",
-   "k-way",
-   "intervals"
+   "sliding-window",
+   "sorting",
+   "k-lists",
+   "alternative-approach",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Google",
    "Facebook"
+  ],
+  "followups": [
+   {
+    "q": "How does this compare with the k-pointer heap solution?",
+    "a": "The heap version is O(n log k) and never materialises the combined sequence, so it streams and uses O(k) memory - strictly better asymptotically. This one sorts everything first at O(n log n) and holds all n pairs. What it buys is conceptual reuse: once flattened, it is literally the minimum-window-substring template with list indices as characters, so there is nothing new to reason about. For an interview I would mention both and implement whichever the constraints favour."
+   },
+   {
+    "q": "Why does the window need counts rather than a set of seen sources?",
+    "a": "Because the same source can appear several times inside the window, and removing one occurrence must not drop the source from the covered count while another remains. Counts track multiplicity and the covered counter changes only on the transitions to and from zero. A set would lose coverage too early and report ranges that do not actually include every list."
+   },
+   {
+    "q": "Why is the initial best the full span of the flattened data?",
+    "a": "Because that range trivially contains every element and hence every list, so it is a valid answer and a safe upper bound - no sentinel arithmetic is needed and the first real improvement simply replaces it. Seeding with an empty or inverted range would need a found-flag or risk an overflow when subtracting. Choosing a seed that is itself a legitimate answer is usually cleaner than an infinity."
+   }
   ]
  },
  {
@@ -15395,17 +15560,32 @@
   "subcategory": "Trees",
   "difficulty": "Hard",
   "question": "Find the maximum sum path between any two leaves in a binary tree.",
-  "answer": "Post-order recursion returning the best downward path sum from each node, updating a global maximum with the node value plus both children's best paths - but only where both children exist, since the path must join two leaves. Time O(n), space O(h).",
+  "answer": "**Approach**\n\nPost-order DFS. Each node returns the best downward path sum to a leaf, while a running maximum records the best leaf-to-leaf path bending at that node.\n\n**Logic**\n\nThe leaf-to-leaf requirement is what separates this from the general maximum path sum. A node may only be the bend point if *both* subtrees actually contain leaves — a node with one child has no leaf-to-leaf path through it, and treating it as though it did is the standard bug.\n\nNegative values must be allowed to be included, since a leaf-to-leaf path has no choice about the nodes between its endpoints.\n\nO(n) time, O(height) stack.\n\n**Program**\n\n```csharp\nusing System;\n\npublic class TreeNode\n{\n    public int val;\n    public TreeNode left, right;\n    public TreeNode(int v) { val = v; }\n}\n\npublic class Solution\n{\n    public static long MaxLeafToLeafSum(TreeNode root)\n    {\n        long best = long.MinValue;\n        BestDownward(root, ref best);\n\n        // No node has two leaf-bearing subtrees, so no leaf-to-leaf path exists.\n        return best == long.MinValue ? 0 : best;\n    }\n\n    // Returns the best sum from this node down to some leaf beneath it.\n    private static long BestDownward(TreeNode node, ref long best)\n    {\n        if (node == null) return 0;\n\n        if (node.left == null && node.right == null) return node.val;\n\n        long left = BestDownward(node.left, ref best);\n        long right = BestDownward(node.right, ref best);\n\n        // A bend here needs leaves on BOTH sides; a one-child node does not qualify.\n        if (node.left != null && node.right != null)\n        {\n            best = Math.Max(best, left + right + node.val);\n            return Math.Max(left, right) + node.val;\n        }\n\n        // Negatives are not skippable: the path must pass through.\n        return (node.left != null ? left : right) + node.val;\n    }\n\n    public static void Main()\n    {\n        var a = new TreeNode(-15)\n        {\n            left = new TreeNode(5)\n            {\n                left = new TreeNode(-8),\n                right = new TreeNode(1)\n            },\n            right = new TreeNode(6) { left = new TreeNode(3), right = new TreeNode(9) }\n        };\n        Console.WriteLine(MaxLeafToLeafSum(a));\n\n        var twoLeaves = new TreeNode(1) { left = new TreeNode(2), right = new TreeNode(3) };\n        Console.WriteLine(MaxLeafToLeafSum(twoLeaves));\n\n        // A chain: only one leaf, so there is no leaf-to-leaf path.\n        var chain = new TreeNode(1) { left = new TreeNode(2) { left = new TreeNode(3) } };\n        Console.WriteLine(MaxLeafToLeafSum(chain));\n\n        Console.WriteLine(MaxLeafToLeafSum(new TreeNode(5)));\n        Console.WriteLine(MaxLeafToLeafSum(null));\n\n        // All negative: the path must still include everything between the leaves.\n        var negatives = new TreeNode(-1) { left = new TreeNode(-2), right = new TreeNode(-3) };\n        Console.WriteLine(MaxLeafToLeafSum(negatives));\n    }\n}\n```\n\n**Output**\n\n```\n18\n6\n0\n0\n0\n-6\n```",
   "tags": [
    "trees",
-   "dfs",
-   "paths",
-   "recursion"
+   "post-order",
+   "leaf-to-leaf",
+   "path-sum",
+   "csharp"
   ],
   "companies": [
    "Amazon",
    "Facebook",
    "Microsoft"
+  ],
+  "followups": [
+   {
+    "q": "Why must the bend node have two children?",
+    "a": "Because a leaf-to-leaf path descends into one subtree and comes back up into the other, so both must contain a leaf. A node with a single child has no second branch to leave by, and treating it as a bend point invents a path that ends at the node itself rather than at a leaf. The chain test checks it: with only one leaf the answer is that no such path exists, not the sum of the chain."
+   },
+   {
+    "q": "How does this differ from the general maximum path sum?",
+    "a": "That version lets a path start and end anywhere, so a negative subtree can simply be dropped by taking the maximum with zero. Here the endpoints must be leaves, so the nodes in between are compulsory however negative they are - the all-negative test returns -6, not 0 or -1. Clamping at zero is correct in one problem and wrong in the other, which is why they are worth solving side by side."
+   },
+   {
+    "q": "Why does the no-path case return zero rather than throwing?",
+    "a": "It is a convention, and a debatable one - returning a sentinel or throwing would also be defensible for 'this tree has no leaf-to-leaf path'. Zero is what most formulations expect, but it is indistinguishable from a genuine path summing to zero, which is the cost. What matters is that the case is handled deliberately and documented; leaving long.MinValue to leak out would be far worse, since it looks like a valid answer."
+   }
   ]
  },
  {
