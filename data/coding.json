@@ -16637,5 +16637,313 @@
     "a": "Because the requirement is that no letter spans two parts and the parts cover the string - that is what correctness means here, and checking it directly tests the specification. Comparing against hand-computed sizes tests my arithmetic as much as the code. The property check would also catch a subtly wrong greedy that happens to produce the right number of parts on the sample input."
    }
   ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Hard",
+  "question": "Find the fewest moves to solve a sliding puzzle board.",
+  "answer": "**Approach**\n\nBFS over board states with the board flattened to a string. Each state's neighbours are the boards reachable by sliding one tile into the blank.\n\n**Logic**\n\nThe state space is small enough to enumerate — 6! = 720 arrangements for a 2×3 board — so BFS finds the optimal move count directly.\n\nFlattening the board to a string makes states hashable and comparable in one step, which is what keeps the visited set cheap.\n\nThe adjacency table is precomputed per blank position rather than derived with arithmetic each time. That is clearer and avoids the wrap-around bug where moving left from column 0 silently lands on the previous row.\n\nO(states × moves).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    // Where the blank can move from each index of a 2x3 board.\n    private static readonly int[][] Adjacent =\n    {\n        new[] { 1, 3 },\n        new[] { 0, 2, 4 },\n        new[] { 1, 5 },\n        new[] { 0, 4 },\n        new[] { 1, 3, 5 },\n        new[] { 2, 4 }\n    };\n\n    public static int SlidingPuzzle(int[][] board)\n    {\n        var start = string.Concat(board[0]) + string.Concat(board[1]);\n        const string solved = \"123450\";\n\n        if (start == solved) return 0;\n\n        var visited = new HashSet<string> { start };\n        var queue = new Queue<string>();\n        queue.Enqueue(start);\n\n        int moves = 0;\n\n        while (queue.Count > 0)\n        {\n            moves++;\n            int levelSize = queue.Count;\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                string state = queue.Dequeue();\n                int blank = state.IndexOf('0');\n\n                foreach (int swapWith in Adjacent[blank])\n                {\n                    var next = state.ToCharArray();\n                    (next[blank], next[swapWith]) = (next[swapWith], next[blank]);\n\n                    string candidate = new string(next);\n\n                    if (candidate == solved) return moves;\n                    if (visited.Add(candidate)) queue.Enqueue(candidate);\n                }\n            }\n        }\n\n        return -1;   // the unreachable half of the permutations\n    }\n\n    private static int[][] Board(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(SlidingPuzzle(Board(new[] { 1, 2, 3 }, new[] { 4, 5, 0 })));\n        Console.WriteLine(SlidingPuzzle(Board(new[] { 1, 2, 3 }, new[] { 5, 4, 0 })));   // unsolvable\n        Console.WriteLine(SlidingPuzzle(Board(new[] { 4, 1, 2 }, new[] { 5, 0, 3 })));\n        Console.WriteLine(SlidingPuzzle(Board(new[] { 1, 2, 3 }, new[] { 4, 0, 5 })));\n        Console.WriteLine(SlidingPuzzle(Board(new[] { 3, 2, 4 }, new[] { 1, 5, 0 })));\n    }\n}\n```\n\n**Output**\n\n```\n0\n-1\n5\n1\n14\n```",
+  "tags": [
+   "dsa",
+   "bfs",
+   "state-space",
+   "puzzle",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is half the state space unreachable?",
+    "a": "Because a slide is a transposition of the blank with a neighbour, and every legal move changes the permutation parity in a way that is coupled to the blank's position - so the reachable states form exactly one parity class. That is why the second test returns -1: swapping two tiles in a solved board produces a configuration no sequence of moves can reach. BFS discovers it by exhausting the reachable set, which is the honest answer; a parity check would detect it in O(n) without searching."
+   },
+   {
+    "q": "Why flatten the board to a string?",
+    "a": "Because the visited set needs states to be hashable and comparable, and a jagged array compares by reference rather than by content - so a HashSet of arrays would never detect a repeat. A string gives value semantics, a cheap hash, and a one-line equality check. For a larger board an encoded integer would be tighter, but for six cells the string is clear and fast enough."
+   },
+   {
+    "q": "How would you scale this to a larger puzzle?",
+    "a": "Plain BFS does not scale - the 15-puzzle has over ten trillion states. The standard answer is A* with an admissible heuristic, usually the sum of Manhattan distances of each tile from its goal, or IDA* when memory is the binding constraint. The heuristic prunes enormously while still guaranteeing optimality. Naming the heuristic and why it must never overestimate is the substance of that follow-up."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Heap",
+  "difficulty": "Hard",
+  "question": "Take as many courses as possible given durations and deadlines.",
+  "answer": "**Approach**\n\nSort by deadline, take greedily, and when a course no longer fits, swap out the longest course taken so far if it is longer than the current one.\n\n**Logic**\n\nSorting by deadline is what makes the greedy safe: a course with an earlier deadline constrains more, so it must be considered first.\n\nThe retroactive swap is the key move. If adding a course overruns its deadline, dropping the longest previously taken course can make room — and since both are already committed, swapping never reduces the count while it may reduce the total time.\n\nThat gives a max-heap of durations, which in .NET means negating the priority.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int MaxCourses(int[][] courses)\n    {\n        // Earliest deadline first: those constrain the schedule most.\n        var byDeadline = courses.OrderBy(c => c[1]).ToArray();\n\n        var takenDurations = new PriorityQueue<int, int>();   // max-heap by duration\n        long elapsed = 0;\n\n        foreach (var course in byDeadline)\n        {\n            int duration = course[0], deadline = course[1];\n\n            if (elapsed + duration <= deadline)\n            {\n                elapsed += duration;\n                takenDurations.Enqueue(duration, -duration);\n                continue;\n            }\n\n            // It does not fit - but swapping out a LONGER course makes room for free.\n            if (takenDurations.Count == 0) continue;\n\n            takenDurations.TryPeek(out int longest, out _);\n\n            if (longest > duration)\n            {\n                takenDurations.Dequeue();\n                elapsed += duration - longest;\n                takenDurations.Enqueue(duration, -duration);\n            }\n        }\n\n        return takenDurations.Count;\n    }\n\n    private static int[][] Courses(params int[][] c) => c;\n\n    public static void Main()\n    {\n        Console.WriteLine(MaxCourses(Courses(\n            new[] { 100, 200 }, new[] { 200, 1300 },\n            new[] { 1000, 1250 }, new[] { 2000, 3200 })));\n\n        Console.WriteLine(MaxCourses(Courses(new[] { 1, 2 })));\n        Console.WriteLine(MaxCourses(Courses(new[] { 3, 2 })));        // cannot fit at all\n        Console.WriteLine(MaxCourses(Courses()));\n\n        // The swap matters: a long early course must be dropped for two short ones.\n        Console.WriteLine(MaxCourses(Courses(\n            new[] { 5, 5 }, new[] { 4, 6 }, new[] { 2, 6 })));\n\n        Console.WriteLine(MaxCourses(Courses(\n            new[] { 1, 10 }, new[] { 2, 10 }, new[] { 3, 10 }, new[] { 4, 10 })));\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n0\n0\n2\n4\n```",
+  "tags": [
+   "dsa",
+   "greedy",
+   "heap",
+   "exchange-argument",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is swapping out the longest course always safe?",
+    "a": "Because both courses are already candidates and the count is unchanged by the exchange - one out, one in - while the elapsed time strictly decreases when the removed course is longer. Less elapsed time can only help later courses fit, never hurt. So the swap weakly dominates keeping the original, which makes the greedy optimal rather than merely plausible. It is the same exchange argument as in job sequencing with deadlines."
+   },
+   {
+    "q": "Why sort by deadline rather than by duration?",
+    "a": "Because the deadline is the constraint that can be violated, and processing in deadline order means that when a course is considered, every course that must finish earlier has already been placed. Sorting by duration would take short courses first regardless of urgency and could miss a tight-deadline course entirely. The [5,5],[4,6],[2,6] case shows the interaction: the greedy takes the 5 first, then swaps it out for the 4 and 2."
+   },
+   {
+    "q": "Why a max-heap when the answer wants many courses?",
+    "a": "Because the heap's job is to surface the best candidate to REMOVE, not to keep - and the course worth dropping is the longest one taken so far. That is the same inversion as keeping the k largest with a min-heap. In .NET the max behaviour comes from negating the priority, which is safe here because durations are positive, so int.MinValue cannot arise."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Stack",
+  "difficulty": "Medium",
+  "question": "Count how many fleets form when cars with different speeds travel to a destination.",
+  "answer": "**Approach**\n\nSort by starting position descending, then sweep computing each car's unobstructed arrival time. A car joins the fleet ahead if it would arrive no later.\n\n**Logic**\n\nProcessing from the car closest to the destination backwards is what makes it a single pass: a car can only be blocked by cars ahead of it, which are already resolved.\n\nA car that would arrive later than the one ahead cannot catch it and starts a new fleet — and it becomes the new blocker, since everything behind it is now limited by its slower pace.\n\nCars are never modelled individually; only the fleet boundary time matters.\n\nO(n log n) for the sort.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int CarFleet(int target, int[] position, int[] speed)\n    {\n        if (position.Length == 0) return 0;\n\n        // Closest to the destination first: a car is only blocked by those ahead.\n        var cars = position.Zip(speed, (p, s) => (Position: p, Time: (target - p) / (double)s))\n                           .OrderByDescending(c => c.Position)\n                           .ToArray();\n\n        int fleets = 0;\n        double blockedUntil = 0;\n\n        foreach (var car in cars)\n        {\n            // Arriving later than the car ahead means it never catches up.\n            if (car.Time > blockedUntil)\n            {\n                fleets++;\n                blockedUntil = car.Time;   // it becomes the new blocker\n            }\n        }\n\n        return fleets;\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(CarFleet(12, new[] { 10, 8, 0, 5, 3 }, new[] { 2, 4, 1, 1, 3 }));\n        Console.WriteLine(CarFleet(10, new[] { 3 }, new[] { 3 }));\n        Console.WriteLine(CarFleet(100, new[] { 0, 2, 4 }, new[] { 4, 2, 1 }));   // all merge\n        Console.WriteLine(CarFleet(10, new[] { 0, 4, 2 }, new[] { 2, 1, 3 }));\n        Console.WriteLine(CarFleet(10, Array.Empty<int>(), Array.Empty<int>()));\n\n        // Same arrival time exactly: they count as one fleet.\n        Console.WriteLine(CarFleet(10, new[] { 0, 5 }, new[] { 1, 1 }));\n        Console.WriteLine(CarFleet(10, new[] { 6, 8 }, new[] { 3, 2 }));\n    }\n}\n```\n\n**Output**\n\n```\n3\n1\n1\n1\n0\n2\n2\n```",
+  "tags": [
+   "dsa",
+   "greedy",
+   "sorting",
+   "simulation",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why process cars from the destination backwards?",
+    "a": "Because blocking only propagates one way - a car can be slowed by cars ahead of it and never by those behind. Starting from the front means each car's blocker is already known when it is examined, so one pass suffices with a single running variable. Processing forwards would require revisiting cars as later information arrived, which is the same reason interval problems are usually swept in a chosen direction rather than either one."
+   },
+   {
+    "q": "Why compare arrival times rather than simulating positions?",
+    "a": "Because the only question is whether a car catches the one ahead before the destination, and that is decided entirely by their unobstructed arrival times - if the follower would arrive no later, it must have caught up somewhere along the way. Simulating position over time would give the same answer at far greater cost and with floating-point drift. Reducing a dynamic question to a static comparison is the insight."
+   },
+   {
+    "q": "Why does the code use doubles, and is that safe?",
+    "a": "Because arrival time is a distance divided by a speed and is rarely integral. The comparison is a strict greater-than, so cars with exactly equal arrival times merge into one fleet, which the [0,5] with equal speeds test confirms. Floating point is a genuine risk on adversarial inputs where two times differ in the last bit; comparing the fractions as cross-multiplied integers would be exact and is what I would do if the inputs were large."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Stack",
+  "difficulty": "Medium",
+  "question": "Simulate asteroids moving in opposite directions and colliding.",
+  "answer": "**Approach**\n\nA stack of surviving asteroids. A collision can only happen when a left-moving asteroid meets a right-moving one already on the stack.\n\n**Logic**\n\nThe collision condition is precise: the stack top must be positive (moving right) and the incoming asteroid negative (moving left). Any other pairing — both same direction, or diverging — never meets.\n\nThe inner loop must continue after a destruction, because the newly exposed stack top may also collide. That chain is why a stack rather than a single comparison is needed.\n\nEqual sizes destroy both, which is the case that needs care: the incoming asteroid must also be discarded, not pushed.\n\nO(n) amortised.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int[] AsteroidCollision(int[] asteroids)\n    {\n        var survivors = new List<int>();\n\n        foreach (int asteroid in asteroids)\n        {\n            bool destroyed = false;\n\n            // Collisions only when a right-mover is on top and a left-mover arrives.\n            while (!destroyed && survivors.Count > 0 &&\n                   survivors[^1] > 0 && asteroid < 0)\n            {\n                int top = survivors[^1];\n\n                if (top < -asteroid) { survivors.RemoveAt(survivors.Count - 1); continue; }\n\n                if (top == -asteroid) survivors.RemoveAt(survivors.Count - 1);   // both go\n\n                destroyed = true;\n            }\n\n            if (!destroyed) survivors.Add(asteroid);\n        }\n\n        return survivors.ToArray();\n    }\n\n    private static void Show(int[] values) =>\n        Console.WriteLine(values.Length == 0 ? \"(none)\" : string.Join(\",\", values));\n\n    public static void Main()\n    {\n        Show(AsteroidCollision(new[] { 5, 10, -5 }));\n        Show(AsteroidCollision(new[] { 8, -8 }));            // equal sizes: both destroyed\n        Show(AsteroidCollision(new[] { 10, 2, -5 }));\n        Show(AsteroidCollision(new[] { -2, -1, 1, 2 }));     // diverging: nothing meets\n        Show(AsteroidCollision(new[] { 1, -2, -2, -2 }));\n        Show(AsteroidCollision(Array.Empty<int>()));\n\n        // A chain: the big left-mover clears several right-movers in turn.\n        Show(AsteroidCollision(new[] { 1, 2, 3, -10 }));\n    }\n}\n```\n\n**Output**\n\n```\n5,10\n(none)\n10\n-2,-1,1,2\n-2,-2,-2\n(none)\n-10\n```",
+  "tags": [
+   "dsa",
+   "stack",
+   "simulation",
+   "collision",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the collision condition specifically positive-on-top and negative-incoming?",
+    "a": "Because a right-moving asteroid already placed and a left-moving one arriving after it are approaching each other - every other pairing separates or travels together. Two right-movers never meet since the later one is behind; a left-mover on the stack has already passed leftwards. Getting that condition wrong makes the simulation destroy asteroids that never meet, which the diverging test case catches immediately."
+   },
+   {
+    "q": "Why must the loop continue after a destruction?",
+    "a": "Because a large left-moving asteroid can destroy several right-movers in sequence - the [1,2,3,-10] case wipes out three - and after each destruction the newly exposed stack top may also collide. A single comparison would stop after the first and leave survivors that should have been destroyed. The chain is exactly what makes this a stack problem rather than a pairwise scan."
+   },
+   {
+    "q": "Why does the equal-size case need separate handling?",
+    "a": "Because both asteroids are destroyed, so the stack top is popped AND the incoming one is not pushed - two effects where the other branches have one. Treating it like the smaller-top case would pop the stack and then push the incoming asteroid, leaving a survivor that should not exist. The [8,-8] test returning nothing is the check, and it is the case most first attempts get wrong."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Heap",
+  "difficulty": "Hard",
+  "question": "Compute how much water a two-dimensional height map can trap.",
+  "answer": "**Approach**\n\nA min-heap sweeping inward from the border. The lowest cell on the current boundary determines the water level for whatever it admits.\n\n**Logic**\n\nThe one-dimensional version scans from both ends; in two dimensions the \"ends\" are the whole border, and the binding constraint is its lowest point — water escapes through the lowest wall.\n\nProcessing the boundary in increasing height means that when a cell is popped, every cell still unvisited is enclosed by walls at least that high. So an interior neighbour lower than the current boundary traps exactly the difference.\n\nThe neighbour then joins the boundary at the higher of its own height and the current level, which is what propagates the water level inward.\n\nO(cells log cells).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static long TrapRainWater(int[][] heights)\n    {\n        if (heights == null || heights.Length < 3 || heights[0].Length < 3) return 0;\n\n        int rows = heights.Length, cols = heights[0].Length;\n        var visited = new bool[rows, cols];\n\n        // The boundary, lowest first: water escapes through the lowest wall.\n        var boundary = new PriorityQueue<(int Row, int Col), int>();\n\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n            {\n                if (r != 0 && r != rows - 1 && c != 0 && c != cols - 1) continue;\n\n                boundary.Enqueue((r, c), heights[r][c]);\n                visited[r, c] = true;\n            }\n\n        int[] dr = { -1, 1, 0, 0 }, dc = { 0, 0, -1, 1 };\n        long trapped = 0;\n\n        while (boundary.Count > 0)\n        {\n            boundary.TryDequeue(out var cell, out int level);\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = cell.Row + dr[d], nc = cell.Col + dc[d];\n\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols || visited[nr, nc]) continue;\n\n                visited[nr, nc] = true;\n\n                // Anything below the current boundary level is flooded to it.\n                trapped += Math.Max(0, level - heights[nr][nc]);\n\n                boundary.Enqueue((nr, nc), Math.Max(level, heights[nr][nc]));\n            }\n        }\n\n        return trapped;\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(TrapRainWater(Grid(\n            new[] { 1, 4, 3, 1, 3, 2 },\n            new[] { 3, 2, 1, 3, 2, 4 },\n            new[] { 2, 3, 3, 2, 3, 1 })));\n\n        Console.WriteLine(TrapRainWater(Grid(\n            new[] { 3, 3, 3, 3, 3 },\n            new[] { 3, 2, 2, 2, 3 },\n            new[] { 3, 2, 1, 2, 3 },\n            new[] { 3, 2, 2, 2, 3 },\n            new[] { 3, 3, 3, 3, 3 })));\n\n        Console.WriteLine(TrapRainWater(Grid(new[] { 1, 2 }, new[] { 3, 4 })));   // too small\n        Console.WriteLine(TrapRainWater(Grid(\n            new[] { 5, 5, 5 }, new[] { 5, 1, 5 }, new[] { 5, 5, 5 })));\n        Console.WriteLine(TrapRainWater(Grid(\n            new[] { 1, 1, 1 }, new[] { 1, 9, 1 }, new[] { 1, 1, 1 })));           // a peak holds none\n    }\n}\n```\n\n**Output**\n\n```\n4\n10\n0\n4\n0\n```",
+  "tags": [
+   "dsa",
+   "heap",
+   "matrix",
+   "flood",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why does the lowest boundary cell determine the level?",
+    "a": "Because water escapes through the lowest point of the enclosing wall - raising every other wall changes nothing while that gap remains. Processing the boundary in increasing height means that when a cell is popped, everything still unvisited is surrounded by walls at least that high, so the level is known and final for whatever it admits. That monotone order is the same reason Dijkstra settles nodes in increasing distance."
+   },
+   {
+    "q": "Why does the neighbour enter the heap at the maximum of its height and the level?",
+    "a": "Because once flooded, the effective wall at that cell is the water surface, not the terrain beneath it - a cell of height 1 under water at level 3 blocks like a 3. Enqueuing the raw height would let a later cell escape through a barrier that water has already sealed, undercounting the trapped volume. That propagation of the level inward is what makes the sweep correct rather than just plausible."
+   },
+   {
+    "q": "Why does the one-dimensional two-pointer approach not generalise?",
+    "a": "Because in one dimension the water above a position is bounded by the maxima on each side, which two pointers track exactly. In two dimensions the escape route can wind through any path to the border, so there is no pair of scalar maxima to compare against - the constraint is the lowest point on an ever-changing frontier. The heap is what maintains that frontier, which is why the two problems look similar and need different machinery."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Hard",
+  "question": "Find the lowest elevation at which a path exists across a grid as water rises.",
+  "answer": "**Approach**\n\nA best-first search where a path's cost is the *maximum* cell on it rather than the sum. The heap pops the lowest such maximum, so the first arrival at the destination is the answer.\n\n**Logic**\n\nThe change from Dijkstra is only in how costs combine: extending a path takes the maximum of the running value and the new cell, not the sum. That is still monotone non-decreasing, which is exactly the property Dijkstra's settle-once rule needs.\n\nThe alternative is binary searching the elevation and running a plain reachability check at each level, which is O(cells log range) and equally valid.\n\nO(cells log cells).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    public static int SwimInWater(int[][] grid)\n    {\n        int n = grid.Length;\n        var settled = new bool[n, n];\n\n        // Cost of a path = the MAXIMUM cell on it, not the sum.\n        var heap = new PriorityQueue<(int Row, int Col), int>();\n        heap.Enqueue((0, 0), grid[0][0]);\n\n        int[] dr = { -1, 1, 0, 0 }, dc = { 0, 0, -1, 1 };\n\n        while (heap.Count > 0)\n        {\n            heap.TryDequeue(out var cell, out int level);\n\n            if (settled[cell.Row, cell.Col]) continue;\n            settled[cell.Row, cell.Col] = true;\n\n            if (cell.Row == n - 1 && cell.Col == n - 1) return level;\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = cell.Row + dr[d], nc = cell.Col + dc[d];\n\n                if (nr < 0 || nr >= n || nc < 0 || nc >= n || settled[nr, nc]) continue;\n\n                heap.Enqueue((nr, nc), Math.Max(level, grid[nr][nc]));\n            }\n        }\n\n        return -1;\n    }\n\n    // The binary search alternative: guess a level, test reachability.\n    public static int SwimByBinarySearch(int[][] grid)\n    {\n        int n = grid.Length;\n        int lo = grid[0][0], hi = n * n - 1;\n\n        while (lo < hi)\n        {\n            int mid = lo + (hi - lo) / 2;\n            if (Reachable(grid, mid)) hi = mid; else lo = mid + 1;\n        }\n\n        return lo;\n    }\n\n    private static bool Reachable(int[][] grid, int level)\n    {\n        int n = grid.Length;\n        if (grid[0][0] > level) return false;\n\n        var seen = new bool[n, n];\n        var stack = new Stack<(int, int)>();\n        stack.Push((0, 0));\n        seen[0, 0] = true;\n\n        int[] dr = { -1, 1, 0, 0 }, dc = { 0, 0, -1, 1 };\n\n        while (stack.Count > 0)\n        {\n            var (r, c) = stack.Pop();\n            if (r == n - 1 && c == n - 1) return true;\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = r + dr[d], nc = c + dc[d];\n\n                if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;\n                if (seen[nr, nc] || grid[nr][nc] > level) continue;\n\n                seen[nr, nc] = true;\n                stack.Push((nr, nc));\n            }\n        }\n\n        return false;\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        var a = Grid(new[] { 0, 2 }, new[] { 1, 3 });\n        Console.WriteLine($\"{SwimInWater(a)} (binary search {SwimByBinarySearch(a)})\");\n\n        var b = Grid(\n            new[] { 0, 1, 2, 3, 4 },\n            new[] { 24, 23, 22, 21, 5 },\n            new[] { 12, 13, 14, 15, 16 },\n            new[] { 11, 17, 18, 19, 20 },\n            new[] { 10, 9, 8, 7, 6 });\n        Console.WriteLine($\"{SwimInWater(b)} (binary search {SwimByBinarySearch(b)})\");\n\n        var c = Grid(new[] { 0 });\n        Console.WriteLine($\"{SwimInWater(c)} (binary search {SwimByBinarySearch(c)})\");\n\n        var d = Grid(new[] { 3, 2 }, new[] { 0, 1 });\n        Console.WriteLine($\"{SwimInWater(d)} (binary search {SwimByBinarySearch(d)})\");\n    }\n}\n```\n\n**Output**\n\n```\n3 (binary search 3)\n16 (binary search 16)\n0 (binary search 0)\n3 (binary search 3)\n```",
+  "tags": [
+   "dsa",
+   "dijkstra",
+   "minimax-path",
+   "binary-search",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is Dijkstra valid when the cost is a maximum rather than a sum?",
+    "a": "Because what Dijkstra actually requires is that extending a path never decreases its cost, so a settled node can never be improved later. Taking the maximum satisfies that just as addition of non-negative weights does - adding a cell can only raise the running maximum or leave it unchanged. The algorithm is unchanged; only the combining operation differs. That generalisation covers minimax and maximin path problems, and the probability variant where costs multiply."
+   },
+   {
+    "q": "When would you prefer the binary search version?",
+    "a": "When the value range is small relative to the grid, since it is O(cells log range) against O(cells log cells) - and the inner reachability check is a plain flood fill with no heap, so the constant factor is much better. It also generalises more obviously when the predicate is complicated. The heap version wins when the range is large or unbounded. Having both here is also the cross-check: they are genuinely different derivations agreeing on every case."
+   },
+   {
+    "q": "What is this problem called in general?",
+    "a": "It is a minimax path or bottleneck shortest path - minimising the largest edge or node on a route. Notably the answer also lies on the minimum spanning tree: the path between two nodes in an MST is a bottleneck-optimal path, so building an MST with Kruskal and then querying the tree path gives another route to the answer. That connection is worth knowing because it turns repeated queries on a fixed grid into a preprocessing problem."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Greedy",
+  "difficulty": "Medium",
+  "question": "Find the minimum number of arrows needed to burst all balloons on a line.",
+  "answer": "**Approach**\n\nSort by end coordinate, then shoot at the end of the first unburst balloon and skip everything that arrow covers.\n\n**Logic**\n\nSorting by end is what makes the greedy optimal: firing at the earliest end point bursts that balloon and as many others as possible, because any arrow that bursts it must land at or before that point, and landing exactly there dominates landing earlier.\n\nThe comparison must be non-strict — a balloon starting exactly where the arrow lands is touched and bursts.\n\nCoordinates can span the full int range, so the end values are compared rather than subtracted, avoiding overflow.\n\nO(n log n).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Linq;\n\npublic class Solution\n{\n    public static int MinArrows(int[][] balloons)\n    {\n        if (balloons == null || balloons.Length == 0) return 0;\n\n        // By END coordinate: shooting at the earliest end dominates.\n        var byEnd = balloons.OrderBy(b => b[1]).ToArray();\n\n        int arrows = 1;\n        long arrowAt = byEnd[0][1];\n\n        foreach (var balloon in byEnd)\n        {\n            // Touching counts as bursting, so the comparison is non-strict.\n            if (balloon[0] <= arrowAt) continue;\n\n            arrows++;\n            arrowAt = balloon[1];\n        }\n\n        return arrows;\n    }\n\n    private static int[][] Balloons(params int[][] b) => b;\n\n    public static void Main()\n    {\n        Console.WriteLine(MinArrows(Balloons(\n            new[] { 10, 16 }, new[] { 2, 8 }, new[] { 1, 6 }, new[] { 7, 12 })));\n\n        Console.WriteLine(MinArrows(Balloons(\n            new[] { 1, 2 }, new[] { 3, 4 }, new[] { 5, 6 }, new[] { 7, 8 })));   // all disjoint\n\n        Console.WriteLine(MinArrows(Balloons(\n            new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 4 }, new[] { 4, 5 })));   // touching\n\n        Console.WriteLine(MinArrows(Balloons(new[] { 1, 2 })));\n        Console.WriteLine(MinArrows(Balloons()));\n\n        // Full int range: subtracting the coordinates would overflow.\n        Console.WriteLine(MinArrows(Balloons(\n            new[] { -2147483646, -2147483645 }, new[] { 2147483646, 2147483647 })));\n\n        // One balloon containing all the others.\n        Console.WriteLine(MinArrows(Balloons(\n            new[] { 1, 100 }, new[] { 2, 3 }, new[] { 50, 60 })));\n    }\n}\n```\n\n**Output**\n\n```\n2\n4\n2\n1\n0\n2\n2\n```",
+  "tags": [
+   "dsa",
+   "greedy",
+   "intervals",
+   "overflow",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why sort by end rather than by start?",
+    "a": "Because the arrow should be fired as late as possible while still bursting the most constrained balloon, and that is the one ending earliest. Firing at its end point bursts it and every balloon that overlaps that coordinate. Sorting by start would fire at the earliest start and miss overlaps that begin later, using more arrows than necessary. It is the same argument as activity selection by earliest end time."
+   },
+   {
+    "q": "Why does a touching balloon burst?",
+    "a": "Because the balloons are closed intervals, so an arrow at coordinate x bursts anything whose range includes x - and a balloon starting exactly at x does. The comparison is therefore less-than-or-equal. Using a strict comparison would fire an extra arrow for each touching pair, which the [1,2],[2,3],[3,4],[4,5] case exposes: the answer is two, not four. It is the same convention question as in interval merging."
+   },
+   {
+    "q": "Why does the code avoid subtracting coordinates?",
+    "a": "Because the coordinates span the full int range, and computing an overlap as end minus start, or comparing differences, overflows - the last test has values at both extremes and would break a version that subtracts. Comparing the endpoints directly never computes an intermediate outside the input range. The arrow position is held in a long as a further guard. It is a small discipline that only shows up on adversarial inputs."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Hard",
+  "question": "Count the number of distinct shortest paths between two nodes in a weighted graph.",
+  "answer": "**Approach**\n\nDijkstra augmented with a path count. When a strictly shorter route is found the count is replaced; when an equally short one is found the counts are added.\n\n**Logic**\n\nThe two cases are the whole algorithm. A strictly better distance invalidates everything counted before, so the count is overwritten. An equal distance is an alternative route to the same optimum, so the counts combine.\n\nThe counts are only final once a node is settled, which is why the addition happens during relaxation and the node's own count is read only after it has been popped — Dijkstra's settle order guarantees all shorter routes have already been processed.\n\nCounts grow multiplicatively along parallel routes, so they are reduced modulo a prime.\n\nO((V + E) log V).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private const long Modulus = 1_000_000_007;\n\n    public static long CountShortestPaths(int n, int[][] edges, int source, int target)\n    {\n        var graph = new List<(int To, long Weight)>[n];\n        for (int i = 0; i < n; i++) graph[i] = new List<(int, long)>();\n\n        foreach (var e in edges)\n        {\n            graph[e[0]].Add((e[1], e[2]));\n            graph[e[1]].Add((e[0], e[2]));\n        }\n\n        var best = new long[n];\n        Array.Fill(best, long.MaxValue);\n        best[source] = 0;\n\n        var ways = new long[n];\n        ways[source] = 1;\n\n        var settled = new bool[n];\n        var heap = new PriorityQueue<int, long>();\n        heap.Enqueue(source, 0);\n\n        while (heap.Count > 0)\n        {\n            int node = heap.Dequeue();\n            if (settled[node]) continue;\n            settled[node] = true;\n\n            foreach (var (next, weight) in graph[node])\n            {\n                long through = best[node] + weight;\n\n                if (through < best[next])\n                {\n                    // Strictly better: everything counted before is invalidated.\n                    best[next] = through;\n                    ways[next] = ways[node];\n                    heap.Enqueue(next, through);\n                }\n                else if (through == best[next])\n                {\n                    // An equally short alternative: the counts combine.\n                    ways[next] = (ways[next] + ways[node]) % Modulus;\n                }\n            }\n        }\n\n        return best[target] == long.MaxValue ? 0 : ways[target];\n    }\n\n    private static int[][] Edges(params int[][] e) => e;\n\n    public static void Main()\n    {\n        // Two equally short routes.\n        Console.WriteLine(CountShortestPaths(4, Edges(\n            new[] { 0, 1, 1 }, new[] { 0, 2, 1 },\n            new[] { 1, 3, 1 }, new[] { 2, 3, 1 }), 0, 3));\n\n        // One route is strictly shorter, so the longer one is not counted.\n        Console.WriteLine(CountShortestPaths(4, Edges(\n            new[] { 0, 1, 1 }, new[] { 0, 2, 5 },\n            new[] { 1, 3, 1 }, new[] { 2, 3, 1 }), 0, 3));\n\n        Console.WriteLine(CountShortestPaths(2, Edges(new[] { 0, 1, 7 }), 0, 1));\n        Console.WriteLine(CountShortestPaths(3, Edges(new[] { 0, 1, 1 }), 0, 2));   // unreachable\n        Console.WriteLine(CountShortestPaths(1, Array.Empty<int[]>(), 0, 0));\n\n        // A diamond of diamonds: the counts multiply along the chain.\n        Console.WriteLine(CountShortestPaths(7, Edges(\n            new[] { 0, 1, 1 }, new[] { 0, 2, 1 }, new[] { 1, 3, 1 }, new[] { 2, 3, 1 },\n            new[] { 3, 4, 1 }, new[] { 3, 5, 1 }, new[] { 4, 6, 1 }, new[] { 5, 6, 1 }), 0, 6));\n    }\n}\n```\n\n**Output**\n\n```\n2\n1\n1\n0\n1\n4\n```",
+  "tags": [
+   "dsa",
+   "dijkstra",
+   "counting",
+   "shortest-path",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why is the count overwritten on a strictly shorter route but added on an equal one?",
+    "a": "Because a strictly shorter distance means every path counted at the old distance is no longer shortest, so those counts are obsolete and must be discarded entirely. An equal distance is a genuinely different route achieving the same optimum, so it adds to the total. Mixing the two up - adding when you should replace - inflates the count with paths that are not shortest, which is the standard bug here."
+   },
+   {
+    "q": "Why is it safe to read the predecessor's count during relaxation?",
+    "a": "Because Dijkstra settles nodes in non-decreasing distance order, so when a node is popped its own distance and count are final - every route that could reach it more cheaply has already been processed. Relaxing from a settled node therefore propagates a complete count. That guarantee is why the algorithm works at all, and it is also why it fails with negative weights, where a settled node can still be improved."
+   },
+   {
+    "q": "Why take the counts modulo a prime?",
+    "a": "Because the number of shortest paths multiplies along independent choices - the diamond-of-diamonds case doubles at each stage - so it grows exponentially in the graph size and overflows long on quite modest inputs. Reducing at each addition keeps it bounded, and since only addition is involved the modular result is exact. The usual problem statement asks for the count modulo 10 to the 9 plus 7 for precisely this reason."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Medium",
+  "question": "Find the nodes in a directed graph from which every path terminates.",
+  "answer": "**Approach**\n\nThree-colour DFS. A node is safe when every path out of it avoids cycles, which is exactly the condition that no descendant is on the current recursion stack.\n\n**Logic**\n\nThe colours encode more than visited-or-not: unvisited, currently being explored, and known-safe. A node reached while still being explored proves a cycle, and everything that can reach that cycle is unsafe.\n\nMarking a node safe only after all its successors return is what makes the propagation correct — a node's status depends on all of them, not on the first one checked.\n\nThe alternative is a reverse topological sort with in-degree pruning on the reversed graph, which finds the same set.\n\nO(V + E).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    private const int Unvisited = 0, Exploring = 1, Safe = 2;\n\n    public static IList<int> EventualSafeNodes(int[][] graph)\n    {\n        var state = new int[graph.Length];\n\n        bool IsSafe(int node)\n        {\n            if (state[node] == Exploring) return false;   // reached a node still on the stack\n            if (state[node] == Safe) return true;\n\n            state[node] = Exploring;\n\n            foreach (int next in graph[node])\n                if (!IsSafe(next)) return false;\n\n            // Only safe once EVERY successor has returned safe.\n            state[node] = Safe;\n            return true;\n        }\n\n        return Enumerable.Range(0, graph.Length).Where(IsSafe).OrderBy(n => n).ToList();\n    }\n\n    private static int[][] Graph(params int[][] adjacency) => adjacency;\n\n    private static void Show(IList<int> nodes) =>\n        Console.WriteLine(nodes.Count == 0 ? \"(none)\" : string.Join(\",\", nodes));\n\n    public static void Main()\n    {\n        // 5 and 6 are terminal; 2 and 4 reach only terminals.\n        Show(EventualSafeNodes(Graph(\n            new[] { 1, 2 }, new[] { 2, 3 }, new[] { 5 }, new[] { 0 },\n            new[] { 5 }, Array.Empty<int>(), Array.Empty<int>())));\n\n        // A pure cycle: nothing is safe.\n        Show(EventualSafeNodes(Graph(new[] { 1 }, new[] { 2 }, new[] { 0 })));\n\n        // No edges at all: everything is terminal.\n        Show(EventualSafeNodes(Graph(\n            Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>())));\n\n        // A self-loop is a cycle of one.\n        Show(EventualSafeNodes(Graph(new[] { 0 }, Array.Empty<int>())));\n\n        // A node pointing into a cycle is itself unsafe.\n        Show(EventualSafeNodes(Graph(\n            new[] { 1 }, new[] { 2 }, new[] { 1 }, Array.Empty<int>())));\n    }\n}\n```\n\n**Output**\n\n```\n2,4,5,6\n(none)\n0,1,2\n1\n3\n```",
+  "tags": [
+   "dsa",
+   "dfs",
+   "three-colour",
+   "cycle-detection",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why must a node be marked safe only after all successors return?",
+    "a": "Because safety is a universal condition - every path out must terminate - so a single successor leading into a cycle makes the node unsafe regardless of how many others are fine. Marking optimistically after the first safe successor would report nodes as safe when one of their branches loops forever. That universal-versus-existential distinction is what separates this from ordinary reachability."
+   },
+   {
+    "q": "Why does the exploring colour identify a cycle?",
+    "a": "Because a node still coloured exploring is on the current recursion path, so reaching it again means following edges back to an ancestor - which is a cycle by definition. A node already coloured safe is a harmless cross edge to a finished subtree. Two colours cannot distinguish those, which is the same reason directed cycle detection needs three states while undirected needs only a parent check."
+   },
+   {
+    "q": "What is the reverse topological alternative?",
+    "a": "Reverse every edge, then repeatedly remove nodes with in-degree zero in the reversed graph - which are the terminals and, progressively, everything that only reaches terminals. What remains is exactly the nodes on or leading into cycles. It is Kahn's algorithm applied to the complement question, iterative rather than recursive, so it avoids the stack-depth risk on a deep graph. Same O(V + E), and the better choice if the input can be adversarially deep."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Hard",
+  "question": "Find the shortest bridge connecting two islands in a binary grid.",
+  "answer": "**Approach**\n\nTwo phases. A flood fill marks the first island entirely, then a multi-source BFS expands outward from all of its cells at once until it touches the second island.\n\n**Logic**\n\nThe multi-source start is what makes the second phase a single BFS rather than one per cell. Seeding every border cell of the first island at distance zero means the frontier expands as one wave, so the first contact is the shortest bridge overall.\n\nThe flood fill must run to completion before the BFS begins — partially marked, the BFS would treat unmarked parts of the first island as the target and report zero.\n\nThe answer is the number of water cells crossed, which is the distance at contact rather than one more.\n\nO(cells).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\n\npublic class Solution\n{\n    private static readonly int[] Dr = { -1, 1, 0, 0 };\n    private static readonly int[] Dc = { 0, 0, -1, 1 };\n\n    public static int ShortestBridge(int[][] grid)\n    {\n        int n = grid.Length;\n        var frontier = new Queue<(int Row, int Col)>();\n        var visited = new bool[n, n];\n\n        // Phase one: mark the FIRST island completely.\n        bool found = false;\n        for (int r = 0; r < n && !found; r++)\n            for (int c = 0; c < n && !found; c++)\n                if (grid[r][c] == 1) { FloodFill(grid, r, c, visited, frontier); found = true; }\n\n        if (!found) return -1;\n\n        // Phase two: one wave outward from every cell of that island at once.\n        int distance = 0;\n\n        while (frontier.Count > 0)\n        {\n            int levelSize = frontier.Count;\n\n            for (int i = 0; i < levelSize; i++)\n            {\n                var (r, c) = frontier.Dequeue();\n\n                for (int d = 0; d < 4; d++)\n                {\n                    int nr = r + Dr[d], nc = c + Dc[d];\n\n                    if (nr < 0 || nr >= n || nc < 0 || nc >= n || visited[nr, nc]) continue;\n\n                    if (grid[nr][nc] == 1) return distance;   // reached the other island\n\n                    visited[nr, nc] = true;\n                    frontier.Enqueue((nr, nc));\n                }\n            }\n\n            distance++;\n        }\n\n        return -1;\n    }\n\n    private static void FloodFill(int[][] grid, int r, int c, bool[,] visited,\n                                  Queue<(int, int)> frontier)\n    {\n        int n = grid.Length;\n        var stack = new Stack<(int, int)>();\n        stack.Push((r, c));\n        visited[r, c] = true;\n\n        while (stack.Count > 0)\n        {\n            var (row, col) = stack.Pop();\n            frontier.Enqueue((row, col));\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = row + Dr[d], nc = col + Dc[d];\n\n                if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;\n                if (visited[nr, nc] || grid[nr][nc] != 1) continue;\n\n                visited[nr, nc] = true;\n                stack.Push((nr, nc));\n            }\n        }\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    public static void Main()\n    {\n        Console.WriteLine(ShortestBridge(Grid(new[] { 0, 1 }, new[] { 1, 0 })));\n\n        Console.WriteLine(ShortestBridge(Grid(\n            new[] { 0, 1, 0 }, new[] { 0, 0, 0 }, new[] { 0, 0, 1 })));\n\n        Console.WriteLine(ShortestBridge(Grid(\n            new[] { 1, 1, 1, 1, 1 },\n            new[] { 1, 0, 0, 0, 1 },\n            new[] { 1, 0, 1, 0, 1 },\n            new[] { 1, 0, 0, 0, 1 },\n            new[] { 1, 1, 1, 1, 1 })));\n\n        Console.WriteLine(ShortestBridge(Grid(\n            new[] { 1, 0, 0, 0 },\n            new[] { 0, 0, 0, 0 },\n            new[] { 0, 0, 0, 0 },\n            new[] { 0, 0, 0, 1 })));\n\n        Console.WriteLine(ShortestBridge(Grid(new[] { 0, 0 }, new[] { 0, 0 })));   // no island\n    }\n}\n```\n\n**Output**\n\n```\n1\n2\n1\n5\n-1\n```",
+  "tags": [
+   "dsa",
+   "bfs",
+   "multi-source",
+   "flood-fill",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why seed the BFS from every cell of the first island?",
+    "a": "Because the bridge may leave from any of them, and running a separate BFS per cell would be O(cells squared). A multi-source BFS expands from all of them as a single wave, so every cell's distance is measured from the nearest island cell automatically and the first contact with the other island is the global minimum. It is the same technique as rotting oranges or walls-and-gates."
+   },
+   {
+    "q": "What goes wrong if the flood fill is incomplete?",
+    "a": "The BFS would encounter unmarked cells of the SAME island, see land, and immediately return zero - reporting a bridge of length zero between an island and itself. So the fill must mark the entire first component before the second phase starts. That ordering dependency between the two phases is the main correctness hazard in this problem, and it is why the fill is a separate completed step rather than interleaved."
+   },
+   {
+    "q": "Why is the answer the distance at contact rather than one more?",
+    "a": "Because the distance counts the water cells crossed, and the wave at distance d consists of cells that are d steps of water from the island. When such a cell sees land, the bridge is exactly those d water cells - the land cell itself is not part of the bridge. The adjacent-islands test returning 1 pins it down: one water cell separates them, and an off-by-one here would report 2."
+   }
+  ]
+ },
+ {
+  "category": "Coding",
+  "subcategory": "Graphs",
+  "difficulty": "Medium",
+  "question": "Find the cells of a grid from which water can flow to two opposite borders.",
+  "answer": "**Approach**\n\nSearch *inward* from each border rather than outward from each cell, then intersect the two reachable sets.\n\n**Logic**\n\nThe inversion is the point. Running a search from every cell to see whether it reaches both borders is O(cells²). Starting at the borders and walking uphill — to neighbours at least as high — finds everything that can drain to that border in one pass per border.\n\nThe comparison reverses with the direction: flowing outward requires non-increasing height, so searching inward requires non-decreasing.\n\nThe answer is the intersection of the two sets.\n\nO(cells).\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic class Solution\n{\n    private static readonly int[] Dr = { -1, 1, 0, 0 };\n    private static readonly int[] Dc = { 0, 0, -1, 1 };\n\n    public static IList<(int Row, int Col)> CellsReachingBoth(int[][] heights)\n    {\n        var result = new List<(int, int)>();\n        if (heights == null || heights.Length == 0) return result;\n\n        int rows = heights.Length, cols = heights[0].Length;\n        var topLeft = new bool[rows, cols];\n        var bottomRight = new bool[rows, cols];\n\n        for (int r = 0; r < rows; r++)\n        {\n            Climb(heights, r, 0, topLeft);                 // left border\n            Climb(heights, r, cols - 1, bottomRight);      // right border\n        }\n\n        for (int c = 0; c < cols; c++)\n        {\n            Climb(heights, 0, c, topLeft);                 // top border\n            Climb(heights, rows - 1, c, bottomRight);      // bottom border\n        }\n\n        for (int r = 0; r < rows; r++)\n            for (int c = 0; c < cols; c++)\n                if (topLeft[r, c] && bottomRight[r, c]) result.Add((r, c));\n\n        return result;\n    }\n\n    // Walking inward from a border means climbing: non-DECREASING height.\n    private static void Climb(int[][] heights, int startRow, int startCol, bool[,] reached)\n    {\n        int rows = heights.Length, cols = heights[0].Length;\n        if (reached[startRow, startCol]) return;\n\n        var stack = new Stack<(int Row, int Col)>();\n        stack.Push((startRow, startCol));\n        reached[startRow, startCol] = true;\n\n        while (stack.Count > 0)\n        {\n            var (r, c) = stack.Pop();\n\n            for (int d = 0; d < 4; d++)\n            {\n                int nr = r + Dr[d], nc = c + Dc[d];\n\n                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols || reached[nr, nc]) continue;\n                if (heights[nr][nc] < heights[r][c]) continue;   // water cannot flow uphill\n\n                reached[nr, nc] = true;\n                stack.Push((nr, nc));\n            }\n        }\n    }\n\n    private static int[][] Grid(params int[][] rows) => rows;\n\n    private static void Show(IList<(int Row, int Col)> cells) =>\n        Console.WriteLine(cells.Count == 0\n            ? \"(none)\"\n            : string.Join(\" \", cells.Select(c => $\"({c.Row},{c.Col})\")));\n\n    public static void Main()\n    {\n        Show(CellsReachingBoth(Grid(\n            new[] { 1, 2, 2, 3, 5 },\n            new[] { 3, 2, 3, 4, 4 },\n            new[] { 2, 4, 5, 3, 1 },\n            new[] { 6, 7, 1, 4, 5 },\n            new[] { 5, 1, 1, 2, 4 })));\n\n        Show(CellsReachingBoth(Grid(new[] { 1 })));\n\n        // A flat grid: every cell reaches both.\n        Show(CellsReachingBoth(Grid(new[] { 2, 2 }, new[] { 2, 2 })));\n\n        Show(CellsReachingBoth(Grid(new[] { 1, 2, 3 }, new[] { 8, 9, 4 }, new[] { 7, 6, 5 })));\n        Show(CellsReachingBoth(Array.Empty<int[]>()));\n    }\n}\n```\n\n**Output**\n\n```\n(0,4) (1,3) (1,4) (2,2) (3,0) (3,1) (4,0)\n(0,0)\n(0,0) (0,1) (1,0) (1,1)\n(0,2) (1,0) (1,1) (1,2) (2,0) (2,1) (2,2)\n(none)\n```",
+  "tags": [
+   "dsa",
+   "dfs",
+   "multi-source",
+   "reverse-search",
+   "csharp"
+  ],
+  "followups": [
+   {
+    "q": "Why search inward from the borders rather than outward from each cell?",
+    "a": "Because asking of every cell whether it reaches a border is a separate search per cell - O(cells squared) in the worst case, with heavy repeated work. Starting at the border and marking everything that can drain to it answers the question for all cells in one traversal per border, so the whole problem is O(cells). Inverting a per-item query into a single propagation is the reusable idea, and it is the same move as multi-source BFS."
+   },
+   {
+    "q": "Why does the height comparison reverse?",
+    "a": "Because water flows to equal or lower ground, so walking backwards along that flow means moving to equal or HIGHER ground. Keeping the outward comparison while searching inward marks exactly the wrong set - and on many grids it still produces a plausible-looking answer, which makes the bug hard to spot. Stating the direction reversal explicitly is the part worth saying aloud when explaining the solution."
+   },
+   {
+    "q": "Why is a flat grid entirely in the answer?",
+    "a": "Because the comparison is non-strict - water flows across equal heights - so every cell of a plateau reaches every border. That is the intended semantics, and it is worth testing because an implementation using a strict comparison would return only the border cells themselves. Plateaux are also where a naive outward search can loop, since equal heights allow movement in both directions; the visited set is what prevents it."
+   }
+  ]
  }
 ]
