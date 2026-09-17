@@ -5746,5 +5746,29 @@
     "a": "A service endpoint keeps traffic on the Azure backbone and lets the resource firewall allow a specific subnet, but the resource still has a public IP and a public DNS name. A private endpoint gives the resource an actual private IP in your VNet, so it can be made entirely unreachable from the internet - and it works from on-premises over ExpressRoute or VPN, which service endpoints do not."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "What are the practical limits of Azure Functions, and when would you not use them?",
+  "answer": "They are excellent for event-driven and scheduled work, and there are specific places they stop being the right tool.\n\n**The limits to know:**\n- **Execution timeout.** Consumption plan defaults to 5 minutes, maximum 10. Premium and Dedicated raise or remove it, but a long-running job on consumption will be killed mid-work.\n- **Cold starts.** On consumption, an idle function pays seconds of startup on the next request - worse for .NET than for scripting runtimes, and worse with many dependencies. Premium plans with pre-warmed instances solve it at a cost that often exceeds an App Service.\n- **Scaling is per-trigger and not always intuitive.** Scaling out to hundreds of instances is excellent for throughput and hostile to a downstream database with a connection limit - the function scales, the database does not, and you exhaust the pool.\n- **Statelessness.** No in-memory state across invocations, so anything stateful needs Durable Functions or external storage.\n- **Local development and debugging** are more awkward than a plain web app, particularly around bindings.\n\n**When I would not use them:**\n1. **A conventional web API with steady traffic** - App Service or Container Apps is simpler, has no cold-start problem, and costs less at consistent load.\n2. **Long-running processing** - use a worker service or a container.\n3. **Anything needing tight control over concurrency and connections** - unconstrained scale-out is a liability against a fixed-capacity dependency.\n4. **A complex application** - dozens of functions with shared code becomes harder to reason about than one service.\n\n**Where they are clearly right:** glue between services, scheduled jobs, queue and blob triggers, webhooks, and genuinely spiky workloads where paying nothing at idle matters.",
+  "tags": [
+   "azure",
+   "functions",
+   "serverless",
+   "cold-start",
+   "scaling"
+  ],
+  "followups": [
+   {
+    "q": "How do you stop a function scaling out and exhausting a database connection pool?",
+    "a": "Constrain concurrency explicitly rather than relying on the platform s defaults. `maxConcurrentCalls` or the batch size in host.json limits per-instance concurrency, and the function app scale limit caps total instances - the product of those two is your worst-case connection count, and it should be a number you have deliberately chosen. Beyond that, put a queue between the trigger and the database work so bursts are levelled, rather than letting the trigger scale directly against a fixed-capacity resource."
+   },
+   {
+    "q": "What do Durable Functions add, and what do they cost?",
+    "a": "They give you stateful orchestration - fan-out/fan-in, chaining, waiting for an external event, human approval steps - with the state persisted so an orchestration survives restarts and can run for days. The cost is that orchestrator code must be deterministic and replayable, since it is re-executed from the start on each resume: no DateTime.Now, no random values, no direct I/O, no non-deterministic ordering. Violating that produces bugs that only appear on replay, which are unpleasant to diagnose."
+   }
+  ]
  }
 ]

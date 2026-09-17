@@ -3782,5 +3782,29 @@
     "a": "No - it stops re-renders caused by identity churn when nothing actually changed, which is the most common and most wasteful case. It does nothing when the value genuinely changes, which is the real problem for high-frequency state: every consumer still re-renders because from React s point of view the value is different. Memoisation addresses the accidental re-renders; only splitting the context or using a selector-based store addresses the intentional ones."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Rendering",
+  "difficulty": "Hard",
+  "question": "Explain what React Server Components change about how you build an application.",
+  "answer": "They move component execution to the server, so the component runs where the data is and only its *output* is sent to the client - not the component code itself.\n\n**What that changes concretely:**\n\n1. **Data fetching moves into the component.** A server component can await a database call directly, with no API endpoint, no loading state and no client-side waterfall. The request-response round trip between client and API disappears for read paths.\n2. **Bundle size drops.** A server component and its dependencies are never shipped - so a markdown renderer or a date library used only for formatting adds nothing to what the browser downloads. This is often the largest practical win.\n3. **Secrets can live in the component**, because it does not run in the browser.\n4. **The default flips.** Components are server components unless marked `'use client'`, so interactivity becomes the thing you opt into rather than the default.\n\n**What they do not do:** replace client components. Anything with state, effects, event handlers or browser APIs must be a client component. The model is a tree where server components render client components and pass them serialisable props - and the boundary is one-directional, so a server component can render a client one but not the reverse except through `children`.\n\n**The mental shift that takes longest:** props crossing the boundary must be serialisable, so you cannot pass a function or a class instance to a client component. And a client component imported into a server component pulls its whole subtree to the client, which is how bundles quietly grow again.\n\n**My honest read:** the wins are real for content-heavy applications with large data requirements, and the added complexity is not obviously worth it for a small, highly interactive app.",
+  "tags": [
+   "react",
+   "server-components",
+   "rsc",
+   "data-fetching",
+   "bundle-size"
+  ],
+  "followups": [
+   {
+    "q": "What is the waterfall problem RSC solves, and does it fully solve it?",
+    "a": "In a client-rendered app, the browser downloads the bundle, renders, discovers it needs data, fetches, then discovers a child needs more data and fetches again - each step serialised over the network. Server components collapse that because the fetches happen server-side with low latency to the data, and they can be parallel. It does not remove waterfalls entirely: a server component awaiting one call before it knows what to fetch next still serialises, just faster. Hoisting the fetches or starting them in parallel is still your responsibility."
+   },
+   {
+    "q": "How does this interact with a query library like TanStack Query?",
+    "a": "They now cover different halves. Read-only data that the server can fetch does not need a client cache at all. Anything the user mutates and must then see updated still needs client-side caching, optimistic updates and invalidation, so the query library keeps that role. The practical arrangement is server components for initial data, with client components using a query library for interactive state - and prefetching on the server to hydrate the client cache so the first interaction is not a fresh fetch."
+   }
+  ]
  }
 ]

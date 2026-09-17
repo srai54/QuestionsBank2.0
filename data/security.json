@@ -2818,5 +2818,29 @@
     "a": "It is necessary but not sufficient. It confirms the file starts like the claimed type, which defeats a trivially renamed executable, but polyglot files are valid in two formats at once and a valid image can still exploit a vulnerability in the decoder. The stronger control is re-encoding - decode and re-write the image with your own library, which produces a file you generated rather than one the attacker did, and discards anything embedded. Combine that with scanning and with serving from an origin where execution does not matter."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Headers",
+  "difficulty": "Medium",
+  "question": "Which HTTP security headers actually matter, and what does each prevent?",
+  "answer": "A handful do most of the work, and the rest are either legacy or situational.\n\n**The ones that matter:**\n\n1. **`Content-Security-Policy`** - the highest-value header by a distance. It controls which sources scripts, styles and other resources may load from, so it turns many XSS vulnerabilities from exploitable into blocked. It is also the hardest to deploy, because a strict policy breaks inline scripts and third-party widgets. Start in report-only mode, fix the violations, then enforce.\n2. **`Strict-Transport-Security`** - forces HTTPS for a period, preventing a downgrade on the first request after the initial visit. Include `includeSubDomains`, and understand that preload is effectively irreversible for the duration.\n3. **`X-Content-Type-Options: nosniff`** - stops browsers guessing content type, which is how a user-uploaded file gets executed as script. One line, no downside.\n4. **`Referrer-Policy`** - stops full URLs, which may contain ids or tokens, leaking to third parties via the Referer header. `strict-origin-when-cross-origin` is a sensible default.\n5. **`Permissions-Policy`** - disables features the site does not use: camera, microphone, geolocation. Limits what an injected script or an embedded frame can request.\n\n**The legacy ones:** `X-Frame-Options` is superseded by CSP `frame-ancestors`, though sending both is harmless for older browsers. `X-XSS-Protection` should be **omitted or set to 0** - the browser filter it enabled was itself a vulnerability source and is removed from modern browsers.\n\n**The header that is not a header:** cookie attributes. `HttpOnly`, `Secure` and `SameSite` do more for real-world session security than most of the above.",
+  "tags": [
+   "security",
+   "http-headers",
+   "csp",
+   "hsts",
+   "browser"
+  ],
+  "followups": [
+   {
+    "q": "Why is CSP hard to deploy on an existing application?",
+    "a": "Because a policy strong enough to be useful forbids inline scripts and `eval`, and most existing applications have both - inline handlers, inline JSON blobs, libraries that build functions dynamically. Making it work means moving inline code into files or adopting nonces or hashes, which touches every page. That is why report-only mode exists: deploy it, collect violation reports from real traffic for a period, fix what it finds, and only then enforce. Going straight to enforcement on a mature app breaks the site."
+   },
+   {
+    "q": "Do these headers matter for an API rather than a browser application?",
+    "a": "Much less, because most of them instruct a browser and an API called by a server has no browser in the path. `Strict-Transport-Security` still matters, and `nosniff` is worth sending. What matters far more for an API is CORS configuration, which people often confuse with a security header - CORS is a browser mechanism that relaxes the same-origin policy, so a permissive `Access-Control-Allow-Origin: *` on an authenticated API is a real finding, while its absence protects nothing against a non-browser client."
+   }
+  ]
  }
 ]

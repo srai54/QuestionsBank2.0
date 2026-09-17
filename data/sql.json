@@ -4662,5 +4662,29 @@
     "a": "They are the same for all four: the same number of columns, in the same order, with compatible types - names come from the first query. What differs is how strictly you should treat that: relying on positional matching means adding a column to one side silently changes the pairing, so listing columns explicitly rather than using `SELECT *` is what keeps these safe over time."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Temporal Data",
+  "difficulty": "Medium",
+  "question": "How would you store the history of changes to a record so you can see what it looked like at any date?",
+  "answer": "Three approaches, and the choice depends on whether history is a product feature or an audit requirement.\n\n**1. Temporal tables** (SQL Server system-versioned, or PostgreSQL with an extension). The database maintains a history table automatically with `ValidFrom`/`ValidTo` columns, and you query it with `FOR SYSTEM_TIME AS OF '2026-01-01'`. This is the least code and the least likely to be got wrong - the database guarantees no change escapes it, including ones made outside your application. Best when you want point-in-time queries as a first-class capability.\n\n**2. An audit table populated by triggers or by the application.** More control over what is captured and what it means - you can record who and why, not just what. Application-level capture (EF Core interceptors) misses anything written outside the application; triggers catch everything but are invisible in the codebase and easy to forget when debugging.\n\n**3. Event sourcing** - store the events, derive current state. History is not an add-on, it *is* the model, and you get the reason for each change rather than only the before-and-after. The cost is substantial: projections to maintain, event schema versioning forever, and queries that are harder for anything ad-hoc.\n\n**How I would choose:** temporal tables for \"what did this look like last month\", an audit table when you need who and why for compliance, and event sourcing only when the business genuinely thinks in events and the complexity is justified by more than history.\n\n**The mistake to avoid:** a bespoke history table maintained by application code that sometimes forgets. Partial history is worse than none, because people trust it.",
+  "tags": [
+   "sql",
+   "temporal-tables",
+   "audit",
+   "event-sourcing",
+   "history"
+  ],
+  "followups": [
+   {
+    "q": "What are the operational costs of temporal tables?",
+    "a": "The history table grows without bound unless you set a retention policy, and it grows fastest for the tables that change most - so an unbounded history on a high-churn table can dwarf the current data. Schema changes propagate to the history table, which constrains how freely you can alter columns. And every update now writes twice, so write-heavy tables pay for it. Retention plus partitioning on the history table is what makes it sustainable."
+   },
+   {
+    "q": "How do you capture who made a change with temporal tables?",
+    "a": "You cannot, directly - system versioning records what changed and when, not who or why. The usual approach is a `ModifiedBy` column on the main table that the application sets, which then flows into the history row automatically. If you need richer context - a reason, a correlation id, the originating request - that is an argument for an audit table alongside, because the temporal mechanism deliberately captures state rather than intent."
+   }
+  ]
  }
 ]

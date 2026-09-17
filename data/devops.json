@@ -4041,5 +4041,29 @@
     "a": "Practise it - roll back a real deployment in a lower environment as part of the release process, and occasionally in production during a low-traffic window. Teams discover that the artefact was not retained, that the pipeline only deploys `latest`, or that the previous version fails against the migrated schema, and they discover it during an incident. Game days and deliberate rollback drills convert those into ordinary findings."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Monitoring",
+  "difficulty": "Medium",
+  "question": "What would you put on a dashboard that an on-call engineer looks at first?",
+  "answer": "One screen that answers \"is something wrong, and is it us\" in a few seconds. Everything else belongs on a second-level dashboard.\n\n**What goes on it:**\n\n1. **The four golden signals per service** - traffic, error rate, latency (p50 and p99, never the average), and saturation. These four cover most of what can be wrong.\n2. **Error budget burn rate** against the SLO, which turns \"errors are elevated\" into \"we are consuming the month s budget in a day\".\n3. **Dependency health** - error rate and latency for each downstream, so \"is it us or them\" is answerable without opening another tool. This single panel saves the most time in practice.\n4. **Saturation of the things that actually run out**: connection pool usage, thread pool queue depth, queue backlogs, disk. These are where cliff-edge failures come from.\n5. **Deployment and config-change markers** overlaid on the timeline. Most incidents follow a change, and seeing the deploy line next to the error spike answers the first question immediately.\n\n**What I would keep off it:** CPU and memory as headline metrics - they are causes, not symptoms, and they alarm people when nothing is wrong. Per-instance detail. Anything nobody has ever acted on.\n\n**The design principle:** symptoms first, causes one click away. The on-call engineer needs to know whether users are affected before knowing which pod is hot. A dashboard with forty panels is a dashboard nobody reads under pressure.",
+  "tags": [
+   "devops",
+   "monitoring",
+   "dashboards",
+   "golden-signals",
+   "on-call"
+  ],
+  "followups": [
+   {
+    "q": "Why p99 rather than the average?",
+    "a": "Because the average hides the tail, and the tail is what users experience and complain about. A service with a 100ms average can have a p99 of 8 seconds, so one in a hundred requests is terrible while the headline looks healthy - and for a page making twenty calls, most page loads hit at least one of those. Percentiles also cannot be averaged across instances, which is a common dashboarding bug: averaging each instance s p99 gives a number that means nothing. Compute percentiles from the underlying distribution."
+   },
+   {
+    "q": "What is saturation and why is it the signal people miss?",
+    "a": "It is how full the constrained resource is - not how busy the CPU is, but how close you are to the limit that actually binds: connections in the pool, items queued for the thread pool, depth of a message queue, disk space. It matters because these fail as cliffs rather than gradients: everything is fine at 80% and collapses at 100%, so latency and errors only move once it is too late. Watching saturation gives you warning where the other three signals give you confirmation."
+   }
+  ]
  }
 ]

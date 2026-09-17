@@ -4504,5 +4504,29 @@
     "a": "A circuit breaker is about *time* - it stops calling a dependency that is failing, and lets it recover. A bulkhead is about *resources* - it caps how much of your capacity any one dependency can consume, so even while C is failing and before the breaker opens, calls to C cannot use more than their allotted share of threads or connections. They compose: the bulkhead contains the damage, the breaker ends it."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Events",
+  "difficulty": "Hard",
+  "question": "What is the difference between an event and a command, and why does it matter for coupling?",
+  "answer": "A **command** says \"do this\" - it is addressed to a specific handler, it can be rejected, and the sender expects it to happen. A **event** says \"this happened\" - it is a statement of fact about the past, the publisher does not know or care who listens, and it cannot be rejected because it has already occurred.\n\n**Why it matters:** the direction of coupling is opposite.\n\n- With a **command**, the sender knows the receiver and depends on it. `SendEmailCommand` means the order service knows an email service exists and should send one. Adding a second thing to happen means changing the order service.\n- With an **event**, the receiver knows the publisher. `OrderPlaced` means the order service knows nothing about email, SMS, analytics or the warehouse - each of them subscribes. Adding a sixth consumer changes nothing in the order service.\n\n**The naming test:** events are past tense and describe facts (`OrderPlaced`, `PaymentFailed`). Commands are imperative (`PlaceOrder`, `RefundPayment`). If you find yourself publishing `SendEmail` as an \"event\", it is a command with a queue in front of it - which is a legitimate thing to do, but do not expect the decoupling benefits.\n\n**The design failure this prevents:** an \"event\" that names what should happen rather than what did. `OrderPlacedSoSendConfirmationEmail` has the publisher deciding the consumer s behaviour, so you have distributed coupling rather than removing it.\n\n**When commands are right:** when exactly one thing must happen and you need to know whether it did. Events are right when the publisher genuinely does not care, and when the list of interested parties will grow.",
+  "tags": [
+   "architecture",
+   "events",
+   "commands",
+   "coupling",
+   "messaging"
+  ],
+  "followups": [
+   {
+    "q": "Should an event carry the full state or just identifiers?",
+    "a": "It is a real trade-off. A thin event with just an id means consumers call back for details - simple to version, but it creates a runtime dependency on the publisher and an N+1 of callbacks. A fat event carrying the state lets consumers work independently, which is the resilience argument, but the event becomes a contract you must version carefully and it may carry data some consumers should not see. The common middle ground is including the fields consumers actually need, decided by asking them, and accepting that adding fields later is safe while removing them is not."
+   },
+   {
+    "q": "What happens when a consumer needs to reject an event?",
+    "a": "It cannot - the fact already happened, so the only options are to compensate or to raise a new event describing the problem. `PaymentFailed` published in response to `OrderPlaced` is how that conversation works, and the order service then decides what to do with its own state. Code that tries to \"fail\" an event handler in a way that undoes the publisher s change has really discovered that the two operations belong in one transaction, which is a boundary problem rather than a messaging one."
+   }
+  ]
  }
 ]

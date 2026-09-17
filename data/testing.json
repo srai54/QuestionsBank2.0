@@ -2493,5 +2493,29 @@
     "a": "Have the builder create the whole graph - an order builder that creates the customer and product it references unless you supply them. Otherwise every test starts with three lines of unrelated setup to satisfy foreign keys, which is exactly the noise that makes tests unreadable. The builder becomes the single place that knows what a valid graph looks like, so a new required relationship is one change rather than a change in every test."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Contracts",
+  "difficulty": "Medium",
+  "question": "Two teams keep breaking each other with API changes. What testing would you introduce?",
+  "answer": "Consumer-driven contract testing, because the specific failure is that the provider does not know what consumers actually depend on.\n\n**How it works:** each consumer declares the interactions it relies on - for this request, I expect a response containing these fields with these types. That declaration is published as a contract. The provider s CI then verifies it can satisfy **every** published contract before deploying, so a breaking change fails the provider s build rather than the consumer s production.\n\n**What this gives you that other testing does not:**\n- The provider finds out at build time *which* consumers a change breaks, and can see whether anyone actually uses the field being removed - which is usually the real question and is otherwise unanswerable.\n- Consumers are not testing against a mock they wrote and hoped was accurate. The contract is verified against the real provider.\n- It scales without an integration environment where every service must be deployed together, which is slow and flaky.\n\n**What it does not replace:** contract tests verify the *shape and semantics of the interaction*, not the business behaviour. Both sides still need their own tests.\n\n**The practical adoption note:** it needs a broker to store contracts and version them against deployments, and it needs both teams to participate - a provider that ignores failing contract verifications gains nothing. That organisational agreement is usually the harder part than the tooling.\n\n**The cheaper first step**, if that is too much: publish an OpenAPI spec, generate clients from it, and add a CI check that fails on a breaking spec change. Less precise, far less setup, and it catches the obvious cases.",
+  "tags": [
+   "testing",
+   "contract-testing",
+   "pact",
+   "api",
+   "integration"
+  ],
+  "followups": [
+   {
+    "q": "What counts as a breaking change in this context?",
+    "a": "Anything a consumer could be relying on that stops being true: removing a field, narrowing a type, making an optional request field required, changing an enum s meaning, changing status codes, or altering default behaviour. Adding an optional field is safe *only if* consumers ignore unknown fields - which must be an agreed and documented expectation, because a strictly-deserialising consumer breaks on additions. Getting that expectation written down early prevents most of these arguments."
+   },
+   {
+    "q": "How do contract tests interact with deployment order?",
+    "a": "The broker tracks which contract versions are verified against which provider versions, so you can ask \"is it safe to deploy this provider version given what is currently in production\" before releasing. That check belongs in the pipeline as a gate. Without it you have contract tests that tell you about compatibility in the abstract but not about the specific versions actually deployed, which is where the real incident happens."
+   }
+  ]
  }
 ]

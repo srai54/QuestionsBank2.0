@@ -12662,5 +12662,29 @@
     "a": "Take it out of the migration entirely. The migration does the fast metadata change - adding a nullable column, creating an index with `ONLINE = ON` where the edition supports it - and the slow data movement runs as a separate batched job that can be paused and resumed. A migration that holds a lock for twenty minutes blocks the deployment and the application simultaneously, and cancelling it mid-way can take longer to roll back than it took to run."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "You add IMemoryCache and memory grows until the process is recycled. What did you miss?",
+  "answer": "Almost certainly a **size limit and an eviction policy**. `IMemoryCache` does not bound itself by default - it holds whatever you put in it until something expires or the process restarts. If the key space is unbounded, so is the cache.\n\n**The specific mistakes:**\n\n1. **No expiration at all.** An entry with neither absolute nor sliding expiration lives forever.\n2. **Sliding expiration only.** An entry accessed regularly never expires, which is correct for a hot key and a leak for a key that is accessed just often enough. Pair sliding with an absolute expiration as a ceiling.\n3. **An unbounded key space.** Caching per user, per correlation id, or per arbitrary search term means the number of distinct keys grows with traffic rather than with your data.\n4. **No `SizeLimit`.** Setting it forces you to give every entry a `Size`, and the cache then evicts under pressure. Without it there is no compaction trigger short of memory pressure from the runtime.\n5. **Caching large object graphs**, so each entry is far bigger than it appears - a cached entity with lazy-loaded navigations can pull in half the database.\n\n**The fix:** set `SizeLimit`, give every entry a size and an absolute expiration, and be deliberate about what the key space actually is. If you cannot enumerate the possible keys, cache something else.\n\n**The related trap:** `IMemoryCache` is per-instance. With several replicas each has its own copy, so hit rates are lower than expected and invalidation reaches only one instance - which is usually the moment to move to a distributed cache.",
+  "tags": [
+   "dotnet",
+   "caching",
+   "imemorycache",
+   "memory-leak",
+   "eviction"
+  ],
+  "followups": [
+   {
+    "q": "What is cache stampede and how do you prevent it in IMemoryCache?",
+    "a": "When a popular entry expires, every concurrent request misses simultaneously and all of them run the expensive factory - so an entry designed to reduce database load causes a spike on it instead. `GetOrCreateAsync` does not deduplicate concurrent factory calls, which surprises people. The fix is a per-key lock or a `Lazy<Task<T>>` stored in the cache so concurrent callers await the same in-flight task, plus jittered expirations so many keys do not expire at the same instant."
+   },
+   {
+    "q": "When do you move from IMemoryCache to a distributed cache?",
+    "a": "When per-instance copies become a problem rather than an optimisation: you need invalidation to reach every instance, hit rates are poor because traffic is spread across replicas, or the cached data is expensive enough that duplicating it per instance wastes real memory. The cost is a network hop and serialisation, so the very hottest small values often stay in memory with a short TTL even when a distributed cache exists - a two-tier arrangement is common and sensible."
+   }
+  ]
  }
 ]
