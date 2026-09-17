@@ -12542,5 +12542,29 @@
     "a": "Do it in the same pass. Compute a hash incrementally as you copy, count bytes so you can abort the moment the limit is exceeded, and check the magic-number header from the first few bytes rather than trusting the content type or extension. For anything needing the whole file - a virus scan - write to a quarantine location first and validate from there asynchronously, so the request completes without holding the file in the process."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Equality",
+  "difficulty": "Medium",
+  "question": "A HashSet reports that it contains an item, then stops finding it. What happened?",
+  "answer": "A field used by `GetHashCode` was mutated after the item was added. The object is still physically in the set, sitting in the bucket for its **old** hash - but lookups compute the **new** hash, land in a different bucket, and find nothing.\n\nThe item is in the set and unreachable at the same time, which is why it looks impossible. Enumerating the set still yields it; `Contains` returns false. Removing it fails too, so it stays there forever - a small leak on top of the correctness bug.\n\n**The rule:** anything used as a dictionary key or set element must be **immutable in the fields that participate in equality**. The cleanest way to guarantee that is to make the type immutable outright, or to hash only on an identity field that never changes - typically the id.\n\n**The related mistakes in the same family:**\n- **Overriding `Equals` without `GetHashCode`.** Two objects compare equal but hash differently, so they land in different buckets and the set happily contains both \"equal\" items. The compiler warns about this and the warning is worth treating as an error.\n- **Hashing on a mutable collection property.** A record containing a `List<T>` has reference equality for that member, so two records with identical contents are not equal - a frequent surprise in tests.\n- **Hashing on too many fields**, so equality is stricter than the domain intends.\n\n**The fix in practice:** use `HashCode.Combine(Id)` on a stable identity, and keep value-object equality for types that are genuinely immutable.",
+  "tags": [
+   "csharp",
+   "equality",
+   "gethashcode",
+   "collections",
+   "immutability"
+  ],
+  "followups": [
+   {
+    "q": "Why not just recompute the hashes when the object changes?",
+    "a": "Because the collection has no way to know. There is no notification from an arbitrary object to every set it happens to be in, and adding one would mean every key type implementing change tracking and every collection subscribing - which is both expensive and a source of leaks. The design deliberately pushes the requirement onto the key type: be immutable. Removing the item, mutating it, and re-adding is the correct manual sequence if you must mutate."
+   },
+   {
+    "q": "What does the compiler actually warn about here?",
+    "a": "CS0659 - overriding `Equals` without overriding `GetHashCode`. It is a warning rather than an error for backwards-compatibility reasons, which means it is easy to ignore in a noisy build. Treating warnings as errors, or at minimum promoting this one, catches the whole class at compile time. Records generate both correctly, which is one of the better arguments for using them for value-like types."
+   }
+  ]
  }
 ]

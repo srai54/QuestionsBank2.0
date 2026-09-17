@@ -4566,5 +4566,29 @@
     "a": "It can make it worse, because a procedure s plan is cached and reused across very different parameter values - which is the classic sniffing scenario. Ad-hoc parameterised queries from the application are cached too, so you get much the same behaviour. The mitigations are the same either way: `OPTIMIZE FOR UNKNOWN`, `OPTION (RECOMPILE)` for genuinely skewed data, or fixing the underlying index. Procedures are neither a cause nor a cure."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Locking",
+  "difficulty": "Hard",
+  "question": "Explain the difference between blocking, deadlock and a long-running transaction, and how you diagnose each.",
+  "answer": "They present similarly - queries are slow or hanging - but the causes and fixes are different.\n\n**Blocking** is normal and temporary: one session holds a lock another needs, and the second waits. It only becomes a problem when the holder is slow. Diagnose with `sys.dm_exec_requests` looking at `blocking_session_id`, and follow the chain to the head blocker - which is the only session that matters.\n\n**Deadlock** is a cycle: two sessions each hold a lock the other needs, so neither can proceed. SQL Server detects it and kills the cheaper one with error 1205. Unlike blocking it resolves itself - the cost is the failed transaction, not the wait. Diagnose from the deadlock graph, which system_health captures by default.\n\n**A long-running transaction** is the underlying cause of much of the blocking you will find. A transaction left open - often because the application does work between `BEGIN` and `COMMIT` that does not need to be inside it, like calling an external API - holds its locks the entire time. It also prevents log truncation, so the transaction log grows.\n\n**The diagnostic order I would use:**\n1. `sys.dm_exec_requests` joined to `sys.dm_exec_sql_text` for what is running now and what is blocking what.\n2. `sys.dm_tran_active_transactions` for transactions open a long time.\n3. The system_health extended event session for deadlock graphs and for what happened overnight.\n4. Wait statistics, to tell lock waits apart from IO or CPU waits - the symptom \"queries are slow\" covers all three.\n\n**The fix for most of it:** shorter transactions, consistent access order, and the right indexes so a query holds fewer locks for less time.",
+  "tags": [
+   "sql",
+   "locking",
+   "blocking",
+   "deadlock",
+   "diagnostics"
+  ],
+  "followups": [
+   {
+    "q": "How does an index reduce locking?",
+    "a": "By reducing how many rows the query has to touch. A scan takes locks across a large range; a seek locks the handful of rows it actually reads. So adding the right index often eliminates a blocking problem entirely without changing a line of application code - the writer and the reader stop overlapping because the reader no longer walks the whole table. A covering index helps further by avoiding lookups into the clustered index, which would take their own locks."
+   },
+   {
+    "q": "What does READ COMMITTED SNAPSHOT change, and what does it cost?",
+    "a": "Readers get a row version rather than taking shared locks, so readers stop blocking writers and vice versa - which removes the most common blocking pattern outright. The costs are a version store in tempdb that must be sized for it, extra work on every update to maintain versions, and the fact that it changes behaviour: queries now see a consistent snapshot from the statement start, so code that was relying on blocking for coordination can break subtly. It is a database-level decision worth testing rather than flipping in production."
+   }
+  ]
  }
 ]

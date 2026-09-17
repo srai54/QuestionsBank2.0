@@ -3969,5 +3969,29 @@
     "a": "Incrementally, behind an abstraction. Introduce the new implementation alongside the old, route to it behind a flag, migrate callers in small merged increments, then delete the old path. This is the same expand-and-contract shape as a zero-downtime schema change. A refactor that cannot be broken down that way is a signal the change is too coupled, which is itself worth knowing before spending three weeks on a branch."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Secrets Rotation",
+  "difficulty": "Medium",
+  "question": "A credential was committed to a public repository an hour ago. Walk me through your response.",
+  "answer": "**Assume it is compromised.** Public repositories are scraped continuously by automated tools; an hour is more than enough. The response order is rotate, then assess, then clean up - and people commonly get that backwards.\n\n**1. Rotate immediately.** Generate a new credential, deploy it, then invalidate the old one. That order avoids an outage. This comes before everything else, including removing the commit, because removing the commit does nothing to the copies already taken.\n\n**2. Assess exposure.** What did the credential grant, and was it used? Check access logs for the resource from the moment of the commit - unfamiliar IPs, unusual access patterns, data volumes. This determines whether you have a leak or an incident.\n\n**3. Clean history, knowing its limits.** Rewriting history with `git filter-repo` or BFG removes it from the repository, but every clone, fork and the platform s cached views may still hold it. On GitHub, deleting a fork does not remove the object from the upstream network immediately - you should contact support to purge cached views. This step is hygiene, not remediation.\n\n**4. Notify** whoever needs to know - security, and the customer if their data was exposed. There may be a regulatory clock on that, which is a reason to involve the right people early rather than handle it quietly.\n\n**5. Fix the cause.** Pre-commit secret scanning, push protection on the repository, and a reason the credential existed in a form that *could* be committed - which is usually the deeper finding. A managed identity or a vault reference cannot be pasted into a config file.",
+  "tags": [
+   "devops",
+   "secrets",
+   "incident-response",
+   "git",
+   "security"
+  ],
+  "followups": [
+   {
+    "q": "Why is removing the commit not enough on its own?",
+    "a": "Because the secret has already been distributed. Anyone who cloned or forked has it, automated scrapers have it within seconds, and the hosting platform may serve cached views of the old object. Git history rewriting also does not change the fact that the credential is valid - only rotation does that. Treating history cleanup as the fix is the most common mistake in this scenario, and it produces a repository that looks clean while the credential still works."
+   },
+   {
+    "q": "How do you prevent it structurally rather than by telling people to be careful?",
+    "a": "Remove the possibility. Secrets that are managed identities or vault references have nothing to paste, which eliminates the class. Where a string is unavoidable, use push protection and pre-commit hooks with a scanner so the commit fails before it leaves the machine, and scan the whole history periodically for what predates the controls. Relying on developer vigilance for something this easy to do accidentally is not a control."
+   }
+  ]
  }
 ]

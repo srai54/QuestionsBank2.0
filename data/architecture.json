@@ -4432,5 +4432,29 @@
     "a": "The version token belongs on the root, and it covers the whole aggregate - so two users editing different lines of the same order conflict, because they are changing one consistency boundary. That is correct behaviour, and it is also the practical cost of a large aggregate: the bigger the boundary, the more unrelated changes collide. Frequent concurrency conflicts in production are a strong signal that an aggregate is too big."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "API Design",
+  "difficulty": "Medium",
+  "question": "A team wants to expose the database schema directly as the API. What are the consequences?",
+  "answer": "It works immediately and then constrains you permanently, which is what makes it tempting and wrong.\n\n**What you lose:**\n\n1. **Freedom to change the schema.** The moment a client depends on a column name, renaming it is a breaking API change. You have converted an internal implementation detail into a public contract, and databases change more often than APIs should.\n2. **Control over what is exposed.** Every column ships, including internal flags, audit fields, soft-delete markers and anything sensitive someone adds later. The default becomes \"exposed unless someone remembers to exclude it\", which is the wrong default for security.\n3. **A meaningful domain model.** The API now speaks in tables and foreign keys rather than in business concepts, so clients assemble domain meaning themselves - and each one does it slightly differently.\n4. **Performance control.** Clients compose their own queries and you cannot predict or index for them. An endpoint that is fast today becomes an unindexed scan when someone filters on a new column.\n\n**What it is genuinely fine for:** internal tooling, admin interfaces, prototypes, and read-only reporting where the consumer is you and the coupling is acceptable and understood.\n\n**What I would propose instead:** DTOs that express the API contract, mapped from the persistence model. It is more code, and that code is the thing that lets the two sides change independently. If the objection is the mapping boilerplate, that is a real cost - but it is much smaller than the cost of a schema you can never refactor.",
+  "tags": [
+   "architecture",
+   "api-design",
+   "dto",
+   "coupling",
+   "trade-offs"
+  ],
+  "followups": [
+   {
+    "q": "Does that argument apply to OData or GraphQL over the database too?",
+    "a": "The exposure question is the same - if the schema maps one-to-one to the storage, you have the same coupling regardless of the query language. What those technologies add is the ability for clients to compose arbitrary queries, which makes the performance problem sharper: you now need depth limits, complexity analysis and whitelisting of filterable and sortable fields. Used over a deliberately designed model rather than raw tables, they are fine; used as a shortcut to avoid designing one, they inherit every problem above."
+   },
+   {
+    "q": "How do you keep the mapping layer from becoming pure boilerplate?",
+    "a": "Let the DTOs diverge from the entities where the domain warrants it, so they are earning their existence rather than duplicating it - flatten relationships the client does not care about, combine fields, omit internals, use names the business uses. If every DTO is an exact copy of its entity, that is a signal the boundary is not doing any work and the real question is whether this API should be public at all. Projecting directly in the query with `Select` also removes most of the mapping code people object to."
+   }
+  ]
  }
 ]

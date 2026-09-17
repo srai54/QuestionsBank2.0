@@ -3455,5 +3455,29 @@
     "a": "Empirically, against a held-out evaluation set with a defined quality bar - not by reading benchmarks. Run both models over the same cases, score against your criteria, and look at the cost-quality curve. Often the small model is equal on 80% of traffic and clearly worse on an identifiable subset, which is exactly the signal to build a router rather than choose one model for everything."
    }
   ]
+ },
+ {
+  "category": "AI & LLM",
+  "subcategory": "Safety",
+  "difficulty": "Medium",
+  "question": "How do you stop prompt injection in a feature where users supply text the model will process?",
+  "answer": "The uncomfortable answer to start with: **prompt injection is not solved**. There is no reliable way to make a model distinguish instructions from data when both arrive as text. So the design must assume injection succeeds and limit what that achieves.\n\n**The controls that actually work, all of them outside the model:**\n\n1. **Least privilege on tools.** If the model can call functions, scope them to what the *user* is allowed to do, enforced server-side by the same authorization the rest of the application uses. An injected instruction to fetch another tenant s data then fails at the data layer, where it should. This is the single most important control.\n2. **Treat model output as untrusted input.** Never execute it, never interpolate it into SQL or a shell command, never render it as raw HTML. It is user-influenced text and deserves the same handling as any other user input.\n3. **Human confirmation for consequential actions.** Sending an email, making a payment, deleting data - the model proposes, a person approves.\n4. **Separate the channels as far as the API allows** - system instructions, user content and retrieved documents in distinct roles, with retrieved content clearly delimited. This raises the bar without being a guarantee.\n5. **Output constraints** - structured output, schema validation, allowlists - so the surface the model can influence is narrow.\n\n**The threat people under-rate is indirect injection**: instructions hidden in a document the system retrieves, a web page it browses, or a support ticket it summarises. The attacker never talks to your model directly. Any content that reaches the context is an untrusted input path.",
+  "tags": [
+   "ai-llm",
+   "prompt-injection",
+   "security",
+   "guardrails",
+   "agents"
+  ],
+  "followups": [
+   {
+    "q": "Do guardrail models and input filters help?",
+    "a": "They raise the cost of an attack and catch the obvious cases, so they are worth having as a layer - but they are classifiers with false negatives, and treating them as a boundary is the mistake. An attacker iterates until something gets through, and encoding, translation and indirection defeat naive filters routinely. Use them for defence in depth and to reduce noise, never as the control that makes a privileged action safe."
+   },
+   {
+    "q": "How does this change when the model can browse or read files?",
+    "a": "The attack surface expands enormously, because any content it reads becomes a potential instruction source and the attacker only needs to control a page or a document. The controls that matter become sandboxing what it can reach, allowlisting domains, stripping or isolating retrieved content, and above all not granting the browsing agent credentials to act on anything sensitive. A model with both untrusted input and privileged tools is the dangerous combination - separating those two capabilities is the design principle."
+   }
+  ]
  }
 ]

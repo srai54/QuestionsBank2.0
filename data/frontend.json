@@ -2276,5 +2276,29 @@
     "a": "Follow the ARIA Authoring Practices pattern for that component exactly - it specifies the roles, states and the full keyboard interaction, including the cases people forget such as Escape, Home and End. Better still, use a well-tested headless library that has already implemented it, since combobox and date picker are notoriously difficult to get right. Writing one from scratch and testing it only with a mouse is how inaccessible components ship."
    }
   ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Bundling",
+  "difficulty": "Medium",
+  "question": "Your JavaScript bundle is 3MB. Walk me through reducing it.",
+  "answer": "First I would look at what is actually in it, with a bundle analyser. Guessing at this is unproductive - the answer is almost always one or two dependencies nobody expected.\n\n**The usual findings and their fixes:**\n\n1. **A date library imported whole.** Moment is the classic - large and not tree-shakeable. Replacing it with `date-fns`, Day.js, or the native `Intl` APIs often removes a large fraction on its own.\n2. **Importing a whole library for one function** - `import _ from 'lodash'` instead of `import debounce from 'lodash/debounce'`, or better, writing the four-line function.\n3. **An icon set imported entirely** when a dozen icons are used.\n4. **Duplicate dependencies** - two versions of the same library pulled by different packages. Deduping or aligning versions removes it.\n5. **A locale or polyfill bundle** included for every language when you support three.\n6. **Source maps or dev dependencies** leaking into the production build, which is a configuration error worth checking early.\n\n**Then the structural work:**\n- **Code splitting by route**, so the initial download is the landing page rather than the whole application. This is usually the biggest single win and does not require removing anything.\n- **Lazy loading heavy components** - a chart library, a rich text editor, a PDF viewer - so they load when opened.\n- **Modern build targets**, since transpiling to ES5 for browsers nobody uses inflates output substantially.\n\n**And measure the right thing:** compressed transfer size, not raw bytes, because Brotli or gzip is what users actually download. A 3MB raw bundle might be 600KB over the wire - still too much, but the number to optimise against.",
+  "tags": [
+   "frontend",
+   "bundling",
+   "code-splitting",
+   "tree-shaking",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "What limits tree-shaking from working?",
+    "a": "CommonJS modules, because the static analysis relies on ES module `import`/`export` to know what is unused - a `require` is dynamic and the bundler must keep everything. Side effects also block it: if a module does work at import time, removing it would change behaviour, so bundlers keep it unless the package declares `sideEffects: false`. That field being missing or wrong on a dependency is a common reason tree-shaking silently underperforms."
+   },
+   {
+    "q": "Is a single large bundle ever better than many small chunks?",
+    "a": "Under HTTP/1.1 yes, because of the connection limit - but under HTTP/2 and HTTP/3 multiplexing removes that penalty, so splitting is nearly always better. The remaining caveat is granularity: hundreds of tiny chunks add request overhead and hurt compression ratios, since compression works better over more content. The sensible target is a handful of route-level chunks plus a stable vendor chunk that stays cached across deployments."
+   }
+  ]
  }
 ]

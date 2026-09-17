@@ -2770,5 +2770,29 @@
     "a": "Search for string concatenation and interpolation reaching anything that executes SQL - `FromSqlRaw`, `ExecuteSqlRaw`, `SqlCommand` with a built CommandText, and dynamic SQL inside stored procedures, which static analysis of application code will not see at all. Roslyn security analysers and most SAST tools flag the common shapes. Then look specifically at sorting and filtering parameters, since those are the places developers legitimately need dynamic SQL and therefore hand-build it."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Tokens",
+  "difficulty": "Hard",
+  "question": "Explain access tokens versus refresh tokens, and how you would handle token theft.",
+  "answer": "An **access token** is short-lived (minutes) and presented on every API call. A **refresh token** is long-lived, held only by the client, and exchanged with the authorisation server for a new access token.\n\n**Why the split exists:** access tokens are usually validated by signature alone, without a database lookup, which makes them fast but effectively **unrevocable** until they expire. Keeping them short bounds the damage from a stolen one. The refresh token is the revocable part, because redeeming it involves the authorisation server, which can check whether it is still valid.\n\n**Handling theft:**\n\n- **Refresh token rotation.** Each redemption issues a new refresh token and invalidates the old one. If a stolen token is redeemed, the legitimate client s next redemption presents an already-used token - that **reuse detection** is the signal that a theft occurred, and the correct response is to revoke the entire token family and force re-authentication. This is the mechanism worth naming, because it turns an undetectable compromise into a detectable one.\n- **Sender-constrained tokens** - DPoP or mTLS - bind the token to a key the client holds, so a stolen token is useless without the key. This is the stronger control and increasingly the recommendation for public clients.\n- **Short access token lifetimes**, so a stolen one expires quickly.\n- **Store tokens correctly.** For a browser, an `HttpOnly` cookie keeps the token unreadable by injected script; `localStorage` does not, and XSS then yields the token directly.\n\n**And the general point:** a bearer token is exactly what the name says - whoever bears it is treated as the user. Every control above is about limiting how long that matters or binding it to something else.",
+  "tags": [
+   "security",
+   "oauth",
+   "jwt",
+   "refresh-tokens",
+   "authentication"
+  ],
+  "followups": [
+   {
+    "q": "Why can you not simply revoke an access token?",
+    "a": "Because validating it requires no contact with the issuer - the resource server checks the signature and expiry locally, which is what makes it scale. Introducing revocation means either checking a revocation list on every request, which reintroduces the round trip and the availability dependency you were avoiding, or introspecting the token with the issuer, which is the same cost. Short lifetimes are the pragmatic compromise; some systems push a revocation list to resource servers for high-value cases."
+   },
+   {
+    "q": "What should the client do when the access token expires mid-session?",
+    "a": "Refresh transparently - catch the 401, exchange the refresh token, retry the original request once. The details that matter are deduplicating concurrent refreshes, since several in-flight requests will all get 401 simultaneously and must not each trigger a rotation (which with rotation enabled would look exactly like token reuse and revoke the family), and giving up after one retry so a genuine authorisation failure does not become an infinite loop."
+   }
+  ]
  }
 ]

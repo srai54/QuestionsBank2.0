@@ -2836,5 +2836,29 @@
     "a": "Technically yes, and the label is useless - there is no partition to tolerate because there is no network between nodes. The moment you add a replica for durability or failover you are distributed and the trade-off returns. This is why the CAP triangle misleads: it invites you to put systems in boxes rather than asking what each system does when a specific link fails, which is the only question with an operational answer."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "File Handling",
+  "difficulty": "Hard",
+  "question": "Design a system that processes CSV uploads of up to 5 million rows, with progress reporting and partial failure handling.",
+  "answer": "The shape is: accept fast, process asynchronously, report progress, and make failure partial rather than total.\n\n**Upload.** The client uploads straight to blob storage via a SAS URL - the API never handles the bytes. The API records a job row (`Pending`) and returns 202 with a job id and a status URL.\n\n**Processing.** A worker picks up the job, streams the blob rather than loading it - `CsvHelper` over the blob stream, never `ReadAllLines`. Memory stays flat at 5 million rows, which is the whole point.\n\n**Batching.** Rows are validated and accumulated into batches of a few thousand, written with `SqlBulkCopy` or equivalent. Row-by-row inserts at this volume are the single biggest performance mistake - the difference is minutes versus hours.\n\n**Progress.** Update a row count on the job record every batch, not every row - and read it from the status endpoint, or push it over SignalR. Updating per row makes the progress table the bottleneck.\n\n**Partial failure** is the interesting design decision, and I would ask the business rather than assume: does one bad row invalidate the file, or should good rows land and bad rows be reported? For imports, \"process what is valid, report the rest\" is usually right. That means per-row validation, an errors table capturing row number, the offending value and the reason, and a downloadable error report at the end.\n\n**Resumability.** Record the last committed row offset on the job, so a worker crash resumes rather than restarting - at 5 million rows, restarting is expensive and doing the first half twice is worse.\n\n**Idempotency.** The same file uploaded twice should not double the data - dedupe on a business key or a content hash of the file.",
+  "tags": [
+   "system-design",
+   "batch-processing",
+   "csv",
+   "bulk-insert",
+   "resilience"
+  ],
+  "followups": [
+   {
+    "q": "Why is SqlBulkCopy so much faster than individual inserts?",
+    "a": "It uses a bulk-load path that bypasses much of the per-statement overhead - one network round trip per batch instead of per row, minimal logging under the right recovery model and table conditions, and no per-statement plan lookup. The practical difference at millions of rows is one or two orders of magnitude. The trade is that it bypasses change tracking and often triggers, and it takes coarser locks, so it belongs on a staging table which you then merge from rather than pointed at a live table."
+   },
+   {
+    "q": "How do you report progress accurately when the total row count is unknown until you finish reading?",
+    "a": "Either count rows in a fast first pass - cheap if you only count newlines and the file is in blob storage - or report progress against bytes consumed rather than rows, which needs no pre-pass since the blob size is known. Byte progress is slightly uneven with variable row lengths but is honest and costs nothing. What to avoid is estimating a total and then exceeding it, which users read as a broken progress bar."
+   }
+  ]
  }
 ]
