@@ -3921,5 +3921,29 @@
     "a": "Because the alternative destroys the information you need. If naming a cause gets someone punished, people stop volunteering what really happened, and you end up with postmortems that describe the symptom and stop. Systems that let one person cause an outage with one mistake are the finding - the fact that a human made the mistake is the least interesting part, since that was always going to happen eventually."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Infrastructure as Code",
+  "difficulty": "Medium",
+  "question": "Someone changed infrastructure through the Azure Portal and now Terraform wants to destroy it. What went wrong and how do you prevent it?",
+  "answer": "The portal change created **drift**: real infrastructure no longer matches state, so Terraform plans to reconcile reality back to what the code says - which can mean destroying or recreating resources.\n\n**The immediate response:** do not apply. Run `terraform plan` and read it properly to see what would be destroyed, then decide whether the manual change was legitimate. If it was, bring it into code - `terraform import` for a new resource, or updating the configuration to match - and re-plan until it is clean. If it was not, applying is the fix, but only after you understand the blast radius.\n\n**Preventing it is mostly organisational:**\n- **Remove write access from humans in production.** Deployments happen through the pipeline with a service principal; people get read access. This is the control that actually works, because the others rely on discipline.\n- **Detect drift continuously** - a scheduled `plan` that alerts when it is non-empty, so drift is found in hours rather than at the next deployment.\n- **Azure Policy** to deny resource types or changes outside the expected pattern.\n- **Resource locks** on critical resources, which stop accidental deletion even by someone with rights.\n- **`prevent_destroy`** lifecycle blocks on things that must never be recreated - a database, a storage account holding data.\n\n**The cultural half:** if people are making portal changes, it is usually because the pipeline is too slow or too painful to use for a small fix. Fixing that removes the incentive. Telling people to stop while leaving a 40-minute pipeline in place does not.",
+  "tags": [
+   "devops",
+   "terraform",
+   "iac",
+   "drift",
+   "azure"
+  ],
+  "followups": [
+   {
+    "q": "What is the risk of terraform import beyond getting the syntax right?",
+    "a": "That the imported resource s configuration does not exactly match what exists, so the next plan shows changes you did not intend - sometimes destructive ones, because a differing attribute forces replacement. Import brings the resource into state but does not write the configuration for you, so you must iterate on plan until it is clean *before* applying. Doing this against production without a careful read of the plan is how an import turns into an outage."
+   },
+   {
+    "q": "Why is storing state remotely with locking non-negotiable?",
+    "a": "Because two concurrent applies against the same state corrupt it, and a corrupted state file means Terraform no longer knows what exists - recovery is manual and unpleasant. A remote backend with locking serialises applies, and versioning on the backing store gives you a way back from a bad write. Local state also means one person s laptop is the source of truth for production, which fails the moment they are on holiday."
+   }
+  ]
  }
 ]

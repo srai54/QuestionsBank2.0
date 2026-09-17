@@ -12398,5 +12398,53 @@
     "a": "When the mapping is data rather than logic and it is large - fifty constant-to-constant cases compile to a chain or a jump table, but more importantly they put configuration in code. A dictionary can be loaded from configuration, tested as data, and changed without a rebuild. Use the switch when each arm is genuinely different logic, and a lookup when it is a table someone might want to edit."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "A dictionary lookup in a hot path is slow. What could be wrong when the operation is supposed to be O(1)?",
+  "answer": "O(1) is *average* case and depends entirely on the hash function. The usual causes of a slow dictionary are all about hashing or about the key type.\n\n**1. A poor `GetHashCode`.** If many keys hash to the same bucket, lookups degrade towards O(n) with worse constants than a list. The classic version is a custom class that overrides `Equals` but not `GetHashCode`, which inherits reference hashing and breaks lookups entirely, or a hash built from a low-cardinality field.\n\n**2. A mutable key.** Mutate a field involved in the hash after insertion and the entry becomes unreachable - it is sitting in the bucket for its old hash. It is not slow so much as silently wrong, and it usually presents as \"the item is in the dictionary but TryGetValue returns false\".\n\n**3. String keys with the wrong comparer.** `StringComparer.OrdinalIgnoreCase` is much faster than culture-aware comparison. If you did not specify a comparer and are relying on default string hashing, that is usually fine - but culture-sensitive comparison on a hot path is a real cost.\n\n**4. Struct keys without `IEquatable<T>`.** Without it, the default comparer falls back to reflection-based `ValueType.Equals`, which is dramatically slower and allocates through boxing.\n\n**5. Growth and rehashing.** Adding many items without an initial capacity forces repeated resize-and-rehash. Passing the expected count to the constructor removes that.\n\n**6. It is not the dictionary at all.** Measure before assuming - the cost is often in what you do with the value, or in a lock around the dictionary.",
+  "tags": [
+   "csharp",
+   "dictionary",
+   "hashing",
+   "performance",
+   "collections"
+  ],
+  "followups": [
+   {
+    "q": "How would you confirm a hash collision problem rather than guessing?",
+    "a": "Group your keys by `GetHashCode()` and look at the distribution - if a large share of keys land on a handful of hash values, that is conclusive. A quick check is to compute the number of distinct hash codes against the number of distinct keys; anything far below 1:1 is a red flag. The fix is a better hash, and `HashCode.Combine(a, b, c)` is the right way to write one rather than hand-rolling XOR of fields, which correlates badly for common data."
+   },
+   {
+    "q": "When would ConcurrentDictionary be slower than a lock around a Dictionary?",
+    "a": "When writes dominate and contention is low. `ConcurrentDictionary` pays for its lock striping and volatile reads on every operation, and `GetOrAdd` can invoke the value factory more than once for the same key under contention - which is a correctness trap if the factory is expensive or has side effects. For a read-mostly cache it is excellent; for a small, heavily-written structure accessed from one place, a plain dictionary under a lock can win."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Startup",
+  "difficulty": "Medium",
+  "question": "Your API takes 40 seconds to start in Kubernetes and gets killed by the liveness probe. What do you investigate?",
+  "answer": "First I would separate \"genuinely slow startup\" from \"the probe is misconfigured\", because the fix differs.\n\n**The probe side:** Kubernetes has three probes and using the wrong one causes exactly this. A **startup probe** exists to give slow-starting containers time without loosening the liveness check forever - set it with a generous `failureThreshold`, and the liveness probe only begins once it passes. Using a liveness probe with a short `initialDelaySeconds` for an app that takes 40 seconds guarantees a restart loop.\n\n**The startup side - what actually takes the time:**\n- **Blocking work in `Program.cs`.** Running migrations, warming caches, or calling a dependency synchronously before the host starts listening. Migrations in particular should usually be a separate job, not part of application startup - several replicas starting at once will all try to migrate.\n- **A dependency that is slow or down**, with a long timeout, being contacted during startup.\n- **JIT and first-request cost.** .NET starts fast but the first request through a path is slower; ReadyToRun or Native AOT helps, as does a warm-up request before reporting ready.\n- **Assembly scanning** - DI registration by convention over many assemblies, AutoMapper or MediatR scanning, can cost seconds.\n- **Reading a large configuration or a Key Vault** with many secrets, serially.\n\n**The distinction I would make explicit:** liveness means \"restart me\", readiness means \"do not send me traffic yet\". Slow startup is a readiness concern. Conflating them turns a slow start into a crash loop, and a dependency blip into a restart storm.",
+  "tags": [
+   "dotnet",
+   "kubernetes",
+   "startup",
+   "probes",
+   "deployment"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between the three probes in one line each?",
+    "a": "Startup: has the app finished booting - disables the other two until it passes. Readiness: can the app serve traffic right now - failing removes it from the load balancer without restarting it. Liveness: is the app broken beyond recovery - failing restarts the container. The common mistake is a liveness probe that checks a dependency, so a database blip restarts every pod and turns a brief degradation into an outage."
+   },
+   {
+    "q": "How do you run EF migrations safely with several replicas?",
+    "a": "Not from application startup. Run them as a separate step - an init container, a Kubernetes Job, or a pipeline stage - that completes before the new version rolls out. EF Core takes a lock so concurrent migrations do not corrupt the schema, but they do serialise and can time out, and a failed migration mid-rollout leaves replicas on different schema versions. Making it a distinct, ordered step also forces the expand-and-contract discipline that zero-downtime schema changes need."
+   }
+  ]
  }
 ]

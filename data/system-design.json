@@ -2812,5 +2812,29 @@
     "a": "Publish change events transactionally with the write - the outbox pattern - so an update cannot be lost between the database and the indexer. Then run a periodic reconciliation that compares counts and checksums between source and index to detect drift, because over months something always slips. And make full reindexing routine and fast enough to be unremarkable: if rebuilding is frightening, you will avoid it exactly when you need it."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Consistency",
+  "difficulty": "Hard",
+  "question": "Explain CAP and why \"pick two\" is a misleading way to describe it.",
+  "answer": "CAP says that when a **network partition** occurs, a distributed system must choose between consistency and availability. That framing matters, because the popular \"pick two of three\" version implies you can choose to sacrifice partition tolerance - and you cannot. Partitions happen whether or not you planned for them, so P is a fact of life, not an option.\n\n**So the real choice is what the system does during a partition:**\n- **CP** - refuse to serve requests it cannot answer consistently. A node that cannot reach a quorum returns an error rather than possibly-stale data.\n- **AP** - keep serving, accept that different nodes may return different answers, and reconcile afterwards.\n\n**The other reason \"pick two\" misleads:** it describes only the partitioned case, which is rare. PACELC is the more useful extension - **if Partitioned, choose A or C; Else, choose Latency or Consistency.** Most of the time there is no partition, and you are still trading latency against consistency, because synchronous replication across regions costs milliseconds on every write.\n\n**How this shows up in real choices:** a payment ledger should be CP - refusing a transaction is better than double-spending. A product catalogue or a social feed should be AP - serving slightly stale data beats showing an error. The point is that it is a **per-use-case** decision, not a system-wide one, and a single application will typically want both in different places.\n\n**The nuance worth adding:** consistency in CAP means linearisability, which is stronger than what most databases call \"consistent\". Plenty of systems marketed as CP offer something weaker.",
+  "tags": [
+   "system-design",
+   "cap-theorem",
+   "pacelc",
+   "consistency",
+   "distributed"
+  ],
+  "followups": [
+   {
+    "q": "Where does eventual consistency actually hurt users?",
+    "a": "Read-your-own-writes is the one people notice: a user updates their profile, is redirected, and sees the old value because the read went to a replica that has not caught up. It reads as a bug regardless of what the architecture diagram says. The fixes are session consistency - pin that user s reads to the primary or to a replica known to be caught up for a short window - or returning the updated value directly from the write so the UI does not need to re-read."
+   },
+   {
+    "q": "Is a single-node database CA?",
+    "a": "Technically yes, and the label is useless - there is no partition to tolerate because there is no network between nodes. The moment you add a replica for durability or failover you are distributed and the trade-off returns. This is why the CAP triangle misleads: it invites you to put systems in boxes rather than asking what each system does when a specific link fails, which is the only question with an operational answer."
+   }
+  ]
  }
 ]

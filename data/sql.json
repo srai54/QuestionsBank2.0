@@ -4494,5 +4494,29 @@
     "a": "In SQL Server, `CREATE UNIQUE INDEX IX ON Users(Email) WHERE DeletedUtc IS NULL` - uniqueness applies only among live rows, so a deleted user s email can be reused. The catch is that the query must match the filter predicate for the optimiser to use the index, and parameterised queries sometimes fail to match, so the index silently is not used for reads even though it still enforces the constraint. PostgreSQL has the same feature as a partial index."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Joins",
+  "difficulty": "Medium",
+  "question": "Explain when a query returns more rows than expected after adding a join, and how to fix it.",
+  "answer": "Adding a join to a one-to-many relationship **multiplies** rows. Join 100 orders to their lines and you get one row per line, not per order - so any aggregate over the order columns now double-counts.\n\nThis is the single most common source of wrong numbers in reporting, and it is quiet: the query runs, the totals look plausible, and they are inflated.\n\n**The shapes it takes:**\n- `SUM(o.Total)` after joining to lines sums the order total once per line.\n- Two one-to-many joins from the same parent produce a cartesian product between them - 10 lines and 10 payments gives 100 rows per order.\n- `COUNT(*)` counts joined rows rather than parents.\n\n**The fixes, depending on what you need:**\n1. **Aggregate before joining.** Join to a derived table or CTE that has already collapsed the children to one row per parent. This is the general answer and keeps the grain correct.\n2. **`COUNT(DISTINCT o.OrderId)`** as a quick correction for counts - correct but slower, and it does not save `SUM`.\n3. **A correlated subquery or `OUTER APPLY`** per parent, when you need one value from the child set.\n4. **Window functions** to compute the aggregate without collapsing, when you want detail and totals together.\n5. **`EXISTS` instead of a join** when you only need to test for the presence of a child - it cannot multiply rows by construction, and it short-circuits.\n\n**The habit that prevents it:** state the grain of the result before writing the query - \"one row per order\" - and check the row count against that expectation.",
+  "tags": [
+   "sql",
+   "joins",
+   "fan-out",
+   "aggregation",
+   "grain"
+  ],
+  "followups": [
+   {
+    "q": "Why is EXISTS usually better than a join for a filter?",
+    "a": "Because it expresses intent - test for existence - and cannot change the grain of the result. A join used purely as a filter multiplies rows whenever more than one child matches, so people add `DISTINCT` to compensate, which then hides the mistake and forces a sort. `EXISTS` also short-circuits at the first match rather than producing every matching row, so it is typically faster on top of being correct."
+   },
+   {
+    "q": "How do you spot this in an existing query that is already returning wrong numbers?",
+    "a": "Strip the aggregates and run it as a detail query, then count rows and compare with the count of the parent table under the same filter. If the detail count exceeds the parent count, something is fanning out and the aggregates above it are inflated. Adding the parent key to the output and checking for repeated keys makes it obvious immediately."
+   }
+  ]
  }
 ]

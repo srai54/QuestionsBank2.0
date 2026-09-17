@@ -5698,5 +5698,29 @@
     "a": "Usually one of: needing a Kubernetes feature Container Apps abstracts away, such as custom operators, specific CNI configuration or node-level control like GPUs and taints; an existing platform team with Kubernetes tooling already built; or a multi-cloud or on-premises requirement. What should *not* push you there is the feeling that Kubernetes is more serious - the abstraction Container Apps provides is a benefit you are giving up, not a limitation you are escaping."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "How do you give a browser client temporary access to a blob without proxying the file through your API?",
+  "answer": "A **SAS token** - a signed URL granting limited access to a specific resource for a limited time - so the browser talks to Storage directly and your API never touches the bytes.\n\n**Why it matters:** proxying a large file through your application consumes a request thread, bandwidth and memory for the duration of the transfer, and it puts your compute on the critical path of every download. At any volume that is the wrong shape.\n\n**The kinds, and which to prefer:**\n- **User delegation SAS** - signed with an Entra ID credential rather than the account key. **This is the one to use.** There is no account key in your application, it is auditable to an identity, and it can be revoked by revoking the delegation key.\n- **Service SAS** - signed with the storage account key. Works, but the key is a permanent, all-powerful credential that is now in your application and cannot be revoked without rotating it and breaking everything else.\n- **Stored access policy** - a server-side policy the SAS references, which gives you a revocation point without rotating the key.\n\n**The rules I would apply:**\n1. **Shortest viable lifetime** - minutes for a download link, not days. The URL *is* the credential, and it will end up in browser history, logs and referrer headers.\n2. **Narrowest permissions** - read-only for a download, write-only for an upload, scoped to one blob rather than the container.\n3. **Restrict by IP** where the client permits it.\n4. **HTTPS only**, always.\n5. **For uploads**, generate a write-only SAS for a specific blob name you chose, so a client cannot overwrite arbitrary blobs.\n\n**Do not** hand out the account key or a container-level SAS to a browser.",
+  "tags": [
+   "azure",
+   "blob-storage",
+   "sas",
+   "security",
+   "uploads"
+  ],
+  "followups": [
+   {
+    "q": "How do you revoke a SAS before it expires?",
+    "a": "A plain SAS cannot be revoked - that is its main weakness, and it is why lifetimes should be short. The two revocation mechanisms are a stored access policy, where deleting or changing the policy invalidates every SAS referencing it, and a user delegation SAS, which stops working when you revoke the user delegation key. Rotating the account key also invalidates every service SAS signed with it, but that is a blunt instrument that breaks everything else using the key."
+   },
+   {
+    "q": "What do you do about validating an upload if the client writes directly to storage?",
+    "a": "Validate after the fact, triggered by the blob-created event through Event Grid. The function checks size, content type and scans for malware if needed, then either moves the blob to a trusted container or deletes it. The key design point is that the upload target is a quarantine container the rest of the system does not read from - so an unvalidated file is never visible to consumers, and you have not had to trust the client."
+   }
+  ]
  }
 ]
