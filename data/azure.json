@@ -5649,5 +5649,29 @@
     "a": "Because it conflates liveness with dependency availability. If the database has a blip, every instance reports unhealthy, the platform recycles them all, and you turn a brief dependency problem into a full outage with cold starts. Use a shallow liveness check for \"is this process alive\", and a separate readiness check that can consider dependencies, with the orchestrator configured to treat them differently."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Messaging",
+  "difficulty": "Medium",
+  "question": "How do you choose between Storage Queues, Service Bus queues, and Event Grid?",
+  "answer": "They solve different problems, and the choice usually falls out of two questions: do you need ordering and transactions, and is this a command or an event?\n\n**Storage Queues** - simple, cheap, very high capacity, at-least-once delivery. No ordering guarantee, no topics, 7-day maximum TTL, 64KB messages. Right when you need a basic work queue and nothing more.\n\n**Service Bus** - the full-featured broker. Topics and subscriptions for publish/subscribe, FIFO via sessions, duplicate detection, dead lettering, scheduled delivery, and transactions across entities. Right for line-of-business messaging where a lost or duplicated message has real consequences - orders, payments, workflow.\n\n**Event Grid** - a reactive event distribution service, push rather than pull. Extremely high fan-out, near-real-time, with built-in publishers for Azure resource events. Right for \"something happened, whoever cares should react\" - a blob was uploaded, a resource was created. It is not a work queue: there is no ordering, and the consumer must be an endpoint that can be pushed to.\n\n**The framing I would use in an interview:** Service Bus for **commands** that must be processed exactly once in order, Event Grid for **events** broadcast to many uninterested-in-each-other subscribers, Storage Queues when Service Bus is more than the problem needs and the cost difference matters at volume.\n\n**Event Hubs** belongs in the comparison too, for completeness: it is for high-throughput *streams* - telemetry, logs, clickstream - with consumers reading at their own offset, rather than for discrete work items.",
+  "tags": [
+   "azure",
+   "service-bus",
+   "event-grid",
+   "messaging",
+   "architecture"
+  ],
+  "followups": [
+   {
+    "q": "How does Service Bus guarantee FIFO, and what does it cost?",
+    "a": "Through sessions: messages sharing a session id are delivered in order to a single consumer that holds a lock on that session. The cost is parallelism - one consumer per session at a time - so throughput is bounded by the number of distinct sessions, and a slow message blocks everything behind it in that session. The usual design is to pick a session key with high cardinality but meaningful grouping, such as an order id, so ordering holds where it matters without serialising everything."
+   },
+   {
+    "q": "What does duplicate detection actually do?",
+    "a": "Service Bus remembers message ids within a configurable time window and discards repeats, so a producer that retries after an ambiguous failure does not enqueue twice. The limits are that the window is finite - a retry after it expires gets through - and it only protects the enqueue side. The consumer can still process a message more than once after a lock expiry or a crash, so idempotent handling is still required."
+   }
+  ]
  }
 ]

@@ -12234,5 +12234,29 @@
     "a": "Each consumer declares the interactions it depends on - this request produces a response containing these fields with these types - and publishes that as a contract. The provider s CI verifies it can satisfy every published contract before deploying. The value is that the provider finds out at build time which consumers a change would break, and can see whether anyone actually uses the field being removed. Pact is the common implementation."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "EF Core",
+  "difficulty": "Hard",
+  "question": "A list endpoint issues 200 database queries for 100 rows. Explain the cause and every way to fix it.",
+  "answer": "That is an N+1: one query for the list, then one per row for each lazy-loaded navigation property - two navigations per row gives 200.\n\n**The cause is lazy loading being triggered inside a loop or a projection.** Often nobody wrote a loop deliberately: serialising the entities to JSON walks every navigation property, and each access issues a query.\n\n**The fixes:**\n\n1. **Project to a DTO with `Select`.** This is the best answer for a read endpoint. EF generates one query returning exactly the columns needed, there is no change tracking, and lazy loading never engages because you never materialise the entity. It also stops the endpoint accidentally exposing the whole entity graph.\n2. **`Include` the navigations** you need. One query with joins. Watch for **cartesian explosion** - two collection `Include`s on the same parent multiply rows, so 100 parents with 10 children and 10 tags returns 10,000 rows. `AsSplitQuery()` issues one query per collection instead, trading round trips for row count.\n3. **Turn lazy loading off entirely.** It is opt-in in EF Core, and I would generally leave it off - it makes database access invisible at the call site, which is exactly how this bug happens.\n4. **`AsNoTracking()`** on read paths. It does not fix the N+1 but removes change-tracking overhead and the identity-resolution cost on large result sets.\n5. **Filtered includes** where you only need some children.\n\n**How I would catch it in future rather than in production:** log generated SQL in development, and assert on query counts in integration tests for the endpoints that matter. A test that fails when an endpoint goes from 2 queries to 200 is cheap and catches regressions that code review will not.",
+  "tags": [
+   "ef-core",
+   "n-plus-one",
+   "performance",
+   "orm",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "When is AsSplitQuery the wrong choice?",
+    "a": "When the parent set is small and the joins are cheap - you have swapped one round trip for several for no benefit. It also loses transactional consistency between the queries unless you wrap them in an explicit transaction: rows can change between the parent query and the child query, producing a graph that never existed. Single query remains the default; split query is the fix for a measured cartesian explosion."
+   },
+   {
+    "q": "How do you spot cartesian explosion in a plan or in logs?",
+    "a": "Compare the row count EF returns with what you expect. If a page of 20 parents produces thousands of rows, two collection includes are multiplying. In the logs the give-away is a single query joining several one-to-many relationships, and a materialisation time far longer than the database execution time - the database returned quickly and EF spent the time de-duplicating rows in memory."
+   }
+  ]
  }
 ]

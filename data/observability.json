@@ -1575,5 +1575,29 @@
     "a": "Metrics are cheap and bounded - a fixed number of time series, aggregated at write time - but you cannot ask a question you did not think of in advance, and high-cardinality labels like user id will destroy your metrics backend. Logs are expensive and unbounded but arbitrary to query. Traces sit in between and are the only one that shows causality across services. Cardinality is the thing to watch: it is the usual cause of a surprise observability bill."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Alerting",
+  "difficulty": "Medium",
+  "question": "Your team gets 200 alerts a week and ignores most of them. How do you fix alerting?",
+  "answer": "Two hundred alerts a week means the alerting is broken, and the risk is not the noise itself - it is that a real incident arrives in a channel nobody reads.\n\n**The rule I would apply: every alert must be actionable, urgent and about user impact.** If a human cannot do something specific about it right now, it is not an alert. It might be a dashboard, a ticket, or nothing.\n\n**How I would fix it:**\n\n1. **Audit what actually fired** over the last month and classify each: did anyone act on it, and did it correspond to user impact? Most teams find a handful of rules generating the majority of alerts, and that almost none led to action.\n2. **Delete or downgrade the non-actionable ones.** CPU at 80% is not an incident; it is a capacity observation. Alert on the symptom users feel, not the resource.\n3. **Alert on symptoms, not causes.** \"Checkout error rate above 2% for 5 minutes\" is worth waking someone. \"A pod restarted\" is not - the system is supposed to survive that.\n4. **Use burn-rate alerts against an SLO** rather than static thresholds. A fast burn of the error budget pages; a slow burn creates a ticket. This naturally distinguishes urgent from merely wrong.\n5. **Require a runbook link on every paging alert.** If nobody can write what to do about it, that is evidence it should not page.\n6. **Add duration and deduplication** so a transient blip does not fire, and one incident produces one alert rather than forty from every affected component.\n\n**The measure of success** is not fewer alerts as such - it is that every page is acted on. I would track alert precision and review it, the same way you would review a flaky test suite.",
+  "tags": [
+   "observability",
+   "alerting",
+   "slo",
+   "error-budget",
+   "on-call"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between an SLI, an SLO and an error budget?",
+    "a": "The SLI is the measurement - the proportion of requests served successfully under 300ms. The SLO is the target for it - 99.9% over 30 days. The error budget is what the target permits you to fail: 0.1%, which over 30 days is about 43 minutes. It turns reliability into a quantity you can spend, which is what makes the trade-off against shipping features an explicit conversation rather than an argument about whether the system is \"stable enough\"."
+   },
+   {
+    "q": "How do burn-rate alerts avoid both noise and slow detection?",
+    "a": "By alerting on multiple windows at once. A fast burn - consuming a large share of the monthly budget within an hour - pages immediately, because at that rate you breach the SLO within the day. A slow burn over days raises a ticket instead. A short window alone is noisy and a long window alone detects catastrophes far too late, so the standard approach combines a short and a long window and requires both to be burning before firing."
+   }
+  ]
  }
 ]

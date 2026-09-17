@@ -2764,5 +2764,29 @@
     "a": "Usually the shaped read model closest to what the endpoint returns, because it avoids repeating serialisation and mapping on every hit. Caching raw domain objects means paying the transformation cost each time; caching the fully rendered HTTP response is the fastest but the least reusable, since any variation in headers, personalisation or format needs a separate entry. The decision follows cardinality - cache at the level where the number of distinct keys stays manageable."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Rate Limiting",
+  "difficulty": "Hard",
+  "question": "Design rate limiting for a public API. Which algorithm, and where does it run?",
+  "answer": "**Algorithm first.** The four common ones, and why I would pick one:\n\n- **Fixed window** - count per calendar minute. Trivial, but allows a double burst at the boundary: a client can send the full quota at 11:59:59 and again at 12:00:00.\n- **Sliding window log** - store every request timestamp. Exact, but memory grows with traffic, which is the wrong shape for a public API.\n- **Sliding window counter** - interpolate between the previous and current window. Close to exact, bounded memory. A good default.\n- **Token bucket** - tokens refill at a steady rate up to a cap. Allows deliberate bursts while bounding the sustained rate, which matches how clients actually behave. **This is usually what I would choose**, because \"100 per minute, but a burst of 20 is fine\" is the real requirement.\n\n**Where it runs.** Ideally at the edge - API gateway, Azure API Management, or a CDN - so rejected traffic never reaches your compute and the cost of an abusive client is near zero. In-process limiting still protects the application but you have already paid for TLS, routing and deserialisation by then.\n\n**The distributed problem:** with several instances, a per-instance counter multiplies the effective limit by the instance count. The shared counter usually lives in Redis, incremented atomically with a Lua script so check-and-increment is not racy. The trade-off to state: a shared counter puts Redis on the path of every request, so you need a decision for what happens when Redis is unavailable - fail open and risk abuse, or fail closed and turn a cache outage into an API outage. I would fail open for rate limiting, with an alert.\n\n**What the response must contain:** 429, a `Retry-After` header, and `RateLimit-Limit`/`RateLimit-Remaining`/`RateLimit-Reset` so well-behaved clients can self-regulate rather than hammering and guessing.",
+  "tags": [
+   "system-design",
+   "rate-limiting",
+   "token-bucket",
+   "redis",
+   "api-design"
+  ],
+  "followups": [
+   {
+    "q": "What do you key the limit on?",
+    "a": "Not the IP alone - it punishes users behind shared NAT and does nothing against a distributed client. For authenticated traffic key on the API key, user or tenant, which is what you actually want to limit and bill. Keep an IP-based limit as a coarse backstop for unauthenticated endpoints, particularly login and registration, where the risk is credential stuffing rather than cost. Tiered limits per plan then fall out naturally."
+   },
+   {
+    "q": "How do you rate limit fairly when one tenant has far more legitimate traffic?",
+    "a": "Per-tenant quotas sized to their plan rather than one global limit, plus a concurrency cap so a single tenant cannot monopolise workers even within their request quota. For shared backend resources, a fair-queuing or weighted approach keeps a heavy tenant from starving others. The failure mode to avoid is a global limit that a large customer exhausts, making the API unavailable for everyone else - that is a noisy-neighbour outage caused by the protection mechanism."
+   }
+  ]
  }
 ]

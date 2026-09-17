@@ -2373,5 +2373,29 @@
     "a": "Yes, narrowly: testing logic that happens to sit behind a DbContext but does not depend on database behaviour - a service method whose branching you want to exercise with minimal setup. It is a test double, not a database. The moment the assertion depends on a constraint, a generated SQL translation, a concurrency token or a transaction, it is the wrong tool and will give a false pass."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "What makes a test valuable, and what would make you delete one?",
+  "answer": "A test is valuable when it would fail for a reason I care about and pass otherwise. That sounds trivial but it rules out most of the tests I would delete.\n\n**Valuable tests:**\n- Assert on **behaviour visible to a caller**, not on internal structure - so refactoring does not break them.\n- Fail for **one reason**, so the failure message localises the problem.\n- Are **deterministic** - no clock, no network, no ordering dependence, no randomness without a fixed seed.\n- Cover the thing that would actually hurt - a money calculation, an authorisation check, a boundary condition.\n- Are readable as a specification. Someone should learn what the code is supposed to do by reading them.\n\n**Tests I would delete:**\n- **Tests of framework behaviour** - asserting that a property setter sets a property, or that EF saves what you told it to.\n- **Tests that mirror the implementation.** If the test asserts \"calls repository.Save once\" and nothing about the outcome, it fails on every refactor and passes on every behaviour change. That is a negative-value test: it costs maintenance and provides no safety.\n- **Tests with no meaningful assertion** - executing code and asserting no exception, when nothing would throw anyway.\n- **Permanently skipped tests.** They are documentation of something that was once broken, not a test. Delete them or fix them.\n- **Duplicates** - five tests covering the same branch through slightly different setup.\n\n**The check I apply:** if I intentionally introduce a bug, does a test fail? If I refactor without changing behaviour, do tests break? The first should be yes, the second no. A suite that gets those backwards is slowing the team down while feeling like diligence.",
+  "tags": [
+   "testing",
+   "test-design",
+   "mocking",
+   "maintainability",
+   "code-review"
+  ],
+  "followups": [
+   {
+    "q": "Is it ever right to delete a test that is currently passing and green?",
+    "a": "Yes - if it cannot fail for a real reason, it is costing build time and maintenance for nothing. The nervousness people feel about deleting tests comes from treating test count as the asset, when the asset is confidence. A suite of 400 meaningful tests gives more confidence than 4,000 where most assert nothing. Delete deliberately and in a reviewed commit, not quietly."
+   },
+   {
+    "q": "How do you test behaviour without coupling to implementation?",
+    "a": "Assert on outputs and observable side effects rather than on interactions. Instead of verifying that a mock repository received `Save`, use a real or in-memory implementation and assert the item can be read back. Mock only at boundaries you do not own and cannot run - a payment gateway, an email sender - and even then assert on the message sent rather than on the call sequence."
+   }
+  ]
  }
 ]

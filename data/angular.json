@@ -3279,5 +3279,29 @@
     "a": "Anything relying on mutation being noticed. Pushing onto an array in place, or setting a property on an input object, no longer triggers a re-render because the reference is unchanged - you must replace the array or object instead. Code that mutates and then expects the view to catch up silently stops updating, which is why the switch should be accompanied by immutable update patterns rather than made in isolation."
    }
   ]
+ },
+ {
+  "category": "Angular",
+  "subcategory": "RxJS",
+  "difficulty": "Hard",
+  "question": "Explain the difference between switchMap, mergeMap, concatMap and exhaustMap with a case where each is correct.",
+  "answer": "They all flatten an inner observable; they differ in what happens when a new outer value arrives while an inner one is still running. Choosing wrongly produces bugs that only appear under real timing.\n\n- **`switchMap`** - cancel the previous inner and switch to the new one. Correct for a **typeahead search**: when the user types another character, the in-flight request for the old term is irrelevant and should be cancelled. Using anything else here gives you the stale-response-overwrites-fresh bug.\n- **`mergeMap`** - run all inners concurrently, results in completion order. Correct when the operations are **independent and order does not matter** - firing off several analytics events, or loading details for a set of ids in parallel. Dangerous with unbounded input, because it will open as many concurrent requests as there are values; it takes a concurrency argument for that reason.\n- **`concatMap`** - queue inners and run them strictly in sequence. Correct when **order matters and none may be dropped** - sending a sequence of edits to a document, where applying them out of order corrupts the result.\n- **`exhaustMap`** - ignore new outer values while an inner is running. Correct for a **save or login button**: the user double-clicks, and you want the second click discarded rather than sending a duplicate request or cancelling the first.\n\n**The interview-level summary:** cancel the old (`switch`), run all (`merge`), queue them (`concat`), ignore the new (`exhaust`). The common mistake is `mergeMap` everywhere, which works fine until timing varies and then produces out-of-order results and duplicate submissions.\n\n**The related leak to mention:** any subscription that is not unsubscribed leaks. Prefer the `async` pipe, which handles it, or `takeUntilDestroyed()` in modern Angular.",
+  "tags": [
+   "angular",
+   "rxjs",
+   "operators",
+   "switchmap",
+   "observables"
+  ],
+  "followups": [
+   {
+    "q": "What happens to an HTTP request that switchMap cancels?",
+    "a": "Angular s `HttpClient` returns a cold observable tied to the underlying request, so unsubscribing actually aborts it - the browser cancels the XHR or fetch. That is genuinely useful: it frees a connection and the server may abandon the work. The caveat is that the server may already have processed it, so `switchMap` must not be used for non-idempotent writes where cancellation could leave partial state."
+   },
+   {
+    "q": "Why is a plain subscribe inside a subscribe a problem?",
+    "a": "It is the nested-callback version of the same thing, with none of the cancellation or ordering guarantees - the inner subscription is not managed by the outer one, so it leaks, and nothing coordinates overlapping inners. It also loses error propagation, since an error in the inner stream does not reach the outer subscriber s error handler. Flattening with the right operator gives lifetime management, cancellation and error handling for free."
+   }
+  ]
  }
 ]
