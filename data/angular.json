@@ -3351,5 +3351,29 @@
     "a": "When first contentful paint matters commercially - a public-facing site where users bounce, or where search indexing matters. Then SSR with hydration is worth the added deployment complexity and the constraints it imposes, such as code that cannot touch `window` during server rendering. For an internal application behind a login, where users load it once at the start of the day and keep it open, the payoff is much smaller and usually not worth the operational cost."
    }
   ]
+ },
+ {
+  "category": "Angular",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "How do you manage state in a large Angular application - services, NgRx, or signals?",
+  "answer": "By matching the tool to how much the state is actually shared and how complex the transitions are.\n\n**A service with signals** (or a `BehaviorSubject` in older code) covers most cases. A singleton service holding a signal, injected where needed, gives shared state with almost no ceremony - and signals make the dependency graph explicit, so consumers update precisely rather than through change detection sweeping the tree. For most feature state this is sufficient and I would start here.\n\n**NgRx** earns its place when the state is genuinely complex and shared: many components reading and writing the same data, transitions you need to trace, time-travel debugging, or a team large enough that an enforced pattern is worth the boilerplate. What you get is predictability - one way to change state, a single place to look. What you pay is a lot of ceremony for simple cases, which is why NgRx on a small application is usually a net loss. NgRx SignalStore reduces that considerably and is worth knowing as the middle ground.\n\n**Component state** for anything local - which is more than people assume. State lifted into a store \"in case\" something else needs it is coupling bought speculatively.\n\n**And the same rule as elsewhere: server data is not application state.** It is a cache with staleness, refetching and invalidation concerns. Putting it in NgRx means reimplementing those badly - an effect that fetches, a reducer that stores, and no answer for \"is this stale\". A query library, or NgRx s own entity and data patterns, handles that properly.\n\n**My default for a new application:** signals in services, with NgRx introduced only where the complexity demonstrably justifies it.",
+  "tags": [
+   "angular",
+   "state-management",
+   "ngrx",
+   "signals",
+   "architecture"
+  ],
+  "followups": [
+   {
+    "q": "What do signals actually change about Angular change detection?",
+    "a": "They make dependencies explicit. With zone-based change detection Angular knows *something* happened and checks every binding in the tree; with signals it knows exactly which computed values and which templates depend on the changed signal, so it updates only those. That is what makes zoneless change detection possible, and it removes a large class of performance work - no more chasing why a component re-renders, because the dependency is declared rather than inferred."
+   },
+   {
+    "q": "When is the boilerplate of NgRx actually worth it?",
+    "a": "When you need to answer \"why is the state like this\" after the fact - a complex workflow with many contributing actions, where a bug report means reconstructing a sequence of events. The action log and devtools make that tractable in a way ad-hoc service state does not. It also helps when many teams touch the same state and you want one enforced way to change it. For a feature owned by one team with a handful of transitions, a service with signals gives the same outcome with a fraction of the code."
+   }
+  ]
  }
 ]

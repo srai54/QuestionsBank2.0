@@ -1329,5 +1329,29 @@
     "a": "By measuring rather than by the calendar. Log the version and the caller on every request, so you can see exactly who is still on v1 and how much traffic they send. Then contact the remaining consumers directly, and consider brownouts - deliberately returning errors for short scheduled windows - which reliably finds the integrations nobody remembered they had. Switching off on the announced date without checking traffic is how you take down a customer who never read the email."
    }
   ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Errors",
+  "difficulty": "Medium",
+  "question": "How should an API report errors, and what do clients actually need?",
+  "answer": "Consistently, in a machine-readable shape, with enough information to act and nothing that helps an attacker.\n\n**What clients need:**\n1. **The right status code.** 400 for a malformed request, 401 for missing or invalid credentials, 403 for authenticated-but-not-allowed, 404 for not found, 409 for a conflict, 422 for semantically invalid, 429 for rate limited, 5xx for our fault. The distinction clients care about most is \"should I retry\" - and that is carried by the class, so returning 200 with an error body destroys it.\n2. **A stable machine-readable code**, not just a message. Clients should branch on `\"insufficient_funds\"`, not on English prose that will be reworded.\n3. **Field-level detail for validation**, so a form can highlight the right input rather than showing one generic banner.\n4. **A correlation id**, so a user can quote it and support can find the request.\n5. **`Retry-After`** on 429 and 503, so well-behaved clients back off correctly instead of guessing.\n\n**The standard shape to use is `application/problem+json`** (RFC 9457) - `type`, `title`, `status`, `detail`, `instance`, plus your own extensions. ASP.NET Core produces it natively, so it costs nothing to adopt and clients get a predictable envelope.\n\n**What must not be in there:** stack traces, SQL, internal paths, dependency names or versions. Those are reconnaissance. The correlation id is how you connect a user-facing message to the internal detail that stays in your logs.\n\n**And be consistent across every endpoint.** A client that must handle three error shapes will handle one of them badly.",
+  "tags": [
+   "rest-apis",
+   "error-handling",
+   "problem-details",
+   "status-codes",
+   "api-design"
+  ],
+  "followups": [
+   {
+    "q": "Should a failed lookup be 404 or an empty 200?",
+    "a": "It depends on whether you are addressing a resource or querying a collection. `GET /orders/123` for an order that does not exist is a 404 - the resource identified by that URI is absent. `GET /orders?status=shipped` matching nothing is a 200 with an empty array - the collection exists and happens to be empty, and forcing clients to treat \"no results\" as an error is awkward. The mistake in the other direction is returning 404 for an empty search, which makes every client special-case it."
+   },
+   {
+    "q": "How do you handle errors that are partially successful, such as a batch operation?",
+    "a": "207 Multi-Status, or a 200 with a per-item result array, because a single status code cannot describe a batch where three of five items succeeded. The important part is that the response says explicitly which items succeeded and which failed with per-item error codes, so the client can retry only the failures. Returning a blanket failure when most items succeeded forces the client either to retry everything - duplicating work - or to reconcile, which it has no information to do."
+   }
+  ]
  }
 ]

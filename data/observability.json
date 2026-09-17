@@ -1743,5 +1743,29 @@
     "a": "Measure it and make it explicit rather than absorbing it silently. Your achievable availability is bounded by your dependencies - if a required downstream offers 99.9%, you cannot promise better without redundancy or graceful degradation. So either set your SLO accordingly and document why, or invest in caching, fallbacks and circuit breaking so the dependency s failures do not become yours. That comparison is also the strongest argument for the investment, because it turns a vague reliability request into a number."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Profiling",
+  "difficulty": "Hard",
+  "question": "A service uses 80% CPU at moderate load. How do you find out why?",
+  "answer": "With a profile, not by reading code - CPU problems are routinely in places nobody suspects, and the usual first guess is wrong.\n\n**How I would approach it:**\n\n1. **Confirm it is your process** and not a sidecar, an agent or the host being oversubscribed. In a container, also check whether you are being CPU-throttled, which looks like high usage pinned exactly at the limit.\n2. **Take a CPU sample in production** - `dotnet-trace` or `dotnet-counters` first for a cheap overview. Sampling profilers have low enough overhead to run against a live service, which matters because the problem often does not reproduce elsewhere.\n3. **Read the flame graph for the widest frames**, which is where the time actually is. The common findings: serialisation, regular expressions (especially without `RegexOptions.Compiled` or a source-generated regex, or a pattern with catastrophic backtracking), logging at a verbose level, LINQ in a hot loop, or reflection.\n4. **Check GC.** If a large share of time is in garbage collection, the problem is allocation rather than computation - and the fix is reducing allocations, not optimising the algorithm. `dotnet-counters` shows gen 0/1/2 rates and time in GC directly.\n5. **Check for a busy-wait.** A polling loop with no delay, or a spin lock under contention, burns CPU doing nothing.\n6. **Compare against a baseline.** 80% may be entirely normal for the work being done - the question is whether it changed, and what changed with it.\n\n**What I would avoid:** optimising from intuition before profiling. The time is almost never where people expect, and the first fix chosen without evidence usually addresses something that was 2% of the total.",
+  "tags": [
+   "observability",
+   "profiling",
+   "cpu",
+   "gc",
+   "dotnet-trace"
+  ],
+  "followups": [
+   {
+    "q": "How do you profile in production without making things worse?",
+    "a": "Use a sampling profiler rather than instrumentation - it interrupts periodically to record stacks, so overhead is a few percent rather than the large multiplier tracing every call incurs. `dotnet-trace` attaches to a running process without restarting it, and `dotnet-counters` is cheaper still for a first look. Profile one instance rather than the fleet, take it out of the load balancer if the overhead is material, and keep the window short. The alternative - reproducing in a lower environment - usually fails because the data volume and traffic shape are what cause it."
+   },
+   {
+    "q": "What does high time in GC tell you, and what do you do about it?",
+    "a": "That you are allocating heavily enough that collection is a significant share of the work - so the fix is to allocate less rather than to tune the collector. Look for per-request allocations in hot paths: string concatenation, LINQ creating intermediate collections, boxing of value types, large buffers that could come from `ArrayPool<T>`, and closures capturing more than they need. Switching to Server GC helps throughput on multi-core machines and is worth checking, but it treats the symptom; the allocation is the cause."
+   }
+  ]
  }
 ]

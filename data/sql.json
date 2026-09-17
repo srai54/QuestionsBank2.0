@@ -4830,5 +4830,29 @@
     "a": "Often it does - predicate pushdown is a standard optimisation and modern engines handle the simple cases. But it cannot always prove the transformation is safe, particularly with complex expressions, functions on the column, or when the query involves outer joins or window functions. So relying on it is a gamble that varies by engine and by query shape. Writing it correctly costs nothing and removes the dependency on the optimiser being clever."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Functions",
+  "difficulty": "Medium",
+  "question": "Why can a scalar user-defined function make a query catastrophically slow?",
+  "answer": "Because historically a scalar UDF is executed **once per row**, as a separate invocation the optimiser cannot see inside. Three consequences follow, and together they can turn a query from milliseconds to minutes.\n\n1. **Row-by-row execution.** A set-based query becomes a loop. A UDF on a million-row scan runs a million times, each with its own overhead.\n2. **The optimiser cannot costthe function.** It has no idea what the UDF does, so its cardinality and cost estimates are wrong, which produces a bad plan for the whole query - not just the function.\n3. **It forces a serial plan.** Historically, a scalar UDF prevented parallelism for the entire query, so a large query that would have used eight cores uses one. This is often the largest single effect.\n4. **It hides data access.** A UDF that queries a table performs that query per row - an N+1 inside the database, invisible in the calling query s text.\n\n**What changed:** SQL Server 2019 introduced **scalar UDF inlining**, which rewrites qualifying functions into the query so the optimiser can see and cost them. It genuinely fixes many cases - but only for functions meeting the eligibility rules, and it can be disabled or fail to apply silently. So the old advice still holds for anything not inlined.\n\n**What I would do instead:** an inline table-valued function, which the optimiser expands like a view and which is set-based - this is the standard replacement. Or a computed column, persisted and indexed, if the value is derived from the same row. Or simply the expression in the query.\n\n**The tell in a plan:** a query whose actual execution time far exceeds its estimated cost, running serially for no apparent reason.",
+  "tags": [
+   "sql",
+   "udf",
+   "performance",
+   "inlining",
+   "execution-plan"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between an inline TVF and a multi-statement TVF?",
+    "a": "An inline TVF is a single `SELECT` that the optimiser expands into the calling query, so it is costed and optimised as one statement - effectively a parameterised view, and it performs well. A multi-statement TVF builds a table variable with procedural code, so it is a black box: the optimiser historically assumed one row (later 100), which produces badly wrong plans when it returns thousands. If you see a multi-statement TVF in a hot query, rewriting it as inline is usually the highest-value change available."
+   },
+   {
+    "q": "How would you confirm a UDF is the problem rather than guessing?",
+    "a": "Run the query with and without the function - replace it with a constant or the inlined expression - and compare duration and plan shape. In the plan, check whether it went from parallel to serial, and compare estimated against actual rows. On SQL Server 2019 and later you can also toggle inlining for the function with `INLINE = OFF` or the database-scoped configuration to see the difference directly, which makes it a controlled experiment rather than an inference."
+   }
+  ]
  }
 ]

@@ -12830,5 +12830,29 @@
     "a": "They let an interface provide behaviour without forcing a base class, so you can share implementation across types that already inherit from something else - which removes one historical reason to reach for a base class. They are best suited to evolving a published interface without breaking implementers. They do not replace composition: the default body cannot access state, it is only callable through the interface reference rather than the concrete type, and diamond resolution rules get confusing quickly."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Threading",
+  "difficulty": "Hard",
+  "question": "Explain what a deadlock is in .NET and the classic ways one occurs.",
+  "answer": "A deadlock is two or more threads each holding a resource the other needs, so none can proceed. Nothing throws by default - the threads simply stop, which is why it presents as a hung request rather than an error.\n\n**The classic causes:**\n\n1. **Inconsistent lock ordering.** Thread A locks X then Y; thread B locks Y then X. The fix is a documented global ordering for acquiring multiple locks, and it removes the entire class.\n2. **Sync-over-async with a synchronization context.** The historical .NET Framework and WPF deadlock: a UI thread calls `.Result` on a task, the task s continuation needs the UI thread to resume, and the UI thread is blocked waiting for it. `ConfigureAwait(false)` in the library avoided it by not capturing the context. **ASP.NET Core has no synchronization context**, so this specific deadlock does not occur there - but blocking still causes thread-pool starvation, which looks similar and is a different problem.\n3. **Holding a lock across an await.** `lock` cannot span an await, but a `SemaphoreSlim` can - and then the continuation may run on a different thread while the semaphore is held, or re-enter and block on itself.\n4. **Re-entrancy.** A callback that acquires a lock already held by the caller, with a non-reentrant primitive.\n5. **Database and application locks interleaved** - holding an application lock while waiting on a database lock that another thread holds while waiting on the application lock.\n\n**How I would diagnose it:** a dump with thread stacks. Several threads parked in `Monitor.Wait` or on a semaphore, with a cycle in what they are waiting for, is conclusive - and far faster than reasoning about it from the code.\n\n**Prevention:** minimise lock scope, never call unknown code while holding a lock, and prefer concurrent collections or immutable data over locking at all.",
+  "tags": [
+   "csharp",
+   "deadlock",
+   "threading",
+   "locks",
+   "diagnostics"
+  ],
+  "followups": [
+   {
+    "q": "Why does calling out to unknown code while holding a lock cause problems?",
+    "a": "Because you have no idea what it does - it may acquire another lock, raise an event with arbitrary subscribers, or call back into your own code and try to take the lock you already hold. That turns your local locking discipline into a global one you cannot enforce. It is the reason guidance says to compute inside the lock and call outside it: gather what you need, release, then invoke the callback. Events raised under a lock are a particularly common version of this."
+   },
+   {
+    "q": "What are lock timeouts good for if they do not prevent deadlock?",
+    "a": "They convert an indefinite hang into a detectable failure. `Monitor.TryEnter` with a timeout, or a `SemaphoreSlim` wait with one, means a deadlocked path throws or returns false rather than parking a thread forever - so you get an exception with a stack trace instead of a mysteriously unresponsive service, and the request fails fast rather than consuming a thread. It is a diagnosability and containment measure, not a correctness fix; the ordering discipline is what actually prevents the deadlock."
+   }
+  ]
  }
 ]

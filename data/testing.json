@@ -2613,5 +2613,29 @@
     "a": "Assert an upper bound rather than an exact number - \"this endpoint issues no more than 3 queries\" - so ordinary refactoring does not break it but an N+1 does. Capture the count with an EF Core interceptor or a diagnostic listener around the operation. The bound should be justified in the test name or a comment, so the next person knows whether raising it is legitimate or is papering over a regression."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Strategy",
+  "difficulty": "Medium",
+  "question": "How do you decide what to test when you have limited time?",
+  "answer": "By risk, which means likelihood of breaking multiplied by cost of breaking - not by what is easiest to test, which is the default when nobody decides.\n\n**What I would cover first:**\n\n1. **Money and data loss.** Anything that charges, refunds, calculates a total, or deletes. A bug here is not a bug report, it is an incident with financial consequences.\n2. **Authorisation.** A missing permission check is a data breach. These are cheap to test and catastrophic to get wrong, which is the best ratio available.\n3. **Complex logic with many branches.** Pricing rules, eligibility, state machines. High branch count means high probability of an uncovered case, and these are exactly where unit tests are cheap and effective.\n4. **Code that changes often.** Frequently-modified code has more opportunities to break, so tests there pay repeatedly. Stable code that has not changed in two years gains less.\n5. **Integration points** - anything crossing a boundary you do not control, where the failure modes are least predictable.\n6. **Bugs that have already happened.** Write the test that would have caught it, before fixing. This is the highest-value test you will write that day, because you have evidence the case is real.\n\n**What I would consciously not test under time pressure:** simple mapping and DTOs, framework behaviour, trivial presentational components, and getters. They inflate coverage and catch almost nothing.\n\n**And I would be explicit about the decision** rather than silently skipping - \"we have not tested the reporting export, here is the risk\" is a decision the team owns. Silence looks like coverage.",
+  "tags": [
+   "testing",
+   "strategy",
+   "risk-based-testing",
+   "prioritisation",
+   "pragmatism"
+  ],
+  "followups": [
+   {
+    "q": "How do you argue for testing time when a deadline is pressing?",
+    "a": "In terms of the cost of the specific failure, not in terms of principle. \"If the discount calculation is wrong we undercharge every order until someone notices, and we cannot reconcile it afterwards\" is a business argument a stakeholder can weigh. \"We should have tests\" is not. Offering the narrow version helps too - a handful of tests around the risky calculation rather than a full suite - because the realistic alternative to comprehensive testing is usually no testing rather than more time."
+   },
+   {
+    "q": "Where does exploratory testing fit when automation time is short?",
+    "a": "It is often the better use of a limited hour, because a person exercising the feature with intent finds the problems nobody anticipated - which is precisely what automated tests cannot do, since they only check what someone already thought of. The trade is that it is not repeatable, so it does not protect against regression. The pragmatic split is exploratory testing to find the problems now, then automating the specific cases it uncovered so they stay fixed."
+   }
+  ]
  }
 ]

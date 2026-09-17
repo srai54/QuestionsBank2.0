@@ -5794,5 +5794,29 @@
     "a": "Restore to an isolated environment on a schedule and verify the data is usable - not just that the restore command succeeded, which is what most teams check. Time it, so the RTO number is measured rather than assumed. Then run failover exercises in a controlled window, ideally as a game day where the team follows the runbook without the person who wrote it, which is how you find the undocumented step. Teams that never test discover during an incident that the backup was of the wrong database or that nobody has the credentials."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Scaling",
+  "difficulty": "Medium",
+  "question": "How would you configure autoscaling for an API, and what usually goes wrong?",
+  "answer": "Autoscaling is a control loop, and most problems come from tuning it as if it were instantaneous.\n\n**What I would configure:**\n- **Scale out on a metric that reflects load**, not just CPU. Requests per instance, queue depth, or response time are usually better signals - a thread-pool-bound service can be saturated at 30% CPU, so CPU-based scaling never fires.\n- **Different thresholds for out and in** - scale out at 70%, in at 40%. Using the same threshold both ways guarantees oscillation.\n- **Scale out fast, scale in slowly.** Adding capacity is cheap and reversible; removing it during a dip and immediately needing it again is not. Asymmetric cooldowns are the single most useful setting here.\n- **A minimum instance count above one**, so a single instance failing does not take the service down and so there is capacity while a new instance starts.\n- **A maximum**, to bound cost and to protect downstream dependencies.\n\n**What usually goes wrong:**\n1. **Flapping** - instances added and removed continuously because thresholds are too close or cooldowns too short. It costs money and destabilises caches.\n2. **Scaling too late.** The metric is averaged over minutes and a new instance takes minutes to start, so by the time capacity arrives the spike is over and users already saw errors. Predictive or schedule-based scaling handles known patterns far better than reactive scaling.\n3. **Scaling into a bottleneck.** More instances against a database with a fixed connection limit makes things worse - you exhaust the pool faster. The dependency must scale too, or you need connection limits per instance.\n4. **Cold start cost** - new instances are slow until JIT and caches warm, so a burst of new instances briefly degrades latency.",
+  "tags": [
+   "azure",
+   "autoscaling",
+   "scaling",
+   "metrics",
+   "capacity"
+  ],
+  "followups": [
+   {
+    "q": "Why is queue depth often a better scaling metric than CPU?",
+    "a": "Because it measures the backlog of work directly rather than a proxy for it, and it is meaningful for workloads that are not CPU-bound - an I/O-heavy consumer can have a huge backlog at low CPU. It also has a natural target: keep the queue near empty, and the number of instances needed follows from arrival rate and processing time. For HTTP services the equivalent is requests per instance or concurrent requests, which is why KEDA-style scaling on queue length is the standard approach for workers."
+   },
+   {
+    "q": "How do you scale when the bottleneck is the database rather than the application?",
+    "a": "Scaling the application is the wrong lever and will make it worse, so the first step is confirming where the constraint actually is. Then: reduce per-request database work with caching and query tuning, add read replicas for read-heavy load, bound connections per instance so more instances do not mean more connections, and put a queue in front of write-heavy work so bursts are levelled rather than amplified. Where the database genuinely needs more capacity, scaling it up is usually simpler and cheaper than sharding."
+   }
+  ]
  }
 ]
