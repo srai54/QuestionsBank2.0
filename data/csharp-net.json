@@ -12566,5 +12566,29 @@
     "a": "CS0659 - overriding `Equals` without overriding `GetHashCode`. It is a warning rather than an error for backwards-compatibility reasons, which means it is easy to ignore in a noisy build. Treating warnings as errors, or at minimum promoting this one, catches the whole class at compile time. Records generate both correctly, which is one of the better arguments for using them for value-like types."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Background Work",
+  "difficulty": "Hard",
+  "question": "You need to run a job every 5 minutes across 3 instances of your service, but it must only run once. How?",
+  "answer": "The naive `BackgroundService` with a timer runs on every instance, so the job executes three times. The fix is a coordination mechanism, and which one depends on how much infrastructure you already have.\n\n**The options, roughly in order of how much I would reach for them:**\n\n1. **A distributed lock.** Every instance wakes on schedule, tries to acquire a lock, and only the winner does the work. A blob lease in Azure Storage is the simplest correct implementation - leases have a built-in expiry, so a crashed holder releases automatically. Redis with a TTL works too, but plain `SETNX` has known edge cases under failover, so use a maintained implementation rather than hand-rolling.\n2. **A database-backed claim.** `UPDATE Jobs SET ClaimedBy = @me, ClaimedUntil = @expiry WHERE Name = @job AND (ClaimedUntil IS NULL OR ClaimedUntil < @now)` and check rows affected. Atomic, needs no new infrastructure, and the row doubles as a record of the last run.\n3. **Take the scheduling out of the service.** A Kubernetes CronJob, an Azure Function on a timer trigger with its built-in singleton behaviour, or a scheduler that enqueues a message which exactly one worker consumes. This is usually the cleanest answer - the service stops owning the scheduling problem at all.\n4. **A leader election** if there are several such jobs, so one instance is leader and runs them all.\n\n**The details that make any of these correct:**\n- **The lock must expire**, or an instance that dies while holding it blocks the job forever.\n- **The job must be idempotent anyway**, because a lock expiring mid-run means two instances can overlap - clock skew and pauses make this unavoidable rather than theoretical.\n- **The expiry must exceed the expected runtime**, with renewal for long jobs.",
+  "tags": [
+   "dotnet",
+   "background-service",
+   "distributed-lock",
+   "scheduling",
+   "idempotency"
+  ],
+  "followups": [
+   {
+    "q": "Why is a lock with a TTL never a complete guarantee?",
+    "a": "Because the holder can be paused - a long GC pause, a hypervisor freeze, a network partition - past the expiry without knowing it. Another instance acquires the lock and starts, and the first resumes believing it still holds it. This is why the fencing-token idea exists: the lock hands out a monotonically increasing number, and the resource rejects writes carrying a stale token. Without that, the honest answer is that the lock reduces the probability of double execution and idempotency handles the remainder."
+   },
+   {
+    "q": "Is a static flag or an in-memory lock ever enough?",
+    "a": "Only within a single process - it prevents two threads in the same instance overlapping, which is a real and separate concern worth handling. It does nothing across instances, and the failure is invisible in development where you run one instance. This is the version that reaches production and then runs three times a night in a nightly billing job, which is how people discover it."
+   }
+  ]
  }
 ]

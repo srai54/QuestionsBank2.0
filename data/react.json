@@ -3734,5 +3734,29 @@
     "a": "Return the updated resource in the mutation response and use it directly, so the UI does not need to re-read at all - this removes the problem for the common case. Where a re-read is unavoidable, pin that user s reads to the primary for a short window after their write, or pass a version token the read path can wait for. Sending all reads to the primary works but discards the reason you added replicas."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Error Handling",
+  "difficulty": "Medium",
+  "question": "How do you handle errors in a React application so users do not see a white screen?",
+  "answer": "A rendering error that nobody catches unmounts the whole tree, which is the white screen. The defence is layered.\n\n**1. Error boundaries**, placed deliberately. A boundary catches errors during rendering, in lifecycle methods and in constructors below it, and renders a fallback instead of unmounting everything. Placement is the design decision: one at the app root stops the white screen, and additional ones around independent regions - a dashboard widget, a sidebar - mean a failure degrades that region rather than the page.\n\n**What boundaries do not catch**, which is the part interviewers probe: event handlers, async code, `setTimeout` callbacks, server-side rendering, and errors thrown in the boundary itself. Those need ordinary try/catch or a promise rejection handler, because they are outside the render lifecycle.\n\n**2. Handle async failures where they happen.** A query library surfaces errors as state, so the component renders an error view rather than throwing. For raw fetches, catch and set error state - an unhandled rejection produces no UI at all, just a console message.\n\n**3. Report the errors.** `componentDidCatch` or the error boundary hook should log to your monitoring with component stack and user context. A boundary that silently shows \"Something went wrong\" and tells nobody means you find out from users.\n\n**4. Make the fallback useful.** A retry button that resets the boundary, a way back to a working page, and a reference id the user can quote. \"Something went wrong\" with no recovery path is barely better than the white screen.\n\n**5. Route-level boundaries** so navigation still works when one route fails.",
+  "tags": [
+   "react",
+   "error-boundaries",
+   "error-handling",
+   "resilience",
+   "ux"
+  ],
+  "followups": [
+   {
+    "q": "Why are function components unable to be error boundaries?",
+    "a": "Because the mechanism relies on the `getDerivedStateFromError` and `componentDidCatch` lifecycle methods, and there is no hook equivalent - React has not provided one. In practice everyone uses a small class component or the `react-error-boundary` library, which wraps that class and adds a reset mechanism and hooks for the surrounding function components. It is the one remaining case where a class component is genuinely required."
+   },
+   {
+    "q": "How do you recover from an error boundary without a full page reload?",
+    "a": "Reset the boundary state and remount the subtree, which `react-error-boundary` exposes as `resetErrorBoundary`. The important detail is resetting whatever caused the error too - if the failure came from bad data in a cache or in state, remounting alone re-renders straight back into the same error and the retry button appears broken. Tying the boundary to a `resetKeys` value that changes on navigation is the usual way to make retry meaningful."
+   }
+  ]
  }
 ]

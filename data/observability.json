@@ -1623,5 +1623,29 @@
     "a": "Use exemplars or traces rather than metrics. Exemplars attach a sample trace id to a metric bucket, so you can go from \"the p99 got worse\" straight to an actual slow request without any high-cardinality label. For genuine per-user analytics, that is an analytics warehouse question, not a monitoring one - the access patterns and retention are entirely different, and trying to serve it from your metrics system is how you end up with neither working."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Debugging",
+  "difficulty": "Hard",
+  "question": "A bug occurs for one customer only, and you cannot reproduce it. How do you approach it?",
+  "answer": "If it happens for one customer and not others, something about *their* data or configuration differs - so the investigation is about finding that difference rather than about the code path.\n\n**1. Get specifics.** Exact timestamp, user, tenant, what they did. \"It does not work\" is not actionable; a trace id from their session is.\n\n**2. Find the request in telemetry.** With distributed tracing and correlation ids this is the whole game - pull their actual request and see where it went wrong. Most of the value of instrumentation is in exactly this scenario, which is worth saying because it justifies the investment.\n\n**3. Look for what is different about them.** Data volume - are they the customer with 50,000 order lines where everyone else has 50? Configuration and feature flags. Locale, timezone, currency, character set. Permissions and role. Account age, so they have data created under an older schema or an older code version. Integrations no other tenant uses.\n\n**4. Consider the client side.** Browser, extensions, network, corporate proxy, an old cached bundle. A hard refresh resolving it points straight at caching or a deployment issue.\n\n**5. Reproduce with their data, not their account.** Copy the shape of their data into a test environment - anonymised. Most \"unreproducible\" bugs reproduce immediately once you have data that looks like theirs.\n\n**The pattern I would bear in mind:** unique customers usually mean boundary conditions. The largest tenant, the oldest account, the only one in a different timezone, the only one using a legacy integration. Ask which superlative applies to them - that question alone often finds it.",
+  "tags": [
+   "observability",
+   "debugging",
+   "tracing",
+   "support",
+   "troubleshooting"
+  ],
+  "followups": [
+   {
+    "q": "What if there is no telemetry for the affected request?",
+    "a": "Then the first fix is the telemetry, because you will have this problem again next week. In the short term, add targeted logging behind a flag you can enable for that tenant only, so you get detail without the volume and cost of raising it globally. Feature-flagged verbose logging scoped to a tenant is a genuinely useful capability to build once and reuse, and it is far better than asking the customer to reproduce while someone watches."
+   },
+   {
+    "q": "How do you handle needing their data when it is sensitive?",
+    "a": "Do not copy production data into a lower environment as a matter of course - that spreads the exposure and is often a compliance breach. Anonymise or synthesise data with the same *shape*: the same volumes, the same distributions, the same edge-case characters and the same relationships, with the values replaced. The shape is almost always what triggers the bug rather than the actual values. Where you genuinely must inspect real data, do it in place with audited, time-limited access."
+   }
+  ]
  }
 ]

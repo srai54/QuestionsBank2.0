@@ -2445,5 +2445,29 @@
     "a": "Write the test for the *behaviour* you want, not the implementation - the test should say what the result is for a given input, which you usually do know even when the algorithm is unclear. If you cannot state the expected output either, that is a signal the requirement is not understood yet, and no amount of coding will resolve that. In genuinely exploratory cases I spike without tests, learn what the shape is, then discard the spike and build it properly."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "End to End",
+  "difficulty": "Medium",
+  "question": "Your end-to-end suite takes 2 hours and is flaky. What do you change?",
+  "answer": "Both problems usually come from the same cause: too many end-to-end tests doing work that belongs lower down.\n\n**Reduce the number first.** E2E tests are the slowest and most fragile, so they should cover a small set of critical user journeys - sign up, search, checkout - not every permutation of every form. Validation rules, error messages and edge cases belong in unit and integration tests, where they run in milliseconds and fail for one reason. A suite of 400 E2E tests is nearly always a testing-pyramid problem rather than an E2E problem.\n\n**Then fix the flakiness, which is mostly waiting.** The dominant cause is timing: fixed `sleep` calls, or assertions that run before the UI has settled. Modern tools like Playwright auto-wait on actionability, so the fix is usually to stop hand-rolling waits and to assert on user-visible state rather than on implementation details. Other recurring causes are tests sharing data, test order dependence, and animations.\n\n**Make selectors stable.** Querying by CSS class or DOM structure breaks on any restyle. Query by role and accessible name, or by an explicit `data-testid` - which also has the side effect of making accessibility problems visible.\n\n**Then attack the 2 hours:**\n- **Parallelise across workers**, which requires the data isolation above.\n- **Seed state through the API rather than the UI.** Logging in and navigating through five pages to reach the test s starting point is most of the runtime - do that setup with API calls and start the browser at the right place.\n- **Run the full suite post-merge** and a smoke subset on the PR.\n\n**And quarantine flaky tests immediately** rather than retrying them, because retries hide the flake and train people to ignore failures.",
+  "tags": [
+   "testing",
+   "e2e",
+   "playwright",
+   "flaky-tests",
+   "test-pyramid"
+  ],
+  "followups": [
+   {
+    "q": "Is it acceptable to retry a failing E2E test automatically?",
+    "a": "As a temporary measure with visibility, yes - a single retry keeps the pipeline usable while you investigate, provided retried tests are reported and tracked rather than silently passing. As a permanent policy it is corrosive: it masks real intermittent bugs, which are often genuine race conditions in the application rather than test problems, and it doubles the runtime of the worst cases. Retries should come with a flake-rate dashboard and someone owning it."
+   },
+   {
+    "q": "How do you decide what belongs in an E2E test at all?",
+    "a": "The journeys where a failure would be a serious business problem, and where the value is specifically in the integration - real browser, real network, real backend. If the same assertion could be made at a lower level with the same confidence, it belongs there. A useful test is whether the E2E test would catch something the integration test could not: a routing problem, a missing build asset, an auth redirect, a CORS failure. If not, move it down."
+   }
+  ]
  }
 ]

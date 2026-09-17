@@ -4456,5 +4456,29 @@
     "a": "Let the DTOs diverge from the entities where the domain warrants it, so they are earning their existence rather than duplicating it - flatten relationships the client does not care about, combine fields, omit internals, use names the business uses. If every DTO is an exact copy of its entity, that is a signal the boundary is not doing any work and the real question is whether this API should be public at all. Projecting directly in the query with `Select` also removes most of the mapping code people object to."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Coupling",
+  "difficulty": "Medium",
+  "question": "Two services need the same reference data. What are your options and their trade-offs?",
+  "answer": "Four options, and the right one depends on how fresh the data must be and who owns it.\n\n**1. One owns it, the other calls it synchronously.** Simple and always fresh. The cost is a runtime dependency - if the owner is down or slow, the caller is too, and availability multiplies. Fine for low volume; poor if it is on a hot path.\n\n**2. One owns it, the other caches a copy.** Same as above with a TTL, so it survives a brief outage and removes most of the calls. You now own staleness - the question to answer explicitly is how out of date the data may be before it causes a real problem.\n\n**3. Event-driven replication.** The owner publishes changes; the consumer keeps its own local copy. Reads are local and fast, and there is no runtime coupling at all. The costs are eventual consistency and an ongoing obligation to handle missed events - which means reconciliation, not just a subscription.\n\n**4. A shared database.** The option that looks cheapest and is usually worst. Both services now depend on the same schema, so neither can change it independently, and you have coupled their deployment and their failure modes. It is the classic route to a distributed monolith.\n\n**How I would choose:** if it is genuinely *reference* data - country codes, product categories, tax rates - it changes rarely and staleness of minutes is harmless, so replication or a cached copy is right and gives the best availability. If it is transactional data that must be current, that is a signal the boundary might be wrong and the two things may belong in one service.\n\n**The question I would ask first:** who *owns* this data? If neither service clearly owns it, that is the actual problem to solve.",
+  "tags": [
+   "architecture",
+   "coupling",
+   "reference-data",
+   "event-driven",
+   "microservices"
+  ],
+  "followups": [
+   {
+    "q": "How do you handle a missed event in the replication approach?",
+    "a": "Assume it will happen and design for it, rather than treating the subscription as reliable. Publish with an outbox so events cannot be lost on the producer side, include a version or sequence number so the consumer detects gaps, and run periodic reconciliation comparing checksums or counts against the owner. Also provide a full-resync path the consumer can trigger - because over months something always drifts, and without a resync mechanism the only fix is manual."
+   },
+   {
+    "q": "When is a shared database actually acceptable?",
+    "a": "When the two components are not really independent services - a temporary state during a migration, or a reporting consumer that reads a replica and never writes. Read-only access to a replica is a legitimate pattern because the coupling is one-directional and the owner still controls the schema. What makes it harmful is two services both writing, or a consumer whose reads constrain the owner from changing its schema."
+   }
+  ]
  }
 ]

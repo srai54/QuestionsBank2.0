@@ -4590,5 +4590,29 @@
     "a": "Readers get a row version rather than taking shared locks, so readers stop blocking writers and vice versa - which removes the most common blocking pattern outright. The costs are a version store in tempdb that must be sized for it, extra work on every update to maintain versions, and the fact that it changes behaviour: queries now see a consistent snapshot from the statement start, so code that was relying on blocking for coordination can break subtly. It is a database-level decision worth testing rather than flipping in production."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Tuning",
+  "difficulty": "Medium",
+  "question": "A query is slow. Walk me through reading the execution plan.",
+  "answer": "I read a plan looking for a small number of specific things rather than trying to understand every operator.\n\n**1. Where is the cost concentrated?** Operators show a percentage of the total. Go to the expensive ones first - but treat the percentages as estimates, because if the estimates are wrong the percentages are wrong too.\n\n**2. Compare estimated against actual rows.** This is the single most informative check. A large discrepancy means the optimiser was working from bad information, and everything downstream is likely a poor choice - the wrong join type, an undersized memory grant, a nested loop where a hash join belonged. The usual causes are stale statistics, a non-sargable predicate the optimiser cannot estimate, table variables (which historically estimate one row), and multi-statement table-valued functions.\n\n**3. Scans versus seeks.** A scan is not automatically bad - scanning a small table or one you genuinely need all of is correct. A scan on a large table where you expected a seek means either a missing index or a predicate that cannot use one.\n\n**4. Look for the expensive operators:** a Sort that could be removed by an index in the right order, a Key Lookup repeated for every row (which a covering index eliminates), a Hash Match spilling to tempdb, and Parallelism operators where the query is not benefiting from going parallel.\n\n**5. Warnings.** Modern plans surface implicit conversions, spills and missing indexes as warnings on the operator, and they are usually pointing straight at the problem.\n\n**The one I check early because it is so common:** implicit conversion. A `WHERE` comparing a `varchar` column to an `nvarchar` parameter converts the *column*, which makes the predicate non-sargable and turns a seek into a scan across the whole table.",
+  "tags": [
+   "sql",
+   "execution-plan",
+   "query-tuning",
+   "statistics",
+   "diagnostics"
+  ],
+  "followups": [
+   {
+    "q": "Why is the missing index suggestion in a plan not something to apply directly?",
+    "a": "Because it is generated for that one query in isolation. It ignores the indexes you already have - often suggesting something that overlaps heavily with an existing one - it ignores the write cost of maintaining it, and it frequently proposes wide INCLUDE lists that are close to a copy of the table. Use it as a hint about which columns matter, then decide whether to extend an existing index instead. Applying every suggestion is how tables end up with twelve indexes and slow writes."
+   },
+   {
+    "q": "What is the difference between the estimated and actual plan, and when do you need each?",
+    "a": "The estimated plan is what the optimiser intends without running the query, so you can get it for an expensive query safely. The actual plan includes real row counts, actual execution time per operator, and runtime warnings such as spills - which is what you need for the estimate-versus-actual comparison that finds most problems. Use estimated to check the shape when running is too costly, and actual whenever you can afford to run it."
+   }
+  ]
  }
 ]
