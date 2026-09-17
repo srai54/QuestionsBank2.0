@@ -4638,5 +4638,29 @@
     "a": "As a value object pairing the amount with the currency, so arithmetic between different currencies is impossible by construction rather than by convention - adding GBP to EUR should not compile or should throw, not silently produce a number. Store both columns together and never let one exist without the other. Conversions then become an explicit operation that takes a rate and a date, which is also what you need for auditability, since the rate used must be recorded rather than recomputed later."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Set Operations",
+  "difficulty": "Medium",
+  "question": "Explain the difference between UNION, UNION ALL, INTERSECT and EXCEPT, and which is a performance trap.",
+  "answer": "- **`UNION ALL`** concatenates two result sets. No deduplication, no sorting, minimal cost.\n- **`UNION`** concatenates *and removes duplicates*, which requires a sort or a hash operation over the combined set.\n- **`INTERSECT`** returns rows present in both, distinct.\n- **`EXCEPT`** returns rows in the first set that are not in the second, distinct.\n\n**The performance trap is `UNION` used where `UNION ALL` was meant**, which is extremely common. People type `UNION` by habit, and on large result sets the deduplication is expensive - often the dominant cost of the query - for no benefit when the inputs are already disjoint. If you know the sets cannot overlap, `UNION ALL` is both faster and clearer about intent.\n\n**The correctness corollary:** if duplicates are *possible* and you use `UNION ALL`, you get them. So the choice should be deliberate rather than habitual in either direction.\n\n**The detail people miss:** all four treat `NULL`s as equal for the purpose of matching, unlike `=` in a `WHERE` clause where `NULL = NULL` is unknown. So `EXCEPT` will remove a row with a NULL that matches a NULL in the second set, where the equivalent `NOT IN` would not - and that difference is a genuine source of wrong results.\n\n**`NOT IN` versus `EXCEPT` versus `NOT EXISTS`:** `NOT IN` with a subquery returning any NULL returns no rows at all, which is logically correct and almost never what was intended. `NOT EXISTS` behaves the way people expect and is usually the right choice.",
+  "tags": [
+   "sql",
+   "set-operations",
+   "union",
+   "nulls",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "Why does NOT IN return nothing when the subquery contains a NULL?",
+    "a": "Because `x NOT IN (1, 2, NULL)` expands to `x <> 1 AND x <> 2 AND x <> NULL`, and the comparison to NULL is unknown rather than true - so the whole expression can never be true, only false or unknown. The result is an empty set regardless of the data. It is logically correct three-valued logic and a reliable source of bugs, which is why `NOT EXISTS` is the safer habit when the subquery column is nullable."
+   },
+   {
+    "q": "Do the column requirements differ between these operators?",
+    "a": "They are the same for all four: the same number of columns, in the same order, with compatible types - names come from the first query. What differs is how strictly you should treat that: relying on positional matching means adding a column to one side silently changes the pairing, so listing columns explicitly rather than using `SELECT *` is what keeps these safe over time."
+   }
+  ]
  }
 ]

@@ -3479,5 +3479,29 @@
     "a": "The attack surface expands enormously, because any content it reads becomes a potential instruction source and the attacker only needs to control a page or a document. The controls that matter become sandboxing what it can reach, allowlisting domains, stripping or isolating retrieved content, and above all not granting the browsing agent credentials to act on anything sensitive. A model with both untrusted input and privileged tools is the dangerous combination - separating those two capabilities is the design principle."
    }
   ]
+ },
+ {
+  "category": "AI & LLM",
+  "subcategory": "Evaluation",
+  "difficulty": "Hard",
+  "question": "How do you know an LLM feature is getting better rather than worse when you change the prompt?",
+  "answer": "With an evaluation set and a scoring method agreed before you start changing anything. Without that, prompt engineering is anecdote - someone tries an example, it looks better, and nobody notices the three cases it broke.\n\n**What I would build:**\n\n1. **A dataset of real inputs**, not invented ones. Sample from production, deliberately including the failures people complained about. A hundred well-chosen cases beat a thousand synthetic ones.\n2. **A scoring method appropriate to the task.** Where there is a correct answer - classification, extraction, routing - use exact match or F1, which is objective and cheap. Where output is open-ended, you need either human rating on a sample or LLM-as-judge with a rubric.\n3. **Regression runs in CI** on every prompt or model change, with results compared against the baseline. A prompt change is a code change and deserves the same gate.\n4. **Segment the results.** An aggregate score hides that the change improved the common case and broke the rare one - which is often the case people escalate.\n\n**On LLM-as-judge**, because it comes up: it correlates reasonably with human judgement when given a specific rubric and examples, and it is the only way to evaluate open-ended output at volume. Its weaknesses are real - position bias, favouring longer answers, and favouring output from the same model family - so calibrate it against human labels on a sample before trusting it.\n\n**And measure in production too:** thumbs up/down, task completion, escalation rate. Offline evaluation tells you whether the change is better on your dataset; only production tells you whether it is better for users.",
+  "tags": [
+   "ai-llm",
+   "evaluation",
+   "llm-as-judge",
+   "regression-testing",
+   "production"
+  ],
+  "followups": [
+   {
+    "q": "How do you evaluate something where correctness is genuinely subjective?",
+    "a": "Shift from scoring absolute quality to pairwise comparison - show a judge two outputs and ask which is better for a stated criterion. People and models are far more consistent at relative judgements than at assigning a score out of ten, and the results aggregate into a ranking. Then define the criteria explicitly in a rubric rather than asking for \"quality\", because an unspecified criterion means every judge applies a different one and the variance swamps the signal."
+   },
+   {
+    "q": "What do you do when the model provider changes the model underneath you?",
+    "a": "Pin to a dated model version wherever the provider offers it, so the change happens when you choose. Then run the evaluation suite against the new version before switching - which is exactly what the suite exists for, and it turns a provider update from a risk into a routine check. Without pinning and without evaluation, you find out from a change in user behaviour, and you cannot tell whether it was the model or something you shipped."
+   }
+  ]
  }
 ]

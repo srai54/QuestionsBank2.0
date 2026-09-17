@@ -4017,5 +4017,29 @@
     "a": "Guaranteed - requests equal limits for every resource - is evicted last. Burstable - requests set and lower than limits - is in the middle. BestEffort - nothing set - is evicted first when the node is under pressure. So the class falls out of how you configure resources, and a pod with no requests is implicitly volunteering to be killed first. For anything important, setting requests is what moves it out of BestEffort."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Rollback",
+  "difficulty": "Medium",
+  "question": "What makes a deployment safely reversible, and when is rollback not an option?",
+  "answer": "A deployment is reversible when you can return to the previous version quickly and the previous version still works against the current state of the world. The second half is what people forget.\n\n**What makes it safe:**\n- **Immutable, versioned artefacts.** Deploying an image by digest means rolling back is redeploying a known-good digest, not rebuilding and hoping.\n- **Backwards-compatible schema changes.** The previous application version must still work against the migrated database, which is what expand-and-contract guarantees.\n- **Backwards-compatible contracts.** If you changed a message format or an API response that consumers have adopted, rolling back breaks them.\n- **Fast, automated, practised.** A rollback procedure that has never been executed is a hypothesis.\n- **Feature flags**, which let you turn behaviour off without deploying at all - usually faster and lower-risk than a rollback.\n\n**When rollback is not an option:**\n1. **A destructive migration has run** - a column dropped, data transformed in place. The old code cannot work and the data may be gone. This is why destructive steps are deferred to a later release.\n2. **Messages in a new format are already in queues**, and the old consumer cannot parse them.\n3. **Clients have cached new frontend assets** that call an endpoint the old backend does not have.\n4. **External state has changed** - you called a payment provider, sent emails, published events. Those do not roll back.\n\n**In those cases the answer is roll *forward*** - a fix deployed quickly - which is why the deployment pipeline being fast matters as much as the rollback mechanism.",
+  "tags": [
+   "devops",
+   "deployment",
+   "rollback",
+   "feature-flags",
+   "release"
+  ],
+  "followups": [
+   {
+    "q": "How do feature flags change the rollback conversation?",
+    "a": "They separate deploy from release, so the risky change is off by default and enabling it is a configuration change taking seconds rather than a deployment taking minutes. That makes the reversal path faster and far less disruptive - you are not moving code, just behaviour. The caveat is that a flag only protects code paths; it cannot undo a schema migration or un-send a message, so it complements the compatibility discipline rather than replacing it."
+   },
+   {
+    "q": "What is the practical way to verify that rollback actually works?",
+    "a": "Practise it - roll back a real deployment in a lower environment as part of the release process, and occasionally in production during a low-traffic window. Teams discover that the artefact was not retained, that the pipeline only deploys `latest`, or that the previous version fails against the migrated schema, and they discover it during an incident. Game days and deliberate rollback drills convert those into ordinary findings."
+   }
+  ]
  }
 ]

@@ -12638,5 +12638,29 @@
     "a": "It has a good place - request-level and cross-field shape validation at the boundary, where it is genuinely better than data annotations and composes well. The mistake is not using it; it is making it the *only* place a domain rule exists. Used for \"this DTO is well-formed\" while the domain enforces \"this is a legal order\", the two are complementary rather than duplicative."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Migrations",
+  "difficulty": "Medium",
+  "question": "How do you manage EF Core migrations across a team without constant conflicts?",
+  "answer": "Migration conflicts come from two people generating migrations against the same model at the same time, so the model snapshot diverges. The fixes are mostly process.\n\n**The practices that remove most of the pain:**\n\n1. **Generate migrations late**, just before merging, rather than at the start of a feature. A migration created on day one and merged on day ten has had ten days to conflict.\n2. **Pull and rebase before generating.** If the snapshot is current, the new migration stacks cleanly.\n3. **When a conflict does happen, do not merge the snapshot by hand.** Delete your migration, take theirs, re-run `dotnet ef migrations add`. The snapshot file is generated - resolving it manually produces a state that does not match either model.\n4. **One migration per pull request**, named meaningfully. Ten auto-named migrations in one PR are unreviewable.\n5. **Review the generated SQL, not the C#.** `migrations script` shows what will actually run, and that is where you notice a column drop, a table rebuild or a lock you did not intend.\n\n**The bigger decision: do not apply migrations at application startup.** With several replicas they race, and a failed migration mid-rollout leaves instances on different schema versions. Run them as a separate pipeline step or job that completes before the new version deploys.\n\n**And for anything destructive**, hand-edit the migration or write it as SQL - the generated one for a rename is usually drop-and-add, which loses data. Expand-and-contract across releases is the safe shape.",
+  "tags": [
+   "efcore",
+   "migrations",
+   "team-workflow",
+   "deployment",
+   "database"
+  ],
+  "followups": [
+   {
+    "q": "What do you do about a migration that has already been applied in production but is wrong?",
+    "a": "Never edit it - other environments have recorded it as applied and will not re-run it, so editing produces a schema that differs by environment. Write a new migration that corrects the state going forward. If it was destructive and data was lost, that is a restore-from-backup conversation, which is the argument for reviewing generated SQL before it reaches production rather than after."
+   },
+   {
+    "q": "How do you handle a long-running migration that would lock a large table?",
+    "a": "Take it out of the migration entirely. The migration does the fast metadata change - adding a nullable column, creating an index with `ONLINE = ON` where the edition supports it - and the slow data movement runs as a separate batched job that can be paused and resumed. A migration that holds a lock for twenty minutes blocks the deployment and the application simultaneously, and cancelling it mid-way can take longer to roll back than it took to run."
+   }
+  ]
  }
 ]

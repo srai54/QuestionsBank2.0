@@ -2884,5 +2884,29 @@
     "a": "Because they answer different questions and have different authority. Preferences are what the user chose; suppression is what you are *compelled* to honour - hard bounces, spam complaints, unsubscribes, regulatory opt-outs. Suppression must be enforced at the send path for every channel and every message type, including ones that bypass preferences such as transactional mail. Storing it as just another preference means a bug in preference resolution becomes a compliance incident."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Multi-tenancy",
+  "difficulty": "Hard",
+  "question": "Compare the models for multi-tenant data isolation and how you would choose.",
+  "answer": "Three models, and the choice trades isolation against cost and operational effort.\n\n**1. Shared database, shared schema** - a `TenantId` column on every table. Cheapest by far, one schema to migrate, and resources are pooled so a small tenant costs almost nothing. The risk is that isolation depends entirely on every query filtering correctly, and one missing `WHERE TenantId` is a cross-tenant data leak. Noisy neighbours are also a real problem.\n\n**2. Shared database, schema per tenant** - separate schemas in one database. Better logical separation, still one database to operate. Migrations multiply by tenant count, which becomes painful at scale.\n\n**3. Database per tenant** - strongest isolation, per-tenant backup and restore, per-tenant performance, and the easy answer to data residency. The costs are real: migrations across hundreds of databases, connection pool management, higher baseline cost per tenant, and a more complex deployment.\n\n**How I would choose:** start with shared-everything for a volume SaaS with many small tenants, because the economics dominate. Move to database-per-tenant when tenants are few and large, when regulation demands it, or for specific enterprise customers - **a hybrid is normal and usually right**: pooled for the long tail, dedicated for the largest and most regulated.\n\n**For the shared model, the control that matters** is enforcing the tenant filter somewhere it cannot be forgotten - a global query filter in EF Core, or row-level security in the database. Relying on every developer remembering is not an isolation strategy, and row-level security is stronger because it also covers ad-hoc queries and other services.",
+  "tags": [
+   "system-design",
+   "multi-tenancy",
+   "isolation",
+   "saas",
+   "row-level-security"
+  ],
+  "followups": [
+   {
+    "q": "What is the risk with EF Core global query filters for tenancy?",
+    "a": "They are bypassable and only cover EF. `IgnoreQueryFilters` removes them, raw SQL never had them, and any other service or reporting tool reading the same database sees everything. They also do not apply to writes, so nothing stops code saving a row with the wrong tenant id. That is why row-level security in the database is the stronger control - it applies to every connection regardless of how the query was written - with the query filter as a convenience layer on top."
+   },
+   {
+    "q": "How do you handle the noisy neighbour problem in a pooled model?",
+    "a": "Cap what any one tenant can consume: per-tenant rate limits at the API, a concurrency cap so one tenant cannot occupy all workers, and query timeouts so a single expensive report cannot dominate. Monitor per-tenant usage so you can see it happening rather than discovering it as a general slowdown. When a tenant consistently exceeds what pooling can absorb, that is the signal to move them to dedicated resources - which is why the hybrid model tends to emerge naturally rather than being designed up front."
+   }
+  ]
  }
 ]

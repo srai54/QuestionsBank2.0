@@ -2300,5 +2300,29 @@
     "a": "Under HTTP/1.1 yes, because of the connection limit - but under HTTP/2 and HTTP/3 multiplexing removes that penalty, so splitting is nearly always better. The remaining caveat is granularity: hundreds of tiny chunks add request overhead and hurt compression ratios, since compression works better over more content. The sensible target is a handful of route-level chunks plus a stable vendor chunk that stays cached across deployments."
    }
   ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "What belongs in the URL versus component state versus a global store?",
+  "answer": "The question I ask is who needs to know this and for how long.\n\n**The URL** holds anything the user should be able to bookmark, share, or reach with the back button: the current route, filters, search terms, pagination, the selected tab, an open item s id. Putting these in component state is the single most common SPA complaint - the back button does the wrong thing, a shared link does not show what the sender saw, and refreshing loses the view. The URL is also a natural cache key for a query library, so the two compose well.\n\n**Component state** holds anything ephemeral and local: whether a dropdown is open, an unsubmitted form value, a hover state, transient UI. If no other component needs it and nobody would bookmark it, it belongs here. Keeping it local also keeps re-renders local, which is the performance argument.\n\n**A global store** holds client state genuinely shared across distant parts of the tree and not derivable: the authenticated user, theme, feature flags, an in-progress multi-step wizard spanning routes, a shopping basket.\n\n**And explicitly not in the global store: server data.** That belongs in a query library, because it is a cache with staleness, refetching and invalidation concerns that a store gives you none of. Copying fetched data into a store is the duplicated-truth bug that produces stale UI.\n\n**The failure mode to name:** putting everything in the global store because it is available. It couples unrelated components, makes state changes hard to trace, and turns every render into a subscription question.",
+  "tags": [
+   "frontend",
+   "state-management",
+   "url-state",
+   "routing",
+   "architecture"
+  ],
+  "followups": [
+   {
+    "q": "How do you keep URL state and component state in sync without loops?",
+    "a": "Treat the URL as the single source of truth and derive component state from it, rather than holding both and synchronising. Read the parameters with the router s hook, and update by navigating - the component then re-renders from the new URL naturally. The loop people create is storing the value in state, writing it to the URL in an effect, and reading the URL back into state in another effect, which fights itself. One direction only."
+   },
+   {
+    "q": "What are the limits of putting state in the URL?",
+    "a": "Length - browsers and servers cap URLs at a few thousand characters, so a complex filter set with many selections can exceed it, and very long URLs break when pasted into chat clients. It is also visible, so nothing sensitive belongs there, and it ends up in server logs, analytics and referrer headers. For large or private state, put an identifier in the URL and hold the rest server-side or in storage keyed by that id."
+   }
+  ]
  }
 ]
