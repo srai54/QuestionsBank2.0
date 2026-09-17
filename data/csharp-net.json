@@ -12710,5 +12710,29 @@
     "a": "Awkwardly, because `T` might be a value type or a reference type and `T?` means different things for each. `default(T)` for an unconstrained `T` is `null` for reference types and zero for value types, which is why APIs like `TryGetValue` use `[MaybeNullWhen(false)]` attributes rather than relying on `T?` alone. For library code you end up using the nullability attributes - `NotNullWhen`, `MaybeNull`, `NotNullIfNotNull` - to describe conditional behaviour the type system cannot express on its own."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Serialization",
+  "difficulty": "Medium",
+  "question": "What changes when you move a project from Newtonsoft.Json to System.Text.Json?",
+  "answer": "`System.Text.Json` is faster and allocates far less, but it is deliberately stricter, so a migration is rarely a straight swap. The differences bite at runtime, not at compile time, which is what makes it risky.\n\n**The behavioural differences that break things:**\n\n1. **Case sensitivity.** `System.Text.Json` matches property names case-sensitively by default; Newtonsoft does not. A payload with `orderId` silently deserialises to null against a property named `OrderId` unless you set `PropertyNameCaseInsensitive`. This is the single most common breakage and it fails silently.\n2. **No support for non-public setters or fields** by default, so private-set properties do not populate without `[JsonInclude]` or a constructor.\n3. **Stricter number handling.** A JSON string `\"123\"` will not bind to an `int` unless you enable `NumberHandling.AllowReadingFromString`. Newtonsoft coerced it.\n4. **No `TypeNameHandling`**, deliberately - that feature is a well-known deserialisation vulnerability. Polymorphism needs `[JsonDerivedType]` with a discriminator instead.\n5. **Comments and trailing commas** rejected unless allowed explicitly.\n6. **Different `DateTime` handling** - ISO 8601 strictly, where Newtonsoft accepted more formats.\n7. **Custom converters** must be rewritten; the APIs are not compatible.\n\n**How I would do the migration:** switch one boundary at a time rather than globally, and put contract tests around each - serialise with both and compare output for a corpus of real payloads. The failures are silent nulls rather than exceptions, so a test comparing actual JSON is what catches them.\n\n**And where I would not migrate:** a stable internal boundary where the performance is irrelevant. The risk is not free.",
+  "tags": [
+   "dotnet",
+   "json",
+   "system-text-json",
+   "migration",
+   "serialization"
+  ],
+  "followups": [
+   {
+    "q": "Why was TypeNameHandling removed rather than made opt-in?",
+    "a": "Because it is a remote code execution vector - it lets the payload specify which type to instantiate, so an attacker who controls the JSON can direct the deserialiser at a type with dangerous behaviour in its constructor or setters. There is a long history of real exploits using exactly this in Newtonsoft and in Java equivalents. `System.Text.Json` instead requires you to declare the permitted derived types explicitly with `[JsonDerivedType]`, so the set is closed and attacker input can only select from types you approved."
+   },
+   {
+    "q": "What does source-generated serialisation add?",
+    "a": "It emits the serialisation code at compile time instead of building it with reflection at runtime, which removes startup cost, reduces allocations, and makes serialisation work under trimming and Native AOT where reflection-based serialisation fails. You declare a `JsonSerializerContext` partial class with `[JsonSerializable]` attributes for the types. The constraint is that the types must be known at compile time, so genuinely dynamic polymorphic scenarios still need the reflection path."
+   }
+  ]
  }
 ]

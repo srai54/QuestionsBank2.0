@@ -4065,5 +4065,29 @@
     "a": "It is how full the constrained resource is - not how busy the CPU is, but how close you are to the limit that actually binds: connections in the pool, items queued for the thread pool, depth of a message queue, disk space. It matters because these fail as cliffs rather than gradients: everything is fine at 80% and collapses at 100%, so latency and errors only move once it is too late. Watching saturation gives you warning where the other three signals give you confirmation."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Cost",
+  "difficulty": "Medium",
+  "question": "Your team is asked to cut cloud spend by 30%. Where do you look first?",
+  "answer": "At the bill, grouped by resource, before touching anything. Cost work done on intuition targets the wrong things - people optimise code while an idle environment costs more than the whole optimisation saves.\n\n**The order I would work in, because it is roughly cheapest-effort first:**\n\n1. **Delete what is not used.** Orphaned disks, unattached IPs, old snapshots, dev environments running at weekends, resources from a project that ended. This is free money and there is usually a surprising amount of it.\n2. **Right-size.** Most resources are provisioned for a peak that never happens or was estimated before launch. Look at actual utilisation over a month and resize to fit with headroom.\n3. **Schedule non-production.** Dev and test environments running 168 hours a week when they are used for 45 is an immediate two-thirds saving on those resources, and it is a scheduling change rather than an engineering one.\n4. **Commitment discounts.** Reserved instances or savings plans on the baseline you know you will run give 30-60% for a commitment. The risk is committing to something you later want to change, so commit to the floor rather than the total.\n5. **Storage tiering and retention.** Cold data on hot storage, logs retained for years because nobody chose a policy, backups accumulating without expiry.\n6. **Data egress**, especially cross-region traffic introduced accidentally by a dependency deployed in the wrong place.\n7. **Then architectural change** - autoscaling, serverless for spiky work, caching to reduce database size.\n\n**The thing I would fix alongside:** tagging enforced by policy, so every line item has an owner. Without attribution, cost work is a one-off exercise that has to be repeated in six months.",
+  "tags": [
+   "devops",
+   "finops",
+   "cost-optimisation",
+   "cloud",
+   "tagging"
+  ],
+  "followups": [
+   {
+    "q": "What is the risk of aggressive right-sizing?",
+    "a": "That you size for the average and get caught by the peak, turning a cost exercise into an incident. Utilisation data hides short spikes if the sampling interval is coarse, so a resource that looks 20% utilised on five-minute averages may be saturating for seconds at a time. Size against p95 or p99 with headroom rather than the mean, change one thing at a time so a regression is attributable, and make sure autoscaling can absorb what you trimmed."
+   },
+   {
+    "q": "How do you make cost visible enough that it stays down?",
+    "a": "Attribute it to teams and features through enforced tagging, and show it where the people who cause it will see it - a channel post per team, not a monthly report to finance. Budgets with alerts at a percentage of forecast catch drift early. And add cost to the definition of done for new services, so someone estimates the running cost before it is built rather than discovering it on the invoice. The pattern to avoid is a cost-cutting project every year, which means nobody owns it in between."
+   }
+  ]
  }
 ]

@@ -4710,5 +4710,29 @@
     "a": "When you are changing most rows, changing a column type, or the update would rewrite the pages anyway. Writing a fresh table is sequential and minimally logged under the right recovery model, while an in-place update of most rows causes page splits and heavy logging. The swap is a metadata operation, so cutover is near-instant and rollback is renaming back. The costs are double the storage during the operation, and having to handle writes that arrive while you build - usually with a trigger capturing changes or a short maintenance window for the final catch-up."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "Two users edit the same record at once. How do you handle it, and what do you tell the second user?",
+  "answer": "The default behaviour - last write wins - silently discards the first user s changes, and neither of them knows. So the first decision is that you need *a* concurrency strategy, not none.\n\n**Optimistic concurrency** is the right default for user-facing edits. Every row carries a version - `rowversion` in SQL Server, or a `ConcurrencyToken` - which is read with the record and included in the `WHERE` clause on update. If the row changed since it was read, zero rows are affected and you know there was a conflict. No locks are held while the user is thinking, which matters because that is minutes, not milliseconds.\n\n**Pessimistic locking** - `SELECT ... FOR UPDATE` or an application-level lock held while editing - prevents the conflict but holds a resource across user think-time, which does not survive a user closing their laptop. It is appropriate for short server-side operations, rarely for interactive editing.\n\n**What I would tell the second user matters as much as the mechanism.** \"Concurrency error\" is useless. The options, from worst to best:\n1. Reject and discard their work - never do this.\n2. Reject, but preserve their input so they can retry without retyping.\n3. Show *what changed* - \"Sam updated the delivery date while you were editing\" - and let them choose.\n4. **Merge field by field** where the edits do not overlap, and only ask about genuine conflicts. This is the best experience and most work.\n\n**And consider whether the conflict is real.** If two users edited different fields, a targeted update of only the changed columns avoids the conflict entirely - which is a strong argument for tracking which fields the user actually modified.",
+  "tags": [
+   "sql",
+   "concurrency",
+   "optimistic-locking",
+   "rowversion",
+   "ux"
+  ],
+  "followups": [
+   {
+    "q": "How does EF Core surface this and what do you do with the exception?",
+    "a": "A `DbUpdateConcurrencyException`, which carries the entries involved so you can read both the values you tried to save and the current database values. The useful handler reloads the database values, compares them with the original and proposed values property by property, and then either merges automatically where only one side changed a field, or presents the genuine conflicts to the user. Catching it and simply retrying is the common mistake - that is last-write-wins with extra steps."
+   },
+   {
+    "q": "Is a LastModified timestamp good enough as a concurrency token?",
+    "a": "Usually not. Clock resolution means two updates within the same tick can appear unchanged, clock skew across servers makes comparisons unreliable, and anything that updates the row without setting the timestamp breaks it silently. A database-maintained `rowversion` increments on every update regardless of who wrote it or how, which is the property you actually need. A timestamp is fine when it is maintained by the database and you accept the resolution risk, and a guid regenerated on each update also works."
+   }
+  ]
  }
 ]

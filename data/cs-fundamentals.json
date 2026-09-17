@@ -3012,5 +3012,29 @@
     "a": "It is the average cost per operation over a sequence, so `List<T>.Add` is amortised O(1) even though the occasional resize is O(n) - the doubling means resizes are rare enough to average out. It misleads when the individual worst case matters: in a latency-sensitive path, one operation occasionally taking 100ms because it triggered a resize and a large copy is a real problem, even though the average is excellent. Amortised analysis is about throughput, not about tail latency."
    }
   ]
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Hashing",
+  "difficulty": "Medium",
+  "question": "What makes a good hash function, and why can you not use a cryptographic hash everywhere?",
+  "answer": "For a hash table you want three properties: **uniform distribution** so keys spread evenly across buckets, **determinism** so the same input always gives the same output, and **speed**, because it runs on every lookup.\n\nA cryptographic hash gives you excellent distribution and adds properties a hash table does not need: preimage resistance, collision resistance against a deliberate attacker, and the avalanche effect. Those cost time - SHA-256 is orders of magnitude slower than a non-cryptographic hash, and in a data structure where the hash is on the hot path that dominates.\n\n**So the rule is:** non-cryptographic hashes (xxHash, MurmurHash, the runtime s built-in) for data structures; cryptographic hashes when an adversary is involved.\n\n**Where the adversary case matters for data structures**, which is the interesting overlap: **hash flooding**. If an attacker can predict your hash function, they can send keys that all collide, turning O(1) lookups into O(n) and causing a denial of service. That is a real attack against web frameworks parsing query strings and JSON into dictionaries. The defence is a randomised seed per process, which .NET does for string hashing by default - which is also why string hash codes differ between runs and must never be persisted.\n\n**And for passwords, neither answer is right.** A fast hash is wrong because speed helps the attacker, and a plain cryptographic hash is fast by design. Password storage needs a deliberately slow, memory-hard function - Argon2id - which is a third category.",
+  "tags": [
+   "cs-fundamentals",
+   "hashing",
+   "hash-tables",
+   "security",
+   "algorithms"
+  ],
+  "followups": [
+   {
+    "q": "Why must you never persist a .NET string hash code?",
+    "a": "Because it is randomised per process, so the same string produces a different hash after a restart. Code that stores a hash code in a database or a file and compares it later will silently stop matching, and the bug appears only after a deployment or a recycle. If you need a stable hash across processes, compute one explicitly with a fixed algorithm - a non-cryptographic one such as xxHash for bucketing, or SHA-256 where you also want collision resistance."
+   },
+   {
+    "q": "What is the birthday problem s relevance to choosing a hash size?",
+    "a": "It means collisions become likely far sooner than the output size suggests - with a 64-bit hash you expect a collision after roughly 2^32 items, not 2^64, because collisions depend on pairs rather than on exhausting the space. So a hash used as a unique identifier over billions of items needs more bits than intuition suggests. For a hash table it matters less, since collisions are expected and handled, but for content-addressed storage or deduplication it decides whether a collision is a theoretical concern or an operational one."
+   }
+  ]
  }
 ]

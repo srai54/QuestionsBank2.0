@@ -2138,5 +2138,29 @@
     "a": "When the data is too large to import, when near-real-time freshness is a genuine requirement rather than a preference, or when security must be enforced at the source. Composite models are usually the better answer now - import the aggregated tables people actually browse and leave the large detail fact table in DirectQuery, with aggregations configured so the engine answers from the imported summary whenever it can and only falls through for detail."
    }
   ]
+ },
+ {
+  "category": "Data & BI",
+  "subcategory": "Incremental Loads",
+  "difficulty": "Medium",
+  "question": "How do you load only what changed from a source system, and what goes wrong?",
+  "answer": "The mechanism depends on what the source can give you, and each option has a failure mode worth knowing.\n\n**1. A modified timestamp column.** Load everything where `ModifiedUtc > lastWatermark`. Simple and common. The failures are real: rows updated by a process that does not set the column are missed entirely, clock skew between the source and your watermark loses records at the boundary, and **hard deletes are invisible** because a deleted row has no timestamp to find.\n\n**2. Change Data Capture.** The database records changes from the transaction log, so you get inserts, updates *and* deletes, with no dependency on application behaviour. This is the most reliable option where the source supports it. Costs are enabling it on the source, retention of the change tables, and handling schema changes.\n\n**3. A change tracking or version column** maintained by the database, which is lighter than CDC and tells you what changed but not the prior values.\n\n**4. Full comparison** - hash every row and diff against the target. Always correct, and expensive; reasonable for small dimensions, not for a large fact table.\n\n**The failures that catch people out:**\n- **Watermark boundaries.** Using `>` on a timestamp with second resolution can skip rows written in the same second as the watermark; using `>=` reprocesses. Use a high-water mark with overlap and make the load idempotent rather than trying to be exact.\n- **Late-arriving data** - a source row backdated after you have loaded that window.\n- **Deletes**, which need soft deletes, CDC, or a periodic reconciliation.\n\n**The safeguard regardless of mechanism:** make the load idempotent with a merge on a business key, so reprocessing a window is harmless.",
+  "tags": [
+   "data-bi",
+   "etl",
+   "incremental-load",
+   "cdc",
+   "watermark"
+  ],
+  "followups": [
+   {
+    "q": "Why make the load idempotent rather than getting the watermark exactly right?",
+    "a": "Because exactness is not achievable in the presence of clock skew, long-running source transactions committing out of timestamp order, and failures part-way through a load. If reprocessing an overlapping window is harmless, you can deliberately overlap by a safety margin and stop worrying about the boundary. A `MERGE` on the business key gives you that, and it also means a failed load can simply be re-run rather than requiring someone to work out how far it got."
+   },
+   {
+    "q": "How do you detect that incremental loading has silently drifted from the source?",
+    "a": "Periodic reconciliation - compare row counts and checksums of key measures between source and target on a schedule, for a window you can afford to check. Drift accumulates quietly over months from exactly the failure modes above, and without a comparison nobody notices until a number is questioned. Pair it with a full reload capability that is routine and fast enough to actually use, so the fix is a re-run rather than a project."
+   }
+  ]
  }
 ]

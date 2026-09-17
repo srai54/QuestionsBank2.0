@@ -4552,5 +4552,29 @@
     "a": "Respect them proactively rather than discovering them through 429s. Implement client-side rate limiting to stay under the documented ceiling, honour `Retry-After` when you do get a 429 rather than retrying on your own schedule, and make sure your retry logic does not treat 429 as a transient error to hammer. If several of your instances call them, the limit is shared across all of them, so the rate limiter needs to be distributed - otherwise each instance stays under the limit individually and the total exceeds it."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Boundaries",
+  "difficulty": "Hard",
+  "question": "How do you decide where to split a system into services or modules?",
+  "answer": "By finding the seams where change happens independently, not by drawing boxes around nouns.\n\n**The heuristics I actually use:**\n\n1. **Follow the business capabilities**, not the data model. \"Ordering\", \"Fulfilment\", \"Billing\" are capabilities. \"Customer\", \"Product\", \"Order\" are entities, and splitting by entity produces services that must talk constantly because every operation touches several.\n2. **Follow team boundaries.** A module or service should have one owning team. Two teams sharing one deployable will block each other, and one team owning fifteen services will drown.\n3. **Follow the rate of change.** Things that change together belong together. If a feature reliably requires edits in three services, those three have a boundary in the wrong place.\n4. **Follow the consistency requirements.** Data that must be immediately consistent belongs on one side of a boundary. If you are wrapping two services in a distributed transaction, the boundary is wrong.\n5. **Follow scaling needs**, but only when they genuinely differ. Splitting something out because it needs ten times the instances is legitimate; splitting because it might one day is not.\n\n**The test that finds bad boundaries fastest:** trace a few real change requests through the design. If most of them touch one module, the boundaries are good. If most touch several, they are not, and you have created coordination cost without gaining independence.\n\n**And prefer modules first.** Boundaries inside one deployable are cheap to get wrong and cheap to move. A service boundary is expensive to change once two teams and a network are involved, so earn it before you take it.",
+  "tags": [
+   "architecture",
+   "boundaries",
+   "modular-monolith",
+   "microservices",
+   "team-topologies"
+  ],
+  "followups": [
+   {
+    "q": "What is the practical way to enforce module boundaries inside a monolith?",
+    "a": "Make violations fail the build rather than relying on review. Separate projects with explicit references so a module physically cannot reference another s internals, `internal` visibility for anything not on the module s public surface, and an architecture test - NetArchTest or ArchUnit style - asserting that no type in one namespace depends on another s internals. Without automated enforcement the boundaries erode within months, because every individual violation looks reasonable at the time."
+   },
+   {
+    "q": "How do you know when a module should become a service?",
+    "a": "When you can name a concrete benefit you cannot get in-process: it needs to scale independently and that is measurably costing you, a separate team needs to deploy on its own cadence, it needs a different technology stack, or regulation demands isolation. Absent one of those, extracting it buys network latency, partial failure and operational overhead for nothing. The good news is that a well-bounded module is already shaped for extraction, so waiting costs little."
+   }
+  ]
  }
 ]

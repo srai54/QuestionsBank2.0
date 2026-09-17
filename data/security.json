@@ -2842,5 +2842,29 @@
     "a": "Much less, because most of them instruct a browser and an API called by a server has no browser in the path. `Strict-Transport-Security` still matters, and `nosniff` is worth sending. What matters far more for an API is CORS configuration, which people often confuse with a security header - CORS is a browser mechanism that relaxes the same-origin policy, so a permissive `Access-Control-Allow-Origin: *` on an authenticated API is a real finding, while its absence protects nothing against a non-browser client."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Logging",
+  "difficulty": "Hard",
+  "question": "What would you log for security purposes, and how do you stop the logs becoming the vulnerability?",
+  "answer": "Security logging has to answer \"who did what, when, and from where\" for the events that matter - and it has to do that without becoming a second copy of the data you were protecting.\n\n**What I would log:**\n- **Authentication events** - success and failure, with the identity attempted, source IP and user agent. Failures matter most: repeated failures across accounts is credential stuffing, repeated failures on one account is a targeted attempt.\n- **Authorisation denials**, which indicate either a bug or someone probing.\n- **Privilege and permission changes**, account creation, role assignment - the actions an attacker takes after getting in.\n- **Access to sensitive data**, at least at the level of who read which record, for anything regulated.\n- **Configuration and security-control changes**, including someone disabling logging.\n- **Session lifecycle** - creation, elevation, termination.\n\n**What must never be logged:** passwords (including in failed attempts, where people log the attempted value), tokens, session identifiers, API keys, full card numbers, and personal data beyond what is justified. Logging the full request body is how most of these leak by accident.\n\n**How the logs become the vulnerability:**\n1. **They contain the secrets** described above, in a system with weaker access control than production.\n2. **Log injection.** Unsanitised user input containing newlines lets an attacker forge log entries - so a value must be encoded before it is written, and structured logging largely solves this because fields are not concatenated into a line.\n3. **They are readable by too many people**, and retained far longer than any policy requires.\n\n**And they must be tamper-evident** - append-only, shipped off the host immediately, because the first thing a competent attacker does is edit them.",
+  "tags": [
+   "security",
+   "logging",
+   "audit",
+   "siem",
+   "privacy"
+  ],
+  "followups": [
+   {
+    "q": "How do you detect an attack from logs rather than just recording it?",
+    "a": "By alerting on patterns rather than on individual events - failed logins across many accounts from one source, a single account failing across many source IPs, authorisation denials clustering on one user, access to sensitive records at a volume far above that user s baseline, and any change to security controls. The individual events are unremarkable; the pattern is the signal. That is what a SIEM is for, and the practical prerequisite is that the events are structured enough to correlate, which is why the logging format matters as much as the content."
+   },
+   {
+    "q": "What is the tension between security logging and privacy regulation?",
+    "a": "Security logs are personal data - they record identifiable people and their actions - so they fall under the same retention, access and erasure obligations as anything else, while security teams want to keep them long and share them widely. The reconciliation is to log the minimum that answers the security question, pseudonymise identifiers where correlation is still possible, set retention deliberately per log type rather than keeping everything forever, and document the lawful basis. An erasure request that cannot be honoured because the data is in immutable security logs is a real conflict, and it is better resolved by design than by argument afterwards."
+   }
+  ]
  }
 ]
