@@ -2325,5 +2325,29 @@
     "a": "Where the risk actually is: anything crossing a boundary you do not control - database, message broker, third-party API, file system, clock and culture. Plus anything where the cost of failure is high regardless of probability, such as money movement or permission checks. Pure logic with no dependencies is exactly where unit tests are cheap and effective, so keep them there."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Unit Testing",
+  "difficulty": "Medium",
+  "question": "How do you test code that depends on the current date and time?",
+  "answer": "By not letting it read the clock directly. `DateTime.Now` inside business logic makes the behaviour untestable, because the test cannot control the input that determines the outcome.\n\n**In modern .NET the answer is `TimeProvider`.** It is an abstraction in the base library, injected as a dependency, with `FakeTimeProvider` in `Microsoft.Extensions.TimeProvider.Testing` for tests. You can set the time, advance it, and it also abstracts timers and delays - so you can test a retry with a 30-second backoff instantly instead of waiting 30 seconds.\n\n**Before `TimeProvider`** the same pattern was hand-rolled: an `IClock` interface with `UtcNow`, a system implementation and a fake. That is still what you will find in most existing codebases and is perfectly adequate.\n\n**The related rules I would apply:**\n- **Store and compute in UTC**, convert to local only at the presentation edge. `DateTime.Now` is almost always a bug in a server application; `DateTimeOffset` is usually the better type because it carries the offset explicitly.\n- **Never use `DateTime.Now` for measuring elapsed time** - it can jump backwards when the clock is adjusted or DST changes. `Stopwatch` uses a monotonic clock and is the correct tool.\n- **Test the boundaries deliberately**: month ends, leap days, DST transitions, and the moment where \"today\" differs between the server s timezone and the user s.",
+  "tags": [
+   "testing",
+   "time",
+   "timeprovider",
+   "datetime",
+   "dependency-injection"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between DateTime.UtcNow and DateTimeOffset.UtcNow?",
+    "a": "`DateTimeOffset` carries an explicit offset from UTC, so the value is unambiguous on its own. A `DateTime` carries only a `Kind` flag that is easily lost - serialise it, put it through a database round trip, or pass it through a library, and a UTC value can come back as `Unspecified` and then get treated as local. `DateTimeOffset` is the safer default for anything crossing a boundary; the one thing it does not capture is the *timezone*, only the offset, which matters if you need to reason about future DST changes."
+   },
+   {
+    "q": "How would you test a scheduled job that should run at 2am local time?",
+    "a": "Inject the time provider and the timezone rather than reading either from the environment, then drive the test by setting the clock to the interesting instants: just before 2am, just after, and on the two DST transition days - where 2am either does not exist or happens twice. Those two days are where scheduled-job bugs actually live, and they cannot be tested at all if the code calls `TimeZoneInfo.Local` and `DateTime.Now` directly."
+   }
+  ]
  }
 ]

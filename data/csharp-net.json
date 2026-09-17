@@ -12139,5 +12139,52 @@
     "a": "`Any()`, clearly. Against a database it translates to `EXISTS`, which can stop at the first matching row; `Count() > 0` counts every match before comparing. In memory the difference is the same shape - `Any()` short-circuits on the first element, `Count()` enumerates the whole sequence. The one exception is when the source is an `ICollection<T>` with an O(1) `Count` property, where it does not matter - but `Any()` is still clearer about intent."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Records",
+  "difficulty": "Medium",
+  "question": "When would you use a record instead of a class, and what surprises people about record equality?",
+  "answer": "I use a record when the type is defined by its **values** rather than its identity - a DTO, a query result, a domain value object like `Money` or `DateRange`, a message. I use a class when the object has identity and lifecycle - an entity, a service, anything with mutable state that matters.\n\n**What records give you:** value equality, a `ToString` that prints the members, deconstruction, `with` expressions, and immutability by default with positional syntax.\n\n**What surprises people:**\n\n1. **Equality is by member, and that includes collections by reference.** Two records each holding a `List<int>` with identical contents are **not** equal, because `List<T>` uses reference equality. This bites constantly in tests. Use an immutable collection with value semantics, or override `Equals`.\n2. **`with` is a shallow copy.** The new record shares the same reference-typed members as the original, so mutating a list on the copy mutates it on the original too.\n3. **Records are not automatically immutable.** `record Person { public string Name { get; set; } }` is a perfectly legal mutable record. Only the positional form generates init-only properties, and even then the members it points at may be mutable.\n4. **Inheritance participates in equality.** A base record and a derived record are never equal, even with identical members, because the generated `Equals` compares the `EqualityContract` type.\n5. **`record struct` exists** and is not immutable unless you write `readonly record struct`.",
+  "tags": [
+   "csharp",
+   "records",
+   "equality",
+   "immutability"
+  ],
+  "followups": [
+   {
+    "q": "Why does the generated equality compare an EqualityContract?",
+    "a": "So that equality is symmetric across an inheritance hierarchy. Without it, a base instance could equal a derived one while the derived one did not equal the base - which breaks the contract of `Equals` and corrupts hash-based collections. Comparing the type first makes it symmetric at the cost of never letting a base and derived record be equal, which is the right trade."
+   },
+   {
+    "q": "Are records a good fit for EF Core entities?",
+    "a": "Generally no. EF entities have identity - two rows with identical column values are still different rows - and EF needs to track and mutate them, which fights init-only properties. Records are an excellent fit for the read side: query projections, DTOs and API responses, where value semantics and immutability are exactly what you want."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Configuration",
+  "difficulty": "Medium",
+  "question": "How do you manage secrets across local development, CI and production in a .NET application?",
+  "answer": "The principle is that secrets never live in the repository and never differ in *mechanism* enough that the code has to know where they came from. The configuration system is the abstraction that makes that possible - `IConfiguration` reads from providers, and the provider changes per environment while the code does not.\n\n**Local development:** the Secret Manager (`dotnet user-secrets`). It stores values outside the project directory, so they cannot be committed by accident. `appsettings.Development.json` is fine for non-secret local overrides but should never hold a credential, because it is in source control.\n\n**CI:** the pipeline s own secret store - GitHub Actions secrets, Azure DevOps variable groups marked secret - injected as environment variables. Environment variables map into `IConfiguration` automatically, with `__` as the section separator.\n\n**Production:** Azure Key Vault, with the application authenticating via **managed identity** so there is no bootstrap secret at all. That last part is the important bit - a vault you access with a stored connection string has just moved the problem. `DefaultAzureCredential` makes the same code work locally (developer credentials) and in Azure (managed identity).\n\n**The practices I would insist on regardless:** secrets scanning in CI so a committed key fails the build, rotation that does not require a redeploy, distinct secrets per environment, and treating any secret that ever touched source control as compromised - rotate it, do not just remove the commit, because the history and every clone still has it.",
+  "tags": [
+   "dotnet",
+   "configuration",
+   "secrets",
+   "key-vault",
+   "security"
+  ],
+  "followups": [
+   {
+    "q": "Why is a managed identity better than a connection string in an environment variable?",
+    "a": "There is no credential to leak, rotate, or accidentally log. The platform issues short-lived tokens to the resource itself, and access is granted by role assignment rather than by possession of a string. An environment variable can be read by anything in the process, appears in crash dumps and diagnostic endpoints, and has to be rotated manually. Managed identity removes the whole category."
+   },
+   {
+    "q": "How do you handle secret rotation without downtime?",
+    "a": "Support two valid secrets during the rotation window - add the new one, deploy or reload configuration, verify traffic is using it, then remove the old one. Key Vault references with `IOptionsMonitor` let the application pick up the new value without a restart. Rotating in a single step, where the old secret is invalidated the moment the new one is created, guarantees a window of failures however fast your deployment is."
+   }
+  ]
  }
 ]

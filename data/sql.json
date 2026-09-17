@@ -4358,5 +4358,29 @@
     "a": "It eliminates the common reader-blocks-writer variety by giving readers a row version instead of taking shared locks, so it removes a large class of them. It does not help with writer-writer deadlocks, which are the ones the ordering fix addresses. It also shifts cost to tempdb for the version store, so it is a database-wide decision with its own capacity implications, not a free switch."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Indexing",
+  "difficulty": "Medium",
+  "question": "A table has 12 indexes and writes have become slow. How do you decide which to remove?",
+  "answer": "Every index is a copy of some of the data that must be kept in sync, so each one taxes every insert, update and delete, and consumes storage and buffer pool. Twelve on one table is usually the result of adding one per slow query without ever reviewing the set.\n\n**How I would decide, with data rather than opinion:**\n\n1. **Find unused indexes.** `sys.dm_db_index_usage_stats` records seeks, scans, lookups and updates per index. An index with zero reads and thousands of writes since the last restart is pure cost. The caveat to state: these stats reset on restart and are per-instance, so check uptime and do not judge from a short window - a quarterly report might use an index that looks dead in a week of data.\n2. **Find duplicate and overlapping indexes.** An index on `(A, B)` makes a separate index on `(A)` redundant, because the composite can serve queries filtering on `A` alone. Leading-column overlap is the cheapest win and is usually present.\n3. **Look for near-duplicates that could be merged.** `(A, B)` and `(A, C)` might become `(A, B) INCLUDE (C)` if the usage supports it.\n4. **Check for over-wide covering indexes.** An INCLUDE list with ten columns is nearly a second copy of the table.\n\n**How I would actually do it:** disable rather than drop first. A disabled index stops being maintained but the definition survives, so restoring it is instant if something regresses. Then drop after a full business cycle has passed.\n\n**And the thing I would check before removing anything:** whether the write slowness is really the indexes. Lock contention, a trigger, page splits from a poorly chosen clustered key, or log file growth can all present the same way.",
+  "tags": [
+   "sql",
+   "indexing",
+   "write-performance",
+   "dmv",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What makes a clustered index key a bad choice for write performance?",
+    "a": "A key that is not monotonically increasing causes inserts to land in the middle of existing pages, which splits them - expensive, and it fragments the index so reads suffer too. A random GUID is the classic offender. Sequential keys avoid splits but can create contention on the last page under very high concurrency, which is when you would consider a sequential GUID or partitioning. Note that the clustered key is also appended to every nonclustered index, so a wide clustered key inflates all of them."
+   },
+   {
+    "q": "When is a filtered index the right answer?",
+    "a": "When queries consistently target a small, well-defined subset - active rows in a table that is mostly soft-deleted, or non-null values in a sparse column. The index is dramatically smaller, so it is cheaper to maintain and more likely to stay in memory. The constraint is that the query predicate must match the filter for the optimiser to use it, and parameterised queries often fail to match, which is the usual reason a filtered index appears to be ignored."
+   }
+  ]
  }
 ]

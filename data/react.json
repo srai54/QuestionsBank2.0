@@ -3628,5 +3628,29 @@
     "a": "When the comparison costs more than the render it avoids - cheap components with many props, or props that change every render anyway, so you pay the comparison and re-render regardless. It also makes behaviour depend on referential stability, so an unrelated refactor that stops memoising a callback silently reintroduces the problem with no visible cause."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "When does state belong in a server-state library rather than in React state, and what goes wrong if you mix them?",
+  "answer": "The distinction I work from: **server state is data you do not own.** It lives elsewhere, other people change it, and your copy is a cache that can be stale. Client state is data you own outright - form input, which tab is open, whether a modal is visible.\n\n**Server state belongs in a library like TanStack Query** because the problems it brings are all the same and all tedious: caching, deduplicating concurrent requests, background refetching, staleness, retries, pagination, and knowing whether you are loading for the first time or refetching. Hand-rolling that with `useEffect` and `useState` means reimplementing it badly in every component, and the bugs are the ones nobody catches in review - a race where a slow response for an old query overwrites a fast one for the new query, or a refetch that never happens after a mutation.\n\n**What goes wrong when you mix them** is duplicated truth. The common mistake is copying fetched data into `useState` to make it editable. Now there are two sources of the same fact, and they drift: the query refetches in the background and the local copy does not update, so the user is editing stale data and saves it over someone else s change.\n\n**The pattern that avoids it:** keep the server data in the query cache and hold only the *diff* in local state - the fields the user has actually edited. On save, send the edit and invalidate the query so the cache refetches. If you need optimistic updates, use the library s mechanism for it, which handles rollback on failure.",
+  "tags": [
+   "react",
+   "state-management",
+   "react-query",
+   "server-state",
+   "caching"
+  ],
+  "followups": [
+   {
+    "q": "Where does URL state fit?",
+    "a": "Anything the user should be able to bookmark, share or reach with the back button belongs in the URL - the current filter, the page number, the selected tab, a search term. Putting it in component state makes those interactions silently break, and it is one of the most common complaints about SPAs. The URL is also a natural cache key for a query library, so the two compose well."
+   },
+   {
+    "q": "Does React Server Components change this?",
+    "a": "It moves a lot of the fetching to the server, so data that is read and never mutated on the client may not need a client cache at all. It does not remove the problem for genuinely interactive data - anything the user mutates and then needs to see updated still requires cache invalidation and optimistic update handling on the client. The split becomes sharper rather than disappearing: static-ish reads move server-side, interactive state stays with a client library."
+   }
+  ]
  }
 ]

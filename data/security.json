@@ -2673,5 +2673,30 @@
     "a": "You cannot re-hash without the plaintext, so you migrate opportunistically: on the next successful login you have the plaintext for a moment, so verify against the old hash and immediately re-hash with Argon2id, storing an algorithm marker per row. Optionally wrap the old hashes in the new algorithm immediately (`argon2(sha256(pw))`) so even un-migrated rows stop being fast to crack. Set a deadline after which un-migrated accounts must reset."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Web",
+  "difficulty": "Hard",
+  "question": "Explain CSRF to me and tell me whether a token-based SPA needs protection against it.",
+  "answer": "CSRF exploits the browser s willingness to attach credentials automatically. If authentication is carried by a **cookie**, then a request originating from `evil.com` to `yourbank.com` still has the cookie attached, because the browser sends cookies based on the destination, not the origin of the page. The attacker cannot read the response, but for a state-changing request that does not matter - the transfer already happened.\n\n**So the condition for CSRF is ambient credentials**: cookies, HTTP Basic, Windows auth. Anything the browser attaches without the page asking.\n\n**A SPA that stores a JWT and sends it in an `Authorization` header is not vulnerable**, because nothing attaches that header automatically - the attacker s page would have to read the token to send it, and same-origin policy prevents that. This is the genuine security argument for header-based tokens.\n\n**But the important caveat:** storing a token in `localStorage` to achieve that trades CSRF for **XSS exposure**. Any injected script can read `localStorage` and exfiltrate the token. An `HttpOnly` cookie is unreadable by script, so it survives XSS better - at the cost of needing CSRF protection. Neither choice is free, and claiming JWTs are simply \"more secure\" is the answer that gets probed.\n\n**My default for a first-party SPA** is an `HttpOnly; Secure; SameSite=Lax` cookie plus anti-forgery tokens. `SameSite` alone stops most classic CSRF, but I would not rely on it exclusively: it is a defence-in-depth layer, not a complete control, and `Lax` still permits top-level GET navigation, so any state change behind a GET remains exposed.",
+  "tags": [
+   "security",
+   "csrf",
+   "xss",
+   "cookies",
+   "jwt",
+   "spa"
+  ],
+  "followups": [
+   {
+    "q": "How does the anti-forgery token actually work in ASP.NET Core?",
+    "a": "The server issues two linked values - one in a cookie, one the client must send back in a header or form field - and validates that they match. The attacker s page can cause the cookie to be sent but cannot read it to produce the matching header, because same-origin policy blocks reading the response. For a SPA, `IAntiforgery.GetAndStoreTokens` exposes the request token, and Angular s `HttpClient` does this automatically with its `XSRF-TOKEN` cookie convention."
+   },
+   {
+    "q": "What does SameSite=Strict break, and why is Lax usually chosen?",
+    "a": "`Strict` withholds the cookie on *any* cross-site request, including a plain link from another site - so a user clicking a link to your app from an email arrives logged out, which looks broken. `Lax` sends it on top-level GET navigations but not on cross-site POSTs or subresource requests, which blocks the CSRF cases while keeping links working. `None` requires `Secure` and reintroduces the exposure, so it is only for deliberate cross-site scenarios."
+   }
+  ]
  }
 ]
