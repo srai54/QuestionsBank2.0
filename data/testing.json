@@ -2349,5 +2349,29 @@
     "a": "Inject the time provider and the timezone rather than reading either from the environment, then drive the test by setting the clock to the interesting instants: just before 2am, just after, and on the two DST transition days - where 2am either does not exist or happens twice. Those two days are where scheduled-job bugs actually live, and they cannot be tested at all if the code calls `TimeZoneInfo.Local` and `DateTime.Now` directly."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Integration",
+  "difficulty": "Medium",
+  "question": "How do you write integration tests against a database without them being slow and flaky?",
+  "answer": "The two problems have different causes, so I would treat them separately.\n\n**Flakiness comes almost entirely from shared state.** Tests that pass alone and fail in a suite are usually depending on data another test created or deleted. The fixes, in order of preference:\n- **Give each test its own data**, keyed by a unique value generated per test. No cleanup needed and tests can run in parallel.\n- **Wrap each test in a transaction and roll back.** Fast and total, but it cannot test anything involving its own transactions, and it does not work when the code under test opens its own connection.\n- **Reset between tests** with a library like Respawn that deletes in dependency order. Slower, but the most realistic.\n\nAvoid ordering-dependent tests and shared mutable fixtures entirely - if a test depends on running third, it will eventually not.\n\n**Slowness comes from setup, not usually from the queries.** The fix is to pay the setup cost once per run rather than once per test: start a container with Testcontainers at collection level, apply migrations once, and let tests share the instance while isolating their data. Reusing containers between runs locally makes the inner loop fast.\n\n**What I would not do** is use an in-memory provider as a substitute for the real database. EF Core s in-memory provider does not enforce relational constraints, does not translate SQL, and does not behave like a database under concurrency - so tests pass against behaviour that does not exist in production. SQLite in-memory is closer but still differs in types, collation and locking. If the point of the test is to exercise real database behaviour, use the real engine.",
+  "tags": [
+   "testing",
+   "integration-testing",
+   "testcontainers",
+   "ef-core",
+   "flaky-tests"
+  ],
+  "followups": [
+   {
+    "q": "How do you handle tests that need to run in parallel against one database?",
+    "a": "Isolate by data rather than by database. Give each test a unique tenant id, prefix or key generated at the start, and scope every query to it - then parallel tests genuinely cannot see each other s rows. Where the schema does not allow that, a schema or database per test worker is the next option, which Testcontainers makes cheap. Serialising the suite is the last resort and it is what everyone reaches for first."
+   },
+   {
+    "q": "Is there a place for the in-memory provider at all?",
+    "a": "Yes, narrowly: testing logic that happens to sit behind a DbContext but does not depend on database behaviour - a service method whose branching you want to exercise with minimal setup. It is a test double, not a database. The moment the assertion depends on a constraint, a generated SQL translation, a concurrency token or a transaction, it is the wrong tool and will give a false pass."
+   }
+  ]
  }
 ]

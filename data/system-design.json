@@ -2740,5 +2740,29 @@
     "a": "The same one the original returned, with the same body - the client should not be able to tell the difference, since that is the point of idempotency. Some APIs add a header such as `Idempotent-Replay: true` for observability. Returning 200 where the original returned 201 is a subtle contract break that confuses clients checking for created-ness."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Caching",
+  "difficulty": "Hard",
+  "question": "Design the caching strategy for a product catalogue read by 50,000 requests per second.",
+  "answer": "At that volume the cache is the system and the database is the backup, so I would design the cache path first and the invalidation story before anything else.\n\n**Layers, from the client inward:**\n1. **CDN / edge cache** for anonymous, cacheable responses. If the catalogue is largely identical for everyone, this absorbs the overwhelming majority of traffic before it reaches your infrastructure, and it is by far the cheapest tier.\n2. **In-process memory cache** on each application instance. Nanosecond access, no network hop. The trade is that it is per-instance, so N instances means N copies and N times the invalidation problem, and memory is bounded by the host.\n3. **Distributed cache (Redis)** as the shared tier. One copy, consistent across instances, survives deployments. Costs a network round trip.\n4. **Database** as the source of truth, which should now see a very small fraction of reads.\n\n**Invalidation** is where these designs fail. For a catalogue I would prefer **event-driven invalidation** - a product update publishes an event, consumers evict the key - with a **TTL as a safety net** so a missed event self-heals rather than serving stale data forever. Pure TTL alone means stale prices; pure event-driven means one lost message is permanent staleness.\n\n**The failure modes I would design for explicitly:**\n- **Stampede** - a hot key expires and thousands of requests hit the database simultaneously. Fix with a per-key lock so one request refreshes while others serve stale, or probabilistic early expiry.\n- **Hot key** - one product in a campaign concentrates load on one Redis shard. Fix by replicating that key across shards with a suffix, or by falling back to the in-process tier for the hottest items.\n- **Cache penetration** - lookups for ids that do not exist bypass the cache every time. Cache the negative result, and consider a Bloom filter.\n- **Cold start after deployment** - an empty in-process cache means every instance stampedes on startup. Warm on startup, or roll deployments gradually.\n\n**What I would measure:** hit ratio per tier, and p99 latency for hits and misses separately. An aggregate latency number hides a terrible miss path.",
+  "tags": [
+   "system-design",
+   "caching",
+   "redis",
+   "cdn",
+   "scaling"
+  ],
+  "followups": [
+   {
+    "q": "How do you keep in-process caches across instances from diverging?",
+    "a": "Accept a bounded divergence window and make it explicit, rather than pretending they are consistent. Short TTLs on the in-process tier - seconds - with the distributed cache as the shared truth means instances converge quickly. If you need faster convergence, publish invalidation messages over Redis pub/sub so instances evict on notification, treating the TTL as the fallback for missed messages. Trying to make per-instance caches strongly consistent recreates a distributed consensus problem you do not want."
+   },
+   {
+    "q": "What do you cache: the rendered response, the domain object, or the query result?",
+    "a": "Usually the shaped read model closest to what the endpoint returns, because it avoids repeating serialisation and mapping on every hit. Caching raw domain objects means paying the transformation cost each time; caching the fully rendered HTTP response is the fastest but the least reusable, since any variation in headers, personalisation or format needs a separate entry. The decision follows cardinality - cache at the level where the number of distinct keys stays manageable."
+   }
+  ]
  }
 ]

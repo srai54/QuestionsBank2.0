@@ -1779,5 +1779,29 @@
     "a": "It is straightforward only if you designed for it: the schema is identical, so the move is an export of that tenant's rows into a new database, a connection-string switch keyed by tenant, and a cutover with a brief write freeze or a dual-write window. What makes it hard is anything that assumed a single database - cross-tenant joins, global sequences, shared reference data with tenant-specific overrides. Keeping the data access strictly tenant-scoped from the start is what preserves the option, which is why I would build it that way even while using a shared database."
    }
   ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Consistency",
+  "difficulty": "Hard",
+  "question": "Explain read-committed versus repeatable-read versus serialisable with a concrete anomaly for each.",
+  "answer": "Isolation levels are defined by which anomalies they permit, so the clearest way to explain them is by the anomaly each one still allows.\n\n**Read uncommitted** permits **dirty reads** - you see another transaction s uncommitted change, which may then roll back, so you acted on data that never existed. Rarely justified.\n\n**Read committed** prevents dirty reads: you only see committed data. It still permits a **non-repeatable read** - you read a row, another transaction updates and commits, you read the same row again in the same transaction and get a different value. This is the default in SQL Server and PostgreSQL.\n\n**Repeatable read** holds your view of rows you have read stable for the transaction. It still permits a **phantom read** - you query \"all orders over 100\", someone inserts a new qualifying row and commits, and re-running the query returns an extra row. Existing rows are stable; the *set* is not.\n\n**Serialisable** prevents phantoms too: the result is as if transactions ran one after another. The cost is either range locks or, in PostgreSQL s SSI implementation, transactions being aborted with a serialisation failure that the application must retry.\n\n**The practical framing I would give:** higher isolation trades concurrency and throughput for correctness guarantees. Most systems run read committed and handle the specific anomalies that matter with explicit concurrency control - an optimistic concurrency token, or `SELECT ... FOR UPDATE` on the rows that need it - rather than raising the global level.",
+  "tags": [
+   "databases",
+   "isolation-levels",
+   "transactions",
+   "mvcc",
+   "concurrency"
+  ],
+  "followups": [
+   {
+    "q": "What is write skew and which levels allow it?",
+    "a": "Two transactions each read an overlapping set, each decides independently that its write is safe, and together they violate an invariant neither broke alone - the classic example is two doctors each going off-call because the other is still on, leaving nobody. Repeatable read permits it, because both reads were stable and neither wrote the same row. Only serialisable prevents it. It is the anomaly that catches people out, because it does not involve any obvious conflict."
+   },
+   {
+    "q": "How does MVCC change the picture?",
+    "a": "It lets readers see a consistent snapshot without blocking writers, which removes most of the reader-writer contention that makes higher isolation expensive in a purely lock-based system. PostgreSQL is MVCC throughout; SQL Server offers it via READ COMMITTED SNAPSHOT and SNAPSHOT isolation. The costs move rather than vanish: you need a version store (tempdb in SQL Server, table bloat and vacuum in PostgreSQL), and snapshot isolation introduces update conflicts that the application must handle."
+   }
+  ]
  }
 ]

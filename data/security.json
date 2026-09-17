@@ -2698,5 +2698,29 @@
     "a": "`Strict` withholds the cookie on *any* cross-site request, including a plain link from another site - so a user clicking a link to your app from an email arrives logged out, which looks broken. `Lax` sends it on top-level GET navigations but not on cross-site POSTs or subresource requests, which blocks the CSRF cases while keeping links working. `None` requires `Secure` and reintroduces the exposure, so it is only for deliberate cross-site scenarios."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Authorization",
+  "difficulty": "Hard",
+  "question": "What is the difference between authentication and authorization failures in an API, and how do you model permissions that depend on the resource?",
+  "answer": "**Authentication** answers \"who are you\" and failing it means 401 with a `WWW-Authenticate` header - the credentials are missing, malformed or expired. **Authorization** answers \"may you do this\" and failing it means 403 - we know who you are and the answer is no. Returning 401 for an authorization failure is a common bug that sends clients into a pointless re-authentication loop.\n\n**The harder half is resource-based authorization** - \"may this user edit *this* document\", which cannot be answered from a role claim alone because it depends on data.\n\n**How I model it:**\n- **Roles** for coarse, application-wide capability - is this user an administrator. Cheap, in the token, no lookup.\n- **Policies over claims** for rules that combine several attributes - a requirement handler that inspects claims and context. In ASP.NET Core this is `IAuthorizationRequirement` with a handler.\n- **Resource-based checks** for anything per-object: load the resource, then call `IAuthorizationService.AuthorizeAsync(user, resource, policy)` with a handler that compares the resource s owner or tenant against the user. This is the piece people skip, and it is where real vulnerabilities live.\n\n**The vulnerability class to name:** insecure direct object reference. The endpoint checks that you are authenticated and have the `Editor` role, then loads document 4471 by id without checking it belongs to you. Changing the id in the URL reads someone else s data. It is consistently among the most common real-world API flaws.\n\n**The defence I would build in structurally:** scope every query by tenant or owner at the data-access layer - a global query filter in EF Core - so forgetting the check in a controller fails closed rather than open. Defence in depth, because relying on every developer remembering every check does not hold.",
+  "tags": [
+   "security",
+   "authorization",
+   "idor",
+   "jwt",
+   "aspnet-core"
+  ],
+  "followups": [
+   {
+    "q": "Why not put all permissions in the JWT as claims?",
+    "a": "Because tokens are bearer credentials with a lifetime, so claims are a snapshot. Revoking a permission does not take effect until the token expires, which for a long-lived token means a fired employee retains access. Fine-grained per-resource permissions also bloat the token past header size limits. The usual split is coarse, slow-changing claims in the token and fine-grained or volatile decisions evaluated server-side per request, with short token lifetimes and refresh to bound the staleness."
+   },
+   {
+    "q": "When would you reach for something like OpenFGA or a policy engine?",
+    "a": "When relationships are the permission model - nested groups, folders inheriting access to their contents, sharing with delegation - which is where role and claim checks become an unmaintainable pile of conditionals. A relationship-based system answers \"does user U have relation R to object O\" including through inheritance chains. The cost is another service on the critical path of every authorization check, so it needs caching and a clear availability story before adopting it."
+   }
+  ]
  }
 ]

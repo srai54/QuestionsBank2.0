@@ -3407,5 +3407,53 @@
     "a": "Providers cache the processed prefix of a prompt, so repeated leading content - a long system prompt, a fixed set of instructions or examples - is billed at a large discount on subsequent requests. It helps most exactly where the cost problem usually is: a large invariant prefix sent thousands of times. To benefit, the shared content must come first and be byte-identical, which means putting the variable part at the end rather than interleaving it. That ordering is a small change with a direct cost effect."
    }
   ]
+ },
+ {
+  "category": "AI & LLM",
+  "subcategory": "RAG",
+  "difficulty": "Hard",
+  "question": "Your RAG system returns confident but wrong answers. How do you debug it?",
+  "answer": "RAG failures are almost always **retrieval** failures wearing a generation costume. The model is doing its job - answering from what it was given - and what it was given was wrong or absent.\n\n**So I would split the pipeline and evaluate the halves separately**, because debugging them together is guesswork.\n\n**1. Is the right chunk being retrieved at all?** Take a failing question, run retrieval alone, and read the top-k chunks. If the answer is not in them, no prompt engineering will help. Measure this properly with recall@k over a labelled set of question-to-chunk pairs.\n\n**Common causes of retrieval failure:**\n- **Chunking that splits the answer.** A fact spanning a chunk boundary is in neither chunk coherently. Overlapping windows and respecting document structure - headings, paragraphs - help more than tuning chunk size.\n- **Pure vector search missing exact terms.** Embeddings are semantic and are poor at product codes, error numbers and names. Hybrid search - BM25 plus vector, fused with reciprocal rank fusion - fixes a large share of real failures.\n- **No reranker.** Retrieve 50 candidates cheaply, then rerank with a cross-encoder and pass the top 5. This is usually the highest-value single addition.\n- **Stale or duplicated index content**, so the model sees an outdated version of a policy.\n\n**2. If retrieval is right and the answer is still wrong**, look at the generation step: is the context being truncated, is the relevant chunk buried in the middle where attention is weakest, is the prompt permitting the model to answer from prior knowledge?\n\n**3. The fix for confidence specifically:** instruct the model to answer only from the provided context and to say when the context is insufficient, and require citations per claim so an unsupported statement is visible. Then verify the citations programmatically - a claim citing a chunk that does not contain it is detectable.",
+  "tags": [
+   "ai-llm",
+   "rag",
+   "retrieval",
+   "evaluation",
+   "hallucination"
+  ],
+  "followups": [
+   {
+    "q": "How do you build an evaluation set without a lot of manual labelling?",
+    "a": "Generate candidate questions from your own documents with an LLM - for each chunk, ask what questions this chunk answers - which gives you question-to-chunk pairs essentially for free, and makes retrieval recall measurable immediately. Then have a human review a sample for quality. It is not a substitute for real user questions, which are messier and should replace the synthetic set over time, but it gets you a regression baseline in an afternoon rather than a month."
+   },
+   {
+    "q": "Why does hybrid search beat pure vector search so often?",
+    "a": "Because the two fail in opposite ways. Embeddings capture meaning but blur exact tokens, so a query for error code `SB-4471` retrieves passages about errors generally. Keyword search nails the exact token but misses paraphrase entirely. Fusing the rankings covers both, and reciprocal rank fusion does it without needing the two scores to be on a comparable scale - which is what makes naive score-blending unreliable."
+   }
+  ]
+ },
+ {
+  "category": "AI & LLM",
+  "subcategory": "Production",
+  "difficulty": "Medium",
+  "question": "How would you control cost and latency in an LLM-backed feature?",
+  "answer": "Both are driven mostly by **tokens and model choice**, so that is where I would start, and both need measuring per request before anything is tuned.\n\n**Cost levers, in order of impact:**\n- **Right-size the model per task.** Most steps in a pipeline - classification, routing, extraction, reformatting - do not need the largest model. Routing simple requests to a small model and escalating only when needed often cuts cost by most of it.\n- **Prompt caching.** A long system prompt or a large shared context resent on every call is the most common waste. Providers charge substantially less for cached prefix tokens, so structuring prompts so the stable part comes first is close to free money.\n- **Cut retrieved context.** Passing 20 chunks when 5 would do multiplies input tokens with no quality gain, and often reduces quality.\n- **Cap output tokens** and ask for structured output rather than prose.\n\n**Latency levers:**\n- **Stream the response** so time-to-first-token is what the user feels, rather than total generation time. This changes perceived performance more than any backend optimisation.\n- **Parallelise independent calls** rather than chaining them.\n- **Cache aggressively** - exact-match cache for repeated queries, and semantic cache for near-duplicates, with a similarity threshold tight enough to avoid returning an answer to a subtly different question.\n- **Do not put the LLM on the critical path** where a precomputed or rule-based answer will do.\n\n**The operational part I would insist on:** per-request token and cost logging attributed to a feature and a tenant, a budget alert, and a hard spend cap. LLM cost scales with usage in a way that surprises people, and the first sign should not be the invoice.",
+  "tags": [
+   "ai-llm",
+   "cost",
+   "latency",
+   "caching",
+   "production"
+  ],
+  "followups": [
+   {
+    "q": "What is the risk of a semantic cache and how do you manage it?",
+    "a": "That two questions embed similarly but have materially different answers - \"can I cancel my order\" and \"can I cancel my subscription\" may sit close in embedding space. The mitigations are a conservative similarity threshold, scoping cache keys by tenant and by any parameters that change the answer, short TTLs for anything time-sensitive, and logging cache hits so you can audit whether returned answers actually matched. Start strict and loosen with evidence."
+   },
+   {
+    "q": "How do you decide when a smaller model is good enough?",
+    "a": "Empirically, against a held-out evaluation set with a defined quality bar - not by reading benchmarks. Run both models over the same cases, score against your criteria, and look at the cost-quality curve. Often the small model is equal on 80% of traffic and clearly worse on an identifiable subset, which is exactly the signal to build a router rather than choose one model for everything."
+   }
+  ]
  }
 ]
