@@ -4360,5 +4360,29 @@
     "a": "You cannot, so you redesign it. Either the boundary is wrong and the two things belong in one service - which is often the right answer and worth checking first - or you accept eventual consistency with a saga: a sequence of local transactions, each with a compensating action if a later step fails. Compensation is not rollback; refunding a payment is not the same as never charging it, and the business has to agree that the intermediate state is acceptable."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Messaging",
+  "difficulty": "Hard",
+  "question": "When would you use a queue instead of a direct HTTP call between two services?",
+  "answer": "The question I ask is whether the caller needs the *result* to continue. If it does, that is a synchronous call. If it only needs the work to eventually happen, a queue is usually better.\n\n**What a queue buys you:**\n- **Temporal decoupling.** The consumer can be down, deploying, or slow, and the producer is unaffected. With HTTP, the consumer s availability becomes the producer s availability.\n- **Load levelling.** A traffic spike lengthens the queue instead of overwhelming the consumer. The consumer processes at its own sustainable rate.\n- **Retries and failure handling for free**, with a dead letter queue as the safety net for poison messages.\n- **Fan-out** - several consumers can react to one event without the producer knowing about any of them.\n\n**What it costs, and this is the part that decides most designs:**\n- **Eventual consistency.** The caller gets an acknowledgement, not a result. Any UI that shows the outcome immediately now needs polling, push, or an optimistic update.\n- **At-least-once delivery**, so every consumer must be idempotent. This is not optional and it is where most bugs appear.\n- **Ordering is not guaranteed** across partitions, and enforcing it costs throughput.\n- **Debugging is harder.** A failure is now asynchronous, disconnected from the request that caused it, and only findable if you propagated trace context into the message.\n- **More infrastructure** to run, monitor and understand.\n\n**So my default:** synchronous HTTP for queries and for commands whose result the user is waiting on; queues for work that is slow, spiky, or genuinely fire-and-forget - sending email, generating a report, updating a search index, propagating an event to interested parties.",
+  "tags": [
+   "architecture",
+   "messaging",
+   "queues",
+   "async",
+   "trade-offs"
+  ],
+  "followups": [
+   {
+    "q": "How do you show a user the result of work that went onto a queue?",
+    "a": "Return 202 Accepted with a status URL the client can poll, or push the result over SignalR or server-sent events when it completes. The other pattern is an optimistic UI that shows the expected outcome immediately and reconciles if it fails. What you must not do is pretend the operation is complete when it is queued - the user then sees an inconsistent state on the next page load and reports it as a bug."
+   },
+   {
+    "q": "What do you do with a message that fails repeatedly?",
+    "a": "Retry a bounded number of times with backoff, then move it to a dead letter queue rather than retrying forever - an infinitely retried poison message blocks the queue and burns resources. The dead letter queue then needs an owner, an alert, and a way to inspect and replay messages after a fix, otherwise it silently becomes where messages go to be forgotten. I would treat a non-empty dead letter queue as an alertable condition."
+   }
+  ]
  }
 ]

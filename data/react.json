@@ -3652,5 +3652,29 @@
     "a": "It moves a lot of the fetching to the server, so data that is read and never mutated on the client may not need a client cache at all. It does not remove the problem for genuinely interactive data - anything the user mutates and then needs to see updated still requires cache invalidation and optimistic update handling on the client. The split becomes sharper rather than disappearing: static-ish reads move server-side, interactive state stays with a client library."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Hooks",
+  "difficulty": "Medium",
+  "question": "Explain why `useEffect` runs twice in development and what genuine bug that is designed to reveal.",
+  "answer": "In React 18 and later, Strict Mode in development deliberately mounts a component, unmounts it, and mounts it again. So every effect runs, cleans up, and runs again. It does not happen in production builds.\n\n**It is not a bug to work around - it is a test.** It reveals effects that are not resilient to being re-run, which is the same condition that breaks under React s ability to preserve and restore state, and it surfaces missing cleanup.\n\n**The genuine bugs it exposes:**\n- **A subscription with no cleanup.** Subscribe on mount, never unsubscribe - now you have two subscriptions and every event is handled twice. In production this leaks on every mount/unmount cycle.\n- **A fetch whose response is not cancelled.** Two requests race; the slower one resolves last and overwrites the newer data. This is a real production bug that Strict Mode makes visible immediately.\n- **An effect that mutates something outside React** - incrementing a global, appending to a list, starting a timer without clearing it.\n\n**The correct response is always to add cleanup**, not to suppress the double-invocation with a ref guard. A ref guard silences the symptom and leaves the underlying non-idempotent effect in place.\n\n**The broader point I would make:** most `useEffect` uses I see in review should not be effects at all. Deriving state from props does not need an effect - compute it during render. Responding to a user action belongs in the event handler. Data fetching belongs in a query library or the framework s loader. Effects are for synchronising with something *outside* React, and that is a much smaller set of cases than people use them for.",
+  "tags": [
+   "react",
+   "hooks",
+   "useeffect",
+   "strict-mode",
+   "cleanup"
+  ],
+  "followups": [
+   {
+    "q": "How do you cancel a fetch inside an effect properly?",
+    "a": "Create an `AbortController` in the effect, pass its signal to fetch, and abort it in the cleanup function. That way a superseded request is actually cancelled rather than merely ignored, so it stops consuming a connection and cannot resolve into stale state. The lighter alternative is an `ignore` boolean flipped in cleanup and checked before setting state - it prevents the stale write but does not cancel the network request."
+   },
+   {
+    "q": "What is the dependency array actually comparing?",
+    "a": "Each dependency by `Object.is`, which is reference equality for objects, arrays and functions. So an object or inline function recreated on every render makes the effect re-run every render, which is the usual cause of an effect loop. Either move the value outside the component, memoise it, or depend on the primitive fields you actually use rather than the containing object."
+   }
+  ]
  }
 ]

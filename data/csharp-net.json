@@ -12186,5 +12186,53 @@
     "a": "Support two valid secrets during the rotation window - add the new one, deploy or reload configuration, verify traffic is using it, then remove the old one. Key Vault references with `IOptionsMonitor` let the application pick up the new value without a restart. Rotating in a single step, where the old secret is invalidated the moment the new one is created, guarantees a window of failures however fast your deployment is."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "Two threads increment a shared counter and the total is wrong. Explain every fix available and when each is appropriate.",
+  "answer": "`count++` is read, add, write - three operations, not one - so two threads can both read 5, both write 6, and one increment is lost. The compiler and CPU may also reorder or cache the value, so a thread can read a stale copy indefinitely.\n\n**The fixes, from cheapest to most general:**\n\n1. **`Interlocked.Increment(ref count)`** - a single atomic CPU instruction. Correct, lock-free, and by far the fastest for this exact case. `Interlocked` also gives `Add`, `Exchange` and `CompareExchange`, the last being the building block for lock-free algorithms.\n2. **`lock (syncRoot)`** - correct and readable, and the right default when you need to protect more than one operation or more than one field. Costs more than `Interlocked` but far less than people assume when uncontended. Lock on a private readonly object, never on `this`, a type, or a string.\n3. **`Monitor` with a timeout** when you need to avoid blocking indefinitely.\n4. **A concurrent collection** - `ConcurrentDictionary`, `ConcurrentQueue` - when the shared state is a collection rather than a scalar. Do not build your own with a lock around a `Dictionary` unless you have measured a reason.\n5. **Avoid sharing entirely** - each thread accumulates locally and you combine at the end. `Parallel.For` has overloads with thread-local state for exactly this, and it is usually the fastest option because there is no contention at all.\n\n**What `volatile` does not do:** it prevents certain reorderings and ensures reads see the latest written value, but it does **not** make `++` atomic. A volatile counter is still wrong. This is the most common misconception on this topic.",
+  "tags": [
+   "csharp",
+   "concurrency",
+   "threading",
+   "interlocked",
+   "race-condition"
+  ],
+  "followups": [
+   {
+    "q": "When is Interlocked not enough?",
+    "a": "As soon as the invariant spans more than one variable. Atomically incrementing two counters that must stay consistent with each other cannot be done with two `Interlocked` calls - another thread can observe the state between them. That needs a lock, or a single atomic replacement of an immutable object holding both values via `CompareExchange` in a retry loop."
+   },
+   {
+    "q": "What is the cost of an uncontended lock?",
+    "a": "Small - tens of nanoseconds, because .NET uses a thin lock that avoids a kernel transition until there is actual contention. The cost that matters is *contention*: when threads block, you pay context switches and the critical section becomes a serialisation point that caps throughput regardless of core count. So the optimisation that matters is shortening or eliminating the critical section, not replacing the lock primitive."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Serialization",
+  "difficulty": "Medium",
+  "question": "An API contract change broke clients even though you only added a field. What could have gone wrong?",
+  "answer": "Adding a field should be backwards compatible, so if it broke clients the cause is usually in how the *client* deserialises rather than in what you added.\n\n**The candidates:**\n\n- **Strict deserialisation on the client.** A client configured to reject unknown members - `MissingMemberHandling.Error` in Newtonsoft, or a code generator producing a strict model - fails on the new field. This is the most common cause and it is why \"additive changes are safe\" is a convention, not a guarantee.\n- **The field is not actually additive.** Adding a required property to a *request* model breaks existing callers who do not send it. Additive is only safe in the response direction.\n- **Serialisation order or casing changed** because the new member shifted something, and a client was parsing positionally or matching case-sensitively. `System.Text.Json` is case-sensitive by default where Newtonsoft is not - a migration between them breaks clients that were relying on the lenient behaviour.\n- **A generated client was regenerated** and the new field changed a type or introduced a nullability difference.\n- **Payload size** crossed a limit - a response cap, a message size limit on a broker, or a mobile client s buffer.\n\n**What I would put in place afterwards:** contract tests that run the *consumer s* expectations against the provider, so a breaking change fails in CI rather than in production. Explicit versioning for genuinely breaking changes. And an agreed compatibility policy stating that clients must ignore unknown fields - written down, because it is an assumption both sides must share for additive evolution to work at all.",
+  "tags": [
+   "dotnet",
+   "api-versioning",
+   "serialization",
+   "json",
+   "contract-testing"
+  ],
+  "followups": [
+   {
+    "q": "What makes a change genuinely breaking versus additive?",
+    "a": "Direction matters. In a response: adding a field is safe, removing one or changing its type or meaning is breaking. In a request: adding an *optional* field is safe, adding a required one is breaking. Changing an enum by adding a value is breaking for clients that switch exhaustively or parse strictly, which surprises people. Renaming anything is always breaking, and semantic changes - the same field now meaning something different - are the worst kind because nothing fails loudly."
+   },
+   {
+    "q": "How do consumer-driven contract tests work in practice?",
+    "a": "Each consumer declares the interactions it depends on - this request produces a response containing these fields with these types - and publishes that as a contract. The provider s CI verifies it can satisfy every published contract before deploying. The value is that the provider finds out at build time which consumers a change would break, and can see whether anyone actually uses the field being removed. Pact is the common implementation."
+   }
+  ]
  }
 ]

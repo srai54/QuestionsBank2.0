@@ -3873,5 +3873,29 @@
     "a": "Same pattern, and the dual-write phase does the conversion. The extra care is around values that do not convert cleanly - a widening change like int to bigint is safe, but narrowing, or changing a string to a date, will have rows that fail. Validate the whole table before switching reads, and decide explicitly what happens to rows that cannot convert, rather than discovering them during the switch."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Containers",
+  "difficulty": "Medium",
+  "question": "Your .NET container image is 1.2GB. How do you get it down, and what actually matters?",
+  "answer": "Most of that is the SDK, which has no business being in a runtime image.\n\n**The main fix is a multi-stage build.** Build with the SDK image, then copy only the published output into a runtime image. That alone typically takes a .NET image from over a gigabyte to a couple of hundred megabytes, because the SDK is roughly 800MB of compilers and tooling you do not ship.\n\n**Then choose the right base:**\n- `aspnet:9.0` - the normal runtime image.\n- `aspnet:9.0-alpine` - much smaller, musl-based. Watch for native dependencies and globalisation: Alpine needs `icu-libs` or invariant globalisation mode, and the latter changes string comparison and formatting behaviour, which is a correctness decision not a size one.\n- `aspnet:9.0-noble-chiseled` - Ubuntu with everything unnecessary removed, no shell, no package manager. Small *and* a much smaller attack surface.\n- **Native AOT** - a self-contained binary with no runtime at all, which can produce very small images, at the cost of reflection limitations and longer builds.\n\n**What actually matters, though, is usually not the megabytes.** Layer caching matters more for build and deploy speed: copy the project files and restore *before* copying the source, so a code change does not invalidate the restore layer. Registry layer sharing means the base layers are pulled once per host regardless.\n\n**The thing I would prioritise over size:** running as a non-root user, not shipping a shell or package manager, and scanning the image for known vulnerabilities in CI. A chiselled image is valuable mainly because there is nothing in it for an attacker to use, and the size reduction is a side effect.",
+  "tags": [
+   "devops",
+   "docker",
+   "containers",
+   "image-size",
+   "dotnet"
+  ],
+  "followups": [
+   {
+    "q": "Why does copying csproj files separately matter so much?",
+    "a": "Because Docker caches layers and invalidates everything after the first changed one. If you copy the whole source and then restore, every source edit invalidates the restore layer and you re-download all packages on every build. Copying just the project files, restoring, then copying the source means the restore layer is reused until dependencies actually change - usually turning a multi-minute build into seconds."
+   },
+   {
+    "q": "When is Native AOT not appropriate?",
+    "a": "When the application depends on runtime code generation or unbounded reflection - most ORMs that build queries dynamically, some serialisers, and anything loading plugins at runtime. Trimming can also remove code that is only reached reflectively, producing failures that appear only at runtime in production. It is well suited to small, self-contained services with minimal APIs and source-generated serialisation, and poorly suited to a large existing app you are hoping to shrink without changing."
+   }
+  ]
  }
 ]

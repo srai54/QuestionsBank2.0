@@ -4382,5 +4382,29 @@
     "a": "When queries consistently target a small, well-defined subset - active rows in a table that is mostly soft-deleted, or non-null values in a sparse column. The index is dramatically smaller, so it is cheaper to maintain and more likely to stay in memory. The constraint is that the query predicate must match the filter for the optimiser to use it, and parameterised queries often fail to match, which is the usual reason a filtered index appears to be ignored."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Window Functions",
+  "difficulty": "Medium",
+  "question": "Give me a problem that is painful with GROUP BY and easy with a window function.",
+  "answer": "The clearest one is **returning detail rows alongside an aggregate**. `GROUP BY` collapses rows, so as soon as you need each row *and* a total over its group, you are forced into a self-join or a correlated subquery. A window function computes the aggregate without collapsing anything.\n\n\"Show each order line with its percentage of the order total\" is one `SUM(...) OVER (PARTITION BY OrderId)` and no join at all. The `GROUP BY` version aggregates to a derived table and joins back, which is more code, harder to read, and usually a second pass over the data.\n\n**The other cases where windows are the natural tool:**\n\n- **Top-N per group** - the \"latest row per customer\" problem. `ROW_NUMBER() OVER (PARTITION BY CustomerId ORDER BY CreatedUtc DESC)` in a subquery, filtered to `= 1`. The classic alternative is a correlated subquery on `MAX(CreatedUtc)`, which breaks when two rows share the same timestamp.\n- **Comparing a row to its neighbour** - `LAG` and `LEAD` for month-over-month change or gap detection, which otherwise needs a self-join on a computed offset.\n- **Running totals** - `SUM(...) OVER (ORDER BY ... ROWS UNBOUNDED PRECEDING)`. Before window functions this was a correlated subquery per row, which is quadratic.\n- **Deduplication** - number the duplicates and delete everything above rank 1.\n\n**The distinction to state:** `ROW_NUMBER` always gives distinct numbers; `RANK` leaves gaps after ties; `DENSE_RANK` does not. Picking the wrong one is a frequent and quiet bug in top-N queries.",
+  "tags": [
+   "sql",
+   "window-functions",
+   "row-number",
+   "analytics",
+   "query-writing"
+  ],
+  "followups": [
+   {
+    "q": "What does the default window frame do and why does it matter?",
+    "a": "When you write an `ORDER BY` inside `OVER` without specifying a frame, the default is `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` - and `RANGE` includes *all peer rows with the same ORDER BY value*, not just rows up to this one. So a running total over a non-unique order column includes the whole tie group at once, which is usually not what was intended. Specifying `ROWS` instead of `RANGE` gives the row-by-row behaviour most people expect, and is also faster."
+   },
+   {
+    "q": "What indexes help a window function?",
+    "a": "One matching the `PARTITION BY` columns followed by the `ORDER BY` columns, in that order. That lets the engine read rows already grouped and ordered, avoiding a sort - and the sort is nearly always the dominant cost in a window query. Checking whether the plan contains a sort operator is the quickest way to tell whether the index is doing its job."
+   }
+  ]
  }
 ]
