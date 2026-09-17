@@ -4806,5 +4806,29 @@
     "a": "When the underlying query is expensive and is read far more often than the base data changes - a nightly aggregate, a reporting summary. The database maintains the stored result, so correctness is not your responsibility, which is the main advantage over hand-maintaining a denormalised table. The costs decide it: SQL Server indexed views add work to every write on the base tables and have restrictive rules about what they can contain, while PostgreSQL materialised views must be refreshed explicitly and are therefore stale by design."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Aggregation",
+  "difficulty": "Medium",
+  "question": "Explain the difference between WHERE and HAVING, and where people get it wrong.",
+  "answer": "`WHERE` filters **rows before grouping**; `HAVING` filters **groups after aggregation**. That ordering is the whole answer, and it follows from the logical processing order: `FROM`, `WHERE`, `GROUP BY`, `HAVING`, `SELECT`, `ORDER BY`.\n\n**So the rules that fall out:**\n- You cannot reference an aggregate in `WHERE` - `WHERE COUNT(*) > 5` is an error, because the count does not exist yet.\n- You cannot reference a `SELECT` alias in `WHERE` or `HAVING` in most engines, because `SELECT` is evaluated after both. PostgreSQL permits it in `GROUP BY` and `ORDER BY` as an extension, which trips people moving between engines.\n\n**Where people get it wrong: putting a non-aggregate filter in `HAVING`.** `GROUP BY CustomerId HAVING Country = 'UK'` is usually legal and is a performance mistake - every row is grouped and then most groups are discarded. The same condition in `WHERE` filters before the grouping work happens, so there is far less to group. On a large table that difference is substantial, and it is invisible in the results because both produce the same answer.\n\n**The corollary worth stating:** if the condition does not involve an aggregate, it belongs in `WHERE`. `HAVING` is for conditions on the aggregate itself - `HAVING COUNT(*) > 5`, `HAVING SUM(Total) > 1000`.\n\n**And the related trap:** `WHERE` on an outer-joined table converts the outer join to an inner join, because the NULL rows fail the predicate. That condition belongs in the `ON` clause instead if you want to keep the unmatched rows.",
+  "tags": [
+   "sql",
+   "group-by",
+   "having",
+   "aggregation",
+   "query-writing"
+  ],
+  "followups": [
+   {
+    "q": "Why does a WHERE clause on an outer-joined table silently change the join type?",
+    "a": "Because the outer join produces rows with NULLs for the unmatched side, and a `WHERE` predicate on a column from that side evaluates to unknown for those rows, so they are filtered out - leaving only the rows that matched, which is an inner join. Moving the predicate into the `ON` clause filters what participates in the join while still preserving unmatched rows from the preserved side. The exception is `WHERE col IS NULL`, which deliberately keeps only the unmatched rows and is how you write an anti-join."
+   },
+   {
+    "q": "Does the optimiser not just move a non-aggregate condition from HAVING to WHERE?",
+    "a": "Often it does - predicate pushdown is a standard optimisation and modern engines handle the simple cases. But it cannot always prove the transformation is safe, particularly with complex expressions, functions on the column, or when the query involves outer joins or window functions. So relying on it is a gamble that varies by engine and by query shape. Writing it correctly costs nothing and removes the dependency on the optimiser being clever."
+   }
+  ]
  }
 ]

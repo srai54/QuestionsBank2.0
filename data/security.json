@@ -2890,5 +2890,29 @@
     "a": "Check whether the provider supports restricting the key by origin, bundle identifier or referrer - most do for browser and mobile keys, and that restriction is the real control. If the key is genuinely privileged and unrestrictable, that SDK is not suitable for client-side use and the integration belongs on your server. It is worth pushing back on the vendor too; a provider that requires an unrestricted privileged key in a client has a design problem you will inherit."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Dependencies",
+  "difficulty": "Medium",
+  "question": "A scanner reports 47 vulnerabilities in your dependencies. How do you triage them?",
+  "answer": "Not by fixing them in order of the CVSS score, which is what the report invites. The score describes the vulnerability in the abstract, not the risk to your system.\n\n**How I would triage:**\n\n1. **Reachability first.** Is the vulnerable code path actually called from your application? A flaw in a function you never invoke is not exploitable in your context. Tools that do reachability analysis cut the list dramatically, often by most of it, and this is the single biggest reduction available.\n2. **Where does the dependency run?** A vulnerability in a build-time or test-only package is a different risk from one in your production request path. It still matters - build systems are a supply chain target - but it is not the same urgency.\n3. **Is it exposed to untrusted input?** A deserialisation flaw in a library that only ever parses your own configuration is not the same as one parsing user uploads.\n4. **What are the compensating controls?** A denial-of-service flaw behind rate limiting and a WAF is lower risk than the raw score suggests.\n5. **Then severity and exploit availability.** A known exploit in the wild raises urgency far more than the score alone.\n\n**What I would do with the outcome:** fix the genuinely reachable and exposed ones now, schedule the rest, and **record a decision for anything accepted** - with a reason and a review date, not a permanent silent suppression.\n\n**And automate the boring majority.** Most advisories are resolved by a patch bump; letting those merge automatically when tests pass keeps the list short enough that humans look at the ones needing judgement.\n\n**The failure mode to avoid is alert fatigue** - a permanently red dashboard that everyone ignores, which is worse than no scanner.",
+  "tags": [
+   "security",
+   "vulnerabilities",
+   "dependencies",
+   "triage",
+   "supply-chain"
+  ],
+  "followups": [
+   {
+    "q": "What do you do when there is no patched version available?",
+    "a": "Work through the options in order: is there a maintained fork or an alternative package, can you remove the dependency entirely (often a small utility is a few lines you could own), can you mitigate at a different layer such as input validation or network policy, or can you pin and isolate it. If none apply, document the accepted risk with the reasoning, the compensating controls and a review date - and monitor the advisory, because a patch may arrive. An undocumented acceptance is indistinguishable from having missed it."
+   },
+   {
+    "q": "How do you handle a vulnerability in a transitive dependency you do not control?",
+    "a": "First check whether your direct dependency has a release that updates it - that is the clean fix. If not, most ecosystems let you force a resolution: `npm` overrides, or a central package version override in .NET, which pins the transitive package to a patched version. That works but risks an incompatibility the direct dependency did not test against, so it needs verification. Raising an issue upstream is worth doing in parallel, since you will not be the only consumer affected."
+   }
+  ]
  }
 ]

@@ -3854,5 +3854,29 @@
     "a": "The navigation menu should be, so users are not shown links they cannot use - but the routes themselves can exist regardless, because access is decided server-side anyway. Fetching a permission set at login and using it to render navigation and to gate UI affordances is the useful pattern. What it must not become is the authorisation decision: the server checks on every request, and the client copy is a convenience that may be stale."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Lists",
+  "difficulty": "Medium",
+  "question": "Why does React need a key on list items, and what goes wrong with the wrong key?",
+  "answer": "The key tells React which element in the new render corresponds to which element in the previous one. Without it, React falls back to matching by position, and position is wrong whenever the list is reordered, filtered or has items inserted anywhere but the end.\n\n**What goes wrong with the index as a key** - which is the common mistake, because it silences the warning:\n\nReact thinks the item at position 2 is the same item it was before. So when you delete the first item, every subsequent item shifts up, and React sees \"item at index 0 changed its props\" rather than \"item 0 was removed\". The consequences are:\n- **Component state attaches to the wrong item.** A checked checkbox, an expanded row, an uncontrolled input s text stays at its position while the data moves under it - so the user sees the wrong row selected or text in the wrong field. This is the bug people report and struggle to reproduce.\n- **Unnecessary re-renders**, because every item after the change looks modified.\n- **Animations and transitions play on the wrong elements.**\n\n**What makes a good key:** stable, unique among siblings, and derived from the data - a database id. Not the array index, not `Math.random()` (which remounts everything on every render), and not a value that can change.\n\n**When the index is acceptable:** a list that is static, never reordered, never filtered, and whose items hold no state. That is a narrow enough case that I would still prefer a real id.\n\n**And the scope detail:** keys only need to be unique among siblings, not globally, so two separate lists can both use key `1`.",
+  "tags": [
+   "react",
+   "keys",
+   "reconciliation",
+   "lists",
+   "state"
+  ],
+  "followups": [
+   {
+    "q": "How does the key affect whether a component remounts?",
+    "a": "A changed key means React unmounts the old component and mounts a new one, discarding its state entirely. That is normally what you want on a genuine identity change, and it is also a deliberate technique: putting a key on a component that should reset when a prop changes - such as a form keyed by the record id - forces a clean remount rather than writing an effect to reset state. It is the cleanest way to express \"this is a different thing now\"."
+   },
+   {
+    "q": "What happens if keys are duplicated?",
+    "a": "React warns and the behaviour becomes unpredictable - it cannot distinguish the two elements, so state and DOM nodes can attach to the wrong one and updates can be dropped. The usual causes are composing a key from a field that is not actually unique, or concatenating values that collide. Where no natural unique id exists, composing several fields or generating a stable id when the data is loaded is better than reaching for the index."
+   }
+  ]
  }
 ]

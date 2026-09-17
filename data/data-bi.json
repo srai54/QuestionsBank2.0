@@ -2162,5 +2162,29 @@
     "a": "Periodic reconciliation - compare row counts and checksums of key measures between source and target on a schedule, for a window you can afford to check. Drift accumulates quietly over months from exactly the failure modes above, and without a comparison nobody notices until a number is questioned. Pair it with a full reload capability that is routine and fast enough to actually use, so the fix is a re-run rather than a project."
    }
   ]
+ },
+ {
+  "category": "Data & BI",
+  "subcategory": "Quality",
+  "difficulty": "Medium",
+  "question": "How do you decide what a \"customer\" is when three systems disagree?",
+  "answer": "This is a master data problem, and it is organisational before it is technical. Three systems disagree because three teams defined a customer for three different purposes - the CRM means a relationship, billing means a payer, and the application means a login. None is wrong; they are different concepts sharing a word.\n\n**What I would do:**\n\n1. **Establish who owns the definition.** Not which system - which *person or team* decides what a customer is. Without that, any technical solution is arbitrated by whoever shouts loudest, and it drifts again within a year.\n2. **Write the definition down**, including the edge cases that actually cause the disagreement: is a prospect a customer, is a churned account still one, is a parent company one customer or several, is a person with two email addresses one or two.\n3. **Identify the system of record per attribute**, not per entity. Billing may own the legal name and address; the CRM may own the relationship owner; the application may own the login. That is usually more honest than declaring one system authoritative for everything.\n4. **Match and merge deliberately** - deterministic rules on strong identifiers where available, probabilistic matching on name and address where not, with a confidence threshold and a human review queue for the uncertain cases. Automatic merging of everything creates wrong merges that are very hard to unpick.\n5. **Keep the lineage**, so a merged record remembers its sources and a bad merge can be reversed.\n\n**And expose the disagreement rather than hiding it.** A dashboard showing where the systems conflict is more useful than a reconciliation that silently picks one, because it drives the conversation that actually fixes the source.",
+  "tags": [
+   "data-bi",
+   "master-data",
+   "data-quality",
+   "governance",
+   "matching"
+  ],
+  "followups": [
+   {
+    "q": "Is a master data management tool the answer?",
+    "a": "It is a tool for implementing decisions, not for making them - and buying one before the definitions and ownership exist produces an expensive system that encodes the same confusion. For a small number of entities, the matching and survivorship logic is a manageable amount of code in your warehouse, and starting there forces the definitional work. A dedicated platform earns its place at scale, with many sources, complex survivorship rules and a stewardship workflow involving non-technical users."
+   },
+   {
+    "q": "How do you handle a bad merge that has already propagated downstream?",
+    "a": "This is why lineage and reversibility matter more than match accuracy. Keep the source records intact and treat the golden record as a derived view rather than overwriting the originals, so unmerging is recomputing rather than reconstructing from backups. Downstream systems should reference the master identifier, and you need a defined process for propagating a split - which is harder than a merge, because consumers may have accumulated their own data against the merged id."
+   }
+  ]
  }
 ]

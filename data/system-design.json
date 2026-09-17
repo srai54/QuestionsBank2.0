@@ -2956,5 +2956,29 @@
     "a": "Segment the work so it is resumable - split the source into chunks, transcode each independently, and record which are complete, so a failure retries one chunk rather than the whole file. That also gives you parallelism, which is what makes a long video finish in reasonable time. The job needs an overall timeout and a dead-letter path so a genuinely broken source file is surfaced to the user as a failure rather than retrying forever, and the partial output must be cleaned up so storage does not fill with abandoned renditions."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scheduling",
+  "difficulty": "Hard",
+  "question": "Design a system that runs millions of user-scheduled reminders at the right time.",
+  "answer": "The naive design - a table of reminders and a job polling \"where due <= now\" every minute - works to a point and then falls over, because the query scans an ever-growing table and the due-now set arrives in bursts at round times like 9:00.\n\n**The shape I would build:**\n\n1. **Partition by time.** Store reminders bucketed into time windows - a table partitioned by due date, or keys shaped so a due-minute is a direct lookup. The scheduler then reads one bucket rather than querying the whole table, so cost is proportional to what is due rather than to what exists.\n2. **A two-tier approach.** A durable store holds everything; a short-horizon queue holds only the next few minutes of work. A loader moves items from the store into the queue as their window approaches, which keeps the hot path small.\n3. **Use the infrastructure where it fits.** Service Bus scheduled messages and delayed queues hand the timing problem to the broker, which is attractive for horizons of hours or days. The limit is cancellation and update - a user changing a reminder means finding and cancelling a scheduled message, which is awkward at volume, so the durable store remains the source of truth.\n4. **Spread the bursts.** Everything due at 09:00 arrives at once, so the workers must scale and the downstream - push notification services, email providers - must be rate limited. Jittering delivery by a few seconds where the product tolerates it flattens the spike enormously.\n5. **Claim work atomically** so several workers take disjoint batches - `FOR UPDATE SKIP LOCKED` or an equivalent claim with a lease - and make delivery idempotent, because a worker crashing after sending and before marking will redeliver.\n\n**And handle the clock properly:** store the user s timezone and the intended local time, not just a UTC instant, or a daily 9am reminder drifts by an hour at DST.",
+  "tags": [
+   "system-design",
+   "scheduling",
+   "queues",
+   "timezones",
+   "scaling"
+  ],
+  "followups": [
+   {
+    "q": "Why store local time plus timezone rather than a computed UTC instant?",
+    "a": "Because a recurring reminder at 9am local must remain 9am after a DST transition, and a UTC instant computed today will be an hour out after the clocks change. Storing the intended local time with the IANA zone identifier lets you resolve the correct instant at scheduling time for each occurrence. It also survives a government changing the rules, which happens more often than people expect - a stored offset is a snapshot of a rule, while a zone identifier is a reference to the current rules."
+   },
+   {
+    "q": "How do you handle a user editing or cancelling a reminder that is already in the short-horizon queue?",
+    "a": "Treat the durable store as authoritative and the queue as a hint: when the worker picks up an item, it re-reads the reminder and checks it is still due and still active before sending. That way a cancellation only has to update the store, and the stale queue entry is discarded harmlessly on pickup. Trying to remove the message from the queue instead couples you to the broker s capabilities and races with the worker already having taken it."
+   }
+  ]
  }
 ]

@@ -12806,5 +12806,29 @@
     "a": "It prints every configuration value, including connection strings and any secret supplied through a provider - so calling it in production or writing it to a log ships secrets to wherever your logs go. Use it in Development only, guarded by an environment check, or write it to the console during local debugging rather than through the logging pipeline. The safe production equivalent is logging the *provider* each key came from without the values."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Inheritance",
+  "difficulty": "Medium",
+  "question": "Why is composition usually preferred over inheritance, and when is inheritance still right?",
+  "answer": "Inheritance couples a subclass to the *implementation* of its base, not just its interface. Change the base and every subclass can break, including in ways the base author cannot foresee - that is the fragile base class problem. It is also permanent: C# has single inheritance, so the one base you pick is the one you have forever.\n\n**Composition gives you** the ability to change behaviour at runtime, combine behaviours freely, test pieces in isolation, and avoid deep hierarchies where you have to read four classes to understand what one method does.\n\n**The test I apply is the Liskov substitution principle:** can every instance of the subclass be used anywhere the base is expected, without the caller noticing? If a subclass throws `NotSupportedException` for an inherited member, or tightens a precondition, the relationship is not \"is-a\" and inheritance is the wrong tool. The classic example is `Square` inheriting `Rectangle` - setting width independently of height is valid for a rectangle and not for a square, so the substitution breaks.\n\n**Where inheritance is still right:**\n- **A genuine is-a relationship with shared implementation** you expect to remain stable - framework base classes such as `ControllerBase` or `BackgroundService`.\n- **The Template Method pattern**, where the base owns an algorithm and subclasses fill in defined steps.\n- **Closed hierarchies you control**, particularly with sealed records for discriminated-union-like modelling, where exhaustive pattern matching is the benefit.\n\n**The practical rule:** default to composition, use inheritance when the hierarchy is shallow, stable, and you own both sides. And **seal classes by default** - unsealing is a decision, and a type not designed for inheritance should not permit it.",
+  "tags": [
+   "csharp",
+   "inheritance",
+   "composition",
+   "liskov",
+   "design"
+  ],
+  "followups": [
+   {
+    "q": "What does designing a class for inheritance actually require?",
+    "a": "Documenting the self-use - which overridable members the base calls internally and in what order - because a subclass overriding one of them changes behaviour the base depends on, and without that documentation they cannot know. It also means being careful never to call a virtual member from a constructor, since the override runs before the derived constructor has initialised its fields, so it sees nulls and defaults. The effort involved is precisely why sealing by default is reasonable: designing for inheritance is a commitment you should make deliberately."
+   },
+   {
+    "q": "How do default interface methods change the composition-versus-inheritance question?",
+    "a": "They let an interface provide behaviour without forcing a base class, so you can share implementation across types that already inherit from something else - which removes one historical reason to reach for a base class. They are best suited to evolving a published interface without breaking implementers. They do not replace composition: the default body cannot access state, it is only callable through the interface reference rather than the concrete type, and diamond resolution rules get confusing quickly."
+   }
+  ]
  }
 ]

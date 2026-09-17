@@ -4137,5 +4137,29 @@
     "a": "Push back on it first, because almost none do - most compile-time settings can be runtime configuration with a small refactor. Where it is unavoidable, such as a trimmed AOT build for one target, treat it as producing genuinely different artefacts with their own identity and test each, rather than pretending they are the same thing promoted. The failure to avoid is one pipeline silently producing different binaries under the same version number."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Config",
+  "difficulty": "Medium",
+  "question": "How do you manage configuration that differs across 12 environments without it becoming unmaintainable?",
+  "answer": "Twelve environments usually means a lot of near-identical configuration, so the goal is to express only the differences and generate the rest.\n\n**The principles:**\n\n1. **Layer it.** A base configuration with the common values, and per-environment overlays containing only what genuinely differs. If an environment file repeats values that are the same everywhere, the layering is not being used.\n2. **Make the differences visible.** Someone should be able to see at a glance what is different about staging - a small overlay file does that; twelve full copies do not, and they drift silently because nobody notices when one falls behind.\n3. **Generate rather than duplicate.** Templating with per-environment parameter files, so adding a setting is one change rather than twelve.\n4. **Secrets separate from configuration**, from a vault, referenced rather than embedded - so the configuration files can be in source control without exception.\n5. **Validate at startup.** Every environment should fail fast if a required setting is missing, so a misconfigured environment is a failed deployment rather than a runtime error later.\n6. **Keep environment count honest.** Twelve is often a sign that environments were created and never retired, each carrying maintenance cost. Asking which of them are actually used is worth doing before optimising how they are configured.\n\n**The anti-pattern:** a large conditional block per environment inside the application - `if (env == \"staging-2\")`. That puts environment knowledge in the code, where it cannot be changed without a deploy and cannot be reviewed as configuration.\n\n**And drift detection**, because environments diverge through manual changes regardless of the process.",
+  "tags": [
+   "devops",
+   "configuration",
+   "environments",
+   "drift",
+   "templating"
+  ],
+  "followups": [
+   {
+    "q": "How do you stop environments drifting from each other?",
+    "a": "Deploy them all from the same definition through the same pipeline, and remove the ability to change them by hand in anything above development - people get read access, the pipeline gets write access. Then run a scheduled comparison that alerts when actual state differs from the definition, which catches whatever slips through. Drift is not primarily a tooling problem: it happens because someone needed a fix and the pipeline was too slow or too awkward, so making the correct path the fastest path matters as much as the controls."
+   },
+   {
+    "q": "What do you do about a setting that is only needed in one environment?",
+    "a": "Put it in that environment s overlay with a comment explaining why, and give it a sensible default in the base so the other environments are not implicitly relying on its absence. The thing to avoid is a setting that exists only in one place with no default, because the code then has to handle it being missing everywhere else, and that null-handling spreads. If one environment needs genuinely different behaviour, a feature flag is often a better expression of it than a configuration difference."
+   }
+  ]
  }
 ]
