@@ -12115,5 +12115,29 @@
     "a": "Usually it would not, which is the point worth making. Tests resolve a service, exercise it once on one thread, and dispose the provider - the captive dependency is real but harmless at concurrency of one. It takes parallel requests to surface. A test that spins up the host and asserts the container builds cleanly with `ValidateOnBuild` catches it deterministically, and is worth having as a plain unit test."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "LINQ",
+  "difficulty": "Medium",
+  "question": "Someone writes `.Where(x => x.IsActive).ToList().Count()` in a code review. What do you say, and does it depend on the source?",
+  "answer": "It depends entirely on what the source is, and that is the point worth making in the review.\n\n**If the source is `IQueryable` (EF Core):** this is a real bug, not a style issue. `ToList()` forces the entire filtered result set to be materialised from the database into memory, and then `Count()` counts objects in memory. Writing `.CountAsync(x => x.IsActive)` instead sends `SELECT COUNT(*) ... WHERE` and returns a single integer. On a large table the difference is loading a million rows versus returning the number 1,000,000.\n\n**If the source is an in-memory `List<T>`:** it is merely wasteful - the `ToList()` allocates a whole new list for nothing. `.Count(x => x.IsActive)` is one pass, no allocation. Worth fixing, but not urgent.\n\n**The broader thing I would raise:** the bug class is \"a `ToList()` in the middle of a chain\", and it is worth training people to notice. Each one is a boundary where deferred execution stops and everything after it happens in memory. Sometimes that is deliberate and correct - forcing materialisation before a client-side-only operation. Often it is accidental and turns a database operation into an application one.\n\n**What I would actually write in the comment:** the corrected line, why it matters for this specific source, and the SQL it will generate instead. A review comment that explains the mechanism teaches; one that says \"use Count()\" does not.",
+  "tags": [
+   "csharp",
+   "linq",
+   "ef-core",
+   "code-review",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "How do you spot this class of problem before review?",
+    "a": "Enable EF Core s client evaluation warnings as errors where possible, and log generated SQL in development so surprising queries are visible while writing the code. There are also analysers that flag suspicious LINQ. The most reliable habit, though, is looking at the SQL for any new query - most of these bugs are obvious the moment you see what actually runs."
+   },
+   {
+    "q": "Is `Any()` or `Count() > 0` better for an existence check?",
+    "a": "`Any()`, clearly. Against a database it translates to `EXISTS`, which can stop at the first matching row; `Count() > 0` counts every match before comparing. In memory the difference is the same shape - `Any()` short-circuits on the first element, `Count()` enumerates the whole sequence. The one exception is when the source is an `ICollection<T>` with an O(1) `Count` property, where it does not matter - but `Any()` is still clearer about intent."
+   }
+  ]
  }
 ]

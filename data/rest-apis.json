@@ -1261,5 +1261,29 @@
     "a": "It fixes the round trips and creates over-fetching - a large payload parsed and transferred on a mobile connection where bandwidth and battery matter, most of which the screen does not use. It also couples the response to one screen's needs, so the next screen either gets its own bloated endpoint or reuses this one badly. Expansion parameters give the same round-trip saving while letting the client state what it wants, which is why they are usually the better answer than a fixed fat response."
    }
   ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "A client says your API is slow because they need 50 requests to render one screen. How do you respond?",
+  "answer": "I would treat it as a real design problem rather than a client complaint, because 50 requests for one screen is usually an N+1 baked into the API shape.\n\n**First I would find out the pattern.** Almost always it is one call for a collection and then one per item for details - the API exposes normalised resources and the client has to stitch them together.\n\n**The options, in roughly the order I would consider them:**\n\n1. **Allow expansion.** `GET /orders?expand=customer,lines` lets the client ask for related data in one call. It keeps the resource model clean and makes the cost explicit and opt-in. Bound what can be expanded and how deep, or you have built an accidental query language.\n2. **Add a purpose-built endpoint** for that screen - a read model shaped to the use case. This is the pragmatic answer when one screen dominates, and it is not a design failure to admit that; it is CQRS applied to the API surface.\n3. **Batch endpoint** - accept multiple ids, return multiple resources. Simple, effective, and avoids inventing per-screen endpoints for every client.\n4. **GraphQL**, if there are many clients with genuinely divergent needs. I would raise it as an option rather than a recommendation, because it moves the problem rather than removing it: you now own query cost analysis, depth limiting and the N+1 on the server side instead.\n\n**What I would push back on:** if the client is making 50 calls because they are polling or not caching, the fix is on their side, and cache headers plus ETags may solve it without any API change. So I would want to see the actual traffic before redesigning anything.",
+  "tags": [
+   "rest-apis",
+   "api-design",
+   "n-plus-one",
+   "graphql",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "How do you stop an expand parameter becoming an unbounded query language?",
+    "a": "Whitelist what is expandable, cap the depth at one or two levels, and refuse combinations that are expensive to satisfy. Document the cost. Without those limits a client will eventually request an expansion that joins six tables per row, and you will discover it in production. The same discipline is what GraphQL servers implement as depth and complexity limits - you need it either way."
+   },
+   {
+    "q": "What role do ETags play here?",
+    "a": "They turn repeat requests into cheap 304s. The client sends `If-None-Match` with the previously returned ETag; if nothing changed, the server returns 304 with no body, saving bandwidth and serialisation but not the round trip. That helps a polling client a great deal and helps a client making 50 distinct first-time calls not at all - which is why diagnosing the actual pattern comes first."
+   }
+  ]
  }
 ]

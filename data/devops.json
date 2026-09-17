@@ -3825,5 +3825,53 @@
     "a": "Degraded rather than unhealthy, if your platform can express it - the instance can still serve most requests, so removing it from rotation makes things worse rather than better. In Kubernetes terms that means readiness passes while the degraded state is surfaced through metrics and alerts for humans. The judgement is whether requests would fail without that dependency; if the answer is 'some would degrade', the instance should keep traffic and the alert should page someone, not the load balancer."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "CI/CD",
+  "difficulty": "Medium",
+  "question": "Your pipeline takes 45 minutes and developers have started pushing straight to main to avoid it. How do you fix this?",
+  "answer": "The behaviour is the signal: a slow pipeline does not just waste time, it changes how people work, and the workaround is more dangerous than the delay.\n\n**First measure where the 45 minutes goes.** Almost every slow pipeline is dominated by two or three stages, and people usually guess wrong about which.\n\n**The fixes that typically matter most:**\n- **Cache dependencies.** Restoring NuGet, npm or Docker layers from scratch every run is often a third of the time. Cache keyed on the lock file.\n- **Parallelise.** Unit tests, linting and build for different projects have no ordering dependency. Test sharding across agents turns a 20-minute suite into 4 minutes on 5 agents.\n- **Split the pipeline by feedback value.** Fast checks - compile, unit tests, lint - run on every push and gate the PR. Slow checks - full integration suite, end-to-end, security scans - run on merge to main or on a schedule. Developers get an answer in 5 minutes; the thorough checks still happen.\n- **Only build what changed** in a monorepo, using affected-project detection.\n- **Fix flaky tests rather than retrying them.** Retries hide flakes and double the runtime of the worst cases.\n\n**On pushing to main:** I would treat that as a symptom to remove the cause of, not a discipline problem to lecture about. Once the PR gate is five minutes, the incentive disappears. Branch protection should then enforce it, but enforcing it while the pipeline is 45 minutes just converts the problem into resentment.",
+  "tags": [
+   "devops",
+   "ci-cd",
+   "pipelines",
+   "developer-experience",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "How do you decide what belongs in the fast gate versus the slow one?",
+    "a": "Ask what a failure tells you and how likely it is. Compile errors and unit test failures are common and cheap to detect, so they gate the PR. A full end-to-end suite catches rarer integration problems and costs a lot, so it runs post-merge with a fast rollback path. The judgement is about expected cost: gate on things likely to fail, and detect the rest quickly enough that reverting is cheap."
+   },
+   {
+    "q": "What do you do about a test that fails 1 in 20 runs?",
+    "a": "Quarantine it immediately so it stops blocking everyone, then fix it as real work with an owner and a deadline - not \"someday\". A flaky test is worse than no test, because it trains people to re-run rather than investigate, and that habit then applies to genuine failures too. Most flakes trace to shared state, time or timezone assumptions, or an implicit ordering dependency between tests."
+   }
+  ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Deployment",
+  "difficulty": "Hard",
+  "question": "You need to deploy a change that renames a database column, with zero downtime and the ability to roll back. How?",
+  "answer": "A rename is a destructive, non-backwards-compatible change, so it cannot be done in one step with zero downtime. The answer is **expand and contract**, across at least three deployments.\n\n**Phase 1 - expand.** Add the new column. Do not touch the old one. Deploy a schema migration only; the application is unchanged and still uses the old column. This deployment is trivially rollbackable because nothing depends on the new column yet.\n\n**Phase 2 - dual write.** Deploy application code that writes to **both** columns and reads from the old one. Backfill the new column for existing rows, in batches, so you do not take a long lock on a large table. At this point both columns are correct and the application still behaves as before, so rollback is still safe.\n\n**Phase 3 - switch reads.** Deploy code that reads from the new column and still writes both. If this is wrong you roll back to phase 2 with no data loss, because the old column has been kept current throughout.\n\n**Phase 4 - contract.** Once you are confident and no deployed version reads the old column, stop writing it, then drop it in a later release.\n\n**Why it must be this many steps:** during a rolling deployment, old and new instances run **simultaneously**. Any single-step rename means one of those two versions is querying a column that does not exist. That is the constraint that forces the whole pattern, and it is the thing to say out loud.",
+  "tags": [
+   "devops",
+   "migrations",
+   "zero-downtime",
+   "database",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "How do you backfill a large table without locking it?",
+    "a": "In batches with a bounded key range - update a few thousand rows, commit, pause briefly, repeat - driven by a script or a background job that can be stopped and resumed. A single `UPDATE` over 50 million rows holds locks and bloats the transaction log. Track progress in a table so a restart resumes rather than starting over, and run it at low-traffic times if the write amplification is significant."
+   },
+   {
+    "q": "What if the change is a type change rather than a rename?",
+    "a": "Same pattern, and the dual-write phase does the conversion. The extra care is around values that do not convert cleanly - a widening change like int to bigint is safe, but narrowing, or changing a string to a date, will have rows that fail. Validate the whole table before switching reads, and decide explicitly what happens to rows that cannot convert, rather than discovering them during the switch."
+   }
+  ]
  }
 ]

@@ -1551,5 +1551,29 @@
     "a": "Spans appear as separate traces rather than as children, or the parent id is empty on the outgoing call. It typically happens where code leaves the async flow - a Task.Run, a timer callback, a custom thread, or a background queue handing work to a worker. The fix is to capture the Activity explicitly and restore it in the new context, which most background-processing libraries now do. It is worth knowing because it produces a gap that looks like a missing instrumentation problem when it is really a context-flow problem."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Instrumentation",
+  "difficulty": "Medium",
+  "question": "An incident happened at 3am and the on-call engineer could not tell which service caused it. What would you add?",
+  "answer": "The gap is almost always **correlation** - there were logs, but nothing tied them together across services.\n\n**The three things I would make sure exist:**\n\n1. **Distributed tracing with propagated context.** A trace id generated at the edge, passed through every hop via W3C `traceparent`, and attached to every log line. Then one request is a single view across all services, and \"which service caused it\" stops being a question. In .NET this is largely automatic with `ActivitySource` and OpenTelemetry - the manual work is making sure the id crosses the boundaries that are not HTTP, like queues.\n2. **Structured logs, not string-formatted ones.** `logger.LogInformation(\"Order {OrderId} failed after {Attempts}\", id, n)` gives queryable fields. String interpolation into the message destroys that and leaves you grepping.\n3. **RED metrics per service** - rate, errors, duration - so a dashboard shows which service s error rate moved at 3am. Metrics tell you *where*; traces tell you *why*; logs tell you *what exactly*. All three, used in that order.\n\n**What I would add beyond telemetry:** alerts that link to a runbook, and a dashboard that answers \"is it us or a dependency\" in one glance. At 3am the engineer needs the first 90 seconds to be decision-making, not archaeology.\n\n**What I would remove:** alerts that fire without being actionable. Alert fatigue is why a real incident gets missed.",
+  "tags": [
+   "observability",
+   "tracing",
+   "logging",
+   "opentelemetry",
+   "incident"
+  ],
+  "followups": [
+   {
+    "q": "What do you sample, and how, without losing the incident you care about?",
+    "a": "Head sampling at a fixed rate is cheap but throws away the rare failures you most want. Tail sampling decides after the trace completes, so you can keep 100% of errors and slow traces and 1% of the fast successful ones - which is usually what you want, at the cost of buffering traces in the collector. The pragmatic middle ground is head sampling with a rule that always keeps traces that carry an error flag."
+   },
+   {
+    "q": "What is the difference between a log, a metric and a trace, in terms of cost?",
+    "a": "Metrics are cheap and bounded - a fixed number of time series, aggregated at write time - but you cannot ask a question you did not think of in advance, and high-cardinality labels like user id will destroy your metrics backend. Logs are expensive and unbounded but arbitrary to query. Traces sit in between and are the only one that shows causality across services. Cardinality is the thing to watch: it is the usual cause of a surprise observability bill."
+   }
+  ]
  }
 ]

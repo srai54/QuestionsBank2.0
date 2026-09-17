@@ -1384,5 +1384,29 @@
    "practices",
    "design"
   ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Schema Design",
+  "difficulty": "Hard",
+  "question": "When would you embed a document versus reference it? Give me a case where you got it wrong.",
+  "answer": "The rule I work from is: **embed what is read together and bounded, reference what is shared or unbounded.**\n\n**Embed when:** the child has no independent identity, it is always fetched with the parent, and the array cannot grow without limit. Order lines in an order, an address in a customer profile. You get the whole aggregate in a single read with no join, which is the main reason to use a document database at all.\n\n**Reference when:** the data is shared between parents (duplicating it means updating it in many places), the child is large or accessed independently, or the relationship is unbounded.\n\n**The way this goes wrong** is the unbounded array. Embedding comments in a post looks perfect until a post gets 100,000 comments: every read of the post loads all of them, the document approaches the 16MB limit, and updates rewrite the whole thing. Documents that grow also get moved on disk, fragmenting storage.\n\n**The pattern that fixes it** is bucketing or the outlier pattern - embed the most recent N inline for the common read, and keep the rest in a separate collection. You keep the single-read benefit for the 95% case without the unbounded growth.\n\n**The honest general point:** MongoDB schema design is driven by the *queries*, not by the data s natural shape. I would want to know the access patterns before designing anything, and if the access patterns are highly relational with lots of ad-hoc joins, that is an argument for a relational database rather than clever document modelling.",
+  "tags": [
+   "mongodb",
+   "schema-design",
+   "embedding",
+   "nosql",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "How do you handle data that must be duplicated when embedding?",
+    "a": "Accept the duplication and plan the update path explicitly - either a background job that fans out changes, or a design that treats the embedded copy as a point-in-time snapshot. The second is often correct and under-used: the product name on a historical order line *should* be what it was when the order was placed, not the current name. Denormalisation is a bug only when the copy is supposed to stay in sync and nothing keeps it so."
+   },
+   {
+    "q": "What is the 16MB document limit really constraining?",
+    "a": "It is a hard ceiling per document, but it is the wrong thing to design against - you want to be far below it. Well before 16MB you are paying to transfer and deserialise data you did not need on every read, and update-in-place becomes rewrite-the-document. Treat a document approaching even a couple of megabytes as a design smell rather than a limit you have room under."
+   }
+  ]
  }
 ]

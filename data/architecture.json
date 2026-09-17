@@ -4336,5 +4336,29 @@
     "a": "By pricing it. Strong consistency across services means synchronous coordination, so every service must be available for any write to succeed - the availability multiplies down, latency rises, and a single slow service blocks everything. That is a genuine option with genuine costs, and for a small number of critical operations it can be right. Applying it everywhere usually trades a mild staleness problem for an outage problem. Framing it as availability versus freshness, with the arithmetic, tends to move the conversation better than invoking CAP."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Trade-offs",
+  "difficulty": "Hard",
+  "question": "Your team wants to split a monolith into microservices. What questions do you ask before agreeing?",
+  "answer": "I would want to know what problem they are solving, because microservices are a solution to an *organisational* scaling problem far more than a technical one, and adopting them for the wrong reason makes everything worse.\n\n**The questions I would ask:**\n\n1. **What is actually hurting?** If the answer is \"deployments are risky\" or \"one team blocks another\", that is a real fit. If it is \"the codebase is messy\", microservices will give you a distributed messy codebase with network calls between the mess.\n2. **How many teams, and what do they own?** Services should follow team boundaries. Three services per team is usually fine; twenty services and four engineers is a maintenance disaster.\n3. **Can we draw the data boundaries?** This is the hardest part. If every proposed service needs the same three tables, the boundaries are wrong and you will end up with a distributed monolith - all the operational cost, none of the independence.\n4. **What is our operational maturity?** Do we have distributed tracing, centralised logging, automated deployments, service discovery, and an on-call rotation? Without those, microservices convert every bug into an archaeology exercise.\n5. **What are we giving up?** Transactions across services become sagas with compensating actions. A single in-process call becomes a network call that can fail, time out or arrive twice. Local reasoning becomes distributed reasoning.\n\n**What I would propose instead, usually:** a modular monolith first. Enforce module boundaries inside one deployable, with no shared database tables between modules. It delivers most of the structural benefit, keeps transactions and refactoring cheap, and if a module genuinely needs independent scaling or deployment later, it is already shaped to be extracted.",
+  "tags": [
+   "architecture",
+   "microservices",
+   "monolith",
+   "trade-offs",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What is a distributed monolith and how do you recognise one?",
+    "a": "Services that must be deployed together, share a database, or break when one of them changes. The tells are: a release checklist that lists several services in order, a schema change requiring coordinated deploys, and a single request fanning out synchronously through five services so the availability is the product of all five. You have taken on network failure, latency and operational overhead while keeping the coupling you were trying to escape."
+   },
+   {
+    "q": "How do you handle a transaction that spans two services?",
+    "a": "You cannot, so you redesign it. Either the boundary is wrong and the two things belong in one service - which is often the right answer and worth checking first - or you accept eventual consistency with a saga: a sequence of local transactions, each with a compensating action if a later step fails. Compensation is not rollback; refunding a payment is not the same as never charging it, and the business has to agree that the intermediate state is acceptable."
+   }
+  ]
  }
 ]
