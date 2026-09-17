@@ -3897,5 +3897,29 @@
     "a": "When the application depends on runtime code generation or unbounded reflection - most ORMs that build queries dynamically, some serialisers, and anything loading plugins at runtime. Trimming can also remove code that is only reached reflectively, producing failures that appear only at runtime in production. It is well suited to small, self-contained services with minimal APIs and source-generated serialisation, and poorly suited to a large existing app you are hoping to shrink without changing."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Incidents",
+  "difficulty": "Medium",
+  "question": "Walk me through how you would run an incident where the checkout page is down.",
+  "answer": "The priority order is **restore service, then find the cause**. People invert those and spend the outage debugging.\n\n**First minutes - establish and communicate.**\n- Declare the incident so nobody is wondering whether it is being handled. Assign a single incident lead who coordinates and does not have their head in the logs.\n- Confirm scope: all users or some, all regions, which exact functionality. Check whether it is us or a dependency.\n- Post an initial status update. It costs a minute and prevents the lead being interrupted constantly.\n\n**Then - mitigate.**\n- **Did anything change?** Deployments, config changes, feature flag flips, certificate expiry, a dependency s own incident. Most outages follow a change, so the fastest mitigation is usually to undo it - roll back, flip the flag off - *before* understanding why it broke. Reverting a deploy you are unsure about is nearly always cheaper than diagnosing under pressure.\n- If nothing changed on our side, look for saturation (a queue backing up, connection pool exhausted, disk full) or an external dependency.\n- Consider degradation: can checkout work without the recommendations service, or with a cached shipping quote?\n\n**After service is restored - the actual fix, and then the postmortem.**\n\n**The postmortem must be blameless and must produce specific actions with owners.** Not \"be more careful\" - \"add an alert on payment provider error rate\", \"make the deploy pipeline block on this smoke test\", \"add a circuit breaker around this call\". The output I care about most is what would have made detection faster, because time to detect is usually the largest part of the outage.",
+  "tags": [
+   "devops",
+   "incident-management",
+   "postmortem",
+   "on-call",
+   "process"
+  ],
+  "followups": [
+   {
+    "q": "What would you not do during the incident?",
+    "a": "Deploy a speculative fix straight to production, make several changes at once so you cannot tell what helped, or let everyone investigate the same thing while nobody handles communication. I would also avoid changing infrastructure under pressure - scaling something up mid-incident often introduces a second problem. And I would not skip writing things down as they happen; the timeline is very hard to reconstruct afterwards from memory."
+   },
+   {
+    "q": "Why insist on blameless postmortems?",
+    "a": "Because the alternative destroys the information you need. If naming a cause gets someone punished, people stop volunteering what really happened, and you end up with postmortems that describe the symptom and stop. Systems that let one person cause an outage with one mistake are the finding - the fact that a human made the mistake is the least interesting part, since that was always going to happen eventually."
+   }
+  ]
  }
 ]

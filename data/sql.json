@@ -4406,5 +4406,29 @@
     "a": "One matching the `PARTITION BY` columns followed by the `ORDER BY` columns, in that order. That lets the engine read rows already grouped and ordered, avoiding a sort - and the sort is nearly always the dominant cost in a window query. Checking whether the plan contains a sort operator is the quickest way to tell whether the index is doing its job."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Data Integrity",
+  "difficulty": "Medium",
+  "question": "A report shows different totals depending on who runs it. What are the likely causes?",
+  "answer": "Differing results for the same report point at something non-deterministic in the query, the data, or the context the query runs in.\n\n**The causes I would check, in order:**\n\n1. **The query is not deterministic.** A `TOP` or `LIMIT` without a unique `ORDER BY` returns an arbitrary subset. Window functions with ties and a non-unique ordering rank rows differently between runs. Either can change results with no data change at all.\n2. **Row-level security or a filter tied to the user.** Different people legitimately see different data, and the report does not say so. This is the answer surprisingly often, and it is not a bug - it is a missing caption.\n3. **Timezone.** `GETDATE()` on the server versus a client-side date, or a date filter applied in local time so \"today\" starts at a different instant for different users. Month-end reports are where this surfaces.\n4. **Reading uncommitted or concurrent data.** `NOLOCK` is the usual culprit - it permits dirty reads, and can also skip or double-count rows during page splits, which produces exactly this symptom intermittently.\n5. **The data is genuinely changing** between runs, and the report has no as-of date. Two people running it minutes apart get different answers correctly.\n6. **A join fanning out** - a one-to-many join inflating an aggregate for some rows and not others, depending on which related rows exist.\n\n**What I would do first:** run the same query as both users with the same parameters and compare, and check whether the report pins an as-of timestamp. Most of these are distinguished in a few minutes once you stop treating it as a mystery and start bisecting the query.",
+  "tags": [
+   "sql",
+   "determinism",
+   "nolock",
+   "reporting",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is NOLOCK more dangerous than people think?",
+    "a": "It is widely treated as \"a bit stale but faster\", which understates it. Read uncommitted permits dirty reads, and during a page split or an allocation scan it can return the same row twice or miss a row that was committed throughout. So you can get counts that are not merely out of date but impossible. It also does not make writers wait less - it makes *this* reader not wait, which is a different thing. `READ COMMITTED SNAPSHOT` gives non-blocking reads that are actually consistent."
+   },
+   {
+    "q": "How do you make a report reproducible?",
+    "a": "Pin the inputs. Record an as-of timestamp and filter on it so re-running gives the same answer, include a unique tiebreaker in every ordering, use UTC internally and convert once at display, and state the user context the report ran under. For financial reporting, snapshot the underlying data into a reporting table so the numbers cannot move retrospectively - reconciliation is impossible against a moving target."
+   }
+  ]
  }
 ]

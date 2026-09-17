@@ -4384,5 +4384,29 @@
     "a": "Retry a bounded number of times with backoff, then move it to a dead letter queue rather than retrying forever - an infinitely retried poison message blocks the queue and burns resources. The dead letter queue then needs an owner, an alert, and a way to inspect and replay messages after a fix, otherwise it silently becomes where messages go to be forgotten. I would treat a non-empty dead letter queue as an alertable condition."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Legacy",
+  "difficulty": "Hard",
+  "question": "You inherit a critical system nobody understands, with no tests and no documentation. Where do you start?",
+  "answer": "Not by rewriting it. The system works, it encodes years of business rules nobody has written down, and a rewrite discards that knowledge while the original keeps changing underneath you.\n\n**My order of work:**\n\n1. **Make it observable before changing anything.** Add logging and metrics at the boundaries - what calls it, what it calls, how often, how long, what fails. Within days you know which parts are actually used, and typically a large share of the code turns out to be dead.\n2. **Get it into a repeatable build and deployment.** If deploying is manual and frightening, every other improvement is blocked behind that fear.\n3. **Add characterisation tests.** Not tests of what the code *should* do - tests of what it *does*, including the bugs. Capture real inputs and record outputs as the expected values. That gives a safety net without needing to understand the logic first, which is the trick that makes legacy work tractable.\n4. **Find the seams and change behaviour only behind them.** Extract the piece you need to touch, put a test around it, then modify.\n5. **Strangle incrementally.** Route one capability at a time to new code behind a facade, keeping the old path until the new one is proven. Each step is independently deployable and reversible.\n\n**What I would resist:** a big-bang rewrite, and refactoring for cleanliness in areas nobody touches. Effort should follow change frequency - the code that changes often is where poor structure actually costs money.\n\n**And I would write down what I learn as I go**, because the absence of documentation is a recurring cost, not a one-off.",
+  "tags": [
+   "architecture",
+   "legacy",
+   "strangler-fig",
+   "refactoring",
+   "characterisation-tests"
+  ],
+  "followups": [
+   {
+    "q": "What is a characterisation test and is it not just locking in bugs?",
+    "a": "It records current behaviour as the expected result, so any change that alters behaviour fails loudly. And yes, it locks in bugs deliberately - that is the point. You cannot safely distinguish \"bug\" from \"load-bearing quirk\" in an unfamiliar system, and something downstream may depend on the wrong behaviour. Once the net exists you can change behaviour intentionally, updating the test with a reason, rather than discovering the dependency in production."
+   },
+   {
+    "q": "When is a rewrite actually justified?",
+    "a": "When the platform is genuinely unsupportable - an unsupported runtime with security implications, or hardware that cannot be replaced - or when the existing system cannot meet a requirement that is not negotiable. Even then I would prefer strangling over a parallel rewrite, because a parallel rewrite has to hit a moving target and typically takes far longer than estimated. The decisive question is whether the business can afford a long period with no new features, since that is what a rewrite actually costs."
+   }
+  ]
  }
 ]

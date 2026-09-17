@@ -2722,5 +2722,29 @@
     "a": "When relationships are the permission model - nested groups, folders inheriting access to their contents, sharing with delegation - which is where role and claim checks become an unmaintainable pile of conditionals. A relationship-based system answers \"does user U have relation R to object O\" including through inheritance chains. The cost is another service on the critical path of every authorization check, so it needs caching and a clear availability story before adopting it."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Supply Chain",
+  "difficulty": "Medium",
+  "question": "How do you reduce the risk of a compromised NuGet or npm package?",
+  "answer": "Dependencies are code you did not write running with your application s privileges, so the exposure is total. The controls are about reducing what you trust and detecting change.\n\n**Before adoption:**\n- **Review what you are adding.** Maintenance activity, number of maintainers, download counts, and crucially the *transitive* tree - one package can pull in dozens. Ask whether a small utility is worth a dependency at all.\n- **Watch for typosquatting** - a name one character off a popular package is a standard attack.\n\n**Ongoing:**\n- **Lock files committed**, so builds are reproducible and an upstream change cannot silently alter what you ship.\n- **Restore from an internal feed** that mirrors upstream, so a package cannot be pulled or replaced from under you, and so you have an approval point.\n- **Scan continuously** - Dependabot, `dotnet list package --vulnerable`, npm audit - and treat the results as work, not noise.\n- **Pin versions** and update deliberately rather than floating.\n- **Verify signatures**, and for .NET enable signature validation on restore.\n\n**The .NET-specific trap worth naming:** **dependency confusion**. If your internal package name also exists on the public feed, some restore configurations prefer the public one, so an attacker who registers your internal name gets code execution in your build. The fix is package source mapping so each namespace resolves from exactly one feed, and reserving your prefix publicly.\n\n**And the build pipeline itself is the highest-value target** - it holds signing keys and deployment credentials. Least-privilege service connections, no secrets in logs, and reviewing what third-party build tasks can access.",
+  "tags": [
+   "security",
+   "supply-chain",
+   "nuget",
+   "dependencies",
+   "dependency-confusion"
+  ],
+  "followups": [
+   {
+    "q": "What is a lock file actually protecting you from?",
+    "a": "Two things: a floating version range silently resolving to a new release, and a transitive dependency changing beneath a direct dependency that has not itself changed. Without a lock file the same commit can produce different binaries on different days, which breaks reproducibility and means a compromised release can enter your build with no change to your code. It does not protect against a *republished* version under the same number, which is why hash verification matters too."
+   },
+   {
+    "q": "How do you keep up with vulnerability alerts without drowning?",
+    "a": "Triage by reachability and severity rather than treating every advisory as equal. A vulnerability in a code path you never call, in a dev-only dependency, is not the same as one in your request path - and tools that do reachability analysis cut the volume substantially. Automate the low-risk patch updates so they merge themselves when tests pass, and reserve human attention for the ones that need judgement. Alert fatigue applies here exactly as it does to monitoring."
+   }
+  ]
  }
 ]

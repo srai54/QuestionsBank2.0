@@ -12258,5 +12258,29 @@
     "a": "Compare the row count EF returns with what you expect. If a page of 20 parents produces thousands of rows, two collection includes are multiplying. In the logs the give-away is a single query joining several one-to-many relationships, and a materialisation time far longer than the database execution time - the database returned quickly and EF spent the time de-duplicating rows in memory."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Disposal",
+  "difficulty": "Medium",
+  "question": "When do you need to implement IDisposable, and what is the full dispose pattern actually for?",
+  "answer": "You implement `IDisposable` when your type **owns** something that will not be cleaned up by garbage collection: a file handle, a socket, a database connection, a timer, an event subscription to a longer-lived object, or unmanaged memory.\n\nYou do **not** implement it just because your type holds a reference to a disposable that it did not create. Ownership is the test - if you were given it, the giver disposes it.\n\n**The full pattern with a finaliser is only for types that directly own unmanaged resources** - a raw handle from P/Invoke. The finaliser is a safety net for callers who forget to dispose, and `GC.SuppressFinalize` stops that net costing anything when they did remember. Finalisers are expensive: an object with one survives an extra GC generation and is cleaned up on a single finaliser thread, so adding one unnecessarily makes things worse.\n\n**In almost all application code you want the simple form:** implement `Dispose()`, dispose what you own, no finaliser. If you genuinely wrap a native handle, use `SafeHandle` instead of writing a finaliser - it handles the lifetime correctly including during process shutdown and P/Invoke edge cases.\n\n**`IAsyncDisposable`** exists for resources whose cleanup involves I/O - flushing a stream, closing a connection gracefully. Implement both when the type could be used either way, and make `Dispose` do the synchronous equivalent rather than blocking on the async one.",
+  "tags": [
+   "csharp",
+   "idisposable",
+   "resources",
+   "finalizers",
+   "memory"
+  ],
+  "followups": [
+   {
+    "q": "What happens if you forget to dispose a HttpClient, or dispose it too often?",
+    "a": "Both are wrong, which is what makes it a favourite question. Creating and disposing an `HttpClient` per request exhausts sockets, because disposing does not release the underlying TCP connection immediately - it sits in TIME_WAIT, and under load you run out of ports. Holding one static forever has the opposite problem: it never picks up DNS changes. `IHttpClientFactory` solves both by pooling and rotating the underlying handlers, which is why it is the standard answer."
+   },
+   {
+    "q": "Does a using statement guarantee disposal?",
+    "a": "In normal control flow yes, including when an exception propagates, because it compiles to try/finally. It does not survive a process crash, a `StackOverflowException`, or `Environment.FailFast` - nothing does. The more common real gap is an object created before the `using` block is entered, or a disposable stored in a field where the `using` only covers a local, so the thing you meant to dispose is not the thing that was disposed."
+   }
+  ]
  }
 ]

@@ -3676,5 +3676,29 @@
     "a": "Each dependency by `Object.is`, which is reference equality for objects, arrays and functions. So an object or inline function recreated on every render makes the effect re-run every render, which is the usual cause of an effect loop. Either move the value outside the component, memoise it, or depend on the primitive fields you actually use rather than the containing object."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Forms",
+  "difficulty": "Medium",
+  "question": "How would you build a form with 40 fields, cross-field validation, and an autosave draft?",
+  "answer": "At 40 fields the naive approach - one `useState` per field, validation in the submit handler - becomes unmanageable and slow, because every keystroke re-renders the whole form.\n\n**Form state: use a library, and use the uncontrolled mode.** React Hook Form registers inputs as uncontrolled and keeps values in a ref, so typing does not re-render the form at all. That single decision solves the performance problem that a 40-field controlled form has. Formik and controlled components re-render on every keystroke, which is fine for five fields and not for forty.\n\n**Validation: schema-based, with Zod or Yup.** One schema is the single source of truth for both types and validation, so the TypeScript type is inferred from it and cannot drift. Cross-field rules - \"end date must be after start date\", \"this field is required only if that checkbox is set\" - express naturally with `refine`/`superRefine`, which is exactly what per-field validation functions handle badly.\n\n**Validate on blur, not on change**, so the user is not told they are wrong while they are still typing the first character; then switch to on-change for a field once it has been marked invalid, so they see it become valid as they fix it.\n\n**Autosave draft:** debounce around a second, save to the server keyed by a draft id, and store a local copy too so a network failure does not lose work. The details that matter: do not autosave invalid data as if it were a submission - save it as a draft; show the save state explicitly; and handle the conflict where the same draft is edited in two tabs.\n\n**The server must revalidate everything.** Client validation is a user-experience feature, not a control.",
+  "tags": [
+   "react",
+   "forms",
+   "validation",
+   "react-hook-form",
+   "zod"
+  ],
+  "followups": [
+   {
+    "q": "Why is uncontrolled faster, and what do you give up?",
+    "a": "Uncontrolled inputs keep their value in the DOM, so React does not re-render on each keystroke - the library reads values on submit or on demand from a ref. You give up straightforward derived UI that reacts to every keystroke, such as a live character counter or a field whose visibility depends on another field s current value. React Hook Form s `watch` gives you that back for specific fields, scoping the re-render to the part that needs it rather than the whole form."
+   },
+   {
+    "q": "How do you handle a validation rule that needs a server check, like uniqueness?",
+    "a": "Asynchronously and debounced, with the result treated as advisory. Check availability as the user types, show the result, but never rely on it - between the check and the submit someone else can take the value, so the server must enforce it with a unique constraint and the client must handle that failure gracefully. Presenting the async check as authoritative is how you get a confusing \"it said it was available\" bug report."
+   }
+  ]
  }
 ]
