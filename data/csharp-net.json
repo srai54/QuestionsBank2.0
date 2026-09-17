@@ -4496,12 +4496,22 @@
   "subcategory": "EF Core",
   "difficulty": "Medium",
   "question": "How does EF Core map DateTime and DateTimeOffset, and which should you store?",
-  "answer": "DateTimeOffset preserves the UTC offset and is unambiguous across time zones; DateTime carries only a Kind that most providers do not persist, so a round trip can lose it. Store UTC consistently - either DateTimeOffset, or DateTime with a converter that forces UtcKind on read - and convert to local time only at the presentation edge.",
+  "answer": "Store **`DateTimeOffset`** for anything representing an instant in time, and **`DateOnly`** for a calendar date with no time component. Reach for `DateTime` only when you have a specific reason.\n\n**The mapping:**\n- `DateTimeOffset` maps to `datetimeoffset` in SQL Server and `timestamptz` in PostgreSQL. The offset is preserved, so the value is unambiguous on its own.\n- `DateTime` maps to `datetime2` (SQL Server) or `timestamp` (PostgreSQL). **The `Kind` is not stored.** A value saved as `Utc` comes back as `Unspecified`, and any later code calling `ToLocalTime()` on it silently produces the wrong answer.\n\nThat lost `Kind` is the whole problem. Nothing throws - you simply get times that are wrong by your server s offset, and only in some code paths.\n\n```csharp\n// If you must use DateTime, force UTC on the way in and out with a converter.\nprotected override void ConfigureConventions(ModelConfigurationBuilder builder)\n{\n    builder.Properties<DateTime>()\n           .HaveConversion<UtcDateTimeConverter>();\n}\n\npublic class UtcDateTimeConverter : ValueConverter<DateTime, DateTime>\n{\n    public UtcDateTimeConverter() : base(\n        v => v.ToUniversalTime(),                                   // to database\n        v => DateTime.SpecifyKind(v, DateTimeKind.Utc))             // from database\n    { }\n}\n\n// Preferred: no converter needed, the offset round-trips\npublic class Order\n{\n    public DateTimeOffset CreatedUtc { get; set; }\n    public DateOnly InvoiceDate { get; set; }          // a date, not an instant\n}\n```\n\n**The distinction worth stating:** `DateTimeOffset` records an offset, **not a timezone**. It tells you the instant unambiguously, but not the zone s rules - so it cannot tell you what local time a future appointment will be after a DST change. For future scheduled events, store the local time plus the IANA timezone id and resolve at read time.",
   "tags": [
    "efcore",
    "datetime",
    "timezone",
    "mapping"
+  ],
+  "followups": [
+   {
+    "q": "Why does PostgreSQL treat DateTime differently from SQL Server here?",
+    "a": "Npgsql is strict: it maps `DateTime` with `Kind.Utc` to `timestamptz` and `Kind.Unspecified` to `timestamp`, and it throws rather than silently converting a mismatched Kind. That is stricter than SQL Server, where the Kind is simply discarded - so code that works quietly-but-wrongly against SQL Server often fails loudly on PostgreSQL. The loud failure is the better behaviour; it surfaces an ambiguity that was always there."
+   },
+   {
+    "q": "What should you use for a recurring appointment at 9am local time?",
+    "a": "Store the wall-clock time and the IANA timezone id - `09:00` plus `Europe/London` - and compute the actual instant when you need it. Storing a `DateTimeOffset` freezes an offset that will be wrong after the next DST transition, so a 9am meeting becomes 8am or 10am. This is the case where `DateTimeOffset` is genuinely not the right answer, and it is worth being able to explain why."
+   }
   ]
  },
  {
@@ -7902,12 +7912,22 @@
   "subcategory": "API Design",
   "difficulty": "Medium",
   "question": "How do you design pagination for a .NET API that stays fast at scale?",
-  "answer": "Offset paging is simple but degrades on deep pages and returns shifting results as data changes. Keyset paging - filter by the last seen sort key - stays constant time and stable, and is what an infinite scroll actually wants. Return an opaque cursor rather than exposing the key, so the implementation can change later.",
+  "answer": "Design it as **keyset pagination with an opaque cursor**, and make the endpoint incapable of expressing the expensive cases.\n\n**The shape of the endpoint:**\n- `limit`, validated and capped server-side - a client asking for 10,000 gets 100.\n- `cursor`, opaque and signed, carrying the last sort key plus the sort definition.\n- No `page` parameter at all, so deep offsets are unrepresentable.\n\n```csharp\npublic record PagedResult<T>(IReadOnlyList<T> Items, string NextCursor);\n\npublic async Task<PagedResult<OrderDto>> GetOrdersAsync(\n    int customerId, string cursor, int limit, CancellationToken ct)\n{\n    limit = Math.Clamp(limit, 1, 100);                 // never trust the client\n\n    var query = _db.Orders\n        .AsNoTracking()                                 // read path: no change tracking\n        .Where(o => o.CustomerId == customerId);\n\n    if (cursor is not null)\n    {\n        var (lastCreated, lastId) = CursorCodec.Decode(cursor, \"createdAt-desc\");\n        query = query.Where(o => o.CreatedUtc < lastCreated\n                              || (o.CreatedUtc == lastCreated && o.Id < lastId));\n    }\n\n    // Order by a UNIQUE composite key, project to a DTO, and read one extra\n    // row to discover whether another page exists - no COUNT(*) required.\n    var rows = await query\n        .OrderByDescending(o => o.CreatedUtc).ThenByDescending(o => o.Id)\n        .Select(o => new OrderDto(o.Id, o.CreatedUtc, o.Total))\n        .Take(limit + 1)\n        .ToListAsync(ct);\n\n    string next = null;\n    if (rows.Count > limit)\n    {\n        rows.RemoveAt(limit);\n        var last = rows[^1];\n        next = CursorCodec.Encode(\"createdAt-desc\", last.CreatedUtc, last.Id);\n    }\n\n    return new PagedResult<OrderDto>(rows, next);\n}\n```\n\n**The four decisions that make this scale:**\n1. **`Select` to a DTO**, so EF emits only the needed columns and lazy loading can never fire an N+1.\n2. **A unique ordering** - `CreatedUtc` plus `Id` - so rows cannot shuffle between pages.\n3. **`Take(limit + 1)`** instead of a `COUNT(*)`, which on a large filtered set can cost more than the page.\n4. **A covering index on `(CustomerId, CreatedUtc DESC, Id DESC)`**, without which every page sorts the whole set and the design achieves nothing.",
   "tags": [
    "api-design",
    "pagination",
    "performance",
    "rest"
+  ],
+  "followups": [
+   {
+    "q": "Why AsNoTracking on a paged read?",
+    "a": "Change tracking makes EF build a snapshot of every materialised entity and run identity resolution across the result, which is pure overhead when nothing will be modified - and it grows with page size. On a projection to a DTO it is moot, since projections are not tracked anyway, but keeping `AsNoTracking` on read paths makes the intent explicit and protects the endpoint if someone later changes the projection back to returning entities."
+   },
+   {
+    "q": "What does the cursor need to contain beyond the key values?",
+    "a": "The sort definition it belongs to, so a cursor issued for `createdAt-desc` is rejected when the client switches to sorting by total - otherwise the boundary comparison is meaningless and rows are silently skipped. Ideally also a signature, so the cursor cannot be modified to move the boundary past a filter the server applied, and a hash of the other query parameters so changing a filter mid-pagination is caught rather than producing a nonsensical page."
+   }
   ]
  },
  {

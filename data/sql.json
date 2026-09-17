@@ -268,11 +268,21 @@
   "subcategory": "Functions",
   "difficulty": "Medium",
   "question": "How do you implement pagination efficiently in SQL Server?",
-  "answer": "Use OFFSET ... FETCH NEXT n ROWS ONLY with a stable ORDER BY for simple paging, but deep offsets get slow because the engine still scans skipped rows. For large datasets use keyset (seek) pagination: WHERE (SortKey) > @lastValue ORDER BY SortKey FETCH NEXT n—it seeks directly and stays fast regardless of page depth.",
+  "answer": "Two mechanisms, and the choice depends on whether the user needs numbered pages.\n\n**OFFSET-FETCH** is the simple one. It is correct, readable, and gets slower the deeper you page, because the engine must still produce and discard every skipped row. Page 1 reads 20 rows; page 500 reads 10,020 and throws away 10,000.\n\n**Keyset (seek) pagination** filters on the last row you showed instead of counting past rows. Cost is constant regardless of depth, because the index seeks straight to the boundary.\n\n```sql\n-- OFFSET-FETCH: simple, degrades with depth\nSELECT OrderId, CustomerId, CreatedUtc, Total\nFROM   dbo.Orders\nWHERE  CustomerId = @customerId\nORDER  BY CreatedUtc DESC, OrderId DESC      -- MUST be unique, or rows shift between pages\nOFFSET @skip ROWS FETCH NEXT @take ROWS ONLY;\n\n-- Keyset: constant cost at any depth\nSELECT TOP (@take) OrderId, CustomerId, CreatedUtc, Total\nFROM   dbo.Orders\nWHERE  CustomerId = @customerId\n  AND  (CreatedUtc < @lastCreatedUtc\n        OR (CreatedUtc = @lastCreatedUtc AND OrderId < @lastOrderId))\nORDER  BY CreatedUtc DESC, OrderId DESC;\n\n-- The index that makes the seek possible. Without it, both plans sort the whole set.\nCREATE NONCLUSTERED INDEX IX_Orders_Customer_Created\n    ON dbo.Orders (CustomerId, CreatedUtc DESC, OrderId DESC)\n    INCLUDE (Total);\n```\n\n**The non-negotiable detail in both:** the `ORDER BY` must be unique. `ORDER BY CreatedUtc DESC` alone lets tied rows come back in any order, and the order can differ between two executions of the same query - so a row appears on two pages or on none. Appending the primary key costs nothing and removes the whole class of bug.\n\n**On counting:** `COUNT(*)` over the filtered set to render \"page 5 of 240\" can cost more than the page itself. Options are an approximate count, a cached count, or dropping total pages in favour of \"next/previous\" - which is what keyset gives you anyway.",
   "tags": [
    "pagination",
    "offset-fetch",
    "keyset"
+  ],
+  "followups": [
+   {
+    "q": "Why does the composite index have to match the ORDER BY direction?",
+    "a": "Because the seek relies on reading the index in the stored order. SQL Server can scan an index backwards, so a single-column mismatch is often fine, but with a composite key and mixed directions - `CreatedUtc DESC, OrderId ASC` against an index of `(CreatedUtc DESC, OrderId DESC)` - it cannot, and the plan adds a sort. The sort is usually the dominant cost, so checking the plan for a sort operator is the quickest way to know the index is actually being used."
+   },
+   {
+    "q": "Can you get numbered pages with keyset pagination?",
+    "a": "Not directly, because a cursor describes a position in the data rather than a count of rows before it. The workarounds are to precompute page boundary keys periodically for a mostly-static dataset, or to accept OFFSET for a numbered admin grid where depth is naturally limited, and use keyset for the endpoints that face real volume. Choosing per surface rather than globally is usually the right answer."
+   }
   ]
  },
  {
@@ -787,12 +797,22 @@
   "subcategory": "Optimization",
   "difficulty": "Medium",
   "question": "What is a good approach to paginate a large ordered result set?",
-  "answer": "For deep pagination use keyset (seek) pagination: WHERE (SortCol, Id) > (@lastSort, @lastId) ORDER BY SortCol, Id OFFSET 0 FETCH NEXT @n—it seeks to the last position via an index and stays O(page size) regardless of depth. OFFSET/FETCH is simpler but O(offset) because it scans skipped rows. Always order by a unique, indexed key combination for stable, fast pages.",
+  "answer": "Page by **value**, not by position. Remember the sort key of the last row you returned and ask for rows after it. This is keyset pagination, and it is the approach that stays fast and stays correct while data changes underneath you.\n\n```sql\n-- First page: no cursor yet\nSELECT TOP (@take) Id, Name, Score\nFROM   dbo.Leaderboard\nORDER  BY Score DESC, Id ASC;\n\n-- Subsequent pages: seek past the last row shown\nSELECT TOP (@take) Id, Name, Score\nFROM   dbo.Leaderboard\nWHERE  Score < @lastScore\n   OR (Score = @lastScore AND Id > @lastId)   -- tiebreaker keeps the order total\nORDER  BY Score DESC, Id ASC;\n```\n\n**Why position-based paging is the wrong default here:**\n\n- **It gets slower with depth.** `OFFSET 100000` makes the engine produce and discard 100,000 rows to give you 20.\n- **It is not stable.** Insert a row before the offset between two requests and everything shifts by one, so the last row of page 1 reappears as the first row of page 2. Delete one and a row is skipped entirely - silently, which is worse.\n\n**The rules that make keyset correct:**\n1. The ordering must be **total** - include a unique column so no two rows tie.\n2. The index must match the ordering columns and directions, or every page pays for a sort.\n3. The cursor should be opaque to clients, so the internal key is not public API.\n\n**When OFFSET is still right:** small result sets, an admin grid where someone genuinely wants page 7, or an export where you control the read and the data is static.",
   "tags": [
    "sql",
    "pagination",
    "keyset",
    "offset-fetch"
+  ],
+  "followups": [
+   {
+    "q": "What happens to a keyset cursor if the row it points at is deleted?",
+    "a": "Nothing breaks. The cursor stores the key *values*, not a reference to the row, so `Score < 4200 OR (Score = 4200 AND Id > 88)` is still a well-defined boundary once row 88 is gone - the next page simply starts from whatever now follows that point. This is a real advantage over offset paging, where a deletion shifts every subsequent row and silently skips one."
+   },
+   {
+    "q": "How do you paginate when the sort column is user-selectable?",
+    "a": "The cursor must encode which ordering it belongs to, and the server must reject a cursor from a different sort - otherwise switching from price to date silently returns wrong rows. In practice that means one composite index per supported sort order, which is why allowing arbitrary sorting on a large table is expensive: each option is another index to maintain on every write. Limiting sortable columns to a small documented set is a legitimate design decision."
+   }
   ]
  },
  {
@@ -1248,12 +1268,22 @@
   "subcategory": "Optimization",
   "difficulty": "Medium",
   "question": "What is the difference between OFFSET-FETCH and TOP?",
-  "answer": "TOP (n) limits the result to the first n rows (optionally WITH TIES), simple for 'top N' queries but not for skipping rows. OFFSET n ROWS FETCH NEXT m ROWS ONLY skips n rows and returns the next m—used for pagination, requiring an ORDER BY. TOP is for limiting; OFFSET-FETCH for paging. Deep OFFSET is slow (scans skipped rows)—use keyset pagination for large datasets instead.",
+  "answer": "`TOP (n)` limits how many rows come back. `OFFSET n ROWS FETCH NEXT m ROWS ONLY` skips n rows and then returns m - so it is TOP with a skip, which is what makes paging possible.\n\n```sql\n-- TOP: first 10 only. No way to ask for the second 10.\nSELECT TOP (10) OrderId, Total\nFROM   dbo.Orders\nORDER  BY CreatedUtc DESC;\n\n-- OFFSET-FETCH: skip then take, so any page is reachable\nSELECT OrderId, Total\nFROM   dbo.Orders\nORDER  BY CreatedUtc DESC, OrderId DESC\nOFFSET 10 ROWS FETCH NEXT 10 ROWS ONLY;\n\n-- TOP has one thing OFFSET-FETCH does not: PERCENT and WITH TIES\nSELECT TOP (10) PERCENT OrderId, Total FROM dbo.Orders ORDER BY Total DESC;\n\nSELECT TOP (3) WITH TIES OrderId, Total       -- returns more than 3 if the 3rd value is tied\nFROM   dbo.Orders\nORDER  BY Total DESC;\n```\n\n**The practical differences:**\n\n- **`ORDER BY` is optional with `TOP`** and **mandatory with `OFFSET-FETCH`**. `TOP` without `ORDER BY` returns an arbitrary 10 rows, and which 10 can change between executions - a real source of non-deterministic bugs.\n- **`TOP` supports `PERCENT` and `WITH TIES`**; `OFFSET-FETCH` supports neither.\n- **`OFFSET-FETCH` is ANSI standard**, so it ports; `TOP` is T-SQL specific.\n- **`TOP` can be used in `INSERT`, `UPDATE` and `DELETE`**, which is how you batch a large modification into chunks that do not hold locks for minutes.\n\n**Performance:** neither is fast at depth. Both must produce the rows they discard, so the deep-paging problem belongs to `OFFSET-FETCH` just as much as it would to a `TOP` emulation.",
   "tags": [
    "sql",
    "top",
    "offset-fetch",
    "pagination"
+  ],
+  "followups": [
+   {
+    "q": "Why is TOP without ORDER BY dangerous rather than just unpredictable?",
+    "a": "Because it looks deterministic in testing and is not. The engine returns whichever rows the chosen plan produces first, and that depends on the index used, parallelism, and how the data is physically laid out - all of which change over time. A query that reliably returned the newest 10 rows in development can quietly return 10 arbitrary rows in production after an index is added, with nothing failing."
+   },
+   {
+    "q": "How would you use TOP to delete a million rows safely?",
+    "a": "In a loop with `DELETE TOP (5000) FROM ... WHERE ...` until no rows are affected, committing each batch. That keeps each transaction short, avoids lock escalation to a table lock, and stops the log file growing without bound. The alternative - one `DELETE` for the whole million - holds locks for the duration, blocks everything touching the table, and can take longer to roll back than it took to run if you cancel it."
+   }
   ]
  },
  {
@@ -2077,12 +2107,22 @@
   "subcategory": "Query Tuning",
   "difficulty": "Medium",
   "question": "How do you paginate large result sets efficiently in SQL?",
-  "answer": "OFFSET-FETCH is readable but the engine still produces and discards the skipped rows, so page 10,000 is slow and results shift as data changes. Keyset pagination filters on the last seen sort key, which stays constant time with a supporting index. Make the sort key unique by appending the primary key, otherwise rows can be skipped or repeated across pages.",
+  "answer": "The efficient approach is a **seek**, not a skip: filter on the last key you returned so the index takes you straight to the boundary, instead of counting past rows you are going to throw away.\n\n```sql\n-- Deep OFFSET: the engine produces 100,020 rows to return 20\nSELECT Id, Name FROM dbo.Products\nORDER BY Name, Id\nOFFSET 100000 ROWS FETCH NEXT 20 ROWS ONLY;\n\n-- Keyset: seeks to the boundary, reads 20 rows, at any depth\nSELECT TOP (20) Id, Name FROM dbo.Products\nWHERE (Name > @lastName) OR (Name = @lastName AND Id > @lastId)\nORDER BY Name, Id;\n\n-- PostgreSQL can express the same thing with a row constructor\nSELECT id, name FROM products\nWHERE (name, id) > (:last_name, :last_id)\nORDER BY name, id\nLIMIT 20;\n```\n\n**Why the difference is so large:** `OFFSET` is not a hint the optimiser can push into an index seek. The rows must be generated and discarded, so cost grows linearly with page depth. Keyset turns the same request into an index seek plus a 20-row range scan - constant work.\n\n**What you must get right:**\n1. **A total ordering.** Append a unique column, or tied rows shuffle between pages.\n2. **A matching composite index**, in the same column order and direction, or you pay for a sort on every page and the benefit disappears.\n3. **An opaque cursor** carrying the key values and the sort it belongs to.\n\n**The other half of the cost** is usually the total-row count for the page numbers. If the UI needs \"of 4,182 results\", that `COUNT(*)` can dominate - cache it, approximate it from statistics, or replace numbered pages with next/previous.",
   "tags": [
    "sql",
    "pagination",
    "keyset",
    "performance"
+  ],
+  "followups": [
+   {
+    "q": "Why is the PostgreSQL row-constructor form preferred where available?",
+    "a": "It expresses the comparison as a single tuple comparison, which the planner understands directly as a range condition on the composite index - so it reliably produces a seek. The equivalent `OR` form is logically identical but harder for a planner to recognise, and can produce a worse plan. SQL Server has no row-constructor comparison, which is why you write the explicit `OR` form there and check the plan for a seek."
+   },
+   {
+    "q": "Does adding a covering index remove the need for keyset pagination?",
+    "a": "No. A covering index removes the lookups back to the base table, so each row is cheaper - but `OFFSET 100000` still has to produce and discard 100,000 of those rows. It reduces the constant factor, not the linear growth. The two are complementary: keyset fixes the algorithmic cost, and a covering index makes each returned row cheap."
+   }
   ]
  },
  {

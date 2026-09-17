@@ -91,12 +91,22 @@
   "subcategory": "Pagination",
   "difficulty": "Medium",
   "question": "What are pagination strategies for REST APIs?",
-  "answer": "Offset/limit (?page=2&size=20)—simple but slow and inconsistent for deep pages with changing data. Cursor/keyset (?after=<token>)—stable and efficient for large/real-time datasets, using an opaque cursor over a sort key. Include total counts sparingly (they're expensive). Return links (next/prev) and metadata. Prefer cursor pagination for scalability.",
+  "answer": "There are three in common use, and the right one depends on whether clients need to jump to a page and how much data sits behind the endpoint.\n\n**Offset/limit** - `GET /orders?page=3&pageSize=20`. Simple, supports arbitrary page jumps and a total count. Degrades with depth and is unstable while data changes - a row inserted between requests duplicates the boundary row, and a deletion silently skips one.\n\n**Cursor/keyset** - `GET /orders?cursor=eyJ...&limit=20`. Constant cost at any depth and stable under concurrent writes. No page numbers and no free total. The right default for feeds, infinite scroll and any large dataset.\n\n**Time/id range** - `GET /events?since=2026-09-01T00:00:00Z`. Natural for logs and event streams, and lets clients resume from where they stopped.\n\n```http\nGET /orders?limit=20 HTTP/1.1\n\nHTTP/1.1 200 OK\nLink: <https://api.example.com/orders?cursor=eyJjIjoiMjAyNi0wOS0xNSIsImkiOjg4fQ&limit=20>; rel=\"next\"\n\n{\n  \"data\": [ { \"id\": 88, \"total\": 240.00 } ],\n  \"pageInfo\": {\n    \"nextCursor\": \"eyJjIjoiMjAyNi0wOS0xNSIsImkiOjg4fQ\",\n    \"hasNextPage\": true\n  }\n}\n```\n\n**Conventions worth following whichever you choose:** cap `limit` server-side so a client cannot request 100,000 records, return the cursor as opaque and document it as opaque, use the `Link` header with `rel=\"next\"`/`rel=\"prev\"` if you want to be HTTP-idiomatic, and keep the envelope consistent across every collection endpoint so clients write one pagination helper rather than several.",
   "tags": [
    "rest",
    "pagination",
    "cursor",
    "offset"
+  ],
+  "followups": [
+   {
+    "q": "Should the response include a total count?",
+    "a": "Only if you can afford it and clients genuinely need it. A `COUNT(*)` over a large filtered set can cost more than the page, so making it unconditional taxes every request for a number most callers ignore. The usual compromises are to make it opt-in with a query parameter, return an approximate count, or expose only `hasNextPage` - which is answerable cheaply by fetching one extra row and checking whether it exists."
+   },
+   {
+    "q": "How do you keep a cursor from becoming public API you can never change?",
+    "a": "Base64-encode it so it is visibly not meant to be read, sign it so a modified cursor is rejected, and document explicitly that clients must treat it as opaque and pass it back verbatim. Without the signature, clients will eventually decode it, depend on the internal field names, and you can no longer change your sort key without breaking them - which is exactly how an implementation detail becomes a contract."
+   }
   ]
  },
  {
@@ -567,12 +577,22 @@
   "subcategory": "Design",
   "difficulty": "Medium",
   "question": "How should filtering, sorting and pagination be expressed?",
-  "answer": "As query parameters on the collection - filter fields by name, a sort parameter with a direction prefix, and either page and size or a cursor. Be consistent across every collection endpoint, document the maximum page size, and always apply a default limit so an unbounded request cannot be made accidentally.",
+  "answer": "Consistently, and as query parameters on the collection resource - so one convention covers every endpoint and clients write the helper once.\n\n```http\nGET /orders\n      ?status=shipped&status=delivered      # repeated key = OR within a field\n      &createdAfter=2026-01-01\n      &minTotal=100\n      &sort=-createdAt,id                   # '-' prefix = descending, comma = tiebreaker\n      &fields=id,total,status               # sparse fieldset\n      &limit=20&cursor=eyJ...\nHTTP/1.1\n```\n\n**The conventions I would settle on:**\n\n- **Filtering:** one parameter per filterable field, with a documented suffix convention for operators (`minTotal`/`maxTotal`, or `total[gte]=100`). Repeating a key means OR within that field; different keys AND together. Whitelist what is filterable - accepting arbitrary field names is how you get an unindexed query that scans a large table.\n- **Sorting:** a single `sort` parameter taking a comma-separated list, `-` for descending. Whitelist sortable fields too, because each one you allow is a composite index you must maintain.\n- **Pagination:** cursor-based by default, with `limit` capped server-side.\n- **Sparse fieldsets:** a `fields` parameter, which is the cheap alternative to GraphQL when payload size is the only complaint.\n\n**What to avoid:** inventing a query language in the URL. `?filter=total>100 AND status='shipped'` looks flexible and immediately becomes a parser you own, an injection surface, and a promise that any combination performs. If clients genuinely need arbitrary queries, that is an argument for GraphQL or a dedicated search endpoint - made deliberately, with cost controls.\n\n**And be consistent about errors:** an unknown sort field should be a 400 naming the problem, not silently ignored. Silent ignoring produces \"the sort does not work\" bug reports that take far longer to diagnose than they should.",
   "tags": [
    "rest",
    "api-design",
    "pagination",
    "conventions"
+  ],
+  "followups": [
+   {
+    "q": "Why whitelist sortable and filterable fields rather than allowing any column?",
+    "a": "Because every combination you allow is a performance commitment. An unindexed sort on a large table scans and sorts the whole set, and a filter on an unindexed column does the same - so an endpoint that is fast in testing can be trivially made slow by a client sorting on a field nobody anticipated. Whitelisting also stops internal column names leaking into your public contract, which would then block any schema refactor."
+   },
+   {
+    "q": "How should filtering interact with a cursor?",
+    "a": "The cursor must be tied to the exact filter and sort it was issued for, and the server should reject it if either changed - otherwise a client that adjusts a filter mid-pagination gets a boundary computed against a different result set, which silently skips or repeats rows. Encoding a hash of the query parameters into the cursor and validating it on use is the straightforward way to enforce that."
+   }
   ]
  },
  {

@@ -779,12 +779,22 @@
   "subcategory": "Queries",
   "difficulty": "Medium",
   "question": "How do you paginate efficiently in MongoDB?",
-  "answer": "Range on an indexed sort key rather than skip, because skip must walk the skipped documents and degrades with depth. Sort by a unique field or append the object id to break ties, and pass the last seen value as the cursor - which also keeps pages stable while data changes.",
+  "answer": "`skip()` has the same problem as SQL `OFFSET`: the server walks and discards every skipped document, so deep pages get progressively slower. The efficient approach is a range query on the sort key.\n\n```javascript\n// Slow at depth - the server scans and discards 100,000 documents\ndb.orders.find({ customerId: 42 })\n         .sort({ createdAt: -1, _id: -1 })\n         .skip(100000)\n         .limit(20);\n\n// Fast at any depth - seeks using the index\ndb.orders.find({\n    customerId: 42,\n    $or: [\n      { createdAt: { $lt: lastCreatedAt } },\n      { createdAt: lastCreatedAt, _id: { $lt: lastId } }   // tiebreaker\n    ]\n  })\n  .sort({ createdAt: -1, _id: -1 })\n  .limit(20);\n\n// The compound index that makes it a seek rather than a collection scan.\n// Order matters: equality fields first, then the sort fields.\ndb.orders.createIndex({ customerId: 1, createdAt: -1, _id: -1 });\n```\n\n**The `_id` shortcut:** if you only need insertion order, `_id` is already monotonic for generated ObjectIds and unique, so `{ _id: { $lt: lastId } }` with `sort({ _id: -1 })` is a complete cursor with no extra index. It is the cheapest correct pagination MongoDB offers, and it is worth using when the ordering requirement allows.\n\n**Check it with `explain()`.** You want an `IXSCAN` and `totalKeysExamined` close to the number returned. If `totalDocsExamined` is far larger than `nReturned`, the index is not doing the work.\n\n**Avoid `countDocuments()` for page totals** on large collections - it scans. `estimatedDocumentCount()` uses metadata and is fast, but it ignores your filter.",
   "tags": [
    "mongodb",
    "pagination",
    "performance",
    "query"
+  ],
+  "followups": [
+   {
+    "q": "Why must equality fields come before sort fields in the compound index?",
+    "a": "This is the ESR rule - Equality, Sort, Range. An equality match on a leading field narrows the index to a contiguous section, and within that section the remaining keys are already in sorted order, so the sort is free. Put the sort field first and the equality match becomes a filter applied across the whole index, which forces either a scan or an in-memory sort. Getting the order wrong is the most common reason a Mongo query is slow despite having \"an index\"."
+   },
+   {
+    "q": "What about Atlas Search or the aggregation pipeline - do they change this?",
+    "a": "The aggregation pipeline has the same skip problem: `$skip` discards documents, so the advice is identical - use a `$match` range on the sort key instead. Atlas Search has its own pagination via `searchAfter`, which is a proper cursor token and is the right mechanism there. Either way the principle is unchanged: never ask the server to produce rows only to throw them away."
+   }
   ]
  },
  {

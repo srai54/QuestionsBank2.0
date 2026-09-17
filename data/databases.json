@@ -1128,11 +1128,21 @@
   "subcategory": "Performance",
   "difficulty": "Hard",
   "question": "How do you replace OFFSET pagination at scale?",
-  "answer": "OFFSET scans and discards rows every page, degrading linearly. Switch to keyset (WHERE (created_at,id) > (?,?) ORDER BY created_at,id LIMIT n) using a covering index. It is stable under inserts and constant-time. Keep OFFSET only for small admin lists; expose opaque cursors encoding the last key.",
+  "answer": "Replace position with a **bookmark**. Instead of \"skip 100,000 rows\", the request says \"give me the rows after this key\". The database seeks to that key using the index and reads forward, so page 5,000 costs the same as page 1.\n\n```sql\n-- Before: cost grows with depth\nSELECT * FROM events ORDER BY created_at DESC, id DESC\nOFFSET 100000 LIMIT 50;\n\n-- After: constant cost\nSELECT * FROM events\nWHERE (created_at, id) < (:last_created_at, :last_id)\nORDER BY created_at DESC, id DESC\nLIMIT 50;\n```\n\n**The migration is mostly an API change, and that is the hard part** - clients currently send `?page=17`, and keyset has no equivalent. So the rollout is:\n\n1. Add a cursor-based endpoint or an optional `cursor` parameter alongside the existing `page`.\n2. Return `nextCursor` in every response, opaque and ideally signed.\n3. Move clients over, starting with the ones paging deepest.\n4. Cap or retire deep `page` values - many APIs simply refuse offsets beyond a limit, which is a legitimate answer.\n\n**What you gain beyond speed:** stability. Offset paging silently duplicates and skips rows when data changes between requests; a keyset cursor does not, because it is anchored to a value rather than a count.\n\n**What you give up:** jumping to an arbitrary page, and a total count if you were deriving it for free. For feeds, exports and infinite scroll that is no loss at all.",
   "tags": [
    "pagination",
    "keyset",
    "performance"
+  ],
+  "followups": [
+   {
+    "q": "What if the client genuinely needs to jump to an arbitrary page?",
+    "a": "Then keep offset for that surface and bound it - most systems cap the reachable depth, because page 5,000 of a search result has no real user behind it. If deep random access is a genuine requirement, precompute page boundary keys into a side table on a schedule, so \"page 400\" becomes a lookup of the boundary key followed by a keyset read. That only works when the underlying ordering is stable enough for the precomputed boundaries to stay meaningful."
+   },
+   {
+    "q": "How do you handle a cursor when the underlying row ordering can change?",
+    "a": "If the sort key is mutable - a score that updates, a last-modified timestamp - a cursor can skip or repeat rows when a row moves across the boundary. The mitigations are to page on an immutable key where possible (creation time and id rather than modified time), or to accept the imprecision explicitly for feed-like data where it does not matter. For anything requiring an exact one-pass read, snapshot the set first and page over the snapshot."
+   }
   ]
  },
  {

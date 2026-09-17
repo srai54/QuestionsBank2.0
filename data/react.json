@@ -1497,12 +1497,22 @@
   "subcategory": "Data",
   "difficulty": "Medium",
   "question": "How do you handle paginated and infinite lists with a query library?",
-  "answer": "Use the infinite query API, which keeps pages in one cache entry and exposes a function to fetch the next based on a cursor returned by the server. Cursor pagination avoids the duplicate and skipped rows that offset pagination produces while the underlying data changes, which is very visible in an infinite scroll.",
+  "answer": "With a dedicated infinite-query API rather than by accumulating pages into component state yourself - that manual version is where the bugs live.\n\n```typescript\nconst {\n  data, fetchNextPage, hasNextPage, isFetchingNextPage, status\n} = useInfiniteQuery({\n  queryKey: ['orders', customerId],           // filters belong in the key\n  initialPageParam: undefined as string | undefined,\n  queryFn: ({ pageParam, signal }) =>\n    fetchOrders({ customerId, cursor: pageParam, signal }),   // pass signal so cancels abort\n  getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,  // undefined = no more pages\n});\n\n// data.pages is an array of responses; flatten for rendering\nconst orders = data?.pages.flatMap(p => p.items) ?? [];\n```\n\n**What the library handles that hand-rolled code usually gets wrong:**\n- **Deduplicating concurrent requests** for the same key, so a double-triggered scroll does not fetch twice.\n- **Caching and background refetching**, with a clear distinction between first load and refetch - so the UI can avoid a full-page spinner on a refresh.\n- **Race conditions.** A slow response for an old filter cannot overwrite a fast response for the new one, because they are different cache keys.\n- **Cancellation**, via the `signal` it passes in.\n\n**The details that matter in practice:**\n1. **Put every filter in the `queryKey`.** Changing a filter should produce a new cache entry, not mutate the existing pages.\n2. **Return `undefined` from `getNextPageParam`** to signal the end - returning `null` or a falsy cursor by mistake causes infinite fetching.\n3. **Virtualise the rendered list** once it grows - the query cache holding 5,000 items is fine; rendering 5,000 DOM nodes is not.\n4. **Use cursor pagination on the server.** Infinite scroll over OFFSET duplicates and skips items as data changes, which users see directly as repeated rows.",
   "tags": [
    "tanstack-query",
    "pagination",
    "infinite-scroll",
    "react"
+  ],
+  "followups": [
+   {
+    "q": "How do you trigger loading the next page reliably?",
+    "a": "An `IntersectionObserver` on a sentinel element after the last row, calling `fetchNextPage` when it becomes visible - and guarding on `hasNextPage && !isFetchingNextPage`, or a fast scroll fires several times. A scroll-position calculation is the common alternative and is worse: it recomputes on every scroll event, needs throttling, and breaks with variable row heights or a nested scroll container."
+   },
+   {
+    "q": "What happens to the accumulated pages when the query refetches?",
+    "a": "By default the library refetches every loaded page to keep them consistent, which is correct but can be expensive after the user has scrolled through twenty pages. `maxPages` bounds how many are retained, discarding from the far end, which keeps both memory and refetch cost bounded. This matters most for a list the user scrolls deeply and then leaves open, where a window refocus triggers a refetch of everything."
+   }
   ]
  },
  {
