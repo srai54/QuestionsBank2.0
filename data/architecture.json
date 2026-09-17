@@ -4768,5 +4768,29 @@
     "a": "It breaks down as soon as the join is over more than a small, bounded set, or needs filtering and sorting across both sides. You cannot efficiently page a result ordered by a field one service owns and filtered by a field the other owns without fetching far more than you need from at least one of them. That specific requirement - cross-service filtering and sorting with pagination - is the clearest signal that a materialised read model is needed rather than composition."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Configuration",
+  "difficulty": "Medium",
+  "question": "When should behaviour be configurable, and when should it be hard-coded?",
+  "answer": "Configuration looks free and is not - every option is a branch that must be tested, documented and supported, and combinations multiply. So the default should be hard-coded, with configuration earned by a specific need.\n\n**Make it configurable when:**\n1. **It genuinely differs per environment** - connection strings, endpoints, limits sized to the deployment.\n2. **It must change without a deploy** - a rate limit you may need to lower during an incident, a feature toggle, a threshold that operations tunes.\n3. **It differs per customer or tenant**, which is a product requirement rather than an engineering convenience.\n4. **It is a policy someone other than engineering owns** - retention periods, business hours, pricing rules.\n\n**Keep it hard-coded when:**\n- **Nobody has asked to change it.** \"We might want to configure this\" is the reasoning behind most of the options nobody has ever touched.\n- **Changing it would require a code change anyway** to remain correct - a configurable value with an implicit dependency elsewhere is a trap.\n- **There is exactly one correct value**, and making it configurable invites someone to set it wrongly.\n\n**The cost people underestimate:** every configurable value is a possible production state. Ten booleans is a thousand combinations, of which you test perhaps two. A misconfigured value is also a common incident cause, and it is harder to diagnose than a code bug because the code looks right.\n\n**What I would insist on for anything configurable:** a sensible default so the common case needs no configuration, validation at startup so a bad value fails the deployment, and documentation of what it does and what happens at the extremes.",
+  "tags": [
+   "architecture",
+   "configuration",
+   "feature-flags",
+   "complexity",
+   "design"
+  ],
+  "followups": [
+   {
+    "q": "How do you decide between configuration and a feature flag?",
+    "a": "By lifetime and by who changes it. A feature flag is temporary, owned by engineering, and exists to decouple deploy from release - it should have a removal date. Configuration is durable, often owned by operations or the business, and expected to persist. Treating a long-lived setting as a flag means it never gets cleaned up and pollutes the flag list; treating a temporary rollout as configuration means it acquires documentation and support expectations it does not deserve."
+   },
+   {
+    "q": "What is the risk of making something configurable per tenant?",
+    "a": "Combinatorial explosion in what you must support and test - with per-tenant behaviour, no two customers run the same system, and a bug may exist only for one combination nobody tried. It also makes support harder, since reproducing an issue requires knowing that tenant s exact configuration. Where it is genuinely required, keeping the options few and orthogonal, defaulting aggressively, and being able to dump a tenant s effective configuration for diagnosis are what keep it manageable."
+   }
+  ]
  }
 ]

@@ -4998,5 +4998,29 @@
     "a": "When polling cost or contention starts to dominate - thousands of jobs per second, or many workers polling frequently enough that the queries themselves load the database you are also using for application data. You also give up features a broker provides: fan-out to multiple consumers, topic subscriptions, delayed delivery, and built-in dead-lettering. The strongest reason to stay with a database queue is transactional enqueue - writing the job in the same transaction as the business data, which is the outbox pattern and is genuinely hard to replicate with an external broker."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Reporting",
+  "difficulty": "Medium",
+  "question": "Reporting queries are slowing down the transactional system. What are your options?",
+  "answer": "Separate the workloads, because they want opposite things - transactional work wants short queries and fast writes, reporting wants long scans over large ranges, and they contend for the same memory, I/O and locks.\n\n**The options, cheapest first:**\n\n1. **Fix the queries.** Some reporting slowness is a missing index or a query scanning far more than it needs. Worth checking before building infrastructure.\n2. **Read-committed snapshot isolation**, so reporting reads take row versions instead of shared locks and stop blocking writers. This removes the *blocking* interaction cheaply, though the resource contention remains.\n3. **A read replica.** Point reporting at it and the transactional system is unaffected by the load. The trade is replication lag - reports may be seconds or minutes behind, which is usually fine and must be stated. This is the standard answer.\n4. **Resource governance** - capping the CPU and memory reporting queries may consume, so a runaway report degrades itself rather than everything else.\n5. **A separate reporting database or warehouse**, loaded on a schedule, with a schema shaped for analysis rather than for transactions. This is the right answer when reporting needs are substantial: you can denormalise, use columnstore indexes, and keep history without burdening the operational schema.\n\n**How I would choose:** a replica when the reports are ordinary queries over current data and staleness of seconds is acceptable; a warehouse when reporting has its own model, needs history, or joins across systems.\n\n**And the thing to settle first** is what freshness the business actually requires - people often ask for real-time and mean \"within the hour\", and that answer changes which option is appropriate.",
+  "tags": [
+   "sql",
+   "reporting",
+   "read-replica",
+   "columnstore",
+   "workload-isolation"
+  ],
+  "followups": [
+   {
+    "q": "What does a columnstore index give you for reporting?",
+    "a": "It stores data by column rather than by row, so an aggregate over three columns of a hundred-column table reads only those three - and columnar compression is dramatic because adjacent values in a column are similar. Combined with batch mode execution it can make analytical queries an order of magnitude faster than a rowstore. The trade is that single-row lookups and frequent small updates are much worse, which is exactly the transactional pattern - so it belongs on reporting tables or on historical partitions rather than on the hot operational table."
+   },
+   {
+    "q": "Why is \"real-time reporting\" usually the wrong requirement?",
+    "a": "Because it is expensive and rarely matches the decision being made - a report someone reads each morning does not need sub-second freshness, and asking for it forces reporting onto the transactional system where it does damage. The useful question is what decision the number supports and how quickly acting on stale data would be wrong. That usually reveals a tolerance of minutes or hours, which opens up replicas, scheduled loads and pre-aggregation. The genuine real-time cases - operational dashboards, fraud detection - are better served by streaming than by querying the transactional database harder."
+   }
+  ]
  }
 ]

@@ -1815,5 +1815,29 @@
     "a": "Treat it as code - defined in the repository, versioned, and deployed with the service, so a new dependency or a renamed metric is updated in the same change rather than being noticed months later when a panel has been empty. Reviewing dashboards as part of incident retrospectives is the other half: every incident where someone had to go elsewhere to answer one of the core questions is evidence of a missing panel, and every panel nobody looked at is a candidate for removal."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Errors",
+  "difficulty": "Medium",
+  "question": "How do you make error reporting useful rather than a wall of noise?",
+  "answer": "By grouping, prioritising and making each group actionable - a raw stream of exceptions is unusable at any real volume.\n\n**What makes it useful:**\n\n1. **Grouping by root cause, not by message.** A `NullReferenceException` from one code path is one issue, whatever the varying details. Good tools fingerprint by stack shape; the thing to avoid is interpolating variable data into exception messages, because that fragments one issue into thousands.\n2. **Ranking by impact** - number of users affected, not number of occurrences. A loop throwing ten thousand times for one user matters less than something hitting a thousand users once each.\n3. **New versus regressed versus ongoing.** A newly-appeared error after a deploy is the most actionable signal available, and it should be surfaced separately rather than buried among long-standing noise.\n4. **Enough context to act** - the release version, the user or tenant, the request path, breadcrumbs of what happened before, and the correlation id linking to the trace.\n5. **Ownership.** Each issue routed to a team, with a state - triaged, ignored deliberately, fixed in a release - so the list is a work queue rather than a log.\n\n**What creates the noise:**\n- **Logging expected outcomes as errors** - validation failures, 404s, cancelled requests when a user navigates away. These are not errors and should not be in the error stream.\n- **Catch-and-log-and-rethrow**, which reports the same failure several times.\n- **No triage discipline**, so the list grows until nobody looks.\n\n**And treat it like an alert list:** if a class of error is not going to be acted on, either fix it or stop reporting it. A permanently noisy error dashboard means the genuinely new failure goes unnoticed.",
+  "tags": [
+   "observability",
+   "error-tracking",
+   "grouping",
+   "triage",
+   "noise"
+  ],
+  "followups": [
+   {
+    "q": "Why do interpolated exception messages cause grouping problems?",
+    "a": "Because the grouping key usually includes the message, so `Order 4471 not found` and `Order 4472 not found` become separate issues - and a common failure appears as thousands of one-off issues rather than one problem affecting thousands of users. The fix is a constant message with the variable data attached as structured properties, which most reporting tools use for detail rather than for grouping. It is the same discipline as structured logging, applied to exceptions."
+   },
+   {
+    "q": "What should you do with an error you have decided not to fix?",
+    "a": "Mark it as deliberately ignored with a reason and a review date, rather than leaving it in the active list or silently suppressing it at the source. Leaving it visible trains people to scroll past errors; suppressing it entirely means you lose the signal if its volume changes significantly, which is often the first sign that something else has broken. An explicit ignored state keeps the active list meaningful while retaining the data."
+   }
+  ]
  }
 ]

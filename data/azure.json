@@ -5890,5 +5890,29 @@
     "a": "From the RTO and RPO the business states, and from what a region outage would actually cost. For most internal and many customer-facing systems, a few hours of downtime during a rare regional event is tolerable, and the correct answer is backups plus infrastructure-as-code so you could rebuild elsewhere - a cold standby. Active-active is a different architecture with conflict resolution and eventual consistency baked in, so it is a decision about the application rather than about infrastructure, and it should not be taken because it sounds more robust."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "An Azure SQL database is hitting its DTU or vCore limit. What do you do before scaling up?",
+  "answer": "Scaling up is the easy lever and usually the wrong first one, because it converts an efficiency problem into a recurring cost. I would find out what is consuming the resource first.\n\n**What I would check:**\n\n1. **Which resource is actually saturated** - CPU, data I/O, log I/O or worker threads. The portal and `sys.dm_db_resource_stats` break it down, and the answer changes the diagnosis completely. Log I/O saturation points at write volume; data I/O at reads that are not hitting memory; worker threads at blocking.\n2. **Query Store for the top consumers.** It ranks queries by resource usage and shows plan changes over time - which is both the fastest way to find the expensive query and the way to see whether a plan regressed.\n3. **Missing indexes and expensive scans**, which are the most common single cause. A query scanning a million rows to return ten is a fixable problem, not a capacity one.\n4. **Blocking and waits**, because worker-thread exhaustion from blocking looks like a capacity limit and is not.\n5. **Chatty application behaviour** - an N+1 issuing hundreds of small queries per request consumes far more than the work justifies.\n6. **Whether reporting is running against the transactional database**, which is often the whole explanation.\n\n**Then scale, if the work is genuinely necessary.** And when scaling, consider the shape as well as the size - serverless for intermittent workloads, Hyperscale for very large databases, or a read replica if the load is read-heavy.\n\n**The reason to do it in this order:** scaling up hides the inefficiency and you pay for it every month afterwards, and a query bad enough to saturate one tier will saturate the next one as data grows.",
+  "tags": [
+   "azure",
+   "azure-sql",
+   "dtu",
+   "query-store",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "What does Query Store give you that DMVs do not?",
+    "a": "Persistence across restarts and plan history. The dynamic management views show what is in the cache right now, so a restart or eviction loses the evidence - which is exactly what happens before someone gets round to investigating. Query Store records execution statistics and every plan per query over time, so you can see that a query was fast until Tuesday and then got a different plan. It also lets you force a known-good plan, which is a targeted fix for plan regression that needs no code change."
+   },
+   {
+    "q": "When is scaling up genuinely the right answer?",
+    "a": "When the workload is efficient and has simply grown - the queries are indexed, the plans are good, and there is more legitimate work than the tier supports. Also when the engineering cost of optimising exceeds the cost difference between tiers, which for a small database is often true: a few hundred pounds a month against several days of work is not a close call. The mistake is scaling without knowing which of those situations you are in, because if it is inefficiency you will be scaling again shortly."
+   }
+  ]
  }
 ]

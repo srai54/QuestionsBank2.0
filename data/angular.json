@@ -3399,5 +3399,29 @@
     "a": "Because a timeout does not tell you whether the server processed the request - only that you did not get a response. Retrying a GET is harmless; retrying a POST that created an order may create a second one. So retries should be limited to idempotent methods by default, with non-idempotent operations opting in only when they carry an idempotency key the server uses to deduplicate. An interceptor that retries everything is a quiet source of duplicate records."
    }
   ]
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "How do you test Angular components and services without the tests becoming a maintenance burden?",
+  "answer": "By testing behaviour through the public surface and keeping the TestBed configuration minimal, because the usual burden comes from tests that are coupled to structure and from setup that has to change whenever a dependency does.\n\n**For services:** test them as plain classes with dependencies passed in. Most services need no TestBed at all - constructing them directly with fakes is faster and simpler. `HttpClientTestingModule` for anything doing HTTP, asserting on the requests made and flushing responses, which exercises the real `HttpClient` rather than a mock of it.\n\n**For components:** render and interact rather than poking at the instance. Query by role or by a test attribute, dispatch real events, assert on what the user would see. Reaching into `component.someProperty` to set state and then checking another property tests the class, not the component - and breaks on every refactor.\n\n**What keeps the maintenance cost down:**\n- **A shared test setup helper** per feature, so a new dependency is added once rather than in thirty test files. This is the single biggest factor.\n- **Shallow rendering** with child components stubbed, so a change to a child does not break the parent s tests.\n- **Test the template contract** - inputs in, outputs emitted - rather than internal method calls.\n- **Avoid over-mocking.** A fake service returning fixed data is usually clearer than a spy with configured return values and call assertions.\n\n**And push logic out of components** into services and pure functions, where it is tested without any rendering at all. A component that is mostly template and wiring needs far fewer tests than one carrying business rules.",
+  "tags": [
+   "angular",
+   "testing",
+   "testbed",
+   "fakeasync",
+   "maintainability"
+  ],
+  "followups": [
+   {
+    "q": "What changed for testing with standalone components?",
+    "a": "Configuration got simpler - you import the component directly rather than declaring it in a module, so the TestBed setup mirrors the component s own imports instead of reconstructing a module graph. Overriding a dependency for a test is a provider override as before, and stubbing a child now means overriding the component s imports rather than declaring a stub in the testing module. Overall it removes a category of setup confusion where a test failed because the module configuration did not match the real one."
+   },
+   {
+    "q": "When do you need fakeAsync and when is async/await enough?",
+    "a": "`fakeAsync` with `tick` lets you control virtual time, so a debounce or a timer can be advanced instantly rather than waited for - that is what it is genuinely for, and it makes a test of a 300ms debounce take microseconds. For ordinary asynchronous work that resolves on its own, `async`/`await` with `fixture.whenStable()` is simpler and reads better. Reaching for `fakeAsync` by default leads to confusing failures about pending timers, so use it when you specifically need to manipulate time."
+   }
+  ]
  }
 ]

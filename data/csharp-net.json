@@ -13022,5 +13022,29 @@
     "a": "The factory is not called under a lock, so several threads missing the same key simultaneously will each run it - you get one winner stored and the others discarded. That is harmless for a pure computation and a real problem when the factory is expensive, opens a connection, or has side effects. The fix is to store a `Lazy<T>` as the value, so the dictionary deduplicates cheaply and only the winning `Lazy` is ever evaluated."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "What is a value object, and why would you create one instead of using a primitive?",
+  "answer": "A value object is defined entirely by its values, has no identity, and is immutable - `Money`, `EmailAddress`, `DateRange`, `PostCode`. Two instances with the same values are the same thing, unlike an entity where two customers with identical details are still different customers.\n\n**Why bother instead of using a `string` or a `decimal`:**\n\n1. **Validation happens once, at construction.** An `EmailAddress` that exists is valid, so nothing downstream needs to check. With a `string`, every method that receives one either revalidates or trusts and hopes - and the latter is what actually happens.\n2. **The type system prevents whole classes of mistake.** `Transfer(decimal amount, decimal fee)` can be called with the arguments swapped and compiles fine. `Transfer(Money amount, Money fee)` does not help there, but `Transfer(AccountId from, AccountId to)` does prevent passing a `CustomerId`. Primitive obsession is what makes those bugs possible.\n3. **Behaviour has somewhere to live.** `Money.Add` can refuse to add different currencies. `DateRange.Overlaps` is written once rather than reimplemented slightly differently in four places.\n4. **Equality means what you want.** Two `Money` values of the same amount and currency are equal, which is almost never true of the primitives you would otherwise compare.\n\n**The cost:** more types, mapping at persistence boundaries, and some ceremony. That is why I would use them for concepts with rules - money, identifiers, ranges, codes with a format - and not wrap every string in the application.\n\n**In modern C#** a `readonly record struct` gives you equality, immutability and a compact representation with very little code.",
+  "tags": [
+   "csharp",
+   "value-objects",
+   "ddd",
+   "primitive-obsession",
+   "ef-core"
+  ],
+  "followups": [
+   {
+    "q": "How do value objects map to a database?",
+    "a": "As owned types in EF Core, which map the properties to columns on the owning table rather than to a separate table - so `Money` becomes `Amount` and `Currency` columns on the order, with no join. For a single-value wrapper such as a strongly-typed id, a value converter is simpler: it converts to and from the primitive on save and load, so the database sees a plain `int` or `uniqueidentifier` while the model keeps the type. Both are configuration rather than compromise, which is what makes the pattern practical."
+   },
+   {
+    "q": "What is the argument against strongly-typed ids specifically?",
+    "a": "Friction at the boundaries - they need converters for EF, for JSON serialisation, for model binding in ASP.NET Core, and for anything that reflects over the model. That is real, repetitive work, and on a codebase with fifty entities it adds up. The counter-argument is that passing the wrong id is a bug that compiles, is easy to write, and can be expensive - so the friction buys something concrete. Source generators now remove most of the boilerplate, which has shifted the balance in favour of using them."
+   }
+  ]
  }
 ]

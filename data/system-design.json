@@ -3028,5 +3028,29 @@
     "a": "A thundering herd on a database that has just recovered, which can knock it over again - the classic secondary outage. The queue consumers need rate limiting and a gradual ramp rather than draining at full speed, and a circuit breaker that reopens if the database starts failing again. Processing order matters too: if the deferred writes conflict with each other or with live traffic, you need either ordering guarantees or idempotent operations that converge regardless of order."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Limits",
+  "difficulty": "Hard",
+  "question": "How would you design a system to enforce per-customer usage quotas accurately?",
+  "answer": "Accurately and at scale pull in opposite directions, so the first question is what accuracy the business actually needs - a hard cap that must never be exceeded is a very different system from a soft limit that may overshoot slightly.\n\n**For a soft limit**, which covers most cases: count in a fast shared store - Redis with atomic increments against a key per customer per period - and check before allowing the operation. Fast, simple, and slightly approximate under failure, since an increment can be lost or double-counted.\n\n**For a hard cap** - where exceeding it has contractual or financial consequences - the counter must be transactional with the operation it governs. That usually means the count lives in the same database, incremented in the same transaction as the work, with a constraint or a conditional update enforcing the ceiling. Correct, and it serialises on the customer s row, which bounds throughput per customer.\n\n**The design details that matter either way:**\n- **Define the window precisely.** A calendar month, a rolling 30 days and a sliding window behave differently at boundaries, and customers notice. Rolling windows need per-event timestamps rather than a single counter, which costs more.\n- **Decide what happens at the limit** - reject, queue, throttle, or allow and bill for overage. This is a product decision that changes the architecture.\n- **Make it observable to the customer** before they hit it - current usage in the API response headers and in the UI, with warnings in advance. A limit that surprises people generates support load regardless of how correct it is.\n- **Reconcile against the source of truth** periodically, because a fast counter drifts.\n\n**And design the failure mode deliberately:** if the counting store is unavailable, do you fail open and risk overage, or fail closed and break the service? For quotas I would usually fail open with an alert.",
+  "tags": [
+   "system-design",
+   "quotas",
+   "rate-limiting",
+   "consistency",
+   "billing"
+  ],
+  "followups": [
+   {
+    "q": "Why does a hard cap limit throughput per customer?",
+    "a": "Because the counter becomes a single row every operation for that customer must update, so concurrent requests serialise on it - which is exactly the contention that makes a naive page-view counter fail. For most customers that is irrelevant, but a large customer generating high concurrency hits it. The mitigations are sharding the counter across several rows summed on read, which weakens the hard guarantee slightly, or accepting a small reservation model where a worker claims a block of quota at a time and reconciles the unused portion."
+   },
+   {
+    "q": "How do you handle quota when the operation happens asynchronously?",
+    "a": "Reserve at acceptance rather than counting at completion, so the caller is told immediately whether they have quota rather than discovering a rejection after the job has been queued. The reservation is then either consumed when the work completes or released if it fails, which needs the release to be reliable - an expiry on the reservation handles a worker that dies. Counting only on completion means a customer can queue far beyond their limit before any of it is rejected, which is usually the wrong behaviour."
+   }
+  ]
  }
 ]
