@@ -3902,5 +3902,29 @@
     "a": "It marks a state update as non-urgent, so React keeps rendering the current UI while preparing the new one instead of immediately unmounting into a fallback. The practical effect is that clicking a tab does not blank the content area - the old tab stays visible, optionally dimmed using the `isPending` flag, until the new one is ready. Without it, any suspending component in the new tree triggers the fallback and the user sees a flash of skeleton on every navigation, which feels worse than a brief delay."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Optimistic Updates",
+  "difficulty": "Medium",
+  "question": "How do you implement an optimistic update safely?",
+  "answer": "Apply the expected result immediately, send the request, and reconcile when it returns - so the interface feels instant rather than making the user wait for a round trip.\n\n**The steps that make it correct rather than just fast:**\n\n1. **Snapshot the previous state** before changing anything, so you can restore it exactly on failure.\n2. **Apply the change locally**, with a marker that it is pending if the UI should show that.\n3. **Send the request.**\n4. **On success, reconcile with the server response** rather than assuming your optimistic value was right - the server may have normalised, assigned an id, or applied a rule you did not model.\n5. **On failure, roll back to the snapshot and tell the user**, clearly. A silent rollback is worse than no optimism, because the user believes the change was saved and it vanishes without explanation.\n\n**Where it is appropriate:** actions that almost always succeed and are cheap to reverse - liking, toggling, reordering, marking as read, adding a comment.\n\n**Where it is not:** anything with a meaningful chance of failure, anything the user will act on before confirmation, and anything with real-world consequences. An optimistic payment confirmation is a lie. The test I use: if the rollback would be embarrassing or costly, wait for the server.\n\n**The complications to handle:**\n- **Concurrent optimistic updates** to the same data, where one failing must not roll back the other s change - which is why libraries snapshot per mutation rather than globally.\n- **Server-assigned ids.** An optimistically created item has no real id until the response arrives, so any interaction with it in between needs a temporary id you reconcile afterwards.",
+  "tags": [
+   "react",
+   "optimistic-updates",
+   "mutations",
+   "react-query",
+   "ux"
+  ],
+  "followups": [
+   {
+    "q": "How do query libraries handle the rollback for you?",
+    "a": "TanStack Query s `onMutate` runs before the request and is where you cancel in-flight refetches, snapshot the current cache and apply the optimistic change; it returns the snapshot as context. `onError` receives that context and restores it, and `onSettled` invalidates so the server state is refetched regardless of outcome. Cancelling outstanding refetches in `onMutate` is the step people miss - without it, a refetch that was already in flight resolves after your optimistic update and overwrites it with stale data."
+   },
+   {
+    "q": "What happens if the user navigates away before the request completes?",
+    "a": "The mutation continues, because it is not tied to the component - but the component that would have handled the error is gone, so a failure can be silently lost and the user never learns their change did not save. Handle mutation errors at a level that outlives the component, such as a global error handler or a toast system mounted at the app root, and make sure the cache is invalidated on settle so the data is correct when they return. Optimistic updates plus unhandled errors on unmount is a reliable way to lose user work quietly."
+   }
+  ]
  }
 ]

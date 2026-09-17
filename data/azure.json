@@ -5818,5 +5818,29 @@
     "a": "Scaling the application is the wrong lever and will make it worse, so the first step is confirming where the constraint actually is. Then: reduce per-request database work with caching and query tuning, add read replicas for read-heavy load, bound connections per instance so more instances do not mean more connections, and put a queue in front of write-heavy work so bursts are levelled rather than amplified. Where the database genuinely needs more capacity, scaling it up is usually simpler and cheaper than sharding."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Observability",
+  "difficulty": "Medium",
+  "question": "How would you set up Application Insights for a .NET service, and what do you watch?",
+  "answer": "Register OpenTelemetry with the Azure Monitor exporter rather than the older classic SDK - it is the current direction, it gives you the same telemetry, and it keeps you portable if the backend ever changes.\n\n**What you get largely for free:** incoming request telemetry, outgoing HTTP dependencies, SQL and EF Core calls, exceptions, and correlation between them. That covers most of what you need without custom code.\n\n**What I would add deliberately:**\n- **Custom dimensions that matter to you** - tenant id, feature flag state, user segment - enriched onto telemetry so you can slice by them. Watch cardinality here; a per-user dimension on metrics is expensive.\n- **Custom metrics for business events**, not just technical ones - orders placed, payments failed. These are what make the dashboard meaningful to someone who is not an engineer.\n- **Sampling configured intentionally.** Adaptive sampling is on by default and will silently drop telemetry under load, which is confusing when you are counting things. Understand what it is doing before you rely on exact counts.\n\n**What I would watch:**\n1. **Failed request rate and dependency failure rate**, split by dependency - the fastest answer to \"is it us or them\".\n2. **Server response time percentiles**, never the average.\n3. **Exception volume by type**, where a new type appearing is often the first sign of a bad deploy.\n4. **Live Metrics during a deployment**, which gives near-real-time feedback while rolling out.\n\n**And the feature worth knowing:** the application map, which draws the dependency topology from actual traffic - useful both for incidents and for discovering calls nobody knew about.",
+  "tags": [
+   "azure",
+   "application-insights",
+   "opentelemetry",
+   "monitoring",
+   "sampling"
+  ],
+  "followups": [
+   {
+    "q": "What is the risk of adaptive sampling?",
+    "a": "It reduces telemetry volume under load to control cost, which is sensible, but it means counts in your telemetry are estimates rather than exact - and it kicks in hardest during a traffic spike, which is exactly when you are looking closely. If you are using request telemetry to count business events you will undercount, and the discrepancy appears only under load. Use proper metrics for anything that must be counted exactly, and understand the sampling rate before drawing conclusions from raw counts."
+   },
+   {
+    "q": "How do you keep Application Insights costs under control?",
+    "a": "Ingestion is billed per gigabyte, so the levers are the same as any log platform: set the logging level appropriately per namespace, do not log request and response bodies by default, configure sampling deliberately, and set a daily cap so a runaway loop cannot produce a surprise invoice. Retention per table matters too - detailed traces rarely need the same retention as aggregated metrics. The most common single cause of a large bill is verbose logging left on after a debugging session."
+   }
+  ]
  }
 ]

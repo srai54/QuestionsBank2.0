@@ -3036,5 +3036,29 @@
     "a": "It means collisions become likely far sooner than the output size suggests - with a 64-bit hash you expect a collision after roughly 2^32 items, not 2^64, because collisions depend on pairs rather than on exhausting the space. So a hash used as a unique identifier over billions of items needs more bits than intuition suggests. For a hash table it matters less, since collisions are expected and handled, but for content-addressed storage or deduplication it decides whether a collision is a theoretical concern or an operational one."
    }
   ]
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Recursion",
+  "difficulty": "Medium",
+  "question": "When would you convert a recursive algorithm to an iterative one?",
+  "answer": "When the recursion depth is unbounded or driven by input, because the stack is a fixed, small resource and exhausting it is an uncatchable failure - `StackOverflowException` in .NET terminates the process and cannot be handled.\n\n**The specific triggers:**\n\n1. **Depth proportional to input size.** Recursing once per element of a list, or per row of a file, means a large input crashes the process. A tree walk over a user-supplied structure has the same exposure - and if the structure comes from outside, it is a denial-of-service vector.\n2. **Deep or unbalanced trees.** A balanced tree of a million nodes is only twenty levels deep and recursion is fine; a degenerate tree that is effectively a linked list is a million levels and is not. If you cannot guarantee balance, do not rely on it.\n3. **Hot paths where call overhead matters**, though this is the weakest reason - the difference is usually small.\n\n**When recursion is the right choice:** when depth is bounded and small, and when the recursive form is dramatically clearer. A tree traversal, a parser over a bounded grammar, divide-and-conquer with logarithmic depth. Clarity has real value and should not be given up without a reason.\n\n**How to convert:** replace the call stack with an explicit `Stack<T>` holding the state each frame needed. The logic is the same; you are managing the frames yourself, which also lets you inspect, pause or persist the traversal - occasionally useful in its own right.\n\n**And note what C# does not give you:** tail-call optimisation is not guaranteed. The IL has a `tail.` prefix and the JIT may apply it, but you cannot rely on it, so a tail-recursive function in C# still consumes stack.",
+  "tags": [
+   "cs-fundamentals",
+   "recursion",
+   "stack",
+   "algorithms",
+   "robustness"
+  ],
+  "followups": [
+   {
+    "q": "Why can you not catch a StackOverflowException?",
+    "a": "Because by the time it occurs there is no stack space left to run a handler, so the runtime cannot safely continue - since .NET 2.0 it terminates the process immediately rather than attempting recovery. That is why depth must be bounded by design rather than guarded by a try/catch. If the depth depends on input you do not control, add an explicit depth limit and throw your own exception before the stack runs out, which is catchable and gives a meaningful error."
+   },
+   {
+    "q": "How much recursion depth is actually safe?",
+    "a": "It depends on frame size and the thread s stack, which defaults to 1MB on Windows for the main thread - so a few thousand frames for a typical method, and far fewer if each frame holds large structs or many locals. Treating a few thousand as the working ceiling is reasonable, and anything that might exceed it needs the iterative form. You can create a thread with a larger stack for a specific deep computation, but that is a workaround rather than a design and it does not scale to many concurrent operations."
+   }
+  ]
  }
 ]

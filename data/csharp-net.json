@@ -12878,5 +12878,29 @@
     "a": "Rarely, and almost never to make something \"async\". Offloading to the thread pool in a web application moves work between pool threads without adding capacity - you still occupy a thread and you have added a context switch. It is appropriate when you genuinely need to run CPU-bound work off the request thread to keep a timeout responsive, or when calling a synchronous third-party API that will otherwise block. Wrapping a blocking call in `Task.Run` to present an async signature is the anti-pattern known as async-over-sync."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "LINQ",
+  "difficulty": "Hard",
+  "question": "Explain deferred execution in LINQ and a bug it has caused you.",
+  "answer": "A LINQ query built with `Where`, `Select` and friends is not executed when you write it - it builds a description of the work. Execution happens when something enumerates it: a `foreach`, `ToList`, `Count`, `First`, or similar.\n\n**The bug this causes most often is multiple enumeration.** A method returns `IEnumerable<T>`, the caller checks `.Any()` and then loops over it, and the work runs twice. Against a database that is two round trips; against an expensive iterator it is double the computation; against a stream it may fail entirely because the sequence cannot be re-read.\n\n**The second classic is capturing a variable that changes.** A query referencing a loop variable or a field evaluates it at enumeration time, not at definition time - so by the time you enumerate, the value is whatever it now is, not what it was when the query was written. This produces results that look randomly wrong.\n\n**The third is lifetime.** A query built from a `DbContext` and returned from a method is executed by the caller - possibly after the context has been disposed at the end of the request scope, giving `ObjectDisposedException` far from the cause.\n\n**How I avoid it:**\n- **Return `IReadOnlyList<T>` from methods where the work is done**, so the contract says \"this is materialised\" and multiple enumeration is impossible.\n- **Reserve `IEnumerable<T>` for genuine streaming**, and name the method so it is obvious.\n- **Materialise once, early**, when the result is used more than once.\n\n**And the deliberate use:** deferred execution is what allows composition - building a query in layers and letting the provider translate the whole thing into one SQL statement. That is the feature, not an accident.",
+  "tags": [
+   "csharp",
+   "linq",
+   "deferred-execution",
+   "ef-core",
+   "code-review"
+  ],
+  "followups": [
+   {
+    "q": "How would you spot multiple enumeration in review?",
+    "a": "Look for a variable of type `IEnumerable<T>` used more than once - `.Any()` followed by a `foreach`, or `.Count()` and then a loop, or the same sequence passed to two methods. Resharper and Rider flag it directly as \"possible multiple enumeration\", and it is worth enabling. The reliable structural fix is at the boundary rather than the call site: if repositories and services return materialised collections, the situation cannot arise in the consuming code at all."
+   },
+   {
+    "q": "What is the difference between IEnumerable and IQueryable for deferred execution?",
+    "a": "Both defer, but they defer different things. `IEnumerable<T>` holds compiled delegates, so composition happens in memory - adding a `Where` to an `IEnumerable` from EF means the filter runs client-side after all rows are fetched. `IQueryable<T>` holds an expression tree the provider inspects, so composition is translated into the SQL. The bug is assigning an `IQueryable` to an `IEnumerable` variable, which silently switches subsequent operators to in-memory evaluation and turns an indexed query into a full table read."
+   }
+  ]
  }
 ]
