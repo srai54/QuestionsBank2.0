@@ -2066,5 +2066,29 @@
     "a": "Identify them by the business key with a window function ranking rows within each key, then delete everything but one - keeping the most recently loaded, usually. Do it in batches for a large table so the transaction log does not explode, and take a backup first, since a de-duplication with a slightly wrong key definition deletes real data. The important part is to fix the job before cleaning, or the cleanup is undone by the next run."
    }
   ]
+ },
+ {
+  "category": "Data & BI",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "Explain the difference between a star schema and a snowflake schema, and which you would build.",
+  "answer": "A **star schema** has one fact table surrounded by denormalised dimension tables - each dimension is a single flat table, even where that means repeating values. A **snowflake schema** normalises those dimensions into sub-tables, so `Product` might link to `Category`, which links to `Department`.\n\n**I would build a star schema by default,** for reasons that are practical rather than theoretical:\n\n- **Fewer joins per query.** A star query joins the fact to each dimension once; a snowflake adds a join per normalisation level. On large fact tables that difference is significant.\n- **Simpler for consumers.** Analysts and BI tools handle a flat dimension easily. Every extra hop is somewhere a report writer can get the grain wrong.\n- **Storage is not the constraint it was.** Snowflaking exists largely to avoid repeating text values, and columnar compression handles repeated values extremely well - a repeated category name costs almost nothing in a columnstore or in Parquet.\n\n**When snowflaking is justified:** a genuinely large dimension with a deep hierarchy that is maintained independently, or a many-to-many relationship that a flat table cannot express honestly. Rapidly changing sub-attributes can also be worth splitting out.\n\n**The thing that matters more than either choice** is getting the **grain** of the fact table right - stating explicitly what one row represents - and handling slowly changing dimensions deliberately. A star schema with an ambiguous grain produces wrong numbers that look plausible, which is far more damaging than an extra join.",
+  "tags": [
+   "data-bi",
+   "dimensional-modelling",
+   "star-schema",
+   "warehouse",
+   "etl"
+  ],
+  "followups": [
+   {
+    "q": "What is a slowly changing dimension and why does the type matter?",
+    "a": "It is a dimension attribute that changes over time - a customer moves region, a product changes category. Type 1 overwrites, so history is lost and last year s report changes when you rerun it. Type 2 adds a new row with validity dates and a surrogate key, preserving history so facts stay attached to the attribute values that were true at the time. The choice is a business decision: if anyone will ever ask \"what did this look like last year\", you need Type 2, and retrofitting it later is painful."
+   },
+   {
+    "q": "What goes wrong if the fact grain is wrong?",
+    "a": "Aggregations double-count. The classic case is joining a fact at order-line grain to a dimension that implies order grain, so the order total is counted once per line and revenue is inflated. It is insidious because the numbers look reasonable - just wrong - and nobody notices until a reconciliation. Writing the grain down in one sentence before building anything, and testing totals against a known source, is the defence."
+   }
+  ]
  }
 ]

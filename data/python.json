@@ -689,5 +689,29 @@
     "a": "The mutable default is caught by most linters - pylint's dangerous-default-value and ruff's B006 flag it directly, so enabling them removes this class of bug mechanically. The class-attribute case and the closure capture are harder because they are legal and sometimes intentional, so tools flag them inconsistently or not at all. That asymmetry is worth knowing: turn the linter on for the one it catches reliably, and rely on review and understanding for the others."
    }
   ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "Explain the GIL and how you would speed up a CPU-bound Python workload.",
+  "answer": "The Global Interpreter Lock is a mutex in CPython that allows only one thread to execute Python bytecode at a time. It exists because CPython s reference-counting memory management is not thread-safe, and a single global lock was far simpler and faster for single-threaded code than fine-grained locking.\n\n**The consequence:** threads give you no CPU parallelism for pure Python. Four threads on four cores running a numeric loop take about as long as one, plus contention overhead.\n\n**Threads are still useful for I/O**, because the GIL is released during blocking I/O - file reads, network calls, database queries. So a thread pool for HTTP requests genuinely helps; a thread pool for computing hashes does not.\n\n**For CPU-bound work, the options:**\n\n1. **`multiprocessing`** - separate processes, separate interpreters, real parallelism. The cost is that arguments and results are pickled between processes, so it is a poor fit for large data or frequent small tasks.\n2. **Push the work into C** - NumPy, Pandas, Polars and similar release the GIL inside their native routines. Vectorising a loop into NumPy is often a much bigger win than any parallelism, because you also eliminate per-element interpreter overhead.\n3. **A native extension or Cython**, releasing the GIL around the hot section.\n4. **A different runtime** - PyPy for long-running pure-Python workloads.\n\n**The 2026 context worth mentioning:** PEP 703 free-threaded CPython makes the GIL optional, available as an experimental build from 3.13 onward. It removes the constraint at the cost of some single-threaded performance and requires C extensions to be rebuilt for it. It is worth knowing about, and not yet what I would build a production system on without testing carefully.",
+  "tags": [
+   "python",
+   "gil",
+   "concurrency",
+   "multiprocessing",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "How do you decide between multiprocessing and just vectorising?",
+    "a": "Profile first, then prefer vectorising. Replacing a Python loop with a NumPy operation often gives a 10-100x speedup because you remove interpreter overhead per element, not just parallelise it - and it adds no process management, no pickling, and no memory duplication. Multiprocessing is the answer when the work is genuinely irreducible Python that cannot be expressed as array operations."
+   },
+   {
+    "q": "Does async/await help with CPU-bound work?",
+    "a": "No, and this is a common confusion. `asyncio` is cooperative concurrency on a single thread - it lets you interleave many waiting operations efficiently, which is excellent for thousands of concurrent network calls. A CPU-bound coroutine does not yield, so it blocks the entire event loop and makes things worse. If you must run CPU work in an async application, push it to a process pool via `run_in_executor`."
+   }
+  ]
  }
 ]

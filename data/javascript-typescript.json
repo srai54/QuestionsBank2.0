@@ -1606,5 +1606,53 @@
     "a": "It would be if you wrote both by hand, which is why the good libraries derive the type from the schema - define the Zod schema once and infer the TypeScript type from it, so they cannot drift. That gives one definition producing both the compile-time type and the runtime check. Writing an interface and a separate validator is the failure mode people are objecting to, and it is avoidable."
    }
   ]
+ },
+ {
+  "category": "JavaScript/TypeScript",
+  "subcategory": "Types",
+  "difficulty": "Medium",
+  "question": "Your team keeps using `any` to silence TypeScript errors. What do you propose instead, and when is `any` actually correct?",
+  "answer": "`any` disables type checking not just at that point but everywhere the value flows, so one `any` in a hot path quietly untypes a whole call chain. It is the option that makes the error message go away and the bug stay.\n\n**What to reach for instead, roughly in order:**\n\n- **`unknown`** when the type genuinely is not known - a parsed JSON payload, a caught error. Unlike `any`, you must narrow before use, so the compiler forces the check you were going to skip.\n- **Generics** when the type varies but relationships must hold. `function first<T>(items: T[]): T` preserves the caller s type where `any` throws it away.\n- **Union types plus narrowing** when the value is one of a known set. Discriminated unions with a literal tag give exhaustive checking in a `switch`.\n- **Type predicates** (`value is Foo`) to encapsulate a runtime check once rather than casting at every call site.\n- **A runtime validator** - Zod or similar - at the boundary where external data enters. That is the honest fix for \"we do not know the shape\": validate once, and have a real type from then on.\n\n**When `any` is correct:** interoperating with genuinely untyped third-party code where writing the declaration is not worth it, and in the middle of a migration where the alternative is not shipping. In both cases it should be explicit and localised - `// eslint-disable-next-line` with a reason, not a project-wide habit.\n\n**The setting that matters more than any of this:** `strict: true`, and `noImplicitAny` so `any` cannot arrive silently. Most teams with an `any` problem also have strict mode off.",
+  "tags": [
+   "typescript",
+   "types",
+   "any",
+   "strict-mode",
+   "code-review"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between `unknown` and `any` in practice?",
+    "a": "Both accept any value on assignment; they differ on what you can then do. With `any` every operation compiles, including ones that will throw at runtime. With `unknown` nothing compiles until you narrow - a `typeof` check, an `instanceof`, a type predicate. It moves the error from runtime to compile time, which is the entire point of the type system."
+   },
+   {
+    "q": "How do you get out of a codebase that already has hundreds of `any`s?",
+    "a": "Incrementally, with the compiler tracking progress. Turn on `strict` for new files only via overrides, or use `noImplicitAny` first and fix what it surfaces file by file. Do not attempt a single big-bang conversion - it produces an unreviewable pull request and stalls. Prioritise boundaries: typing the API response and the data layer removes more real risk than typing internal helpers."
+   }
+  ]
+ },
+ {
+  "category": "JavaScript/TypeScript",
+  "subcategory": "Async",
+  "difficulty": "Medium",
+  "question": "Explain what happens when you use `forEach` with an async callback, and what to use instead.",
+  "answer": "`Array.prototype.forEach` ignores the return value of its callback. An `async` callback returns a promise, so `forEach` fires all of them and returns `undefined` immediately - it does not wait for any of them. The code after the loop runs before the work finishes, and any rejection becomes an unhandled promise rejection rather than something you can catch.\n\nThis is the bug behind \"my loop finished but the data was not saved yet\".\n\n**What to use instead, depending on what you want:**\n\n- **Sequential** - a plain `for...of` loop with `await` inside. Each iteration completes before the next begins. Use it when order matters or when you must not overwhelm a downstream service.\n- **Parallel** - `await Promise.all(items.map(async item => ...))`. All start at once, and you wait for all. Fastest, but with 10,000 items you have just opened 10,000 concurrent connections.\n- **Parallel with a limit** - a concurrency-capped map (p-limit, or a hand-rolled worker pool). This is what production code usually wants: fast, but bounded.\n- **`Promise.allSettled`** when one failure should not abort the rest. `Promise.all` rejects on the first failure, and the other promises keep running unobserved.\n\n**The subtlety worth mentioning:** `map` with an async callback is fine and idiomatic, because it *returns* the array of promises for you to await. `forEach` is the problem specifically because it discards them.",
+  "tags": [
+   "javascript",
+   "async",
+   "promises",
+   "concurrency",
+   "foreach"
+  ],
+  "followups": [
+   {
+    "q": "Why does Promise.all reject immediately but the other work continues?",
+    "a": "Because a promise is already running - `Promise.all` only observes results, it does not control execution. Rejecting on the first failure means you stop *waiting*, but the remaining operations run to completion with nobody handling their results, and their rejections may surface as unhandled. If the operations have side effects you need to reason about, use `allSettled` and inspect every outcome, or wire up an `AbortController` so the rejection actually cancels the rest."
+   },
+   {
+    "q": "How would you implement a concurrency limit without a library?",
+    "a": "Keep a pool of N workers each pulling from a shared queue: create an index counter, spawn N async functions that loop taking the next index until the array is exhausted, and `await Promise.all` on the workers. It is about ten lines and avoids the common broken approach of chunking into fixed batches - batching waits for the slowest item in each batch before starting the next, so one slow item stalls the whole group."
+   }
+  ]
  }
 ]

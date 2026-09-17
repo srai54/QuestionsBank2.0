@@ -2964,5 +2964,29 @@
     "a": "Something in the corporate network path - a proxy, TLS inspection, or a DNS server behaving differently. TLS-inspecting middleboxes terminate and re-establish connections, adding a handshake and sometimes breaking connection reuse entirely, which produces exactly this variance. Split-horizon DNS resolving to a different address is another common one. The fastest confirmation is to compare the connection-phase timings from both networks, because the shape of the difference names the layer."
    }
   ]
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Data Structures",
+  "difficulty": "Medium",
+  "question": "When would you choose a heap over a sorted list, and where have you seen one used in real systems?",
+  "answer": "A binary heap gives you O(log n) insert and O(log n) extract-min, with O(1) peek at the minimum. A sorted list gives O(1) peek and O(n) insert, because inserting in the middle shifts elements.\n\n**So the choice is about the mix of operations.** If you insert frequently and only ever need the smallest element, a heap wins decisively. If the collection is built once and then read in order many times, sorting once and iterating is better - and simpler.\n\n**The crucial property:** a heap is only *partially* ordered. It guarantees the root is the minimum, and nothing else. You cannot iterate a heap in sorted order without repeatedly extracting, and you cannot binary search it. People reach for a heap expecting a sorted structure and are surprised.\n\n**Where they show up in real systems:**\n- **Priority queues** - job schedulers, task queues where some work outranks other work. `PriorityQueue<TElement, TPriority>` exists in .NET for exactly this.\n- **Timer wheels and scheduled tasks** - the next thing to fire is always the minimum deadline, and new timers are inserted constantly. This is precisely the insert-heavy, peek-minimum pattern.\n- **Dijkstra and A\\*** - repeatedly extract the closest unvisited node.\n- **Top-K problems** - keeping a bounded min-heap of size K while streaming a large input gives the K largest in O(n log k) with O(k) memory, which is the standard answer when the data does not fit in memory.\n- **K-way merge** - the heap holds the current head of each sorted source.",
+  "tags": [
+   "cs-fundamentals",
+   "data-structures",
+   "heap",
+   "priority-queue",
+   "algorithms"
+  ],
+  "followups": [
+   {
+    "q": "Why does top-K use a min-heap when you want the largest elements?",
+    "a": "Because you need cheap access to the *weakest* member of the current best set, to decide whether a new element displaces it. A min-heap of size K puts the smallest of your current top K at the root, so each new element is one O(1) comparison against it, and only a genuine improvement costs O(log k) to insert. A max-heap would put the wrong end at the root and give you no cheap way to evict."
+   },
+   {
+    "q": "What does .NET PriorityQueue not give you that people expect?",
+    "a": "It is not stable - two items with equal priority may come out in any order - and it has no efficient way to update or remove an arbitrary element s priority, which Dijkstra implementations often want. The workarounds are to include a monotonically increasing sequence number in the priority to force stability, and to insert a duplicate with the new priority while skipping stale entries on extraction. It is also not thread-safe."
+   }
+  ]
  }
 ]

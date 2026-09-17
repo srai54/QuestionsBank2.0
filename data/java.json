@@ -637,5 +637,29 @@
     "a": "It hides that an iterator is being created, which matters when you need iterator.remove or when the collection's iterator has particular semantics. It also means you cannot access the index without tracking it separately, and for a LinkedList a manual index loop is accidentally quadratic where the enhanced loop is linear. So the syntax sugar is good, and knowing what it compiles to explains both the exception and several performance surprises."
    }
   ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Memory",
+  "difficulty": "Medium",
+  "question": "A Java service gets OutOfMemoryError in production. Walk me through diagnosing it.",
+  "answer": "First I would read the message precisely, because the variants point at different causes: `Java heap space` is the ordinary case, `GC overhead limit exceeded` means the collector is running constantly and reclaiming almost nothing, `Metaspace` points at class loading rather than objects, and `unable to create new native thread` is not a heap problem at all.\n\n**Make sure a heap dump exists.** `-XX:+HeapDumpOnOutOfMemoryError` with a path should be on in every production service - without it you are relying on reproducing the failure, which rarely works. Then analyse it in Eclipse MAT, whose leak suspects report usually names the culprit directly.\n\n**What I am looking for in the dump:** the dominator tree - which few objects retain the most memory - and then the path from a GC root to them, which explains *why* they are still alive.\n\n**The common causes:**\n- **Unbounded caches**, especially a `HashMap` used as one with no eviction.\n- **ThreadLocal values not removed**, which in a pooled-thread environment means the value survives as long as the thread does - a well-known leak in application servers.\n- **Classloader leaks** on redeploy, showing up as Metaspace growth.\n- **Holding entire result sets** instead of streaming - fetching a million rows to compute a sum.\n- **Genuinely undersized heap** for the workload, which is a capacity answer rather than a leak.\n\n**The distinction to make explicitly:** a leak grows without bound and will recur after a restart; a capacity problem is stable but too large for the configured heap. Restarting fixes both temporarily, which is why people misdiagnose this.",
+  "tags": [
+   "java",
+   "memory",
+   "oom",
+   "heap-dump",
+   "troubleshooting"
+  ],
+  "followups": [
+   {
+    "q": "How is this different from diagnosing the same symptom in .NET?",
+    "a": "The process is nearly identical - snapshot, find what retains memory, trace the root - and so are most causes, since both are tracing-GC runtimes where a leak means an unintended reference. The tooling differs: MAT and jmap versus dotnet-gcdump and dotnet-dump. .NET has the Large Object Heap as an extra consideration, and Java has Metaspace and classloader leaks as a category that has no direct .NET equivalent outside of collectible AssemblyLoadContexts."
+   },
+   {
+    "q": "What does \"GC overhead limit exceeded\" tell you specifically?",
+    "a": "That the JVM spent more than 98% of recent time collecting while recovering less than 2% of the heap - so it is thrashing rather than failing to allocate outright. It usually means the live set has grown to just under the heap size: there is technically room, but almost nothing is collectable. It is a strong signal of a leak or an undersized heap rather than a single large allocation spike."
+   }
+  ]
  }
 ]

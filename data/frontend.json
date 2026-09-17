@@ -2228,5 +2228,29 @@
     "a": "Longer than a realistic session, which for a business application usually means at least a working day and often a week - the cost is storage, which is negligible for JavaScript bundles. The constraint is any requirement to remove code containing a vulnerability, where you do want the old version gone. A reasonable default is to keep the previous few builds and clean up on a schedule, rather than deleting as part of the deployment itself, which is what creates the window."
    }
   ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "A page scores badly on Largest Contentful Paint. What are the likely causes and fixes?",
+  "answer": "LCP measures when the largest element in the viewport finishes rendering - usually a hero image, a video poster, or a large block of text. A bad score means the user is looking at an incomplete page for too long.\n\n**I would break the time down into its four parts**, because the fix differs completely for each:\n\n1. **Time to first byte** - slow server or no CDN. Fix at the origin: caching, a faster query, edge delivery.\n2. **Resource load delay** - the browser did not *discover* the LCP resource early enough. This is the most common and most fixable cause. A hero image referenced from CSS, injected by JavaScript, or lazy-loaded is discovered late. Fixes: put it in the HTML as a plain `<img>`, add `fetchpriority=\"high\"`, preload it, and never mark the above-the-fold image `loading=\"lazy\"` - that single attribute on a hero image is a frequent own goal.\n3. **Resource load time** - the image is simply too big. Serve modern formats (AVIF, WebP), size it to the actual display dimensions with `srcset`, and compress properly.\n4. **Element render delay** - the resource arrived but rendering was blocked. Render-blocking CSS and synchronous scripts in the head, or a font swap strategy that hides text until the font loads. Inline critical CSS, defer the rest, and use `font-display: swap`.\n\n**The measurement point I would make:** optimise against field data, not only Lighthouse. Lab scores on a fast machine hide the problem; real-user monitoring shows what your actual users on mid-range phones experience, and that is what search ranking uses.",
+  "tags": [
+   "frontend",
+   "performance",
+   "core-web-vitals",
+   "lcp",
+   "images"
+  ],
+  "followups": [
+   {
+    "q": "How does LCP interact with client-side rendering?",
+    "a": "Badly, by default. A pure SPA ships an empty shell, so nothing meaningful can paint until the JavaScript bundle downloads, parses and executes, and then fetches data. The LCP element is often gated behind two round trips. Server-side rendering or static generation puts real content in the initial HTML so the browser can discover and paint it immediately - which is the main performance argument for SSR frameworks."
+   },
+   {
+    "q": "What is the relationship between LCP and CLS, and can fixing one hurt the other?",
+    "a": "Yes. A common LCP fix is to render text immediately with a fallback font, which then reflows when the web font loads and shifts layout, hurting CLS. Similarly, loading an image faster without reserving its space causes a shift when it arrives. The answer to both is to reserve dimensions up front - width and height attributes or `aspect-ratio` on images, and `size-adjust` on font fallbacks so the fallback occupies the same space as the final font."
+   }
+  ]
  }
 ]
