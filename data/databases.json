@@ -1803,5 +1803,29 @@
     "a": "It lets readers see a consistent snapshot without blocking writers, which removes most of the reader-writer contention that makes higher isolation expensive in a purely lock-based system. PostgreSQL is MVCC throughout; SQL Server offers it via READ COMMITTED SNAPSHOT and SNAPSHOT isolation. The costs move rather than vanish: you need a version store (tempdb in SQL Server, table bloat and vacuum in PostgreSQL), and snapshot isolation introduces update conflicts that the application must handle."
    }
   ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Scaling",
+  "difficulty": "Hard",
+  "question": "At what point do you shard a database, and what breaks when you do?",
+  "answer": "Much later than people think. Sharding is the last resort because it breaks things that are free in a single database, and most \"we need to shard\" situations are solved by cheaper means.\n\n**What I would exhaust first:** indexing and query tuning, a read replica for read-heavy load, caching, archiving cold data out of hot tables, vertical scaling (which goes a very long way on modern hardware), and partitioning within one database - which gives you manageability benefits without the distributed problems.\n\n**The genuine triggers:** the write volume exceeds what one primary can take, the working set no longer fits in memory on the largest instance available, or regulatory data residency forces geographic separation.\n\n**What breaks:**\n- **Cross-shard joins and aggregates.** A query spanning shards must be scattered and gathered in application code, and it is as slow as the slowest shard.\n- **Transactions across shards.** You lose ACID across the boundary; you get sagas and eventual consistency instead.\n- **Unique constraints across shards** - a globally unique email cannot be enforced by the database. You need a separate lookup service or a naturally partitioned key.\n- **Auto-increment ids.** You move to UUIDv7, Snowflake ids, or per-shard ranges.\n- **Rebalancing.** Adding a shard means moving data. Hash sharding with a fixed number of logical shards mapped onto physical nodes makes this far less painful than hashing on node count directly.\n- **Operations** - migrations, backups and restores now run N times, and a partial failure leaves shards at different schema versions.\n\n**The decision that matters most is the shard key.** It should distribute evenly and keep data that is queried together on the same shard - usually tenant id in a B2B system, which is the case where sharding works best because the boundary already exists in the domain.",
+  "tags": [
+   "databases",
+   "sharding",
+   "scaling",
+   "partitioning",
+   "distributed"
+  ],
+  "followups": [
+   {
+    "q": "What makes a bad shard key?",
+    "a": "Anything that concentrates load or forces cross-shard queries. A monotonically increasing key sends all new writes to one shard - a hotspot. A low-cardinality key cannot spread across many shards. And a key that does not match your access patterns means most queries must scatter to every shard, which gives you the costs of sharding and none of the benefit. If your most common query cannot be answered from one shard, the key is wrong."
+   },
+   {
+    "q": "How do you handle a tenant that outgrows its shard?",
+    "a": "Plan for it before it happens, because it always does - the distribution of tenant sizes is usually extreme. The common approaches are to give very large tenants a dedicated shard (which also simplifies their compliance and performance story), and to keep a tenant-to-shard mapping in a lookup table rather than computing placement from a hash, so a tenant can be moved without changing the routing scheme. Migration itself needs dual-write plus backfill plus cutover, so the routing indirection is what makes it feasible at all."
+   }
+  ]
  }
 ]

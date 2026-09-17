@@ -5673,5 +5673,30 @@
     "a": "Service Bus remembers message ids within a configurable time window and discards repeats, so a producer that retries after an ambiguous failure does not enqueue twice. The limits are that the window is finite - a retry after it expires gets through - and it only protects the enqueue side. The consumer can still process a message more than once after a lock expiry or a crash, so idempotent handling is still required."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Compute",
+  "difficulty": "Medium",
+  "question": "How do you choose between App Service, Container Apps, AKS and Functions for a new .NET service?",
+  "answer": "I would choose the least operational burden that meets the requirement, and let specific needs push me up the ladder.\n\n**Azure Functions** - event-driven, short-lived work. Best when the workload is genuinely bursty or scheduled, because consumption billing means you pay nothing at idle. The constraints: cold starts on the consumption plan, execution time limits, and a programming model that resists being used for a long-running stateful service.\n\n**App Service** - the default for a conventional web application or API. Deploy code or a container, get scaling, slots, certificates and diagnostics without thinking about infrastructure. This is where I would start unless something rules it out.\n\n**Container Apps** - when you need container-native features App Service lacks: scale to zero for HTTP or queue-driven work, KEDA-based scaling on arbitrary event sources, Dapr, or several collaborating microservices with internal service discovery. It gives you most of Kubernetes s useful properties without running a cluster.\n\n**AKS** - when you genuinely need Kubernetes: complex networking, custom operators and CRDs, an existing Kubernetes investment and expertise, tight control over scheduling, or portability across clouds as a hard requirement. The cost is that you now own cluster upgrades, node pools, networking and the expertise to run them - which is a full-time concern, not a side task.\n\n**The question I would ask the team:** who operates this at 3am, and do they know Kubernetes? Choosing AKS without that answer is the most common expensive mistake in this list. Most .NET services run perfectly well on App Service or Container Apps.",
+  "tags": [
+   "azure",
+   "compute",
+   "aks",
+   "container-apps",
+   "functions",
+   "architecture"
+  ],
+  "followups": [
+   {
+    "q": "When does scale-to-zero matter, and when is it a trap?",
+    "a": "It matters for genuinely intermittent workloads - internal tools, dev environments, spiky event processing - where paying for idle compute dominates the bill. It is a trap for anything user-facing with sporadic traffic, because the first request after idle pays a cold start, and for .NET that can be seconds. If a real user is waiting, keep a minimum instance count; if a queue is waiting, scale to zero freely."
+   },
+   {
+    "q": "What pushes a team from Container Apps to AKS in practice?",
+    "a": "Usually one of: needing a Kubernetes feature Container Apps abstracts away, such as custom operators, specific CNI configuration or node-level control like GPUs and taints; an existing platform team with Kubernetes tooling already built; or a multi-cloud or on-premises requirement. What should *not* push you there is the feeling that Kubernetes is more serious - the abstraction Container Apps provides is a benefit you are giving up, not a limitation you are escaping."
+   }
+  ]
  }
 ]

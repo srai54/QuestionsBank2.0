@@ -2252,5 +2252,29 @@
     "a": "Yes. A common LCP fix is to render text immediately with a fallback font, which then reflows when the web font loads and shifts layout, hurting CLS. Similarly, loading an image faster without reserving its space causes a shift when it arrives. The answer to both is to reserve dimensions up front - width and height attributes or `aspect-ratio` on images, and `size-adjust` on font fallbacks so the fallback occupies the same space as the final font."
    }
   ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Accessibility",
+  "difficulty": "Medium",
+  "question": "A client says the site must be accessible. What do you actually do, beyond adding alt text?",
+  "answer": "Accessibility is mostly about building with the right primitives, not adding attributes afterwards. The largest wins come from things that are invisible if you get them right.\n\n**What I would actually do:**\n\n1. **Use semantic HTML.** A `<button>` is focusable, keyboard-activatable, and announced as a button. A `<div onClick>` is none of those, and reproducing them with ARIA takes several attributes and a keydown handler that people get wrong. Most ARIA in real codebases exists to patch an element that should have been native.\n2. **Make everything keyboard reachable and operable.** Tab through the whole page. Every interactive element must be focusable, in a sensible order, with a visible focus indicator - and removing focus outlines for aesthetics is a genuine accessibility regression.\n3. **Manage focus on navigation and in dialogs.** When a modal opens, focus moves into it and is trapped; when it closes, focus returns to the trigger. In an SPA, route changes must move focus and announce the new page, or a screen reader user has no idea anything happened.\n4. **Label every form control** with a real `<label>`, and associate error messages with their field so they are announced, not just coloured red.\n5. **Colour contrast** at 4.5:1 for body text, and never colour as the only signal - add an icon or text.\n6. **Announce dynamic changes** with live regions, so an async result is not silent.\n\n**How I would verify:** automated tools (axe, Lighthouse) catch perhaps a third of issues - they are a floor, not a standard. Then keyboard-only testing, then an actual screen reader. Ideally testing with disabled users, because that surfaces things no checklist contains.\n\n**And I would get it into CI**, because accessibility regressions are otherwise found at the next audit.",
+  "tags": [
+   "frontend",
+   "accessibility",
+   "a11y",
+   "aria",
+   "semantic-html"
+  ],
+  "followups": [
+   {
+    "q": "What is the most common ARIA mistake?",
+    "a": "Using it where native HTML would do, and then implementing it incompletely - `role=\"button\"` on a div without `tabindex`, without keyboard handling, and without the disabled state, which is worse than no ARIA because it promises behaviour that is not there. The related mistake is redundant roles, such as `role=\"button\"` on an actual `<button>`, which is noise. The guidance in the ARIA spec itself is that no ARIA is better than bad ARIA."
+   },
+   {
+    "q": "How do you handle accessibility for a complex custom component like a combobox?",
+    "a": "Follow the ARIA Authoring Practices pattern for that component exactly - it specifies the roles, states and the full keyboard interaction, including the cases people forget such as Escape, Home and End. Better still, use a well-tested headless library that has already implemented it, since combobox and date picker are notoriously difficult to get right. Writing one from scratch and testing it only with a mouse is how inaccessible components ship."
+   }
+  ]
  }
 ]

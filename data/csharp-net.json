@@ -12330,5 +12330,53 @@
     "a": "A concrete return type rather than `IResult`, which means the endpoint s possible responses are visible in the signature - so OpenAPI generation is accurate without extra attributes, and unit tests can assert on the typed result directly instead of casting. Declaring `Results<Ok<Product>, NotFound>` documents the contract in the type system, which is the closest minimal APIs get to the self-describing quality of well-attributed controllers."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Generics",
+  "difficulty": "Medium",
+  "question": "Explain covariance and contravariance in C# generics with a case where you needed them.",
+  "answer": "Variance controls whether a generic type with a derived argument is assignable to the same generic with a base argument.\n\n**Covariance (`out`)** - the type parameter appears only in *output* positions, so `IEnumerable<Dog>` is assignable to `IEnumerable<Animal>`. Safe because you can only take things out, and every `Dog` you take out is an `Animal`.\n\n**Contravariance (`in`)** - the parameter appears only in *input* positions, so `IComparer<Animal>` is assignable to `IComparer<Dog>`. Safe because anything that can compare any two animals can certainly compare two dogs.\n\n**Where I actually needed it:** a handler abstraction. `IEventHandler<in TEvent>` means a handler registered for a base event type can process derived events, so `IEventHandler<OrderEvent>` handles `OrderShipped` without a separate registration. And returning `IEnumerable<T>` covariantly from repositories lets a method returning `IEnumerable<Manager>` satisfy a contract expecting `IEnumerable<Employee>`.\n\n**Why `List<T>` is not covariant:** it has both input and output positions. If `List<Dog>` were assignable to `List<Animal>`, you could add a `Cat` to it through the base reference and corrupt the list. The compiler forbids it - which is exactly the hole that arrays *do* have: `Dog[]` is assignable to `Animal[]`, and storing a `Cat` throws `ArrayTypeMismatchException` at runtime. That is a design mistake C# inherited, and it means every array store carries a runtime type check.",
+  "tags": [
+   "csharp",
+   "generics",
+   "variance",
+   "covariance",
+   "type-system"
+  ],
+  "followups": [
+   {
+    "q": "Why does array covariance exist at all if it is unsafe?",
+    "a": "It predates generics. Before C# 2.0 there was no way to write a method that worked over an array of any reference type, so covariant arrays were the pragmatic escape hatch. The cost is permanent: the runtime must type-check every store into a reference-type array, which is a real performance cost on every assignment, and the failure surfaces at runtime rather than compile time. Generics made it unnecessary, but removing it would break too much code."
+   },
+   {
+    "q": "Can a type parameter be both covariant and contravariant?",
+    "a": "Not the same one - `out` and `in` are mutually exclusive because they describe opposite constraints, and a parameter used in both positions must be invariant. A generic type can have several parameters with different variance, which is exactly what `Func<in T, out TResult>` does: contravariant in its argument, covariant in its return. That is why a `Func<object, string>` can be used where a `Func<string, object>` is expected."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Pattern Matching",
+  "difficulty": "Medium",
+  "question": "How has pattern matching changed how you write C#, and where does it improve on the alternatives?",
+  "answer": "It has mostly replaced chains of `if`/`else` with type checks and casts, and made the intent of a branch visible in the pattern rather than buried in the body.\n\n**The forms I use most:**\n- **Type patterns with declaration** - `if (value is Customer c && c.IsActive)` replaces a type check, a cast, and a null check with one expression.\n- **Switch expressions** - an expression rather than a statement, so the result can be assigned directly. Crucially the compiler warns when the cases are not exhaustive, which a chain of `if`s never does.\n- **Property patterns** - `order is { Status: Status.Shipped, Lines.Count: > 0 }` reads as the business condition and handles nulls along the way.\n- **Relational and logical patterns** - `temperature switch { < 0 => \"freezing\", >= 0 and < 15 => \"cold\", ... }`, which removes the boundary-condition bugs that manual comparison chains attract.\n- **List patterns** - `[var first, .., var last]` for shape-matching sequences.\n\n**Where it genuinely improves things:** exhaustiveness. A switch expression over an enum or a closed hierarchy warns when a case is missing, so adding a new enum value surfaces every place that must handle it. That is the compile-time safety a Visitor pattern buys with far more ceremony.\n\n**Where I would not use it:** when the pattern becomes so dense that it needs a comment to read. A deeply nested property pattern with several relational clauses is clever rather than clear, and a named method with a meaningful name is better. The point is expressing intent, not compressing lines.",
+  "tags": [
+   "csharp",
+   "pattern-matching",
+   "switch-expressions",
+   "exhaustiveness",
+   "language"
+  ],
+  "followups": [
+   {
+    "q": "How do you get true exhaustiveness checking over a class hierarchy?",
+    "a": "Seal the hierarchy - an abstract base with a private constructor and nested derived types, or records in one file with no accessible constructor elsewhere - so the compiler knows the complete set. C# still does not have real discriminated unions, so the warning you get is about the patterns not covering all *inputs*, and a `null` or an unexpected type falls into a discard arm. The pragmatic version is a `_ => throw new UnreachableException()` arm, which converts a missed case into an immediate, obvious failure rather than silent wrong behaviour."
+   },
+   {
+    "q": "When is a switch expression worse than a dictionary lookup?",
+    "a": "When the mapping is data rather than logic and it is large - fifty constant-to-constant cases compile to a chain or a jump table, but more importantly they put configuration in code. A dictionary can be loaded from configuration, tested as data, and changed without a rebuild. Use the switch when each arm is genuinely different logic, and a lookup when it is a table someone might want to edit."
+   }
+  ]
  }
 ]

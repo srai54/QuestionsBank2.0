@@ -1285,5 +1285,29 @@
     "a": "They turn repeat requests into cheap 304s. The client sends `If-None-Match` with the previously returned ETag; if nothing changed, the server returns 304 with no body, saving bandwidth and serialisation but not the round trip. That helps a polling client a great deal and helps a client making 50 distinct first-time calls not at all - which is why diagnosing the actual pattern comes first."
    }
   ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Versioning",
+  "difficulty": "Medium",
+  "question": "How do you version a public API, and when do you actually need a new version?",
+  "answer": "The best versioning strategy is to need it rarely, so the first question is whether the change is genuinely breaking. Additive changes - new optional fields in requests, new fields in responses - need no version if clients are contractually required to ignore unknown fields. Getting that expectation into the documentation from day one saves most versioning pain.\n\n**When a version is genuinely needed:** removing or renaming a field, changing a type or its semantics, making an optional request field required, changing error codes or status semantics, or altering default behaviour.\n\n**The mechanisms, with trade-offs:**\n- **URL path** (`/v1/orders`) - explicit, obvious in logs, trivially cacheable, easy to route at the gateway. Purists object that the resource identity should not change with representation, and they are right in principle; it remains the most common choice because it is the most operable.\n- **Header** (`Api-Version: 2` or content negotiation via `Accept`) - cleaner in theory, keeps URLs stable, but harder to test in a browser and easy to omit, and caching requires `Vary` to be right.\n- **Query string** - simple, but pollutes every URL and is easy to drop accidentally.\n\n**I would use the URL path for a public API**, because the people consuming it benefit from the obviousness more than they suffer from the impurity.\n\n**The part that matters more than the mechanism:** a deprecation policy. Announce, give a long window, use `Deprecation` and `Sunset` headers so tooling can see it, measure who is still calling the old version, and contact them. And keep the number of live versions small - every supported version multiplies testing and maintenance forever.",
+  "tags": [
+   "rest-apis",
+   "versioning",
+   "deprecation",
+   "api-design",
+   "backwards-compatibility"
+  ],
+  "followups": [
+   {
+    "q": "How do you avoid maintaining two full implementations?",
+    "a": "Keep one internal model and translate at the edges - the versioned controllers or endpoints map their own DTOs to and from a single domain representation. Then a version difference is a mapping, not a fork of the business logic. Where behaviour genuinely differs, isolate that behind a strategy resolved by version rather than branching throughout. The failure mode to avoid is copying the whole stack per version, which guarantees the two drift and bugs get fixed in only one."
+   },
+   {
+    "q": "How do you decide when it is safe to switch off an old version?",
+    "a": "By measuring rather than by the calendar. Log the version and the caller on every request, so you can see exactly who is still on v1 and how much traffic they send. Then contact the remaining consumers directly, and consider brownouts - deliberately returning errors for short scheduled windows - which reliably finds the integrations nobody remembered they had. Switching off on the announced date without checking traffic is how you take down a customer who never read the email."
+   }
+  ]
  }
 ]
