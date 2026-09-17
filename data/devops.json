@@ -4113,5 +4113,29 @@
     "a": "Run the shadow instance in a mode where writes go nowhere - a separate database or a no-op implementation of anything that mutates state or calls a third party. The failure people hit is a shadow path that sends emails or charges cards because the side effect was two layers down and nobody traced it. So the safe version requires knowing every outbound effect, which is itself a useful exercise, and it is why shadow testing is most straightforward for read paths."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "How do you structure a deployment pipeline across dev, test and production?",
+  "answer": "One pipeline, one artefact, promoted through environments - not a separate build per environment. The build happens once and the *same* binary is deployed everywhere, because building per environment means production runs something no environment ever tested.\n\n**The shape:**\n\n1. **Build once.** Compile, test, package, and version the artefact immutably - an image by digest, not a mutable tag. Everything downstream refers to that identity.\n2. **Promote the same artefact.** Dev, then test, then production, with configuration injected per environment rather than baked in. If the artefact differs between environments, the testing proves nothing about production.\n3. **Gates that match the risk.** Automatic to dev, automatic to test after the integration suite passes, manual approval to production - or automatic if you have the confidence and the rollback story to support it.\n4. **Environment configuration outside the artefact**, from a vault or the platform s settings, so the same image behaves correctly in each.\n5. **Database migrations as an ordered step** before the application rolls out, not from application startup.\n\n**What I would insist on regardless of tooling:**\n- **Traceability** - which commit is in production right now, answerable in seconds.\n- **Rollback as a first-class path**, exercised regularly rather than theoretically available.\n- **The pipeline definition in the repository**, versioned with the code it builds, so a change to the process is reviewed like a change to the code.\n- **Secrets from the platform s store**, never in the pipeline definition, and masked in logs.\n\n**And the anti-pattern to name:** a pipeline that rebuilds from source for each environment, usually because someone needed a per-environment compile-time setting. That setting should be configuration.",
+  "tags": [
+   "devops",
+   "ci-cd",
+   "promotion",
+   "artefacts",
+   "environments"
+  ],
+  "followups": [
+   {
+    "q": "Why is rebuilding per environment actually dangerous rather than just wasteful?",
+    "a": "Because the thing you tested is not the thing you shipped. A dependency can resolve to a different version, a compiler or base image can have moved, a transient build environment difference can change behaviour - so a build that passed every test in staging is not evidence about the binary now in production. It also breaks traceability: you can no longer point at an artefact and say exactly what is running. Build once and promote makes the tested artefact and the deployed artefact the same object."
+   },
+   {
+    "q": "How do you handle a setting that genuinely must differ at build time?",
+    "a": "Push back on it first, because almost none do - most compile-time settings can be runtime configuration with a small refactor. Where it is unavoidable, such as a trimmed AOT build for one target, treat it as producing genuinely different artefacts with their own identity and test each, rather than pretending they are the same thing promoted. The failure to avoid is one pipeline silently producing different binaries under the same version number."
+   }
+  ]
  }
 ]

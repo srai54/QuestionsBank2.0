@@ -3830,5 +3830,29 @@
     "a": "`polite` queues the announcement until the screen reader finishes what it is saying, which is right for almost everything - a search result count, a saved confirmation, a loading state. `assertive` interrupts immediately, which is appropriate only for genuinely urgent messages such as a session about to expire or an error blocking the user. Overusing assertive makes the experience hostile, because every minor update cuts off whatever the user was listening to."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Routing",
+  "difficulty": "Medium",
+  "question": "How do you handle authentication and protected routes in a React application?",
+  "answer": "The important framing first: **route protection in the client is a user-experience feature, not a security control.** The bundle is on the user s machine and can be modified, so hiding a route hides nothing. Every protected endpoint must enforce authorisation server-side, independently. Anyone who describes client-side route guards as the security model has the threat model backwards.\n\n**With that established, the client-side structure:**\n\n1. **A route wrapper** that checks authentication state and redirects to login when absent, preserving the attempted URL so the user lands where they intended after signing in - that last detail is what separates a good implementation from an annoying one.\n2. **A loading state while auth is being determined.** The common bug is redirecting to login on first render because the token check has not completed, so a refresh on a protected page bounces the user out. There are three states, not two: authenticated, unauthenticated, and unknown.\n3. **Role or permission checks** for finer-grained access, with a clear \"you do not have access\" page rather than a silent redirect, which looks broken.\n4. **Handling expiry mid-session** - a 401 from any request should trigger a refresh attempt and, failing that, a redirect to login with the current location preserved.\n\n**Token storage:** an `HttpOnly` cookie keeps it unreadable by injected script, at the cost of needing CSRF protection. `localStorage` avoids CSRF and exposes the token to any XSS. Neither is free, and for a first-party application I would take the cookie.\n\n**And do not put roles in client state as the source of truth** - render from them, but let the server decide.",
+  "tags": [
+   "react",
+   "routing",
+   "authentication",
+   "protected-routes",
+   "security"
+  ],
+  "followups": [
+   {
+    "q": "How do you avoid the flash of redirect on page refresh?",
+    "a": "Model auth as three states and render nothing decisive until the check resolves - show a loader or a skeleton while the token is being validated or refreshed, and only redirect once you know the user is genuinely unauthenticated. The bug comes from treating \"no user yet\" and \"no user\" as the same thing. Persisting a minimal hint that a session probably exists, so the first render can assume authenticated and correct itself, removes the flicker for the common case."
+   },
+   {
+    "q": "Should the route configuration itself be driven by permissions from the server?",
+    "a": "The navigation menu should be, so users are not shown links they cannot use - but the routes themselves can exist regardless, because access is decided server-side anyway. Fetching a permission set at login and using it to render navigation and to gate UI affordances is the useful pattern. What it must not become is the authorisation decision: the server checks on every request, and the client copy is a convenience that may be stale."
+   }
+  ]
  }
 ]

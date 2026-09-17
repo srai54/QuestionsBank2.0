@@ -4782,5 +4782,29 @@
     "a": "Full-text search works on words - it tokenises, stems and ranks, so it understands that \"running\" and \"runs\" are related and can score relevance. Trigram matching works on three-character sequences, so it handles substrings and typos within words but has no concept of word meaning or relevance. Full-text is better for natural language; trigram is better for partial identifiers, product codes and fuzzy name matching. They solve different problems and PostgreSQL lets you use both."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Views",
+  "difficulty": "Medium",
+  "question": "When is a view helpful and when does it become a problem?",
+  "answer": "A view is a stored query. It stores no data and, by itself, does nothing for performance - which is the first misconception to clear up.\n\n**Where views help:**\n- **Encapsulating a complicated join** that many queries need, so the logic is written once.\n- **A security boundary** - grant access to a view exposing certain columns and rows rather than to the table, which is a legitimate and under-used technique.\n- **A compatibility layer** during a schema change. Rename the table, create a view with the old name, and existing consumers keep working while you migrate them. This is genuinely useful in an expand-and-contract migration.\n- **Presenting a simplified model** to reporting tools.\n\n**Where they become a problem:**\n- **Nested views.** A view selecting from a view selecting from a view produces a query the optimiser must flatten, and the resulting plan is frequently poor - it pulls in columns and joins nobody asked for because each layer selects more than the layer above needs. Three or four levels deep is a common and painful legacy pattern.\n- **The illusion of cheapness.** `SELECT * FROM BigView WHERE Id = 5` looks like a lookup and may execute the entire underlying query including joins to tables irrelevant to that row.\n- **Hidden cost at the call site.** A developer joining two views has no visual cue that they just wrote an eight-table query.\n- **`SELECT *` inside a view**, which does not pick up new columns until refreshed and can break unexpectedly.\n\n**The distinction to state:** an *indexed* or *materialised* view is a different thing entirely - it stores results and does help performance, at the cost of maintenance on every write to the base tables.",
+  "tags": [
+   "sql",
+   "views",
+   "indexed-views",
+   "performance",
+   "schema-design"
+  ],
+  "followups": [
+   {
+    "q": "Why does the optimiser sometimes handle nested views badly?",
+    "a": "It expands them into a single statement and then tries to simplify, and simplification has limits - it cannot always prove that a join is unnecessary, particularly with outer joins, `DISTINCT`, aggregates or window functions in an inner layer, because removing the join could change the result. So joins and columns you never wanted stay in the plan. The practical tell is a plan far larger than your query suggests, touching tables you did not name. Flattening the view into the query it is actually used for usually fixes it immediately."
+   },
+   {
+    "q": "When would you use a materialised view instead?",
+    "a": "When the underlying query is expensive and is read far more often than the base data changes - a nightly aggregate, a reporting summary. The database maintains the stored result, so correctness is not your responsibility, which is the main advantage over hand-maintaining a denormalised table. The costs decide it: SQL Server indexed views add work to every write on the base tables and have restrictive rules about what they can contain, while PostgreSQL materialised views must be refreshed explicitly and are therefore stale by design."
+   }
+  ]
  }
 ]

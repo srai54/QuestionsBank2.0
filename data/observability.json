@@ -1719,5 +1719,29 @@
     "a": "That the bill is the visible cost and a longer outage is the hidden one. Observability is what turns a four-hour incident into a twenty-minute one, and the data you cut is discovered to be missing precisely when you need it. So the framing I would use is not \"spend less\" but \"spend it on what gets queried\" - keeping full fidelity for failures while sampling the routine usually cuts the bill substantially without touching the data anyone actually uses."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "SLOs",
+  "difficulty": "Hard",
+  "question": "How would you set an SLO for a service that has never had one?",
+  "answer": "Start from what users actually experience, and from data rather than from a target someone likes the sound of.\n\n**The steps:**\n\n1. **Pick the right SLI.** It must reflect a user-visible outcome: the proportion of requests that succeed within a latency threshold, for the journeys that matter. \"CPU under 80%\" is not an SLI - users do not experience CPU.\n2. **Measure current performance for several weeks** before setting any target. Most teams discover reality is either much better or much worse than assumed, and setting a target first means either an SLO that is never breached and therefore tells you nothing, or one that is permanently breached and gets ignored.\n3. **Set the target slightly tighter than current performance**, not at an aspirational number. The purpose is to detect meaningful degradation and to make reliability work negotiable - not to be ambitious.\n4. **Compute the error budget** and make it concrete: 99.9% over 30 days is about 43 minutes. That number is what changes conversations, because it converts reliability into something you can spend.\n5. **Agree what happens when the budget is exhausted** - typically feature work pauses in favour of reliability work. Without that agreement the SLO is a dashboard, not a mechanism.\n\n**What I would avoid:** setting the same target for every service. The checkout path and the internal reporting tool have different consequences, and applying 99.99% everywhere spends enormous effort where it does not matter.\n\n**And the honest point:** an SLO should be achievable while still allowing you to ship. If it forces you to stop changing the system, it is too tight - perfect reliability is available only to a system nobody deploys.",
+  "tags": [
+   "observability",
+   "slo",
+   "error-budget",
+   "sli",
+   "reliability"
+  ],
+  "followups": [
+   {
+    "q": "Why is 100% the wrong target?",
+    "a": "Because it leaves no room to change anything, and every change carries risk - so a 100% target means either you never deploy or you routinely breach and stop caring. It is also unachievable for reasons outside your control: the network, the cloud provider, the client s device. And it is not what users need, since they cannot distinguish 99.99% from 100% through their own flaky connections. The error budget framing makes this constructive: the gap below 100% is what you are permitted to spend on shipping."
+   },
+   {
+    "q": "What do you do when a dependency you do not control limits your achievable SLO?",
+    "a": "Measure it and make it explicit rather than absorbing it silently. Your achievable availability is bounded by your dependencies - if a required downstream offers 99.9%, you cannot promise better without redundancy or graceful degradation. So either set your SLO accordingly and document why, or invest in caching, fallbacks and circuit breaking so the dependency s failures do not become yours. That comparison is also the strongest argument for the investment, because it turns a vague reliability request into a number."
+   }
+  ]
  }
 ]

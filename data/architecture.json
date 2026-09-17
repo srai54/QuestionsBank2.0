@@ -4600,5 +4600,29 @@
     "a": "Put the data access behind an abstraction early, so the engine is a configuration choice rather than assumptions spread through the codebase - and in the dual-running phase, that is what lets you read from either or compare both. Where raw SQL exists, inventory it first, since it is where the dialect differences live. The temptation is to rewrite the application and migrate the database at the same time; separating them means that when something breaks you know which change caused it."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Caching",
+  "difficulty": "Hard",
+  "question": "Where would you put a cache in a layered application, and what are the consequences of each choice?",
+  "answer": "Each layer caches something different, and caching at the wrong layer either saves nothing or creates invalidation problems you cannot solve.\n\n**At the edge (CDN or reverse proxy).** Caches whole responses. Removes the most load because the request never reaches your infrastructure, and it is the cheapest tier by far. Only works for responses that are identical across users - anything personalised needs careful `Vary` handling or it is either useless or dangerous.\n\n**At the API layer (response caching).** Caches the serialised response, so you skip serialisation and everything below. High value per hit, but the cache key must capture every input that changes the output - route, query, headers, tenant, user. Miss one and you serve one user s data to another, which is the worst failure mode in this list.\n\n**At the service layer.** Caches a domain result - the shaped object rather than the response. More reusable across endpoints, and you still pay serialisation. This is usually the best balance for anything personalised.\n\n**At the data layer.** Caches query results or entities. Lowest value per hit because you still do all the mapping and serialisation, but the highest hit rate because the same data serves many different operations.\n\n**Where I would start:** the edge for anonymous content, the service layer for authenticated. And I would cache the *shaped read model* rather than raw entities, because that avoids repeating the mapping cost on every hit.\n\n**The consequence that decides it in practice is invalidation.** The higher you cache, the more entries one data change invalidates - one product update may invalidate hundreds of cached pages. The lower you cache, the less you save per hit. That trade is the actual design decision.",
+  "tags": [
+   "architecture",
+   "caching",
+   "invalidation",
+   "layering",
+   "cdn"
+  ],
+  "followups": [
+   {
+    "q": "What is the most dangerous mistake in response caching?",
+    "a": "A cache key that omits something which changes the output - most often the authenticated user or the tenant. The result is one user being served another s data from cache, which is a data breach rather than a bug, and it appears intermittently so it is hard to reproduce and easy to dismiss. The defence is to make personalised responses explicitly non-cacheable at shared layers, and to include tenant and user in the key wherever they are cached at all, with `Vary` headers set correctly for anything a proxy might store."
+   },
+   {
+    "q": "How do you decide cache duration when the data changes unpredictably?",
+    "a": "Pair a TTL with event-driven invalidation rather than choosing between them. The events handle the normal case so data is fresh within seconds of a change, and the TTL is the safety net for a missed event, so a bug produces staleness for minutes rather than forever. Choosing the TTL alone forces you to guess, and the guess is always wrong in one direction - too short and you lose the benefit, too long and users see stale data with no recovery path."
+   }
+  ]
  }
 ]

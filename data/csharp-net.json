@@ -12782,5 +12782,29 @@
     "a": "For programmer errors and for genuinely exceptional conditions - a null argument that should never be null, an invalid state that indicates a bug, an unreachable dependency. Those should be loud and should not be swallowed by a caller who was not expecting them. For outcomes that are part of the normal operation of the API - not found, validation failed, already exists - a result is better, because it forces the caller to acknowledge the case and costs nothing at runtime."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Configuration",
+  "difficulty": "Medium",
+  "question": "A setting works locally and not in the container. How does .NET configuration resolve values, and where would you look?",
+  "answer": "Configuration is a layered set of providers, and the **last one registered wins** for any key. The default host registers them in this order: `appsettings.json`, then `appsettings.{Environment}.json`, then user secrets in Development, then environment variables, then command-line arguments.\n\nSo the usual answer is that something later in the chain is overriding what you expect - or that a provider you rely on locally is not present in the container.\n\n**Where I would look, in order:**\n\n1. **Which environment is the container running as?** `ASPNETCORE_ENVIRONMENT` decides which `appsettings.{Environment}.json` loads. If it is unset or set to `Production`, your `appsettings.Development.json` is simply not read - and that file is where most people put local values.\n2. **User secrets are Development-only.** If the value lives there, it exists only on your machine. This is the most common cause of exactly this symptom.\n3. **Environment variable naming.** Nested keys use a double underscore as the separator - `Smtp__Host`, not `Smtp:Host` or `Smtp.Host`. The colon form works on Windows and not on Linux, which is precisely the local-versus-container difference.\n4. **Case and binding.** Binding is case-insensitive, but a mistyped section name binds silently to nothing and you get a default-valued object rather than an error.\n5. **The file was not copied into the image**, or was copied but not marked to be.\n\n**The diagnostic that settles it in one step:** dump the resolved configuration at startup in a non-production environment - `((IConfigurationRoot)config).GetDebugView()` shows every key, its value and **which provider supplied it**. That turns a guessing exercise into reading the answer.",
+  "tags": [
+   "dotnet",
+   "configuration",
+   "containers",
+   "environment-variables",
+   "troubleshooting"
+  ],
+  "followups": [
+   {
+    "q": "How do you stop a missing setting from silently becoming a default?",
+    "a": "Validate options at startup with `AddOptions<T>().Bind(section).ValidateDataAnnotations().Validate(...).ValidateOnStart()`. Without `ValidateOnStart`, validation runs lazily on first access, so a missing setting surfaces as a failed request at 3am rather than a container that refuses to start. Failing the deployment is strictly better - a container that will not start is visible immediately and rolls back automatically."
+   },
+   {
+    "q": "What is the risk of GetDebugView and how do you use it safely?",
+    "a": "It prints every configuration value, including connection strings and any secret supplied through a provider - so calling it in production or writing it to a log ships secrets to wherever your logs go. Use it in Development only, guarded by an environment check, or write it to the console during local debugging rather than through the logging pipeline. The safe production equivalent is logging the *provider* each key came from without the values."
+   }
+  ]
  }
 ]

@@ -2589,5 +2589,29 @@
     "a": "It changes the code deliberately - flipping a comparison, removing a statement - and reports whether any test failed. A surviving mutant means the code was executed but nothing asserted the behaviour it changed, which is the gap coverage cannot see. It is the closest thing to measuring test quality. It is not used more because it is slow: running the suite once per mutation is expensive, so it needs to be scoped to critical modules and run on a schedule rather than on every commit."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you stop performance regressions reaching production?",
+  "answer": "By measuring the things that actually degrade, automatically, and treating a regression as a failure rather than an observation.\n\n**What I would put in place, in order of value per effort:**\n\n1. **Benchmarks on the hot paths**, run in CI with BenchmarkDotNet or equivalent, comparing against a stored baseline and failing on a regression beyond a threshold. This catches algorithmic mistakes at the unit level - the accidental O(n²), the allocation added to a tight loop.\n2. **Query count assertions** in integration tests. An endpoint that went from 2 queries to 200 is an N+1 someone just introduced, and this is the cheapest high-value check available - far easier than measuring time, and not flaky.\n3. **Bundle size budgets** for front-end builds, failing the build when a dependency pushes it over. A single careless import can double the download.\n4. **Load tests on the critical journeys** before release, comparing throughput at a fixed latency target against the previous version - not just \"does it pass\".\n5. **Production monitoring with alerts on latency percentiles**, which catches what the earlier stages miss, especially anything data-volume dependent.\n\n**The caveat that matters:** CI machines are noisy and shared, so wall-clock timings there are unreliable and produce flaky failures. Prefer deterministic proxies - allocation counts, query counts, bundle bytes, operation counts - which are exact and do not depend on what else the build agent is doing. Use real timing for load tests on dedicated infrastructure.\n\n**And the cultural half:** a performance budget agreed up front, so \"is 400ms acceptable\" is answered before the argument rather than during it.",
+  "tags": [
+   "testing",
+   "performance-testing",
+   "benchmarking",
+   "regression",
+   "ci"
+  ],
+  "followups": [
+   {
+    "q": "Why are allocation counts a better CI signal than elapsed time?",
+    "a": "Because they are deterministic - the same code allocates the same amount regardless of what else the machine is doing, so the assertion is exact and a change is unambiguous. Elapsed time on a shared CI agent varies by a large factor depending on neighbours, so a threshold loose enough not to be flaky is too loose to catch real regressions. Allocations also correlate well with the problems you care about, since GC pressure is a common cause of latency at scale."
+   },
+   {
+    "q": "How do you write a query count assertion without coupling to implementation?",
+    "a": "Assert an upper bound rather than an exact number - \"this endpoint issues no more than 3 queries\" - so ordinary refactoring does not break it but an N+1 does. Capture the count with an EF Core interceptor or a diagnostic listener around the operation. The bound should be justified in the test name or a comment, so the next person knows whether raising it is legitimate or is papering over a regression."
+   }
+  ]
  }
 ]
