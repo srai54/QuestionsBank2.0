@@ -4926,5 +4926,29 @@
     "a": "Because in SQL Server a nonclustered index stores the clustered key as its row locator - that is how it gets back to the full row. So a 16-byte clustered key adds 16 bytes to every row of every nonclustered index, against 4 for an integer. On a table with six indexes and millions of rows that is a substantial difference in storage, in how much fits in memory, and therefore in how much I/O the queries do. It is the strongest technical argument for a narrow clustered key."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Diagnostics",
+  "difficulty": "Medium",
+  "question": "A query returns the right answer but is inconsistent in how long it takes. What causes that?",
+  "answer": "Variable duration for identical work points at contention, caching or plan instability rather than at the query itself.\n\n**The causes, roughly in order of likelihood:**\n\n1. **Blocking.** The query waits on locks held by other sessions, so its duration depends on what else is running. Wait statistics distinguish this immediately - lock waits look nothing like CPU or I/O waits.\n2. **Buffer pool state.** A cold run reads from disk; a warm run reads from memory, and the difference can be an order of magnitude. A query that is fast when you test it repeatedly and slow in production may simply be reading cold pages there.\n3. **Plan instability from parameter sniffing.** The cached plan is recompiled at some point with different parameters, so the same query text gets a different plan and different performance. The tell is that it changes after a restart, a statistics update or an index rebuild.\n4. **Parallelism decisions.** The engine may choose a parallel plan or not depending on available threads at the time, and a parallel plan waiting for worker threads under load can be slower than serial.\n5. **Memory grant problems.** If the grant is undersized the query spills to tempdb, which is dramatically slower - and whether it spills can depend on concurrent memory pressure.\n6. **Resource contention generally** - tempdb, I/O throughput shared with other workloads, or a noisy neighbour on shared infrastructure.\n\n**How I would narrow it:** capture wait statistics for the query across several executions. That single measurement distinguishes waiting-for-locks from waiting-for-I/O from actually-computing, and it eliminates most of the list in one step.",
+  "tags": [
+   "sql",
+   "diagnostics",
+   "wait-statistics",
+   "parameter-sniffing",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "How do you tell a cold cache from a real problem?",
+    "a": "Run it twice and compare - if the second run is dramatically faster and stays fast, the first was reading from disk. Then the question becomes whether production ever gets a warm cache for this data, which depends on how much data there is relative to memory and how often it is accessed. A reporting query over cold historical data will always pay the I/O, so the fix is reducing how much it reads rather than expecting caching to save it."
+   },
+   {
+    "q": "What is a memory grant and why does an undersized one hurt so much?",
+    "a": "The engine estimates how much memory a query needs for sorts and hash operations and reserves it before execution. If the estimate is too low - usually because of bad cardinality estimates - the operation cannot fit in memory and spills to tempdb, turning memory-speed work into disk-speed work. If the estimate is too high, the query reserves memory it does not use and other queries queue waiting for a grant. Both trace back to estimate quality, which is why statistics problems show up as erratic performance rather than as consistently slow queries."
+   }
+  ]
  }
 ]

@@ -2962,5 +2962,29 @@
     "a": "Queryability, mostly. You cannot do a range query, a sort, a `LIKE` or a join on ciphertext, and equality only works if the encryption is deterministic - which leaks information, because identical plaintexts produce identical ciphertexts and an attacker can infer distribution. So the practical pattern is encrypting fields you retrieve but never search on, and keeping a separate searchable surrogate such as a hash or a truncated value for lookup. Deciding which fields genuinely need it, rather than encrypting everything, is what keeps the design workable."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Sessions",
+  "difficulty": "Medium",
+  "question": "How should a session work for a web application, and what are the common mistakes?",
+  "answer": "A session associates a series of requests with an authenticated user. The identifier that carries it is a bearer credential - whoever holds it is the user - so every design decision follows from protecting it and bounding how long it matters.\n\n**What a correct session looks like:**\n- **A cryptographically random identifier** of sufficient length, generated server-side. Never derived from the user id, a counter, or anything predictable.\n- **Carried in a cookie marked `HttpOnly`, `Secure` and `SameSite`** - `HttpOnly` so injected script cannot read it, `Secure` so it never crosses plain HTTP, `SameSite=Lax` as a CSRF defence-in-depth layer.\n- **Regenerated on privilege change**, especially at login. Reusing the pre-login identifier is **session fixation** - an attacker who sets a known identifier before the user logs in then holds an authenticated session.\n- **Expiring** on both an idle timeout and an absolute lifetime, so a forgotten session does not live forever.\n- **Invalidated server-side on logout**, not just cleared client-side. Clearing the cookie while the server still honours the identifier means a copied cookie still works.\n\n**The common mistakes:**\n- **Session identifiers in URLs**, which leak through referrer headers, browser history, logs and shared links.\n- **No server-side invalidation** for stateless tokens, so logout is cosmetic - which is why short token lifetimes matter when using JWTs.\n- **Not rotating on login**, the fixation bug.\n- **Storing anything sensitive in a client-side session** the user can read or modify.\n\n**And bind what you reasonably can** - alerting on a session used from a wildly different location is a detection, not a prevention, but it is worth having.",
+  "tags": [
+   "security",
+   "sessions",
+   "cookies",
+   "session-fixation",
+   "authentication"
+  ],
+  "followups": [
+   {
+    "q": "Why is logout with a JWT harder than with a server-side session?",
+    "a": "Because the whole point of a JWT is that the resource server validates it locally by signature without contacting the issuer, so there is no state to delete - the token remains valid until it expires regardless of what the user clicked. The options are all compromises: keep access tokens very short and rely on refresh-token revocation, maintain a denylist that resource servers check (which reintroduces the round trip you were avoiding), or use opaque tokens with introspection. Being clear that \"logout\" with a JWT usually means \"stopped issuing new ones\" is the honest position."
+   },
+   {
+    "q": "What is the difference between an idle timeout and an absolute timeout, and why have both?",
+    "a": "Idle timeout ends a session after a period of inactivity, which handles the unattended machine; absolute timeout ends it a fixed time after login regardless of activity, which bounds how long a stolen session is useful even if the attacker keeps it alive. With only an idle timeout, an attacker who has the cookie can refresh it indefinitely and the session never expires. With only an absolute one, an abandoned session stays valid on a shared computer until the limit. The pair covers both, which is why standards recommend both."
+   }
+  ]
  }
 ]

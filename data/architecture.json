@@ -4720,5 +4720,29 @@
     "a": "Almost always at small scale, because engineering time dominates infrastructure cost by a wide margin. A managed service that costs twice the raw compute but removes an operational burden is a clear win when the team is small - a few hundred pounds a month against days of engineering attention is not a close comparison. The calculus inverts at scale, where infrastructure becomes the larger number and optimisation work pays for itself, which is why cost-driven rearchitecting is usually premature before you have the volume to justify it."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "APIs",
+  "difficulty": "Hard",
+  "question": "Your API is used by a mobile app that cannot be updated quickly. How does that change your design?",
+  "answer": "It removes your ability to fix mistakes by changing both sides, so the API contract becomes something close to permanent. Old app versions stay in use for years - some users never update - so anything you ship has to work indefinitely.\n\n**How that changes the design:**\n\n1. **Version from the first release.** Retrofitting versioning is far harder than starting with it, and you will need it.\n2. **Never break, only add.** Removing a field, renaming one, changing a type or tightening validation breaks clients you cannot update. The contract that makes additive evolution safe - clients must ignore unknown fields - has to be established and documented from day one, because you cannot introduce it later.\n3. **Put behaviour behind server-controlled configuration.** Anything you might want to change - limits, feature availability, messages, even endpoint URLs - should be fetched from the server rather than compiled into the app. That turns \"we need an app release\" into a config change.\n4. **Build a kill switch and a minimum-version check.** The ability to tell an old client \"you must update to continue\" is the escape hatch for a security problem, and it has to exist in the first version to be useful.\n5. **Design responses to be forward-compatible** - objects rather than bare arrays at the top level, so fields can be added alongside; enums that clients handle gracefully when an unknown value arrives.\n6. **Be conservative about what you expose**, because every field is a commitment.\n\n**And measure what versions are actually in use**, so retirement decisions are based on traffic rather than on the release date. The question \"how many users would we break\" must be answerable in minutes.",
+  "tags": [
+   "architecture",
+   "api-design",
+   "versioning",
+   "mobile",
+   "backwards-compatibility"
+  ],
+  "followups": [
+   {
+    "q": "How do you handle a change that genuinely cannot be additive?",
+    "a": "Run both behaviours side by side, selected by the client version or by an explicit version in the request, and keep the old one until traffic on it is negligible. That means the server carries both code paths for a long time, which is a real maintenance cost and is the price of the constraint. Where the change is forced by a security problem rather than a preference, the minimum-version check is what lets you cut off old clients deliberately - which is disruptive, and is why it needs to exist before you need it."
+   },
+   {
+    "q": "What does a good deprecation process look like for a mobile API?",
+    "a": "Announce in-app well ahead of the date, use the `Deprecation` and `Sunset` headers so tooling can see it, and track adoption so you know exactly how many users remain. Then prompt increasingly firmly inside the app before enforcing, rather than switching off on the announced date - because the users still on the old version are by definition the ones who do not update promptly, and a silent failure looks to them like the app is broken. Brownouts, where the old path fails briefly at scheduled times, reliably surface anyone who missed the messaging."
+   }
+  ]
  }
 ]

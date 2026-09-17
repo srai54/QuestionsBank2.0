@@ -3950,5 +3950,29 @@
     "a": "A ref set to false on cleanup, checked before setting state after an async operation, to avoid updating an unmounted component. It was widely used because React warned about it - but React removed that warning, since setting state on an unmounted component is harmless rather than a leak. The pattern is now usually a sign that the async work should be cancelled instead, with an `AbortController` in the effect cleanup, which actually stops the request rather than ignoring its result."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Portals",
+  "difficulty": "Medium",
+  "question": "What problem do portals solve, and what do they not change?",
+  "answer": "A portal renders a child into a different DOM node while keeping it in the same React tree. The usual reason is escaping a CSS stacking or overflow context - a modal, tooltip or dropdown inside a container with `overflow: hidden` or a `transform` gets clipped or mispositioned, and no amount of `z-index` fixes it because the container established a new stacking context.\n\n**What the portal changes:** the DOM position. The element renders under `document.body` or another target, so it is no longer inside the clipping container.\n\n**What it does not change:** anything about React. The component stays in the React tree where you wrote it, so:\n- **Context flows normally** - a portalled modal still reads the theme or auth context from its React parent, even though its DOM parent is elsewhere. This surprises people and is usually what you want.\n- **Events bubble through the React tree**, not the DOM tree. A click inside a portalled modal propagates to the React parent that rendered it, which can trigger a handler on a component that is nowhere near it in the DOM. That is the behaviour that causes real bugs - a dropdown inside a clickable card closing the card when you click a menu item.\n\n**What portals do not give you for free, and this is the part people miss:** accessibility. The portalled content is elsewhere in the DOM, so screen reader order and keyboard navigation no longer follow the visual relationship. A modal needs focus trapping, focus restoration on close, `aria-modal`, and the background made inert - none of which the portal provides.\n\n**Which is why I would use a headless library** for dialogs and popovers rather than building on a raw portal.",
+  "tags": [
+   "react",
+   "portals",
+   "modals",
+   "accessibility",
+   "events"
+  ],
+  "followups": [
+   {
+    "q": "Why do events bubble through the React tree rather than the DOM tree?",
+    "a": "Because React attaches its listeners at the root container and synthesises propagation along its own component hierarchy, so the path an event takes follows where you wrote the component rather than where it rendered. That is deliberate and usually helpful - a portalled child behaves like a child for handler purposes. It becomes a bug when a portal is rendered inside something with a click handler, because clicks in the portal fire it, and the fix is stopping propagation explicitly at the portal boundary."
+   },
+   {
+    "q": "What does making the background inert actually involve?",
+    "a": "Preventing everything outside the modal from being focusable or reachable by assistive technology while it is open - the `inert` attribute on the background container does both in modern browsers, and `aria-hidden` on it is the older approach that hides it from screen readers without stopping focus. Combined with a focus trap inside the modal and restoring focus to the trigger on close, that is what makes a dialog usable by keyboard and screen reader. Getting all of it right by hand is fiddly enough that using the native `<dialog>` element or a tested library is the sensible default."
+   }
+  ]
  }
 ]

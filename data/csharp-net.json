@@ -12950,5 +12950,29 @@
     "a": "For value types, yes - the runtime specialises generic code per value type, so `List<int>` stores actual integers with no boxing, which is the main reason generics replaced `ArrayList`. The exception is when the generic code constrains to an interface and calls through it in a way the JIT cannot devirtualise, or when a generic value is assigned to `object`. Constraining with `where T : struct, IEquatable<T>` lets the JIT emit a direct call and keeps the boxing away."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Startup",
+  "difficulty": "Medium",
+  "question": "Explain the difference between AddSingleton, AddScoped and AddTransient with a case where choosing wrongly causes a bug.",
+  "answer": "- **Singleton** - one instance for the application lifetime.\n- **Scoped** - one instance per scope, which in ASP.NET Core means per HTTP request.\n- **Transient** - a new instance every time it is resolved.\n\n**The rule that follows:** a service may depend on something with an equal or longer lifetime, never a shorter one. Violating that gives you a **captive dependency** - the shorter-lived service is captured and lives as long as its captor.\n\n**The bug I would describe:** a singleton service injecting a scoped `DbContext`. The context is resolved once and lives forever, so concurrent requests share one instance. `DbContext` is not thread-safe, so you get \"A second operation was started on this context before a previous operation completed\" under load - intermittently, never in development where one request runs at a time. Its change tracker also accumulates every entity ever loaded, so memory grows and queries slow down.\n\n**The subtler version:** transient captured by a singleton. That does not throw under scope validation, because transient is legal to resolve anywhere - but the instance is now effectively a singleton, so any per-use state it holds is shared across every caller.\n\n**How I catch it:** `ValidateScopes` turns resolving a scoped service from the root provider into an exception, and `ValidateOnBuild` moves it to startup so it fails the deployment. The generic host enables both in Development only, which is why this class of bug so often escapes to production.\n\n**And the fix** depends on the need: inject `IServiceScopeFactory` and create a scope per unit of work, use `IDbContextFactory<T>`, or simply make the consuming service scoped.",
+  "tags": [
+   "dotnet",
+   "dependency-injection",
+   "lifetimes",
+   "captive-dependency",
+   "ef-core"
+  ],
+  "followups": [
+   {
+    "q": "Why is transient not always the safe default?",
+    "a": "Because it creates an instance per resolution, which for a service injected in ten places means ten instances per request - wasteful if construction is expensive, and wrong if the service is meant to coordinate anything within the request. It also disposes differently: a transient `IDisposable` resolved from a scope is held by that scope until it ends, so a transient that is resolved frequently within a long-lived scope accumulates undisposed instances. Transient suits cheap, stateless services; scoped is usually the better default in a web application."
+   },
+   {
+    "q": "What happens to disposal for each lifetime?",
+    "a": "The container disposes what it created, when the owning scope ends - so scoped instances are disposed at the end of the request, and singletons at application shutdown. The trap is a transient `IDisposable`, which is tracked by the scope that resolved it and only disposed when that scope ends; in a singleton or the root scope that means never, which is a real leak for anything holding a connection. Registering with a factory and disposing yourself, or avoiding disposable transients, is how you avoid it."
+   }
+  ]
  }
 ]

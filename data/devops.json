@@ -4209,5 +4209,29 @@
     "a": "Treat it as a defect in the alert, not in the person. Either it is not actionable, in which case delete it or turn it into a dashboard, or it is actionable and the underlying problem should be fixed so it stops firing, or the threshold is wrong. An alert that is habitually acknowledged without action is actively harmful, because it trains the on-call engineer to dismiss pages - and that habit transfers to the one that matters."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Secrets",
+  "difficulty": "Medium",
+  "question": "How do you give a developer the access they need without giving them production credentials?",
+  "answer": "By separating \"can deploy\" from \"can read production data\", and by making the normal path not require either.\n\n**The structure I would put in place:**\n\n1. **Nobody has standing write access to production.** Deployments happen through the pipeline using a service identity; people do not deploy from laptops. That single change removes most of the need for credentials in the first place.\n2. **Read access is scoped and audited.** Where a developer genuinely needs to look at production - diagnosing an incident - that access is granted through a break-glass process: time-limited, approved, logged, and revoked automatically. Privileged Identity Management does this natively in Entra ID.\n3. **Managed identities rather than connection strings.** If the application authenticates by identity, there is no credential to hand out or leak, and access is granted by role assignment which is visible and revocable.\n4. **Good non-production environments.** Most requests for production access are really requests for realistic data, so a well-seeded test environment with anonymised data removes the need.\n5. **Diagnostics that do not require database access** - logs, traces, and a per-tenant verbose logging switch - so the usual investigation does not start with \"can someone run a query\".\n\n**The cultural half:** if the approved path is slow or painful, people will find a way around it, and shared credentials in a password manager is what that looks like. Making the legitimate route fast is a security control, not a convenience.\n\n**And for the genuine emergency**, have a documented break-glass account with its use alarmed rather than pretending no such need exists.",
+  "tags": [
+   "devops",
+   "access-control",
+   "secrets",
+   "break-glass",
+   "security"
+  ],
+  "followups": [
+   {
+    "q": "What does anonymising production data actually require?",
+    "a": "More than replacing names, because re-identification is usually possible from combinations - a postcode, a date of birth and a job title can identify one person even with the name removed. Realistic anonymisation means substituting consistently so relationships still work, generalising or bucketing quasi-identifiers, and being careful with free-text fields where anything can appear. It is enough work that many teams find generating synthetic data with the same shape and distributions is both safer and less effort than sanitising a copy."
+   },
+   {
+    "q": "How do you handle an incident at 3am when the approved access process needs an approver?",
+    "a": "Design for it - a break-glass path that does not require a second person, with the access granted immediately, heavily logged, alarmed to the security team, and expiring automatically. The control is detection and review rather than prevention, because a process that blocks an incident response will simply be circumvented, and then you have neither the access control nor the audit trail. Reviewing every break-glass use the next working day is what keeps it honest."
+   }
+  ]
  }
 ]

@@ -2733,5 +2733,29 @@
     "a": "Anything about behaviour or quality rather than structure. They can assert that the domain does not reference EF Core; they cannot assert that the domain model is any good, that the boundaries are in sensible places, or that a method does what its name says. They also check only what someone thought to encode, so a new kind of coupling nobody anticipated passes. They are a ratchet that preserves decisions already made, not a substitute for making good ones."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Fixtures",
+  "difficulty": "Medium",
+  "question": "How do you test a feature that spans several services?",
+  "answer": "By testing as much as possible without needing all of them running, and being deliberate about the small amount that genuinely requires the full system.\n\n**The layers, from cheapest up:**\n\n1. **Unit tests per service** for its own logic, with collaborators faked.\n2. **Contract tests** for the interactions between services, so each side verifies its expectations against the other without both being deployed. This is the layer that replaces most cross-service integration testing, and it is the one teams most often skip.\n3. **Component tests** - one real service with its real database, and its dependencies stubbed at the network boundary with WireMock or similar. This exercises the service s full stack including serialisation, configuration and data access.\n4. **A small number of end-to-end tests** across the deployed system, covering only the critical journeys.\n\n**Why not more end-to-end tests:** they need every service deployed and healthy, they are slow, and they fail for reasons unrelated to the change - so a failure means investigating five services. They are also the least precise: a failure tells you the journey broke, not where.\n\n**What genuinely needs the full system:** the things that only exist between services - routing, authentication flows crossing boundaries, message formats on real infrastructure, and the configuration that differs per environment.\n\n**The organisational point I would make:** if testing a change requires coordinating several teams to deploy together, that is telling you something about the boundaries rather than about the testing. Services that must be tested together usually must be released together, which is the definition of a distributed monolith.",
+  "tags": [
+   "testing",
+   "integration",
+   "contract-testing",
+   "microservices",
+   "e2e"
+  ],
+  "followups": [
+   {
+    "q": "How do you handle the test data problem across services?",
+    "a": "Each service owns its own data, so a cross-service scenario needs consistent data in several places - and seeding them all through a shared script recreates the coupling you were avoiding. The better approach is to set up through each service s own API, so the test creates a customer by calling the customer service rather than by inserting a row. That is slower but it keeps each service s internals private and means the setup exercises real code paths. Unique keys per test run then let it work in parallel against a shared environment."
+   },
+   {
+    "q": "What do you do when an end-to-end test fails intermittently because of a dependency?",
+    "a": "Distinguish the test being flaky from the system being unreliable, because they need opposite responses. If the dependency is genuinely unstable, the test is telling you something true and the answer is to fix the system or add resilience, not to retry. If the flakiness is from timing - the test asserting before an asynchronous step completed - the fix is polling for the expected state with a timeout rather than sleeping. Retrying without deciding which it is hides real reliability problems, and end-to-end tests are exactly where those show up first."
+   }
+  ]
  }
 ]

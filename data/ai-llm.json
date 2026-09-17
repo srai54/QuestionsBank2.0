@@ -3527,5 +3527,29 @@
     "a": "Constrain the output. Structured output or function calling with a schema removes the entire class of parsing failures and stops the model wandering into prose. Then validate the result against your own rules and fail closed rather than passing through something unvalidated. Those two steps typically fix more real failures than prompt tuning does, and they are code you can test - which is the general principle: move as much of the guarantee as possible out of the model and into the surrounding system."
    }
   ]
+ },
+ {
+  "category": "AI & LLM",
+  "subcategory": "Agents",
+  "difficulty": "Hard",
+  "question": "What changes when an LLM can call tools and take actions rather than just generating text?",
+  "answer": "The failure mode changes from \"wrong text\" to \"wrong action\", and text can be reviewed before it matters while an action has already happened.\n\n**What that means for the design:**\n\n1. **Least privilege becomes the primary control.** The tools available to the model should be scoped to what the *user* is permitted to do, enforced server-side by the same authorisation the rest of the application uses. The model deciding to call a tool is not authorisation - the tool must check.\n2. **Separate reading from acting.** Tools that read are low risk; tools that write, send, pay or delete need confirmation, and ideally a human in the loop for anything consequential.\n3. **Bound the loop.** An agent that plans and retries can loop indefinitely, consuming cost and repeating side effects. Hard limits on iterations, wall-clock time and spend are not optional.\n4. **Make every action idempotent or confirmable**, because retries are inherent to the pattern - the model will call a tool again if it does not believe it succeeded.\n5. **Log every tool call with its arguments and result**, so behaviour is reconstructable. Without that an agent is unauditable, and \"why did it do that\" becomes unanswerable.\n6. **Assume prompt injection succeeds.** Any content the agent reads - a document, a web page, a ticket - can contain instructions. The defence is not detecting them reliably, which is unsolved, but ensuring that a compromised agent cannot do anything the user could not.\n\n**The combination to be most careful about** is untrusted input plus privileged tools plus autonomy. Any two are manageable; all three is where the real risk lives, and separating them is the main architectural lever.",
+  "tags": [
+   "ai-llm",
+   "agents",
+   "tool-use",
+   "security",
+   "evaluation"
+  ],
+  "followups": [
+   {
+    "q": "How do you decide which actions need human confirmation?",
+    "a": "By reversibility and blast radius. Anything irreversible - sending an external message, moving money, deleting data - or anything affecting many records at once should require explicit confirmation showing exactly what will happen. Reversible, single-record, low-consequence actions can proceed autonomously. The useful framing is to ask what you would want reviewed if a competent but occasionally careless junior colleague were doing it, because that is roughly the reliability profile you are designing around."
+   },
+   {
+    "q": "What does evaluating an agent look like compared with evaluating a single response?",
+    "a": "You evaluate the trajectory, not just the final answer - did it choose appropriate tools, in a sensible order, without unnecessary calls, and did it recover when one failed. A correct final answer reached by a wasteful or lucky path will not generalise. That means recording full traces of tool calls and scoring them, which is more work than scoring text output. It also means testing failure paths deliberately: what the agent does when a tool errors, times out or returns something unexpected is where most real problems are."
+   }
+  ]
  }
 ]
