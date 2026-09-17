@@ -3710,5 +3710,29 @@
     "a": "Asynchronously and debounced, with the result treated as advisory. Check availability as the user types, show the result, but never rely on it - between the check and the submit someone else can take the value, so the server must enforce it with a unique constraint and the client must handle that failure gracefully. Presenting the async check as authoritative is how you get a confusing \"it said it was available\" bug report."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Data Fetching",
+  "difficulty": "Medium",
+  "question": "A user reports the UI showing stale data after they edited something. What are the likely causes?",
+  "answer": "The write succeeded and the read did not reflect it - so the question is which copy of the data the UI is reading.\n\n**The candidates, in order:**\n\n1. **The cache was not invalidated after the mutation.** The query library still holds the old response and serves it. This is the most common cause and the fix is to invalidate or update the relevant query keys in the mutation s success handler.\n2. **The wrong key was invalidated.** Invalidating `['orders']` will not touch `['orders', customerId]` unless the key structure supports prefix matching - and if the filters in the key do not match, nothing is refetched.\n3. **Data was copied into local state** when it was fetched. The cache updated, the copy did not. This is the duplicated-truth bug, and it is why fetched data should stay in the cache with only the user s edits held locally.\n4. **An optimistic update was applied and never reconciled**, or rolled back silently on failure so the user believes it saved.\n5. **Read-your-own-writes across a replica.** The write went to the primary and the read went to a replica that has not caught up. This one is server-side and the UI is innocent.\n6. **HTTP caching** - a `Cache-Control` header or a service worker serving a cached response.\n\n**How I would narrow it fast:** check the network tab. If no request was made, it is a client cache problem. If a request was made and returned stale data, it is server-side - replication lag or a server cache. That single observation splits the problem in half.",
+  "tags": [
+   "react",
+   "caching",
+   "stale-data",
+   "mutations",
+   "troubleshooting"
+  ],
+  "followups": [
+   {
+    "q": "What is the right way to update the cache after a mutation - invalidate or write the new value in?",
+    "a": "Invalidate by default, because it refetches and is always correct. Writing the server response directly into the cache avoids a round trip and is worth doing on a hot path, but it only works if the response contains everything the cached queries hold - otherwise you write a partial object and create a subtler staleness bug. Optimistically updating and then invalidating gives you both: instant feedback and eventual correctness."
+   },
+   {
+    "q": "How do you handle read-your-own-writes without pinning everything to the primary?",
+    "a": "Return the updated resource in the mutation response and use it directly, so the UI does not need to re-read at all - this removes the problem for the common case. Where a re-read is unavoidable, pin that user s reads to the primary for a short window after their write, or pass a version token the read path can wait for. Sending all reads to the primary works but discards the reason you added replicas."
+   }
+  ]
  }
 ]

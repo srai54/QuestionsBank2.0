@@ -12494,5 +12494,53 @@
     "a": "They let you add a member to an interface without breaking existing implementers, which removes one of the historical arguments for abstract base classes in library design. They are useful for evolving a published contract. They do not change the core question of whether to have the interface at all, and using them heavily gets confusing quickly - diamond resolution rules and the fact that the default is only callable through the interface reference, not the concrete type, surprise people."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "HttpClient",
+  "difficulty": "Medium",
+  "question": "Explain the HttpClient lifetime problem and how IHttpClientFactory solves it.",
+  "answer": "There are two opposite failure modes, and that is what makes it a good question - both obvious answers are wrong.\n\n**Creating one per request and disposing it exhausts sockets.** Disposing an `HttpClient` closes the connection, but the underlying TCP socket enters `TIME_WAIT` for a couple of minutes before the OS reclaims the port. Under load you exhaust the ephemeral port range and get `SocketException` - and the symptom appears minutes after the traffic, which makes it confusing to diagnose.\n\n**Holding one static forever leaks DNS.** The connection pool keeps connections alive indefinitely, so the client never re-resolves the hostname. When the target fails over to a new IP, your application keeps calling the old one until it is restarted.\n\n**`IHttpClientFactory` solves both** by separating the client from the handler. The `HttpMessageHandler` holding the connection pool is cached and shared, so sockets are reused - and it is **rotated** on a lifetime (two minutes by default), so DNS changes are picked up. The `HttpClient` instances handed out are cheap wrappers you can create freely.\n\n**It also gives you the things you would otherwise hand-roll:** named and typed clients so configuration lives in one place, a delegating-handler pipeline for auth headers, logging and correlation propagation, and integration with resilience policies for retry, timeout and circuit breaking.\n\n**The modern default:** `services.AddHttpClient<IOrdersApi, OrdersApi>().AddStandardResilienceHandler()`, which wires sensible retry, breaker and timeout in one line.",
+  "tags": [
+   "dotnet",
+   "httpclient",
+   "sockets",
+   "dns",
+   "resilience"
+  ],
+  "followups": [
+   {
+    "q": "If the handler is rotated, are in-flight requests affected?",
+    "a": "No - a handler is only disposed once its lifetime has expired *and* no client is still using it. The factory tracks references and defers disposal, so an in-flight request completes on the old handler while new clients get the new one. That is precisely the coordination you would have to write yourself with a static client, and getting it wrong means intermittent `ObjectDisposedException` under load."
+   },
+   {
+    "q": "Does a typed client keep its own state safely?",
+    "a": "The typed client class is registered as transient, so a new instance is created per injection while the underlying handler is shared - which means instance fields on it are per-use and safe, but they are also pointless for caching, since the instance does not survive. State that should persist belongs in a singleton service the typed client depends on. The trap is injecting a typed client into a singleton, which pins one instance and defeats handler rotation."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Streams",
+  "difficulty": "Medium",
+  "question": "A file upload endpoint uses a lot of memory on large files. What is wrong and how do you fix it?",
+  "answer": "Almost certainly the whole file is being buffered in memory - either read into a `byte[]` or a `MemoryStream`, or bound to an `IFormFile` and then copied. A 200MB upload becomes at least 200MB of allocation per concurrent request, and anything over 85KB goes on the Large Object Heap, which is not compacted.\n\n**The fix is to stream rather than buffer**: read from the request body and write to the destination in chunks, so memory stays flat regardless of file size.\n\n**In ASP.NET Core specifically:**\n- **Disable the form-value model binding** for that endpoint, because model binding buffers the whole multipart body before your action runs. That means `[DisableFormValueModelBinding]` and reading with `MultipartReader` directly.\n- **Copy stream to stream** - `await section.Body.CopyToAsync(destinationStream)` - never via a `MemoryStream`.\n- **Set a size limit** with `RequestSizeLimit`, and enforce it, or you have an easy denial-of-service vector.\n- **Do not seek** unless you must; seeking usually implies buffering.\n\n**The better architecture for large files:** do not route the bytes through your API at all. Issue the client a SAS URL and have it upload directly to blob storage, then validate asynchronously from the blob-created event. Your compute never touches the file, which removes the memory question entirely and the bandwidth cost with it.\n\n**Also worth checking:** whether a virus scan, an image resize or a hash is being done on the buffered copy, since those often force the buffering that the upload path itself avoided.",
+  "tags": [
+   "dotnet",
+   "streams",
+   "uploads",
+   "memory",
+   "aspnet-core"
+  ],
+  "followups": [
+   {
+    "q": "Why does the Large Object Heap make this worse than ordinary allocation?",
+    "a": "Objects of 85,000 bytes or more go on the LOH, which is collected only with gen 2 and is not compacted by default. Repeatedly allocating differently sized large buffers fragments it - you end up with plenty of free space, none of it contiguous, so the heap keeps growing and eventually you get an OutOfMemoryException with memory apparently available. Streaming in small fixed-size chunks, ideally from `ArrayPool<T>`, avoids the LOH entirely."
+   },
+   {
+    "q": "How do you validate a file you are streaming, if you cannot hold it in memory?",
+    "a": "Do it in the same pass. Compute a hash incrementally as you copy, count bytes so you can abort the moment the limit is exceeded, and check the magic-number header from the first few bytes rather than trusting the content type or extension. For anything needing the whole file - a virus scan - write to a quarantine location first and validate from there asynchronously, so the request completes without holding the file in the process."
+   }
+  ]
  }
 ]

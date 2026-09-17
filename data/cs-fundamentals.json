@@ -2988,5 +2988,29 @@
     "a": "It is not stable - two items with equal priority may come out in any order - and it has no efficient way to update or remove an arbitrary element s priority, which Dijkstra implementations often want. The workarounds are to include a monotonically increasing sequence number in the priority to force stability, and to insert a duplicate with the new priority while skipping stale entries on extraction. It is also not thread-safe."
    }
   ]
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Complexity",
+  "difficulty": "Medium",
+  "question": "An algorithm is O(n log n) and another is O(n). When might you choose the O(n log n) one?",
+  "answer": "Big-O describes asymptotic growth, and it deliberately discards everything else - constants, lower-order terms, and the behaviour of real hardware. Those discarded things routinely decide which is faster in practice.\n\n**Reasons to choose the O(n log n) algorithm:**\n\n1. **The constant factor.** An O(n) algorithm with a large constant loses to an O(n log n) one with a small constant until n gets big. For n in the thousands, log n is only about 12 - so the \"worse\" algorithm does 12x the comparisons, which a 50x smaller constant easily beats.\n2. **Memory locality.** An O(n) algorithm with random memory access can be far slower than an O(n log n) one that walks memory sequentially, because a cache miss costs hundreds of cycles. This is why array-based structures often beat linked ones despite identical complexity.\n3. **Space.** The O(n) time algorithm may need O(n) extra space - counting sort needs an array the size of the key range, which can exceed the input entirely.\n4. **Worst case versus average.** O(n) on average with an O(n²) worst case is a liability when input can be adversarial. Guaranteed O(n log n) is preferable when a pathological case is a denial-of-service risk.\n5. **It is already written and tested.** A correct library sort beats a hand-rolled linear-time algorithm you have to debug, unless the profile says otherwise.\n\n**The honest summary:** big-O tells you how things scale, not which is faster at your n. Measure at realistic size with realistic data.",
+  "tags": [
+   "cs-fundamentals",
+   "complexity",
+   "big-o",
+   "performance",
+   "algorithms"
+  ],
+  "followups": [
+   {
+    "q": "Give a concrete example where the asymptotically worse algorithm wins.",
+    "a": "Sorting small arrays. `Array.Sort` in .NET uses introsort, which switches to insertion sort below about 16 elements - insertion sort is O(n²) but has almost no overhead and excellent locality, so it beats the O(n log n) partitioning on tiny inputs. The same reasoning explains why a linear scan of a small array beats a hash lookup: the hash computation and indirection cost more than comparing a handful of contiguous values."
+   },
+   {
+    "q": "What does amortised complexity mean and where does it mislead?",
+    "a": "It is the average cost per operation over a sequence, so `List<T>.Add` is amortised O(1) even though the occasional resize is O(n) - the doubling means resizes are rare enough to average out. It misleads when the individual worst case matters: in a latency-sensitive path, one operation occasionally taking 100ms because it triggered a resize and a large copy is a real problem, even though the average is excellent. Amortised analysis is about throughput, not about tail latency."
+   }
+  ]
  }
 ]

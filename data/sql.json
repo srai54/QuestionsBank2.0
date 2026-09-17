@@ -4542,5 +4542,29 @@
     "a": "Marginally, and the comparison is misleading. A unique constraint is backed by an index you would very likely want anyway for lookups. A foreign key costs a check per insert, which is small relative to the write itself. The cost that does matter is on bulk loads, where disabling and re-enabling constraints around a large import is a legitimate technique - provided you actually re-validate afterwards rather than leaving them untrusted, which silently excludes them from query plans in SQL Server."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Stored Procedures",
+  "difficulty": "Medium",
+  "question": "Would you put business logic in stored procedures? Argue both sides.",
+  "answer": "**The case for:** they run next to the data, so a set-based operation over millions of rows avoids pulling the data to the application - that can be an order-of-magnitude difference and is sometimes the only viable approach. They give a stable interface if several applications share a database, they can be permissioned so callers get execute rights without table access, and they can be changed without redeploying the application.\n\n**The case against**, which is why I would generally keep logic in the application:\n- **Testing is painful.** No mocking, no fast unit tests, no easy way to test a branch in isolation.\n- **Version control is awkward.** They live in the database, so the deployed version and the repository version drift unless you are disciplined about migrations.\n- **Debugging and refactoring tooling is far weaker** than for C#. No find-all-references that crosses the boundary reliably.\n- **Logic ends up in two places**, which is the worst outcome - some rules in the application, some in procedures, and no single place to read what the system does.\n- **T-SQL is a poor language for branching logic**, and complex procedures become long and unreadable.\n\n**Where I land:** procedures for **data-intensive set operations** - a large batch update, a complex reporting aggregate, an ETL step - and application code for business rules. The dividing line is whether the logic is about *moving and shaping data* or about *what the business means*.\n\n**The thing I would not accept** is procedures as a security boundary substituting for application authorization, or procedures written because \"the database team owns that layer\", which is an organisational answer to a technical question.",
+  "tags": [
+   "sql",
+   "stored-procedures",
+   "architecture",
+   "trade-offs",
+   "testing"
+  ],
+  "followups": [
+   {
+    "q": "How do you keep stored procedures under version control properly?",
+    "a": "Treat them as migrations, in the same repository and the same pipeline as everything else - each change is a scripted, ordered migration applied by the deployment, never a change made in SSMS. Tools like DbUp, Flyway or EF Core migrations all support this. The check that it is working is being able to rebuild the database from scratch from the repository and get exactly what is in production; if you cannot, the procedures are not really in source control."
+   },
+   {
+    "q": "Does moving logic to procedures help with parameter sniffing?",
+    "a": "It can make it worse, because a procedure s plan is cached and reused across very different parameter values - which is the classic sniffing scenario. Ad-hoc parameterised queries from the application are cached too, so you get much the same behaviour. The mitigations are the same either way: `OPTIMIZE FOR UNKNOWN`, `OPTION (RECOMPILE)` for genuinely skewed data, or fixing the underlying index. Procedures are neither a cause nor a cure."
+   }
+  ]
  }
 ]

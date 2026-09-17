@@ -3945,5 +3945,29 @@
     "a": "Because two concurrent applies against the same state corrupt it, and a corrupted state file means Terraform no longer knows what exists - recovery is manual and unpleasant. A remote backend with locking serialises applies, and versioning on the backing store gives you a way back from a bad write. Local state also means one person s laptop is the source of truth for production, which fails the moment they are on holiday."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Branching",
+  "difficulty": "Medium",
+  "question": "Compare trunk-based development with GitFlow. Which would you use and why?",
+  "answer": "**GitFlow** has long-lived `develop`, `release` and `feature` branches with a defined promotion path. It was designed for versioned software with scheduled releases, where you genuinely need to maintain several versions at once.\n\n**Trunk-based development** keeps one main branch, with short-lived branches merged within a day or two, and releases cut from main.\n\n**I would use trunk-based for a web application or service**, which is what most teams are building:\n\n- **Merge conflicts scale with branch age.** A branch open for three weeks is a guaranteed painful merge; one open for a day is not.\n- **Integration problems surface immediately** rather than at a release-branch merge, when several weeks of work from several people collide at once.\n- **It is a precondition for continuous delivery.** You cannot deploy frequently if work sits on branches for weeks.\n- **GitFlow s complexity is real.** Hotfix flows, back-merges into develop, and which branch a fix belongs on are recurring sources of mistakes.\n\n**The objection to trunk-based is \"how do we ship unfinished work\"**, and the answer is feature flags - merge the code dark and turn it on when ready. That decouples deploy from release, which is the actual goal.\n\n**Where GitFlow still fits:** software with supported versions in the field - a desktop application, an on-premises product, a library where consumers are on 2.x and 3.x simultaneously. There you genuinely need release branches, and the ceremony is buying something.",
+  "tags": [
+   "devops",
+   "git",
+   "trunk-based",
+   "gitflow",
+   "branching"
+  ],
+  "followups": [
+   {
+    "q": "What does trunk-based require that teams often lack?",
+    "a": "A fast, trustworthy CI pipeline and real test coverage - because main must stay releasable, and the only thing protecting it is automation. Teams that adopt trunk-based with a slow or flaky pipeline end up either blocking on it or bypassing it, and main becomes unreliable. It also needs a feature-flag habit and code review that happens in hours rather than days, since a small branch waiting two days for review is no longer short-lived."
+   },
+   {
+    "q": "How do you handle a large refactor under trunk-based development?",
+    "a": "Incrementally, behind an abstraction. Introduce the new implementation alongside the old, route to it behind a flag, migrate callers in small merged increments, then delete the old path. This is the same expand-and-contract shape as a zero-downtime schema change. A refactor that cannot be broken down that way is a signal the change is too coupled, which is itself worth knowing before spending three weeks on a branch."
+   }
+  ]
  }
 ]

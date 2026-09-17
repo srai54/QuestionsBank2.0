@@ -5722,5 +5722,29 @@
     "a": "Validate after the fact, triggered by the blob-created event through Event Grid. The function checks size, content type and scans for malware if needed, then either moves the blob to a trusted container or deletes it. The key design point is that the upload target is a quarantine container the rest of the system does not read from - so an unvalidated file is never visible to consumers, and you have not had to trust the client."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Networking",
+  "difficulty": "Hard",
+  "question": "How would you stop your App Service talking to the database over the public internet?",
+  "answer": "Two mechanisms, and they solve opposite directions of traffic - which is the distinction interviewers look for.\n\n**VNet integration** controls **outbound** traffic from the App Service. It injects the app into a subnet so its outbound calls originate from a private IP inside your virtual network, and can then reach private endpoints and internal resources.\n\n**Private Endpoint** controls **inbound** traffic to the database. It gives the SQL Server a private IP inside your VNet and, with the public network access setting disabled, the database has no internet-facing listener at all.\n\n**You need both** for the full path: VNet integration so the app s traffic leaves through the VNet, and a private endpoint so the database is reachable inside it.\n\n**The piece that trips people up is DNS.** The private endpoint creates a record in a private DNS zone - `privatelink.database.windows.net`. Without that zone linked to the VNet, the application resolves the public name to the public IP and the connection either fails or silently goes out over the internet, which is the exact thing you were preventing. Most \"private endpoint not working\" problems are DNS.\n\n**The rest of the hardening:** disable public network access on the database, use managed identity so there is no connection-string password at all, and NSGs or a firewall for egress control. Service endpoints are the older, simpler alternative - they keep traffic on the Azure backbone and restrict by subnet, but the resource keeps its public IP, so private endpoints are the stronger answer.",
+  "tags": [
+   "azure",
+   "networking",
+   "private-endpoint",
+   "vnet",
+   "security"
+  ],
+  "followups": [
+   {
+    "q": "How do you verify the traffic is actually going over the private path?",
+    "a": "Resolve the database hostname from inside the app - the Kudu console or a diagnostic endpoint - and confirm it returns the private IP from your subnet range rather than a public one. That single check catches the DNS misconfiguration, which is the usual failure. Beyond that, disabling public network access on the database is the definitive test: if the app still works, the private path is genuinely in use."
+   },
+   {
+    "q": "What is the difference between a service endpoint and a private endpoint in one line?",
+    "a": "A service endpoint keeps traffic on the Azure backbone and lets the resource firewall allow a specific subnet, but the resource still has a public IP and a public DNS name. A private endpoint gives the resource an actual private IP in your VNet, so it can be made entirely unreachable from the internet - and it works from on-premises over ExpressRoute or VPN, which service endpoints do not."
+   }
+  ]
  }
 ]
