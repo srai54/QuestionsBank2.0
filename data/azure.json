@@ -5770,5 +5770,29 @@
     "a": "They give you stateful orchestration - fan-out/fan-in, chaining, waiting for an external event, human approval steps - with the state persisted so an orchestration survives restarts and can run for days. The cost is that orchestrator code must be deterministic and replayable, since it is re-executed from the start on each resume: no DateTime.Now, no random values, no direct I/O, no non-deterministic ordering. Violating that produces bugs that only appear on replay, which are unpleasant to diagnose."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Disaster Recovery",
+  "difficulty": "Hard",
+  "question": "What is the difference between RTO and RPO, and how do they change your architecture?",
+  "answer": "**RPO - Recovery Point Objective** - is how much *data* you can afford to lose, measured in time. An RPO of one hour means losing up to an hour of transactions is acceptable.\n\n**RTO - Recovery Time Objective** - is how long you can afford to be *down*. An RTO of four hours means service must be restored within four hours.\n\nThey are independent, and conflating them is the common mistake. A nightly backup gives you an RPO of up to 24 hours regardless of how quickly you restore, and a restore that takes six hours gives you an RTO of six hours regardless of how recent the backup is.\n\n**How they drive architecture:**\n\n| Requirement | What it forces |\n|---|---|\n| RPO of hours | Periodic backups are enough |\n| RPO of minutes | Log shipping or asynchronous replication |\n| RPO of zero | Synchronous replication - and you pay write latency on every transaction, forever |\n| RTO of a day | Restore from backup into rebuilt infrastructure |\n| RTO of hours | Infrastructure as code plus a tested restore procedure |\n| RTO of minutes | A warm standby, already running |\n| RTO near zero | Active-active across regions, which is a different application design, not a deployment option |\n\n**The point I would press in an interview:** these must come from the business, per workload, not be chosen by engineers. And they should differ by system - the order-taking path may need minutes, the reporting warehouse may tolerate a day, and applying the strictest number everywhere is how DR budgets get spent on the wrong things.\n\n**And an untested restore is not a backup.** The number that matters is the RTO you have actually measured, not the one in the document.",
+  "tags": [
+   "azure",
+   "disaster-recovery",
+   "rto-rpo",
+   "backup",
+   "resilience"
+  ],
+  "followups": [
+   {
+    "q": "What does active-active actually require of the application?",
+    "a": "That it can tolerate the same data being written in two places - which means conflict resolution, globally unique identifiers rather than database-generated sequences, and idempotent operations. It usually forces eventual consistency between regions and a decision about what happens when the regions disagree. That is an application design constraint, not something you can add later with infrastructure, which is why an RTO near zero is far more expensive than it appears on a diagram."
+   },
+   {
+    "q": "How do you actually test disaster recovery without causing a disaster?",
+    "a": "Restore to an isolated environment on a schedule and verify the data is usable - not just that the restore command succeeded, which is what most teams check. Time it, so the RTO number is measured rather than assumed. Then run failover exercises in a controlled window, ideally as a game day where the team follows the runbook without the person who wrote it, which is how you find the undocumented step. Teams that never test discover during an incident that the backup was of the wrong database or that nobody has the credentials."
+   }
+  ]
  }
 ]

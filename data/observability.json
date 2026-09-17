@@ -1695,5 +1695,29 @@
     "a": "Configure the logging provider to include it from the current `Activity`, which most structured logging setups support - Serilog with an enricher, or the OpenTelemetry logging integration which attaches trace and span ids automatically. Doing it manually per call site guarantees inconsistency. The value is being able to pivot from a slow span in the trace straight to the log lines emitted during it, which is the workflow that makes tracing worth the setup."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Cost",
+  "difficulty": "Medium",
+  "question": "Your observability bill is larger than your compute bill. What do you do?",
+  "answer": "This is common and usually fixable without losing the signal, because most of the volume is data nobody has ever queried.\n\n**Find where it is going first** - almost always logs rather than metrics or traces, and usually a handful of sources producing the majority.\n\n**The reductions, in order of value:**\n\n1. **Fix the log levels.** Debug or verbose left on in production is the single most common cause. Configure levels per namespace so you can be verbose about one component without the rest.\n2. **Stop logging request and response bodies** by default. It is enormous, it is usually a compliance problem too, and it is rarely what solves an incident.\n3. **Sample.** High-volume routine events do not all need keeping - sample successful requests aggressively while keeping 100% of errors and slow traces. Tail sampling gives exactly that.\n4. **Set retention per data type** rather than one global period. Detailed traces are useful for days; aggregated metrics are useful for a year and cost far less. Keeping everything at the longest retention is how bills grow.\n5. **Move high-volume, rarely-queried data to a cheaper tier** - basic or archive logs, queried occasionally rather than indexed for instant search.\n6. **Fix cardinality.** A single high-cardinality metric label can dominate a metrics bill, and the fix is usually a route template rather than a raw path.\n\n**And the structural fix:** a daily cap so a runaway loop cannot produce a surprise invoice, plus an alert on ingestion volume so growth is visible before it is a problem.\n\n**What I would protect:** error logs, traces for failures, and the metrics behind the alerts. Cutting those to save money converts a cost problem into a longer outage.",
+  "tags": [
+   "observability",
+   "cost",
+   "sampling",
+   "retention",
+   "logging"
+  ],
+  "followups": [
+   {
+    "q": "How do you decide what is safe to sample away?",
+    "a": "Ask what you would use it for. Successful, fast requests are almost never inspected individually - their value is aggregate, and metrics capture that far more cheaply than logs. Errors, slow requests and anything unusual are exactly what gets inspected, so keep those at full fidelity. Tail sampling implements this directly by deciding after the trace completes. The mistake is uniform head sampling at a low rate, which throws away rare failures in the same proportion as common successes."
+   },
+   {
+    "q": "What is the argument against aggressive cost cutting here?",
+    "a": "That the bill is the visible cost and a longer outage is the hidden one. Observability is what turns a four-hour incident into a twenty-minute one, and the data you cut is discovered to be missing precisely when you need it. So the framing I would use is not \"spend less\" but \"spend it on what gets queried\" - keeping full fidelity for failures while sampling the routine usually cuts the bill substantially without touching the data anyone actually uses."
+   }
+  ]
  }
 ]

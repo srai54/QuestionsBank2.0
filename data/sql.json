@@ -4734,5 +4734,29 @@
     "a": "Usually not. Clock resolution means two updates within the same tick can appear unchanged, clock skew across servers makes comparisons unreliable, and anything that updates the row without setting the timestamp breaks it silently. A database-maintained `rowversion` increments on every update regardless of who wrote it or how, which is the property you actually need. A timestamp is fine when it is maintained by the database and you accept the resolution risk, and a guid regenerated on each update also works."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Normalisation",
+  "difficulty": "Medium",
+  "question": "When would you deliberately denormalise, and how do you keep the copies correct?",
+  "answer": "Normalisation removes redundancy so a fact is stored once and cannot disagree with itself. Denormalisation trades that guarantee for read performance, so it should be a deliberate, measured decision rather than a default.\n\n**When I would do it:**\n1. **A join that is measurably expensive on a hot read path** - and only after indexing has been exhausted. Storing a customer name alongside an order to avoid a join on a list screen is the classic case.\n2. **Aggregates that are expensive to compute** - an order count on a customer, a running balance. Recomputing from a million rows per request is the thing you are avoiding.\n3. **Historical accuracy**, which is the case people misclassify as denormalisation when it is actually correct modelling. The price on an order line *should* be the price at the time of the order, not a join to the current product price. That is not a copy that can drift; it is a different fact.\n4. **Reporting and analytical models**, where star schemas denormalise dimensions by design.\n\n**Keeping copies correct** is the whole cost, and the options are:\n- **Update both in one transaction**, which is simple and correct within one database.\n- **Triggers**, which guarantee it regardless of who writes, at the cost of hidden behaviour.\n- **Materialised or indexed views**, where the database maintains it - the strongest option when your platform supports it, because correctness is not your responsibility.\n- **Eventual consistency via events**, for cross-service copies, with reconciliation because events get missed.\n\n**And the check I would insist on:** a reconciliation job comparing the copy against the source periodically. Over months, copies drift, and without a comparison nobody finds out until the numbers are questioned.",
+  "tags": [
+   "sql",
+   "denormalisation",
+   "normalisation",
+   "data-modelling",
+   "consistency"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between a denormalised copy and a snapshot of a historical fact?",
+    "a": "A copy is meant to stay in sync and can therefore be wrong; a snapshot is meant to stay fixed and is correct precisely because it does not follow the source. The product name on an order line is a snapshot - if the product is renamed, the historical order should still show what the customer bought. Confusing the two produces both kinds of bug: syncing something that should be frozen rewrites history, and freezing something that should sync leaves stale data. Being explicit about which one a column is belongs in the model documentation."
+   },
+   {
+    "q": "When is an indexed or materialised view better than maintaining the copy yourself?",
+    "a": "Almost always, where the platform supports it for your query shape - the database guarantees consistency, so there is no drift and no reconciliation job. The constraints are what limits it: SQL Server indexed views have a restrictive set of permitted constructs and add cost to every write on the base tables, and PostgreSQL materialised views must be refreshed explicitly so they are stale by design. When the query fits the restrictions, let the database do it; when it does not, you are back to maintaining it and owning the reconciliation."
+   }
+  ]
  }
 ]

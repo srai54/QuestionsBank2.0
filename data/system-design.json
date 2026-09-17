@@ -2932,5 +2932,29 @@
     "a": "Backfill their feed with that person s recent posts, or accept that the new follow only affects future posts. Backfilling is better for the experience - the feed immediately reflects the change - and it is a bounded operation since you only need the recent window. The case to watch is a bulk import or someone following thousands of accounts at once, which turns a user action into a large amount of work, so it belongs on a queue with rate limiting rather than inline in the request."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Uploads",
+  "difficulty": "Hard",
+  "question": "Design a system that lets users upload and stream video.",
+  "answer": "Video is the case where the naive design - accept the file, store it, serve it - fails at every stage, so the shape is a pipeline.\n\n**Upload.** Direct to object storage with a pre-signed URL, never through the application. Large files need **resumable, chunked upload** because mobile connections drop - the client uploads parts and can resume from the last acknowledged part rather than restarting a 2GB transfer.\n\n**Ingest and validate.** The upload completing raises an event. A worker validates the container and codec, checks duration and dimensions, and scans it. The upload target is a quarantine bucket nothing else reads from.\n\n**Transcode.** This is the core of it. One source file becomes a ladder of renditions - several resolutions and bitrates - packaged for adaptive streaming with HLS or DASH. That is what lets a player switch quality as bandwidth changes, and it is why you cannot just serve the original MP4. Transcoding is CPU-intensive and bursty, so it belongs on a queue with workers that scale, and segments of a long video can be transcoded in parallel.\n\n**Storage and delivery.** Renditions and segments go to object storage behind a CDN - essential, because video is large and bandwidth from origin is expensive and slow. Thumbnails and a preview sprite are generated in the same pipeline.\n\n**Playback.** The player requests a manifest listing the renditions and picks one based on measured bandwidth, adjusting as it goes. Signed, expiring URLs if the content is protected, and DRM if licensing requires it.\n\n**The state to track throughout:** the video has a status - uploaded, validating, transcoding, ready, failed - surfaced to the user, because transcoding takes minutes and silence looks broken.",
+  "tags": [
+   "system-design",
+   "video",
+   "transcoding",
+   "cdn",
+   "streaming"
+  ],
+  "followups": [
+   {
+    "q": "Why can you not just serve the original file with HTTP range requests?",
+    "a": "You can, and it works for small clips - the browser fetches byte ranges and seeks. It fails for real video because there is one quality: a user on a poor connection either buffers constantly or cannot play at all, and a mobile user downloads a 4K file to a small screen. Adaptive streaming exists to solve exactly that by letting the player switch renditions mid-playback. Serving the original also means no control over codec compatibility across devices, which is why transcoding is unavoidable rather than an optimisation."
+   },
+   {
+    "q": "How do you handle a transcode that fails halfway through a long video?",
+    "a": "Segment the work so it is resumable - split the source into chunks, transcode each independently, and record which are complete, so a failure retries one chunk rather than the whole file. That also gives you parallelism, which is what makes a long video finish in reasonable time. The job needs an overall timeout and a dead-letter path so a genuinely broken source file is surfaced to the user as a failure rather than retrying forever, and the partial output must be cleaned up so storage does not fill with abandoned renditions."
+   }
+  ]
  }
 ]

@@ -12734,5 +12734,29 @@
     "a": "It emits the serialisation code at compile time instead of building it with reflection at runtime, which removes startup cost, reduces allocations, and makes serialisation work under trimming and Native AOT where reflection-based serialisation fails. You declare a `JsonSerializerContext` partial class with `[JsonSerializable]` attributes for the types. The constraint is that the types must be known at compile time, so genuinely dynamic polymorphic scenarios still need the reflection path."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Extension Methods",
+  "difficulty": "Medium",
+  "question": "When is an extension method the right tool, and when does it make code worse?",
+  "answer": "An extension method adds a method to a type you do not own, resolved statically at compile time. It is syntax, not polymorphism - which is the source of both its usefulness and its problems.\n\n**Where it is right:**\n- **Adding behaviour to a type you cannot modify** - a framework type, a generated client, an interface from a library. This is the original purpose.\n- **Fluent builders and pipelines** - LINQ is the canonical example, and `IServiceCollection` and `IApplicationBuilder` extensions are how ASP.NET Core composes configuration readably.\n- **Giving an interface default behaviour** without forcing every implementer to write it - though default interface methods now compete for this.\n\n**Where it makes things worse:**\n- **Hiding domain logic.** A business rule as an extension method on an entity is logic the entity cannot enforce, so the object can still be put into an invalid state by anyone who does not call your method.\n- **Discoverability.** The method only exists if the namespace is imported, so a reader who cannot find it has to know which namespace to look in. Extension methods scattered across namespaces are genuinely hard to navigate.\n- **Extending `object` or very common types**, which pollutes IntelliSense everywhere.\n- **Null confusion.** An extension method can be called on a null reference without throwing, because it is a static call - `((string)null).IsEmpty()` works. That surprises people, though it is occasionally useful.\n\n**The resolution rule to know:** an instance method always wins over an extension method with the same signature. So if the type later gains that method, your extension silently stops being called - a behaviour change with no compile error.",
+  "tags": [
+   "csharp",
+   "extension-methods",
+   "design",
+   "linq",
+   "testability"
+  ],
+  "followups": [
+   {
+    "q": "What happens when two namespaces define the same extension method?",
+    "a": "If both namespaces are imported and the signatures are equally applicable, it is a compile error for ambiguity - which is at least loud. The subtler case is when one is *more* specific: an extension on `IEnumerable<T>` and another on `List<T>` both in scope means the `List<T>` one wins silently for lists, so behaviour depends on the declared type of the variable rather than its runtime type. That is a real trap when someone changes a variable from `IEnumerable<T>` to `List<T>` for an unrelated reason."
+   },
+   {
+    "q": "Do extension methods hurt testability?",
+    "a": "They can, because they are static and cannot be substituted - if a class calls an extension method that hits the database or the clock, there is no seam to intercept. That is fine for pure functions, where substituting would be pointless, and a problem for anything with a dependency. The guideline that follows is to keep extension methods pure: transform the input and return a result, with no I/O and no ambient state. An extension method that calls a service is a dependency in disguise."
+   }
+  ]
  }
 ]

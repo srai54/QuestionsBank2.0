@@ -3327,5 +3327,29 @@
     "a": "Incrementally, and only where it pays. Standalone components and NgModules interoperate, so you can convert leaf components first and work upward, which is the low-risk order. The benefits are real - clearer dependencies, simpler lazy loading, better tree-shaking - but a big-bang migration of a large app is a lot of churn with no user-visible change. Converting as you touch files is usually the right pace."
    }
   ]
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "An Angular application takes 8 seconds to load. What do you do?",
+  "answer": "Split the 8 seconds before changing anything - network, parse and execute, and application bootstrap are three different problems with different fixes.\n\n**1. Bundle size.** Check with `ng build --stats-json` and a bundle analyser. The usual findings: a library imported whole rather than by path, Moment or a full locale set, a UI framework where only a few components are used, and dependencies duplicated at different versions. Set budget thresholds in `angular.json` so a regression fails the build rather than being discovered later.\n\n**2. Lazy loading.** A single eager bundle means the user downloads the admin module to see the login page. Route-level lazy loading is usually the single biggest win and does not require removing anything - `loadComponent` per route with standalone components, `loadChildren` for feature areas.\n\n**3. Build configuration.** Confirm production mode, AOT and optimisation are actually on - a misconfigured pipeline shipping a development build is not rare and explains a surprising number of these. Modern targets matter too; transpiling for browsers nobody uses inflates output.\n\n**4. Rendering strategy.** If the page is still blank while JavaScript executes, server-side rendering or prerendering puts content on screen immediately. That changes perceived load time more than any bundle reduction.\n\n**5. What happens after bootstrap.** An APP_INITIALIZER making three sequential HTTP calls blocks the application from starting - parallelise them or defer the non-essential ones.\n\n**And measure against field data**, not a fast developer machine on a fast connection. Throttle to a mid-range device and 4G, which is where the 8 seconds is actually being experienced.",
+  "tags": [
+   "angular",
+   "performance",
+   "bundle-size",
+   "lazy-loading",
+   "ssr"
+  ],
+  "followups": [
+   {
+    "q": "How much does switching to standalone components and signals help load time?",
+    "a": "Standalone components help modestly through better tree-shaking, because dependencies are declared per component rather than pulled in by module, so unused code is easier for the bundler to drop. Signals mainly help runtime responsiveness rather than initial load - they reduce change detection work, which matters after the app is up. Neither is a load-time fix on its own; lazy loading and removing oversized dependencies are where the seconds actually are."
+   },
+   {
+    "q": "When is server-side rendering worth the complexity in Angular?",
+    "a": "When first contentful paint matters commercially - a public-facing site where users bounce, or where search indexing matters. Then SSR with hydration is worth the added deployment complexity and the constraints it imposes, such as code that cannot touch `window` during server rendering. For an internal application behind a login, where users load it once at the start of the day and keep it open, the payoff is much smaller and usually not worth the operational cost."
+   }
+  ]
  }
 ]

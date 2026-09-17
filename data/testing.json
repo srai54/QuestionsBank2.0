@@ -2541,5 +2541,29 @@
     "a": "Same treatment - they are hidden dependencies on ambient state. Wrap them behind `TimeProvider` and an id generator interface, injected. Until you can, extract them into virtual methods you override in tests. The tell that they are dependencies rather than language features is that the test cannot control them, so the assertion has to be loose - and loose assertions are what let real bugs through."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Async",
+  "difficulty": "Medium",
+  "question": "How do you test asynchronous code without sleeps and flakiness?",
+  "answer": "Sleeps are the root of most flaky async tests - too short and the test fails intermittently, too long and the suite crawls. Neither is a fix because the sleep is guessing at timing rather than observing state.\n\n**What I do instead:**\n\n1. **Await the actual operation.** If the method returns a `Task`, await it - most \"async testing\" problems are really fire-and-forget code that the test cannot observe. If you cannot await it, that is a design problem worth fixing rather than testing around.\n2. **Inject the clock.** `TimeProvider` with `FakeTimeProvider` lets you advance time instantly, so a retry with a 30-second backoff is tested in microseconds rather than waiting. This turns a whole category of slow tests fast.\n3. **Use a signal rather than a sleep** when you must wait for something external - a `TaskCompletionSource` set by a callback, or a `SemaphoreSlim` released when the work completes. The test then waits exactly as long as needed and no longer.\n4. **Poll with a timeout** as the last resort, for genuinely external state - but poll on a condition, and fail with a clear message on timeout rather than sleeping a fixed period and asserting.\n5. **Control the scheduler** where the framework allows it, so background work runs deterministically.\n\n**The traps specific to async tests:**\n- **`async void` test methods** - the framework cannot await them, so failures are missed and the test appears to pass. Always `async Task`.\n- **Blocking with `.Result`** inside a test, which can deadlock in some contexts and hides the real exception inside an `AggregateException`.\n- **Not awaiting a task at all**, so the assertion runs before the work does.",
+  "tags": [
+   "testing",
+   "async",
+   "flaky-tests",
+   "timeprovider",
+   "dotnet"
+  ],
+  "followups": [
+   {
+    "q": "How do you test that something does NOT happen within a period?",
+    "a": "This is the case that genuinely needs waiting, and it is worth minimising. Use a fake clock and advance it, which proves the behaviour without real time passing. Where that is impossible, wait the shortest period that is meaningful and accept the test is slower - but make sure the assertion is about observable state rather than absence of a log line. Tests asserting a negative over real time are inherently the slowest and flakiest, so it is worth asking whether a different assertion proves the same thing."
+   },
+   {
+    "q": "What is the right way to test a BackgroundService?",
+    "a": "Call `StartAsync` and `StopAsync` directly rather than running the host, so the test controls the lifecycle. Inject a fake clock so the loop delay is instant, and use a signal - a `TaskCompletionSource` completed by the work - so the test knows when an iteration has finished rather than sleeping. Testing it through the full host is an integration test and worth having, but the unit-level test of the work itself should not involve the hosting machinery at all."
+   }
+  ]
  }
 ]
