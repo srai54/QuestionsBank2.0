@@ -2301,5 +2301,29 @@
     "a": "It avoids the isolation problem and introduces a worse one: it is not the database you run in production. EF Core's in-memory provider does not enforce foreign keys, unique constraints or transactions properly, and it translates LINQ differently from a real provider - so tests pass against behaviour the real database does not have. SQLite in-memory is closer but still differs in types, collation and concurrency. For unit tests of logic it is fine; for tests whose purpose is to verify the data access works, it defeats the purpose."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Strategy",
+  "difficulty": "Medium",
+  "question": "Your team has 4,000 unit tests, 95% coverage, and bugs still reach production regularly. What is going wrong?",
+  "answer": "High coverage with high defect escape almost always means the tests are asserting that the code does what it does, rather than that the system does what it should.\n\n**The specific failure modes I would look for:**\n\n- **Over-mocking.** If every dependency is a mock, each test proves a method calls its collaborators in a certain order. Change the implementation and the tests break; change the behaviour incorrectly and they pass. Coverage is high because every line executes, but nothing is verified end to end.\n- **Testing the wrong seam.** Unit tests around trivial mapping and getters, nothing around the query that actually breaks, the transaction boundary, or the serialisation contract.\n- **No integration tests against real infrastructure.** Most production bugs I have seen live in the gaps: a query EF cannot translate, a migration that locks a table, a timezone or culture assumption, a JSON contract change. A mocked repository cannot catch any of those.\n- **Assertions that cannot fail** - asserting the mock returned what the mock was told to return.\n\n**What I would do:** stop treating coverage as the goal. Add integration tests against a real database in a container for the paths that actually carry risk, write a handful of end-to-end tests for critical flows, and when a production bug occurs, write the test that would have caught it *before* fixing it. That last habit does more for escape rate than any coverage target.",
+  "tags": [
+   "testing",
+   "strategy",
+   "coverage",
+   "integration-testing",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What coverage number would you target instead?",
+    "a": "None as a target. Coverage is useful as a *finder* - looking at uncovered lines tells you what nobody tested, and that is worth reviewing. As a target it becomes Goodhart s law: people write tests that execute code without asserting anything meaningful. I would rather track escaped defects and mean time to detection, which measure the outcome tests exist for."
+   },
+   {
+    "q": "How do you decide what deserves an integration test?",
+    "a": "Where the risk actually is: anything crossing a boundary you do not control - database, message broker, third-party API, file system, clock and culture. Plus anything where the cost of failure is high regardless of probability, such as money movement or permission checks. Pure logic with no dependencies is exactly where unit tests are cheap and effective, so keep them there."
+   }
+  ]
  }
 ]

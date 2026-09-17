@@ -2649,5 +2649,29 @@
     "a": "It is reasonable and it is an argument for better tests rather than for manual updates - if you cannot trust a patch-level bump without manual verification, that uncertainty exists whether the update is automated or not. Start with patch and minor updates grouped weekly, with major versions raised separately for human review. The alternative, which is what produced forty CVEs, is that updates happen only under pressure and in large batches, which is strictly riskier."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Authentication",
+  "difficulty": "Hard",
+  "question": "Explain how you would store and verify passwords in 2026, and what you would say if someone proposed SHA-256 with a salt.",
+  "answer": "I would say SHA-256 with a salt is a 2005 answer and it is now unsafe, and I would explain why precisely rather than just asserting it.\n\nThe salt does its job - it defeats rainbow tables and stops identical passwords having identical hashes. The problem is **speed**. SHA-256 is designed to be fast, and modern GPUs compute billions of them per second. A leaked hash database with fast hashes is brute-forced offline at enormous rate, salt or no salt. The salt raises the cost linearly; the attacker s hardware raises their throughput exponentially.\n\n**What you need is a deliberately slow, memory-hard function.** In order of preference: **Argon2id**, then **scrypt**, then **bcrypt**, then **PBKDF2** if you are constrained to what a platform ships. Argon2id is memory-hard, which is what defeats GPU and ASIC parallelism - a GPU has thousands of cores but not thousands of copies of 64MB of RAM.\n\n**The parameters matter as much as the algorithm.** They should be tuned so a single hash takes roughly 100–500ms on your production hardware, and revisited periodically as hardware improves. Storing the parameters alongside the hash is what lets you raise them later and re-hash on next successful login.\n\n**The rest of the answer,** because password storage alone is not the whole control: rate-limit and lock out on repeated failures, compare in constant time, never log the password or the hash, check submitted passwords against a breached-password list (the k-anonymity range API means you never send the full hash), and enforce length over composition rules - a long passphrase beats mandatory punctuation.\n\n**And the strongest answer:** if I can avoid storing passwords at all, I do. Federated identity through OIDC to Entra ID, or passkeys, removes the entire class of problem.",
+  "tags": [
+   "security",
+   "passwords",
+   "hashing",
+   "argon2",
+   "authentication"
+  ],
+  "followups": [
+   {
+    "q": "Why is bcrypt still acceptable but not preferred?",
+    "a": "It is deliberately slow and has held up well for decades, so it is far better than a fast hash. Its weakness is that it is only CPU-hard, not memory-hard - it uses a fixed 4KB working set, which modern GPUs and FPGAs can parallelise effectively. It also silently truncates input at 72 bytes, which quietly weakens long passphrases and surprises people. Argon2id addresses both."
+   },
+   {
+    "q": "What is the practical migration path from an existing SHA-256 store?",
+    "a": "You cannot re-hash without the plaintext, so you migrate opportunistically: on the next successful login you have the plaintext for a moment, so verify against the old hash and immediately re-hash with Argon2id, storing an algorithm marker per row. Optionally wrap the old hashes in the new algorithm immediately (`argon2(sha256(pw))`) so even un-migrated rows stop being fast to crack. Set a deadline after which un-migrated accounts must reset."
+   }
+  ]
  }
 ]

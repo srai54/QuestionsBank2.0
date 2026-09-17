@@ -4310,5 +4310,53 @@
     "a": "Archive or delete completed rows on a schedule, because the dequeue's index still has to skip past them and the table's size affects everything. A filtered index covering only Pending rows is the other half, so the index the dequeue uses stays small regardless of history. If completed rows must be retained, moving them to a separate table keeps the queue table hot and small - treating the queue as working state rather than as a permanent log is the shift that fixes it."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Query Performance",
+  "difficulty": "Medium",
+  "question": "A stored procedure runs in 200ms when you execute it in SSMS but times out when the application calls it. Same parameters. Why?",
+  "answer": "This is the classic **parameter sniffing plus SET options** pair, and I would check them in that order.\n\nThe plan cache is keyed partly on the connection s SET options. SSMS connects with `ARITHABORT ON`; older .NET clients connect with it OFF. Different SET options mean a *different cache entry*, so the application and SSMS can be running two completely different plans for identical SQL. You \"prove\" the procedure is fast in SSMS while the app uses a bad cached plan.\n\nThe plan is bad because it was compiled for whichever parameter values happened to be first - parameter sniffing. A plan optimised for a customer with 10 orders is catastrophic for one with 2 million, and vice versa.\n\n**How I confirm it:** query `sys.dm_exec_cached_plans` joined to `sys.dm_exec_sql_text` and look for two plans for the same query. Or set `ARITHABORT OFF` in SSMS and watch it become slow too - that is the proof, and it takes thirty seconds.\n\n**Fixes, in order of preference:** fix the underlying cause (a missing index or stale statistics often removes the plan sensitivity entirely); `OPTIMIZE FOR UNKNOWN` or a local-variable copy to get an average-case plan; `OPTION (RECOMPILE)` when the data is genuinely skewed and a per-call plan is worth the CPU. `WITH RECOMPILE` on the whole procedure is the blunt instrument.",
+  "tags": [
+   "sql",
+   "sql-server",
+   "parameter-sniffing",
+   "execution-plan",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Why is OPTION (RECOMPILE) not just the default answer?",
+    "a": "Because it pays compilation cost on every execution. For a procedure called a few times a minute over skewed data that is an excellent trade; for one called thousands of times a second it replaces a plan problem with a CPU problem. It also means the plan never appears in the cache for you to inspect later, which makes future diagnosis harder."
+   },
+   {
+    "q": "How does this differ in PostgreSQL?",
+    "a": "PostgreSQL has no SET-options plan-cache split, so the SSMS-versus-app symptom does not occur in the same form. It does have a related behaviour: prepared statements switch from custom plans to a generic plan after five executions, which can produce the same \"fast then suddenly slow\" pattern. `plan_cache_mode` lets you force one or the other."
+   }
+  ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Transactions",
+  "difficulty": "Hard",
+  "question": "Two jobs deadlock nightly. The error says one was chosen as the deadlock victim. How do you fix it, and why is a retry not enough on its own?",
+  "answer": "A deadlock means two sessions each hold a lock the other needs. SQL Server detects the cycle and kills the cheaper one. Retrying the victim is a legitimate *mitigation* - deadlocks are transient by definition - but on its own it means you keep doing work twice every night and the failure rate climbs as volume grows.\n\n**To fix the cause I need the deadlock graph.** It is captured by the system_health extended event session by default, so it is already there. The graph names both sessions, the resources, and the lock modes, which usually makes the cause obvious.\n\n**The causes, roughly in order of frequency:**\n- **Inconsistent access order.** Job A updates Orders then Inventory; Job B updates Inventory then Orders. Making every transaction touch tables in the same order eliminates this entire class.\n- **Lock escalation.** A large update escalates from row to table locks at around 5,000 locks, suddenly conflicting with things it never touched before.\n- **A non-covering index forcing a bookmark lookup**, so a reader takes locks on the clustered index it would not otherwise need.\n- **Transactions held open too long** - work done between `BEGIN` and `COMMIT` that did not need to be inside it, like calling an external API.\n\n**So the fix is usually: shorten the transaction, make the access order consistent, and add the index that stops the lookup.** Then add retry with backoff on top for the residue, because you cannot eliminate deadlocks entirely.",
+  "tags": [
+   "sql",
+   "deadlock",
+   "transactions",
+   "isolation",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "What must be true of the operation before you retry it?",
+    "a": "It must be safe to run again - which for a rolled-back transaction it generally is, since the deadlock victim s work is fully undone. The danger is a retry loop around a transaction that has non-transactional side effects inside it: a queue message sent, an email, a file written, an HTTP call. Those happen again on retry. Move side effects outside the transaction, or make them idempotent."
+   },
+   {
+    "q": "Does READ COMMITTED SNAPSHOT fix deadlocks?",
+    "a": "It eliminates the common reader-blocks-writer variety by giving readers a row version instead of taking shared locks, so it removes a large class of them. It does not help with writer-writer deadlocks, which are the ones the ordering fix addresses. It also shifts cost to tempdb for the version store, so it is a database-wide decision with its own capacity implications, not a free switch."
+   }
+  ]
  }
 ]

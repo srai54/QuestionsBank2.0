@@ -2716,5 +2716,29 @@
     "a": "Not necessarily - you can upload to a quarantine container that nothing else can read, validate from there, and move or delete based on the result. That keeps the transfer off your compute while preserving the guarantee that nothing unvalidated reaches the real storage. If the requirement is genuinely that no untrusted byte is ever written, then streaming through the API with strict size limits is the honest answer, and the cost in capacity has to be accepted and sized for."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Scaling",
+  "difficulty": "Hard",
+  "question": "Design an idempotent payment endpoint. The client may retry after a timeout and must never be charged twice.",
+  "answer": "The core insight is that a timeout tells the client nothing about whether the work happened. So the client must be able to repeat the request and the server must recognise the repeat.\n\n**The contract:** the client generates an **idempotency key** - a UUID - per logical payment attempt, and sends it in a header. The key belongs to the *intent*, so a retry of the same payment reuses it and a genuinely new payment gets a new one. The client generates it, not the server, because the server cannot distinguish a retry from a new request otherwise.\n\n**The server algorithm:**\n\n1. Insert a row `(key, status=in_progress, request_hash)` with a **unique constraint on the key**. The constraint is what makes this correct under concurrency - two simultaneous retries race, one insert wins, the other gets a violation and knows it is a duplicate.\n2. If insert succeeds, this is the first attempt: perform the charge, then store the response and set status to complete - **in the same transaction as the charge** where possible.\n3. If the insert violates the constraint, read the existing row. If complete, return the stored response with the original status code. If still in progress, return 409 so the client retries shortly rather than risking a parallel charge.\n4. Compare the `request_hash`. Same key with a *different* body is a client bug - return 422 rather than silently returning the old result.\n\n**The hard part is the gap** between charging at the payment provider and recording it locally. If the process dies in between, the money moved and the record did not. The mitigations are to send your idempotency key *through* to the provider so their side deduplicates too, and to reconcile against the provider s record on startup and on a schedule.\n\n**Retention:** keys must expire, or the table grows forever. 24 hours is typical and should exceed the client s maximum retry window.",
+  "tags": [
+   "system-design",
+   "idempotency",
+   "payments",
+   "distributed",
+   "reliability"
+  ],
+  "followups": [
+   {
+    "q": "Why not just deduplicate on the natural key - amount, customer, timestamp?",
+    "a": "Because it is either too loose or too strict. Two genuine identical purchases a second apart are legitimate and would be wrongly merged; add a timestamp to distinguish them and retries no longer match because the client sends a new timestamp. An explicit client-generated key expresses intent unambiguously, which is exactly what heuristics cannot do."
+   },
+   {
+    "q": "What status code do you return for a successful replay?",
+    "a": "The same one the original returned, with the same body - the client should not be able to tell the difference, since that is the point of idempotency. Some APIs add a header such as `Idempotent-Replay: true` for observability. Returning 200 where the original returned 201 is a subtle contract break that confuses clients checking for created-ness."
+   }
+  ]
  }
 ]

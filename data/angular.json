@@ -3255,5 +3255,29 @@
     "a": "Largely, in the direction the framework is heading. Signals track dependencies precisely, so a change notifies exactly the views that read that value rather than triggering a tree walk - which is what OnPush was approximating manually. In a fully signal-based zoneless application the change detection strategy becomes much less relevant. During migration both coexist, and OnPush remains the right setting for components that still take conventional inputs."
    }
   ]
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Change Detection",
+  "difficulty": "Hard",
+  "question": "An Angular page is sluggish when typing in a form. What is likely happening and how do you fix it?",
+  "answer": "Almost always: something expensive is running on every change detection cycle, and typing triggers a cycle per keystroke.\n\n**The specific offenders, in order:**\n\n1. **A method call in the template** - `{{ calculateTotal() }}` or `*ngIf=\"isVisible()\"`. Angular has no way to know the result is unchanged, so it calls the method every cycle, several times per keystroke. Replace with a property computed on change, a pure pipe, or a signal.\n2. **An impure pipe**, which is re-evaluated every cycle by definition.\n3. **Default change detection over a large tree.** Every cycle checks every binding in every component. `ChangeDetectionStrategy.OnPush` limits checks to components whose inputs changed by reference, an event fired, or an async pipe emitted - usually a large win, and it forces immutable update patterns which are worth having anyway.\n4. **Array or object literals in templates** - `[config]=\"{ id: 1 }\"` creates a new object every cycle, so an OnPush child re-renders every time regardless.\n5. **Zone.js triggering on things you do not care about** - a third-party library running timers or scroll handlers inside the zone.\n\n**How I would confirm** rather than guess: Angular DevTools profiler shows the change detection cycles and what they cost.\n\n**The modern answer** is signals and zoneless change detection. Signals make the dependency graph explicit, so Angular updates precisely what depends on the changed value instead of checking everything. For a new codebase that is the direction; for an existing one, OnPush plus removing template method calls gets most of the benefit for far less disruption.",
+  "tags": [
+   "angular",
+   "change-detection",
+   "performance",
+   "onpush",
+   "signals"
+  ],
+  "followups": [
+   {
+    "q": "How do you run something outside the zone?",
+    "a": "Inject `NgZone` and use `ngZone.runOutsideAngular(() => ...)` for work that should not trigger change detection - animation frames, scroll or mousemove handlers, a charting library s internal loop. When you need to update the UI from that work, wrap just that part back in `ngZone.run(...)`. Getting the boundary wrong means either the UI never updates, or you have reintroduced the cost you were avoiding."
+   },
+   {
+    "q": "What breaks when you switch a component to OnPush?",
+    "a": "Anything relying on mutation being noticed. Pushing onto an array in place, or setting a property on an input object, no longer triggers a re-render because the reference is unchanged - you must replace the array or object instead. Code that mutates and then expects the view to catch up silently stops updating, which is why the switch should be accompanied by immutable update patterns rather than made in isolation."
+   }
+  ]
  }
 ]

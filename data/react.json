@@ -3604,5 +3604,29 @@
     "a": "When the problem is architectural rather than dependency weight - a content-heavy site that should be server-rendered or statically generated but is shipping a client-side SPA, where the cost is not the bundle but that nothing renders until JavaScript runs. That is a structural mismatch no amount of splitting fixes. The distinction is whether the first paint is blocked on JavaScript by design. If the app is genuinely interactive and the bundle is merely bloated, that is a cleanup, not a migration."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "A list of 500 rows re-renders on every keystroke in an unrelated search box. Walk me through diagnosing and fixing it.",
+  "answer": "First I would confirm what is actually re-rendering, with the React DevTools Profiler rather than by reasoning about the code. It highlights which components rendered and why, and the \"why\" is usually the whole answer.\n\n**The typical cause** is that the search input s state lives in a common ancestor, so every keystroke re-renders that ancestor and therefore its entire subtree - including the 500 rows, which did not change.\n\n**Fixes, cheapest first:**\n\n1. **Move the state down.** If the input s state lives in the input s own component, the ancestor never re-renders. This is the fix people skip and it is usually the right one - no memoisation, no dependency arrays, nothing to get wrong later.\n2. **Lift the expensive subtree out via composition.** Pass the list as `children` to the component holding the state; children passed as props do not re-render when the parent s state changes, because the element was created by the grandparent.\n3. **`React.memo` on the row**, but only once 1 and 2 are not applicable. It only helps if the props are referentially stable, which means the `onClick` handler must be wrapped in `useCallback` and any object or array prop in `useMemo` - otherwise every render produces new references and memo compares unequal every time. This is why memo so often appears to do nothing.\n4. **Virtualise** if 500 becomes 50,000. Rendering only the visible window is the only thing that scales, and libraries like TanStack Virtual handle it.\n\n**What I would flag in review:** reaching for `memo`/`useCallback`/`useMemo` before restructuring is the common mistake. It adds dependency arrays that go stale, and it hides the fact that the component tree is shaped wrongly.",
+  "tags": [
+   "react",
+   "performance",
+   "rendering",
+   "memo",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "Does the React Compiler change this advice?",
+    "a": "It changes the memoisation half. The compiler inserts memoisation automatically, so hand-written `useMemo` and `useCallback` largely stop being necessary, which removes the stale-dependency footgun. It does not change the structural advice - state still causes its owner s subtree to re-render, so moving state down and composing with `children` remain the primary fixes and are worth doing regardless."
+   },
+   {
+    "q": "When is memo actively harmful?",
+    "a": "When the comparison costs more than the render it avoids - cheap components with many props, or props that change every render anyway, so you pay the comparison and re-render regardless. It also makes behaviour depend on referential stability, so an unrelated refactor that stops memoising a callback silently reintroduces the problem with no visible cause."
+   }
+  ]
  }
 ]

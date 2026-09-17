@@ -5625,5 +5625,29 @@
     "a": "It is a consideration rather than a blocker - the secret is in the process memory either way while it is being used, and a memory dump exposes it regardless. What matters more is not writing it to logs, not including it in exception messages or telemetry, and limiting its lifetime where practical. The genuine improvement is reducing exposure: managed identity means the token is short-lived and automatically rotated, so even a captured value is useful for a much shorter window than a static password."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Reliability",
+  "difficulty": "Medium",
+  "question": "Your App Service restarts under load and users get 502s. Where do you look, in what order?",
+  "answer": "I would separate \"the platform restarted it\" from \"it crashed\", because the fixes are different.\n\n**First, establish which.** The Diagnose and Solve Problems blade shows application restarts and their reason. `AppServiceConsoleLogs` and `AppServicePlatformLogs` in Log Analytics give the same detail queryable.\n\n**The usual causes, in the order I check them:**\n\n1. **Memory limit.** The plan tier has a hard memory ceiling; exceeding it gets the worker recycled. A 32-bit worker process caps at ~2GB regardless of tier, and that setting is still off by default on older App Services - worth checking first because it is a one-click fix.\n2. **Unhandled exception on a background thread.** In .NET this terminates the process. `async void`, an unobserved exception in a fire-and-forget `Task.Run`, or a `BackgroundService` whose `ExecuteAsync` throws - in .NET 6 and later a throwing BackgroundService stops the host by default.\n3. **Health check failing**, so the platform recycles the instance believing it unhealthy. A health endpoint that itself depends on a slow database will fail under exactly the load you need it to survive.\n4. **Startup time exceeding the limit**, causing a restart loop that only appears under load because scale-out triggers new instances.\n5. **Thread-pool starvation** making everything, including the health probe, time out.\n\n**The 502 specifically** means the front end could not get a response from the worker - consistent with all of the above, and also with the app listening on the wrong port or failing to start.\n\n**What I would put in place regardless:** Always On enabled, a health check endpoint that is shallow and does not call dependencies, autoscale rules with sensible cool-down, and Application Insights so the next occurrence is diagnosable without guesswork.",
+  "tags": [
+   "azure",
+   "app-service",
+   "reliability",
+   "troubleshooting",
+   "scenario"
+  ],
+  "followups": [
+   {
+    "q": "How do you make a BackgroundService resilient to this?",
+    "a": "Wrap the work inside `ExecuteAsync` in a try/catch that logs and continues, rather than letting the exception escape - since .NET 6 an escaping exception stops the entire host by default (`BackgroundServiceExceptionBehavior`). Catch around the unit of work inside the loop, not around the whole loop, so one bad iteration does not end the service. And honour the `CancellationToken` so shutdown is graceful rather than a timeout."
+   },
+   {
+    "q": "Why should a health check not call the database?",
+    "a": "Because it conflates liveness with dependency availability. If the database has a blip, every instance reports unhealthy, the platform recycles them all, and you turn a brief dependency problem into a full outage with cold starts. Use a shallow liveness check for \"is this process alive\", and a separate readiness check that can consider dependencies, with the orchestrator configured to treat them differently."
+   }
+  ]
  }
 ]
