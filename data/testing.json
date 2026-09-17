@@ -2637,5 +2637,29 @@
     "a": "It is often the better use of a limited hour, because a person exercising the feature with intent finds the problems nobody anticipated - which is precisely what automated tests cannot do, since they only check what someone already thought of. The trade is that it is not repeatable, so it does not protect against regression. The pragmatic split is exploratory testing to find the problems now, then automating the specific cases it uncovered so they stay fixed."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Determinism",
+  "difficulty": "Medium",
+  "question": "A test passes locally and fails in CI. What are the usual causes?",
+  "answer": "The environment differs in ways the test was implicitly depending on. I would work through the usual suspects rather than re-running and hoping.\n\n**The common causes:**\n\n1. **Test ordering and shared state.** Locally your IDE may run tests in a different order, or you ran only one. CI runs the whole suite, possibly in parallel, so a test depending on data another test created now fails - or passes only when run after its neighbour.\n2. **Parallelism.** CI often runs with more parallelism, exposing races between tests sharing a database, a file, a port or a static.\n3. **Time zone and culture.** The build agent runs in UTC with an invariant culture; your machine does not. Date formatting, parsing, string comparison and sorting all change - and a test asserting on a formatted date is the classic casualty.\n4. **Machine speed.** A test with a timing assumption or a fixed sleep passes on a fast laptop and fails on a loaded, throttled build agent. This is the most common cause of intermittent CI-only failures.\n5. **Missing environment configuration** - user secrets, a local connection string, an environment variable, a file present locally and not in the repository.\n6. **File system differences.** Case sensitivity on Linux versus Windows, and path separators.\n7. **Left-over local state** - a database that has accumulated data from previous runs, so the test has been passing for the wrong reason.\n\n**The diagnostic that settles it fastest:** run the full suite locally in the same order and with the same parallelism as CI. Most of these reproduce immediately once you stop running the test in isolation.",
+  "tags": [
+   "testing",
+   "ci",
+   "flaky-tests",
+   "determinism",
+   "parallelism"
+  ],
+  "followups": [
+   {
+    "q": "How do you fix a test that depends on the machine timezone?",
+    "a": "Remove the dependency rather than configuring the agent to match your machine, which only hides it. Inject the clock and the timezone rather than reading `DateTime.Now` and `TimeZoneInfo.Local`, and assert on values in UTC or on a fixed zone you set explicitly in the test. If you must compare formatted output, specify the culture explicitly rather than relying on the ambient one. Setting the CI agent to your local timezone makes the test pass and leaves production, which runs in UTC, still broken."
+   },
+   {
+    "q": "What is the right response to a test that fails only under parallelism?",
+    "a": "Find the shared resource, because that is always what it is - a static field, a database row, a file, a fixed port, or a singleton in the container. Then either give each test its own copy, key the data uniquely per test, or mark that specific collection as non-parallel. Disabling parallelism for the whole suite is the common response and it is the wrong one: it hides the coupling, slows every build, and the coupling usually indicates something about the code under test that is worth knowing."
+   }
+  ]
  }
 ]

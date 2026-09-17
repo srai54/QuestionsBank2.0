@@ -4672,5 +4672,29 @@
     "a": "Make the cost visible rather than arguing harder. Track and report the time lost to it - estimates inflated because of it, incidents attributable to it, changes that took longer than they should - so the conversation moves from opinion to data over a few months. Meanwhile improve opportunistically within feature work, which needs no permission. If it remains consistently unfunded while causing measurable harm, that is worth escalating as a risk in writing, because at that point it is an organisational decision rather than an engineering one."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Versioning",
+  "difficulty": "Hard",
+  "question": "How do you version events in an event-driven system, where old events live forever?",
+  "answer": "Events are harder to version than an API, because an API has live consumers you can coordinate with, while events persisted in a log or an event store must remain readable years later by code that has been rewritten several times. The old events are immutable facts - you cannot go back and change them.\n\n**The rules that make it tractable:**\n\n1. **Only make additive changes.** Adding an optional field is safe if every consumer ignores unknown fields - which must be an agreed contract from day one, enforced by the serialiser configuration. Removing or renaming a field, or changing its meaning, is breaking.\n2. **Never reuse a field name for a different meaning.** That is the worst kind of break because nothing fails - old events are reinterpreted incorrectly.\n3. **Version the event type, not the payload,** when a breaking change is genuinely needed - `OrderPlacedV2` as a new type published alongside the old until consumers migrate. Two types is clearer than one type with conditional semantics.\n4. **Upcast on read.** The consumer or the store translates old event shapes into the current model at the point of reading, so the rest of the code only ever deals with the current version. This keeps the versioning logic in one place instead of spread through every handler.\n5. **Weak schema** - tolerant readers that ignore what they do not recognise and supply defaults for what is absent.\n\n**And the deeper point:** a lot of event versioning pain comes from events that were designed as data transfer objects rather than as business facts. `OrderPlaced` carrying the whole order document changes whenever the order model changes; `OrderPlaced` carrying the facts that were true at that moment is far more stable, because business facts change less often than internal models.",
+  "tags": [
+   "architecture",
+   "event-versioning",
+   "event-sourcing",
+   "schema-evolution",
+   "messaging"
+  ],
+  "followups": [
+   {
+    "q": "What do you do when you need to fix incorrect data in already-published events?",
+    "a": "You do not edit them - events are an immutable record of what was believed at the time, and rewriting history breaks any consumer that has already processed them and makes audit meaningless. Instead publish a compensating or correcting event: `OrderAmountCorrected` referencing the original. Consumers that care apply the correction, and the log honestly records both that the mistake happened and that it was fixed. Where a projection must be rebuilt, replay from the log including the correction rather than mutating the stored events."
+   },
+   {
+    "q": "How does schema registry help, and what does it not solve?",
+    "a": "It stores the schema for each event type and version, validates that producers publish conforming messages, and can enforce compatibility rules - rejecting a change that would break existing consumers before it is deployed. That catches accidental breaking changes at the right moment, which is its main value. What it does not solve is semantic change: a field that keeps its name and type while its meaning shifts passes every compatibility check and breaks every consumer silently. That still requires human discipline and review."
+   }
+  ]
  }
 ]

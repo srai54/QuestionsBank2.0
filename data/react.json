@@ -3878,5 +3878,29 @@
     "a": "React warns and the behaviour becomes unpredictable - it cannot distinguish the two elements, so state and DOM nodes can attach to the wrong one and updates can be dropped. The usual causes are composing a key from a field that is not actually unique, or concatenating values that collide. Where no natural unique id exists, composing several fields or generating a stable id when the data is loaded is better than reaching for the index."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Suspense",
+  "difficulty": "Hard",
+  "question": "What does Suspense actually do, and where is it useful?",
+  "answer": "Suspense lets a component tell React \"I am not ready to render yet\", and React shows the nearest fallback instead of the component. It is a coordination mechanism for loading states - it does not fetch anything itself.\n\n**The problem it solves:** without it, every component manages its own loading flag, so a page shows five spinners appearing and disappearing independently as different requests resolve. Suspense lets you declare loading boundaries at the level the design actually wants - one spinner for the whole section - without each component knowing about the others.\n\n**Where it is genuinely useful:**\n- **Code splitting** with `lazy`, which is the original and least controversial use. The fallback shows while the chunk downloads.\n- **Coordinating several loading components** under one boundary, so the layout does not shift as each resolves separately.\n- **Streaming server rendering**, where the server sends the shell immediately and streams in the slower sections as they become ready - the user sees content much sooner, which is the strongest practical argument for it.\n- **Transitions**, where `useTransition` marks an update as non-urgent so the old UI stays visible instead of flashing a fallback while the new data loads.\n\n**What people expect it to do and it does not:** fetch data. The component must be integrated with a framework or library that supports suspending - a router loader, a query library with suspense enabled, or RSC. Writing your own suspending fetch by throwing a promise is possible and not something I would build by hand.\n\n**And the boundary placement matters:** too high and a slow component blanks the whole page, too low and you are back to scattered spinners.",
+  "tags": [
+   "react",
+   "suspense",
+   "loading-states",
+   "streaming",
+   "transitions"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between Suspense and an error boundary?",
+    "a": "They are the same idea applied to different states - Suspense catches \"not ready yet\" and shows a fallback, an error boundary catches \"this threw\" and shows an error UI. They compose: you typically wrap a section in both, so it can show a skeleton while loading and an error with a retry if the load fails. Neither catches what the other handles, which is why a component that throws during a suspended render needs both boundaries present to degrade properly."
+   },
+   {
+    "q": "How does useTransition change what the user sees?",
+    "a": "It marks a state update as non-urgent, so React keeps rendering the current UI while preparing the new one instead of immediately unmounting into a fallback. The practical effect is that clicking a tab does not blank the content area - the old tab stays visible, optionally dimmed using the `isPending` flag, until the new one is ready. Without it, any suspending component in the new tree triggers the fallback and the user sees a flash of skeleton on every navigation, which feels worse than a brief delay."
+   }
+  ]
  }
 ]

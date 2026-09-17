@@ -2914,5 +2914,29 @@
     "a": "First check whether your direct dependency has a release that updates it - that is the clean fix. If not, most ecosystems let you force a resolution: `npm` overrides, or a central package version override in .NET, which pins the transitive package to a patched version. That works but risks an incompatibility the direct dependency did not test against, so it needs verification. Raising an issue upstream is worth doing in parallel, since you will not be the only consumer affected."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Rate Limiting",
+  "difficulty": "Medium",
+  "question": "How does rate limiting protect against credential stuffing, and what else do you need?",
+  "answer": "Rate limiting slows an attacker down but does not stop credential stuffing on its own, because the attack is **distributed and low-volume per account**. An attacker with a million stolen credential pairs tries each one once, from a different IP each time - so no single account and no single IP exceeds a sensible threshold. A per-IP limit catches the naive version and misses the real one.\n\n**What actually helps, layered:**\n\n1. **Per-account attempt limits** with an increasing delay, so repeated failures against one account become impractical regardless of source. Prefer throttling over hard lockout, because lockout is itself a denial-of-service vector - an attacker can lock every account.\n2. **Breached credential checking.** Reject passwords known to be in public breach corpora, at registration and at password change. This removes the ammunition the attack depends on, and the k-anonymity range API means you never send the full hash.\n3. **Device and behavioural signals** - a login from an unrecognised device, an unusual location, or an implausible travel time triggers step-up verification rather than a block.\n4. **Multi-factor authentication**, which is the control that actually defeats the attack. A correct password without the second factor gets nowhere.\n5. **Bot detection and proof-of-work challenges** on the login endpoint, to raise the cost per attempt.\n6. **Monitoring for the pattern** - a spike in failures spread thinly across many accounts is the signature, and it is invisible if you only alert on per-account thresholds.\n\n**And the detail people get wrong:** the failure response must be identical for \"no such user\" and \"wrong password\", and take the same time, or the endpoint becomes a user enumeration oracle.",
+  "tags": [
+   "security",
+   "credential-stuffing",
+   "rate-limiting",
+   "mfa",
+   "authentication"
+  ],
+  "followups": [
+   {
+    "q": "Why is account lockout discouraged if it stops the attack?",
+    "a": "Because it converts an authentication attack into an availability attack - anyone who knows a username can lock that account out deliberately, and in bulk that takes your user base offline with no credentials needed at all. Progressive delays achieve the same defensive effect against automated guessing while leaving the legitimate user able to log in, just slowly. Where a hard lockout is required by policy, it should be short and self-releasing rather than requiring support intervention, which is otherwise the real cost."
+   },
+   {
+    "q": "How do you rate limit without penalising users behind a shared IP?",
+    "a": "Do not key solely on IP, because corporate NAT and mobile carrier networks put thousands of legitimate users behind one address - a strict per-IP limit locks out an entire office. Key on the account for authenticated attempts, and use IP only as a coarse backstop with a generous threshold. Combining signals is better than tightening any one: an IP with a high failure *rate across many distinct accounts* is a much stronger indicator than volume alone, and it does not punish a busy shared connection."
+   }
+  ]
  }
 ]

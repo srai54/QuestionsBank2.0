@@ -4161,5 +4161,29 @@
     "a": "Put it in that environment s overlay with a comment explaining why, and give it a sensible default in the base so the other environments are not implicitly relying on its absence. The thing to avoid is a setting that exists only in one place with no default, because the code then has to handle it being missing everywhere else, and that null-handling spreads. If one environment needs genuinely different behaviour, a feature flag is often a better expression of it than a configuration difference."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Docker",
+  "difficulty": "Medium",
+  "question": "Your container works locally and fails in the cluster. What are the usual causes?",
+  "answer": "The image is identical, so the difference is environment - configuration, identity, networking, or resources. I would work through those in order because they account for nearly all of it.\n\n**The usual causes:**\n\n1. **Configuration and environment variables.** Something set in your shell or a local `.env` file that does not exist in the cluster. In .NET specifically, nested keys need a double underscore separator on Linux - `Smtp__Host` - and the colon form that works locally on Windows does not.\n2. **Secrets and identity.** Locally you authenticate as yourself, often through cached credentials that `DefaultAzureCredential` silently picks up. In the cluster the workload identity may be missing a role assignment, so the same code cannot read the vault or the database.\n3. **Networking.** The database is reachable from your machine and the cluster is on a different network - a firewall rule allowing your IP but not the cluster s egress, a private endpoint without the DNS zone linked, or a service the container resolves by a hostname that only exists locally.\n4. **Resource limits.** Memory limits cause OOM kills that present as crashes; CPU limits cause throttling that presents as slowness and probe timeouts. Locally there are no limits.\n5. **File system and permissions.** Running as non-root in the cluster and root locally, so a write to a path succeeds locally and is denied there. Read-only root filesystems catch this too.\n6. **Probes.** A startup slower than the liveness probe allows produces a restart loop that looks like the application crashing.\n\n**The fastest diagnostic:** get the logs from the failing pod including previous instances, then exec into a running container and check what it can actually see - resolve the hostname, read the environment, test the connection.",
+  "tags": [
+   "devops",
+   "docker",
+   "kubernetes",
+   "troubleshooting",
+   "configuration"
+  ],
+  "followups": [
+   {
+    "q": "How do you debug a container that crashes immediately and cannot be exec-ed into?",
+    "a": "Read the logs of the *previous* instance rather than the current one, which is where the crash output is - the running container may be a fresh restart with nothing useful yet. Then override the entrypoint to something that stays alive, such as a shell, so you can start it and inspect the environment by hand. In Kubernetes an ephemeral debug container attaches to the pod without changing the image, which is the cleaner option when available since it preserves the actual failing configuration."
+   },
+   {
+    "q": "Why does DefaultAzureCredential hide this class of problem?",
+    "a": "Because it tries a chain of credential sources and succeeds locally via your Azure CLI or Visual Studio login, so the code appears to work without any managed identity configured. In the cluster those sources are absent and it falls through to the workload identity, which may have no role assignments - and the failure is an authorisation error far from the cause. Being explicit about which credential to use in each environment, or at least logging which one was selected, turns a confusing runtime failure into an obvious configuration one."
+   }
+  ]
  }
 ]

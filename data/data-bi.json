@@ -2186,5 +2186,29 @@
     "a": "This is why lineage and reversibility matter more than match accuracy. Keep the source records intact and treat the golden record as a derived view rather than overwriting the originals, so unmerging is recomputing rather than reconstructing from backups. Downstream systems should reference the master identifier, and you need a defined process for propagating a split - which is harder than a merge, because consumers may have accumulated their own data against the merged id."
    }
   ]
+ },
+ {
+  "category": "Data & BI",
+  "subcategory": "Governance",
+  "difficulty": "Medium",
+  "question": "What does data lineage mean in practice, and why would you invest in it?",
+  "answer": "Lineage is the ability to answer two questions: **where did this number come from**, and **what breaks if I change this**. In practice it is a map from a figure on a report back through the transformations, tables and source systems that produced it.\n\n**Why it is worth investing in:**\n\n1. **Trust.** When an executive challenges a number, the ability to trace it to source in minutes rather than days is the difference between a question and a crisis of confidence in the whole platform. Most reporting credibility problems are really lineage problems.\n2. **Impact analysis.** Before changing a source column or a transformation, knowing which twenty reports depend on it turns a risky change into a planned one. Without it, you find out when someone complains.\n3. **Incident response.** When a load fails or produces bad data, lineage tells you which downstream outputs are affected and need reprocessing - and which are safe.\n4. **Regulatory requirements.** For financial or personal data, demonstrating the provenance of a reported figure is often mandatory rather than nice to have.\n5. **Deprecation.** You cannot safely retire a table if you do not know who reads it, so without lineage nothing is ever deleted and the platform accretes forever.\n\n**How you get it:** it is largely automatic if transformations are declared in a tool that can parse them - dbt builds a dependency graph from the SQL, and modern catalogues extract column-level lineage from query logs. It is close to impossible if the pipeline is a set of hand-written scripts that nobody can parse, which is itself an argument for a declarative transformation layer.\n\n**The practical starting point** is table-level lineage for the reports that matter most, rather than column-level lineage for everything.",
+  "tags": [
+   "data-bi",
+   "lineage",
+   "governance",
+   "dbt",
+   "impact-analysis"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between table-level and column-level lineage?",
+    "a": "Table-level tells you that report A depends on table B, which is enough for impact analysis on a table drop and is much easier to produce. Column-level tells you that a specific figure derives from a specific column through a specific expression, which is what you need to answer \"why is this number wrong\" and to assess whether a column change actually affects a given output. Column-level is substantially more work to capture and maintain, so the sensible progression is table-level everywhere first, column-level for the critical reporting paths."
+   },
+   {
+    "q": "How does lineage help with a GDPR erasure request?",
+    "a": "It tells you everywhere a person s data has propagated - which warehouse tables, which aggregates, which extracts sent to third parties, which backups. Without that map, an erasure request can only be honoured in the source system, leaving copies scattered through the analytics estate that you cannot even enumerate. Lineage turns an unanswerable question into a checklist, and it also informs the design: knowing how widely personal data spreads is usually an argument for pseudonymising it earlier in the pipeline."
+   }
+  ]
  }
 ]

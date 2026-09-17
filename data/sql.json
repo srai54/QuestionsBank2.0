@@ -4854,5 +4854,29 @@
     "a": "Run the query with and without the function - replace it with a constant or the inlined expression - and compare duration and plan shape. In the plan, check whether it went from parallel to serial, and compare estimated against actual rows. On SQL Server 2019 and later you can also toggle inlining for the function with `INLINE = OFF` or the database-scoped configuration to see the difference directly, which makes it a controlled experiment rather than an inference."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Statistics",
+  "difficulty": "Hard",
+  "question": "What are database statistics, and how do stale ones cause a slow query?",
+  "answer": "Statistics are the optimiser s model of your data - a histogram of value distribution per indexed column, plus density and row counts. The optimiser uses them to estimate how many rows each step will produce, and those estimates decide the plan: which index, which join algorithm, how much memory to request, and whether to go parallel.\n\n**When statistics are stale, the estimates are wrong, and the plan is built for data that no longer exists.** The classic case is a table that grew from a thousand to a million rows while the statistics still describe a thousand. The optimiser chooses a nested loop join because it expects a handful of rows, and executes it a million times. The query was fine last month and is now catastrophic, with no code change - which is exactly the \"nothing changed\" regression.\n\n**The tell in an execution plan** is a large gap between estimated and actual rows. That single comparison identifies most plan-quality problems.\n\n**Why they go stale:** automatic updates trigger on a proportion of rows modified, so a very large table can absorb many changes before hitting the threshold. Ascending keys are the classic trap - rows inserted above the histogram s highest value look like zero rows to the optimiser, so queries for \"today s orders\" estimate one row and get a plan sized for one row.\n\n**What I would do:** update statistics with a fuller sample on the affected table, confirm the plan improves, then look at whether the automatic threshold is adequate for that table s churn. A scheduled maintenance job is the normal answer for large volatile tables.\n\n**And distinguish this from parameter sniffing**, which produces a similar symptom from a different cause - there the statistics are fine and the cached plan was compiled for unrepresentative parameters.",
+  "tags": [
+   "sql",
+   "statistics",
+   "cardinality-estimation",
+   "execution-plan",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "How do you tell stale statistics apart from parameter sniffing?",
+    "a": "Check whether the bad estimate is wrong for *all* parameter values or only some. Stale statistics give poor estimates regardless of what you pass, so the plan is wrong for everyone. Parameter sniffing gives a plan that is excellent for some values and terrible for others, so running with a different parameter and recompiling produces a good plan from the same statistics. Comparing estimated rows against actual for several different parameter values separates them quickly."
+   },
+   {
+    "q": "What is the ascending key problem and how is it handled?",
+    "a": "New rows inserted above the highest value in the histogram fall outside it, so the optimiser estimates very few rows for a predicate targeting recent data - which is the most common kind of query on a time-series table. The result is a plan sized for one row processing thousands. Modern SQL Server versions estimate better for this case under the current cardinality estimator, but on large tables the reliable fix is updating statistics more frequently than the automatic threshold allows, which usually means a scheduled job targeting the volatile tables specifically."
+   }
+  ]
  }
 ]

@@ -12854,5 +12854,29 @@
     "a": "They convert an indefinite hang into a detectable failure. `Monitor.TryEnter` with a timeout, or a `SemaphoreSlim` wait with one, means a deadlocked path throws or returns false rather than parking a thread forever - so you get an exception with a stack trace instead of a mysteriously unresponsive service, and the request fails fast rather than consuming a thread. It is a diagnosability and containment measure, not a correctness fix; the ordering discipline is what actually prevents the deadlock."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Async",
+  "difficulty": "Medium",
+  "question": "What is the difference between concurrency and parallelism, and why does it matter for how you write .NET code?",
+  "answer": "**Concurrency** is dealing with several things at once - structuring work so it can be interleaved. **Parallelism** is doing several things at once - actually executing simultaneously on different cores. Concurrency is about structure, parallelism is about execution, and you can have either without the other.\n\n**Why it matters practically in .NET:** they map to different tools, and using the wrong one is the most common async mistake.\n\n- **Concurrency without parallelism** is what `async`/`await` gives you for I/O. A thousand concurrent HTTP calls need no thousand threads - each awaits, releasing its thread, and resumes when the response arrives. The work is *waiting*, not computing, so no parallelism is needed and adding threads helps nothing.\n- **Parallelism** is what `Parallel.ForEach` and PLINQ give you for CPU work. Here you genuinely want several cores computing at once.\n\n**The mistake in each direction:**\n- Using `Task.Run` or `Parallel.ForEach` for I/O consumes a thread per operation for the duration of the wait, which is the thread-pool starvation problem - you have bought parallelism for something that needed concurrency.\n- Using `async` for CPU-bound work gains nothing, because there is nothing to await; the method runs synchronously to completion and you have added a state machine for no benefit.\n\n**The question to ask about any workload:** is it waiting or computing? Waiting means async and `Task.WhenAll`. Computing means `Parallel`. Both means `Parallel.ForEachAsync`, which is async-aware and bounded.\n\n**And on a single core** you can still have concurrency - the operations interleave - which is exactly why async scales throughput on modest hardware.",
+  "tags": [
+   "csharp",
+   "async",
+   "concurrency",
+   "parallelism",
+   "threading"
+  ],
+  "followups": [
+   {
+    "q": "Does async make a single request faster?",
+    "a": "No, and this is worth being clear about - an async method that awaits one database call takes exactly as long as the synchronous equivalent for that one request. What it changes is *throughput*: the thread is released during the wait and can serve another request, so the same server handles far more concurrent users. Async is a scalability technique, not a latency one. The only way it reduces latency for a single operation is if you use it to run independent calls concurrently with `Task.WhenAll`."
+   },
+   {
+    "q": "When is Task.Run appropriate in ASP.NET Core?",
+    "a": "Rarely, and almost never to make something \"async\". Offloading to the thread pool in a web application moves work between pool threads without adding capacity - you still occupy a thread and you have added a context switch. It is appropriate when you genuinely need to run CPU-bound work off the request thread to keep a timeout responsive, or when calling a synchronous third-party API that will otherwise block. Wrapping a blocking call in `Task.Run` to present an async signature is the anti-pattern known as async-over-sync."
+   }
+  ]
  }
 ]
