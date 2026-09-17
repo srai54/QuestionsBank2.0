@@ -3758,5 +3758,29 @@
     "a": "Reset the boundary state and remount the subtree, which `react-error-boundary` exposes as `resetErrorBoundary`. The important detail is resetting whatever caused the error too - if the failure came from bad data in a cache or in state, remounting alone re-renders straight back into the same error and the retry button appears broken. Tying the boundary to a `resetKeys` value that changes on navigation is the usual way to make retry meaningful."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Context",
+  "difficulty": "Medium",
+  "question": "When should you use Context, and why does it cause performance problems?",
+  "answer": "Context solves **prop drilling** - passing a value through many layers that do not use it. It is a dependency injection mechanism, not a state manager, and that distinction explains both when to use it and why it performs badly when misused.\n\n**Good uses:** values that are genuinely global and change rarely - theme, locale, the authenticated user, a configured client instance. Low frequency of change is the key property.\n\n**The performance problem:** every consumer of a context re-renders when the context *value* changes, and there is no way to subscribe to part of it. Two mistakes make this severe:\n\n1. **Putting frequently-changing state in context.** A context holding form state or a mouse position re-renders every consumer on every change, no matter how deep or unrelated.\n2. **Creating a new object as the value on every render.** `<Ctx.Provider value={{ user, setUser }}>` produces a new object identity each time the provider re-renders, so every consumer re-renders even when `user` has not changed. Memoise the value.\n\n**The mitigations:**\n- **Split contexts** by change frequency - a stable context for the value and a separate one for the setters, since setters never change identity and consumers that only dispatch then never re-render.\n- **Memoise the provider value.**\n- **Use a real state library** for anything with frequent updates or selective subscription - they exist precisely because context cannot do selector-based subscription.\n\n**And note what context is not:** it is not a cache. Server data belongs in a query library, which handles staleness, deduplication and refetching that context gives you none of.",
+  "tags": [
+   "react",
+   "context",
+   "performance",
+   "state-management",
+   "rendering"
+  ],
+  "followups": [
+   {
+    "q": "Why can you not subscribe to part of a context value?",
+    "a": "Because the propagation mechanism compares the whole value by identity and notifies every consumer when it changes - there is no selector in the API, so React cannot know that a consumer only cares about one field. That is precisely the gap external state libraries fill with `useSyncExternalStore` and a selector, which lets a component subscribe to a slice and re-render only when that slice changes. Splitting into several contexts is the built-in approximation of the same idea."
+   },
+   {
+    "q": "Does memoising the context value fix everything?",
+    "a": "No - it stops re-renders caused by identity churn when nothing actually changed, which is the most common and most wasteful case. It does nothing when the value genuinely changes, which is the real problem for high-frequency state: every consumer still re-renders because from React s point of view the value is different. Memoisation addresses the accidental re-renders; only splitting the context or using a selector-based store addresses the intentional ones."
+   }
+  ]
  }
 ]

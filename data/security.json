@@ -2794,5 +2794,29 @@
     "a": "Refresh transparently - catch the 401, exchange the refresh token, retry the original request once. The details that matter are deduplicating concurrent refreshes, since several in-flight requests will all get 401 simultaneously and must not each trigger a rotation (which with rotation enabled would look exactly like token reuse and revoke the family), and giving up after one retry so a genuine authorisation failure does not become an infinite loop."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "File Uploads",
+  "difficulty": "Hard",
+  "question": "What are the risks of letting users upload files, and how do you mitigate each?",
+  "answer": "File upload is one of the highest-risk features you can add, because it accepts attacker-controlled bytes and usually stores and serves them.\n\n**The risks and their mitigations:**\n\n1. **Malicious content** - malware, or a file crafted to exploit whatever parses it. Mitigate by scanning before the file is reachable, and by treating the upload target as a quarantine area nothing else reads from until it passes.\n2. **Stored XSS.** An uploaded HTML or SVG file served from your domain executes script in your origin, with access to cookies and session. SVG is the one people miss - it is an image that can contain script. Serve user content from a **separate domain** so the origin is different, set `Content-Disposition: attachment` where possible, and send `X-Content-Type-Options: nosniff`.\n3. **Path traversal.** A filename of `../../appsettings.json` overwriting something it should not. Never use the client-supplied filename for storage - generate your own identifier and keep the original name only as metadata for display.\n4. **Denial of service** by size or by decompression - a zip bomb, or an image whose dimensions cause an enormous allocation when decoded. Enforce a size limit at the web server and the application, cap image dimensions before decoding, and bound extraction.\n5. **Content-type spoofing.** The declared type and the extension are both attacker-controlled. Validate the **magic number** in the file header, and re-encode images rather than trusting them - re-encoding also strips embedded payloads and EXIF data.\n6. **Storage exhaustion and cost**, so quota per user.\n\n**The architectural mitigation that helps most:** upload directly to object storage via a time-limited SAS, validate asynchronously, and serve from a separate domain through a CDN. Your application never handles the bytes, which removes several of these risks structurally.",
+  "tags": [
+   "security",
+   "file-upload",
+   "xss",
+   "svg",
+   "owasp"
+  ],
+  "followups": [
+   {
+    "q": "Why is a separate domain better than a separate path for user content?",
+    "a": "Because the same-origin policy is per origin, not per path. Content served from `/uploads/` on your main domain shares the origin with your application, so script in an uploaded file can read cookies, call your API as the user, and manipulate the DOM of your pages. Serving from a distinct domain - not even a subdomain, since cookies can be scoped to the parent - puts that content in a different origin where it can do none of those things. This is why the large platforms all use a separate user-content domain."
+   },
+   {
+    "q": "Is checking the magic number sufficient validation?",
+    "a": "It is necessary but not sufficient. It confirms the file starts like the claimed type, which defeats a trivially renamed executable, but polyglot files are valid in two formats at once and a valid image can still exploit a vulnerability in the decoder. The stronger control is re-encoding - decode and re-write the image with your own library, which produces a file you generated rather than one the attacker did, and discards anything embedded. Combine that with scanning and with serving from an origin where execution does not matter."
+   }
+  ]
  }
 ]

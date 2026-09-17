@@ -4614,5 +4614,29 @@
     "a": "The estimated plan is what the optimiser intends without running the query, so you can get it for an expensive query safely. The actual plan includes real row counts, actual execution time per operator, and runtime warnings such as spills - which is what you need for the estimate-versus-actual comparison that finds most problems. Use estimated to check the shape when running is too costly, and actual whenever you can afford to run it."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Data Types",
+  "difficulty": "Medium",
+  "question": "What data type would you use for money, and why not float?",
+  "answer": "`decimal` - in SQL Server `decimal(19,4)` or similar, and `decimal` in C#. Never `float` or `double`.\n\n**The reason is that binary floating point cannot represent most decimal fractions exactly.** 0.1 has no exact binary representation, in the same way 1/3 has no exact decimal one. So values are stored as the nearest representable approximation, and the errors accumulate across arithmetic. Summing a million transactions gives a total that is close but wrong, and \"close\" is not acceptable when it is money and someone reconciles it.\n\nThe classic demonstration is that `0.1 + 0.2` does not equal `0.3` in binary floating point - it is 0.30000000000000004. An equality comparison on a computed monetary value then fails for no visible reason.\n\n**`decimal` stores digits in base 10**, so decimal fractions are exact and arithmetic behaves the way an accountant expects. It is slower than floating point and has a smaller range, and neither of those matters for money.\n\n**The related decisions I would make:**\n- **Pick the scale for the domain.** Four decimal places is common because unit prices and exchange rates need more than two even when totals do not.\n- **Store the currency alongside the amount.** An amount without a currency is not a value, and a single `decimal` column silently assumes everyone uses one.\n- **Decide rounding explicitly.** Banker s rounding versus away-from-zero changes totals over many rows, and .NET s default `Math.Round` is banker s rounding, which surprises people.\n- **Consider integer minor units** - storing pence rather than pounds - which some systems prefer because it removes fractional arithmetic entirely.\n\n**Where float is right:** measurements, scientific values, coordinates, anything where a tiny relative error is inherent in the data anyway.",
+  "tags": [
+   "sql",
+   "data-types",
+   "decimal",
+   "money",
+   "precision"
+  ],
+  "followups": [
+   {
+    "q": "What goes wrong specifically when EF Core maps a decimal without precision?",
+    "a": "It falls back to a default precision and scale - historically `decimal(18,2)` - and silently truncates anything finer, so an exchange rate or a unit price with four decimal places loses digits on save with no error. EF Core now warns about decimal properties with no configured precision for exactly this reason. Configuring `HasPrecision(19, 4)` explicitly on every money property is the fix, and it is worth a convention applied model-wide rather than per property."
+   },
+   {
+    "q": "How do you handle multi-currency amounts in the model?",
+    "a": "As a value object pairing the amount with the currency, so arithmetic between different currencies is impossible by construction rather than by convention - adding GBP to EUR should not compile or should throw, not silently produce a number. Store both columns together and never let one exist without the other. Conversions then become an explicit operation that takes a rate and a date, which is also what you need for auditability, since the rate used must be recorded rather than recomputed later."
+   }
+  ]
  }
 ]

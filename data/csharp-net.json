@@ -12614,5 +12614,29 @@
     "a": "The original `ISourceGenerator` re-ran fully on every keystroke in the IDE, which made large projects sluggish. `IIncrementalGenerator` builds a pipeline of cached transformations, so unchanged inputs are not recomputed and only the affected outputs regenerate. It is the one to use for anything new; the older interface is effectively deprecated. Getting the caching right - making the pipeline values equatable so they compare cheaply - is the main skill in writing one well."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Validation",
+  "difficulty": "Medium",
+  "question": "Where should validation live in a layered application, and how many times should the same rule be expressed?",
+  "answer": "Validation happens at more than one layer because the layers are answering different questions, and conflating them is what produces either duplicated rules or gaps.\n\n**The layers and what each is for:**\n\n1. **Request validation at the API boundary.** Is this payload well-formed - required fields present, types correct, strings within length, numbers in range. This is about rejecting garbage early with a useful 400, and it should know nothing about the domain.\n2. **Domain invariants inside the model.** Can an order be shipped if it has no lines, can a discount exceed the total. These belong *in the domain object*, ideally enforced in the constructor or the method so an invalid instance cannot exist. This is the rule that must never be bypassed.\n3. **Database constraints.** The last line of defence against anything that writes - a migration, an admin query, a second service, a bug.\n\n**The rule I would apply:** the *domain rule* is expressed once, in the domain. Request validation may duplicate a *shape* check for a better error message, and that is acceptable because it is a different concern - but it must not be the only place a business rule lives, or a caller reaching the domain another way bypasses it.\n\n**The anti-pattern** is business logic in FluentValidation validators and nowhere else. It gives nice error messages and leaves the domain model unable to protect itself, so any other entry point - a background job, a bulk import, another handler - creates invalid state.\n\n**A useful test:** if I construct the domain object directly in a unit test with invalid data, does it throw? If not, the invariant is not really enforced.",
+  "tags": [
+   "csharp",
+   "validation",
+   "ddd",
+   "layering",
+   "api-design"
+  ],
+  "followups": [
+   {
+    "q": "How do you return good error messages if the rule lives in the domain and throws?",
+    "a": "Catch the domain exception at the boundary and map it to a problem-details response, with a machine-readable code so clients can react. For rules where multiple failures should be reported at once - which is what users want on a form - have the domain expose a validation method returning a result object that the boundary can enumerate, and keep the constructor throwing as the guarantee. That gives you both: friendly aggregated messages and an object that cannot be invalid."
+   },
+   {
+    "q": "Does that mean FluentValidation has no place?",
+    "a": "It has a good place - request-level and cross-field shape validation at the boundary, where it is genuinely better than data annotations and composes well. The mistake is not using it; it is making it the *only* place a domain rule exists. Used for \"this DTO is well-formed\" while the domain enforces \"this is a legal order\", the two are complementary rather than duplicative."
+   }
+  ]
  }
 ]

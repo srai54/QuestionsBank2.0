@@ -4480,5 +4480,29 @@
     "a": "When the two components are not really independent services - a temporary state during a migration, or a reporting consumer that reads a replica and never writes. Read-only access to a replica is a legitimate pattern because the coupling is one-directional and the owner still controls the schema. What makes it harmful is two services both writing, or a consumer whose reads constrain the owner from changing its schema."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Resilience",
+  "difficulty": "Hard",
+  "question": "Service A calls B, which calls C. C becomes slow. Describe how the failure propagates and how you stop it.",
+  "answer": "Without protection this is a **cascading failure**, and the mechanism is worth describing precisely because it is not obvious.\n\nC slows from 50ms to 10 seconds. B s calls to C now occupy a thread or a connection for 10 seconds each. B s thread pool or connection pool fills with requests waiting on C, so B cannot serve *any* request - including ones that never touch C. A then sees B as unavailable, and A s pools fill waiting on B. A service that is merely *slow* has taken down two healthy services above it, and the outage is far wider than the fault.\n\n**The controls, each addressing a different part of the chain:**\n\n1. **Timeouts everywhere, set shorter than the caller s patience.** This is the most important and most often missing. An unbounded call is what converts slowness into resource exhaustion. Every timeout should be shorter than the one above it, so the failure surfaces at the right layer.\n2. **Circuit breaker around C.** Once C is clearly failing, stop calling it and fail fast, which frees B s resources immediately. This is what stops the propagation.\n3. **Bulkheads.** Isolate the resources used for calling C - a separate connection pool or a concurrency limit - so exhausting them cannot starve unrelated work in B. This is why the pattern is named after ship compartments.\n4. **A fallback.** Cached data, a degraded response, or a partial page. This turns a failure into a reduced experience rather than an error.\n5. **Load shedding** at A - reject beyond capacity rather than queueing everything and making every user wait.\n\n**And the ordering people get wrong:** retries without a breaker make it worse, because A and B retrying multiply the load on a C that is already struggling.",
+  "tags": [
+   "architecture",
+   "resilience",
+   "cascading-failure",
+   "bulkhead",
+   "timeouts"
+  ],
+  "followups": [
+   {
+    "q": "How do you choose a timeout value?",
+    "a": "From the latency distribution, not from a round number. Set it above the p99 of the healthy case with some headroom - so it does not fire during normal variation - but well below the point at which the caller s own budget is exhausted. Then work down the chain: if A must answer in 3 seconds, B gets perhaps 2 and C perhaps 1, so a slow C surfaces as a fast failure at B rather than a timeout at every level simultaneously. Passing a deadline down the call chain makes this explicit rather than a set of independent guesses."
+   },
+   {
+    "q": "What is the difference between a bulkhead and a circuit breaker here?",
+    "a": "A circuit breaker is about *time* - it stops calling a dependency that is failing, and lets it recover. A bulkhead is about *resources* - it caps how much of your capacity any one dependency can consume, so even while C is failing and before the breaker opens, calls to C cannot use more than their allotted share of threads or connections. They compose: the bulkhead contains the damage, the breaker ends it."
+   }
+  ]
  }
 ]

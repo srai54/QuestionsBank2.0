@@ -2469,5 +2469,29 @@
     "a": "The journeys where a failure would be a serious business problem, and where the value is specifically in the integration - real browser, real network, real backend. If the same assertion could be made at a lower level with the same confidence, it belongs there. A useful test is whether the E2E test would catch something the integration test could not: a routing problem, a missing build asset, an auth redirect, a CORS failure. If not, move it down."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "How do you manage test data so tests stay readable and independent?",
+  "answer": "The two goals conflict if you do it naively - shared fixtures make tests short but coupled; per-test setup makes them independent but verbose. The resolution is builders.\n\n**The pattern I use is an object mother or builder per aggregate**, producing a valid default that each test modifies only in the dimension it cares about. A test then reads as \"given an order that is already shipped, when I cancel it, then it fails\" with one line of setup, and the reader sees immediately which property matters because it is the only one mentioned.\n\n**What this fixes:** tests full of irrelevant setup. If a test constructs an order with twelve properties and only one affects the outcome, the reader cannot tell which - and every future change to the constructor breaks every test.\n\n**Independence comes from data ownership, not cleanup.** Each test creates its own data with unique keys - a generated id or a prefix per test - so tests cannot see each other s rows and can run in parallel. That is more reliable than cleanup, which fails when a test fails midway, and it beats resetting the database between tests, which forces serial execution.\n\n**What I avoid:**\n- **A large shared seed** that every test depends on. It becomes untouchable - nobody can change a row because some unknown test asserts on it.\n- **Tests that depend on ordering** to set up each other s state.\n- **Random data without a fixed seed.** It produces failures that cannot be reproduced. If you want randomised inputs, use property-based testing deliberately, with a recorded seed.\n\n**And keep production-like *shape*:** realistic volumes and edge-case characters, because a test dataset of five clean rows never exercises the behaviour that breaks.",
+  "tags": [
+   "testing",
+   "test-data",
+   "builders",
+   "fixtures",
+   "maintainability"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between an object mother and a builder?",
+    "a": "An object mother exposes named factory methods for meaningful cases - `Orders.Shipped()`, `Orders.WithNoLines()` - which reads well when the useful variations are a small known set. A builder exposes fluent modifiers - `An.Order().WithStatus(Shipped).Build()` - which scales better when tests need arbitrary combinations. They combine well: object mother methods that return a pre-configured builder, so common cases are one call and unusual ones are still expressible."
+   },
+   {
+    "q": "How do you handle test data for an integration test that needs referential integrity?",
+    "a": "Have the builder create the whole graph - an order builder that creates the customer and product it references unless you supply them. Otherwise every test starts with three lines of unrelated setup to satisfy foreign keys, which is exactly the noise that makes tests unreadable. The builder becomes the single place that knows what a valid graph looks like, so a new required relationship is one change rather than a change in every test."
+   }
+  ]
  }
 ]

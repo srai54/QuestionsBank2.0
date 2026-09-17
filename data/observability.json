@@ -1647,5 +1647,29 @@
     "a": "Do not copy production data into a lower environment as a matter of course - that spreads the exposure and is often a compliance breach. Anonymise or synthesise data with the same *shape*: the same volumes, the same distributions, the same edge-case characters and the same relationships, with the values replaced. The shape is almost always what triggers the bug rather than the actual values. Where you genuinely must inspect real data, do it in place with audited, time-limited access."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Health",
+  "difficulty": "Medium",
+  "question": "What should a health check endpoint actually check?",
+  "answer": "It depends which question the caller is asking, and the most common mistake is having one endpoint that tries to answer all of them.\n\n**Liveness** - \"is this process irrecoverably broken, should I restart it?\" This should be **shallow**: return 200 if the process can serve a request. It must not check dependencies. A liveness check that touches the database means a database blip restarts every instance, turning a brief degradation into a full outage with cold starts - and restarting does not fix a broken database anyway.\n\n**Readiness** - \"should traffic be routed here right now?\" This *may* check the dependencies the instance needs to serve traffic - the database connection, a required downstream. Failing readiness removes the instance from the load balancer without restarting it, which is the correct response to a transient dependency problem.\n\n**Startup** - \"has this finished booting?\" Used to give slow-starting applications time before liveness begins.\n\n**What I would include in readiness:** a cheap connectivity check per critical dependency, with its own short timeout so the health endpoint itself cannot hang. What I would *not* include: expensive queries, checks of non-critical dependencies, or anything that makes health checking a load source in itself.\n\n**The distinction that matters for the answer:** mark dependencies as *degraded* rather than *unhealthy* where the service can still do useful work without them. ASP.NET Core supports this directly with health check tags and separate endpoints, so `/health/live` and `/health/ready` can filter to different sets.\n\n**And never expose detailed health publicly** - it enumerates your internal topology for anyone who asks.",
+  "tags": [
+   "observability",
+   "health-checks",
+   "kubernetes",
+   "readiness",
+   "reliability"
+  ],
+  "followups": [
+   {
+    "q": "What happens if every instance fails readiness at once?",
+    "a": "You have taken yourself offline, because the load balancer has nowhere to route. This is the failure mode that makes over-eager readiness checks dangerous: a dependency that every instance shares - a database, an identity provider - fails, every instance reports not ready, and a partial outage becomes total. Some platforms have a safeguard that keeps routing when no instance is healthy, but relying on that is not a design. The safer approach is to fail readiness only for things that genuinely make this instance useless while others might still work."
+   },
+   {
+    "q": "How do you stop a health endpoint becoming a load source?",
+    "a": "Cache the result for a few seconds, so a probe every second does not mean a database query every second across every instance - with many instances and several dependencies that adds up to real traffic aimed at the thing you are worried about. Give each individual check a tight timeout so one slow dependency cannot make the endpoint hang and cause a false negative. And keep the probe interval and failure threshold sensible: probing every second with a threshold of one is asking for restarts on noise."
+   }
+  ]
  }
 ]
