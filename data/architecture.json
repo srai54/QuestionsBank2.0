@@ -4792,5 +4792,29 @@
     "a": "Combinatorial explosion in what you must support and test - with per-tenant behaviour, no two customers run the same system, and a bug may exist only for one combination nobody tried. It also makes support harder, since reproducing an issue requires knowing that tenant s exact configuration. Where it is genuinely required, keeping the options few and orthogonal, defaulting aggressively, and being able to dump a tenant s effective configuration for diagnosis are what keep it manageable."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Deployment",
+  "difficulty": "Hard",
+  "question": "How do you deploy a stateful service - one holding in-memory state or long-lived connections?",
+  "answer": "Stateless services are easy to deploy because instances are interchangeable. Stateful ones need a plan for what happens to the state and the connections during a rollout.\n\n**First, question the state.** A surprising amount of in-memory state is a cache that could be rebuilt or moved to a distributed cache - and doing that converts the problem into the easy one. Genuine state worth keeping in memory usually means either long-lived client connections or an in-memory working set that is expensive to rebuild.\n\n**For long-lived connections - WebSockets, SignalR, gRPC streams:**\n1. **Drain rather than kill.** On shutdown, stop accepting new connections, notify existing clients to reconnect, and allow a grace period. Kubernetes gives you `preStop` and `terminationGracePeriodSeconds` for exactly this.\n2. **Clients must reconnect automatically with backoff and jitter** - otherwise every disconnected client reconnects simultaneously and the new instances are immediately overwhelmed.\n3. **Make the connection stateless where possible** - a backplane such as Redis so any instance can serve any client, meaning a reconnection does not need to land on a particular instance.\n\n**For in-memory working state:**\n- **Externalise it** - Redis, a database - so instances are interchangeable again.\n- **Or accept a warm-up period**, with readiness reporting false until the instance has loaded what it needs, so traffic only arrives when it is useful.\n- **Roll slowly**, one instance at a time, so the warm-up cost is spread.\n\n**And design for the instance dying unexpectedly**, not just for graceful shutdown - because a node failure gives you no shutdown hook at all, and any design that only works with a clean stop will fail.",
+  "tags": [
+   "architecture",
+   "stateful-services",
+   "deployment",
+   "websockets",
+   "graceful-shutdown"
+  ],
+  "followups": [
+   {
+    "q": "Why does reconnection need jitter specifically?",
+    "a": "Because an instance shutting down disconnects all its clients simultaneously, and without jitter they all reconnect at the same moment - a thundering herd against the remaining instances, which may then fail or shed load, disconnecting more clients and amplifying it. Random backoff spreads them over a window, turning a spike into a ramp. It is the same reasoning as jitter in retry policies, and it matters more here because the trigger reliably synchronises every client at once."
+   },
+   {
+    "q": "What is the argument against externalising state to make the service stateless?",
+    "a": "Latency and a new dependency. In-memory access is nanoseconds and Redis is a network round trip, so for state accessed many times per request the difference is real - and you have made the cache a component whose failure affects you. That is usually still the right trade because interchangeable instances make deployment, scaling and failure recovery dramatically simpler. The cases where it is not are genuinely latency-critical paths, and there the answer is often a two-tier arrangement: in-memory for speed with a short TTL, distributed as the shared truth."
+   }
+  ]
  }
 ]

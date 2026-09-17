@@ -3998,5 +3998,29 @@
     "a": "When the user does not actually need to scan all the rows - which is most of the time. Pagination reduces what you fetch and hold, not just what you render, so it helps the network and memory as well as the DOM. Virtualisation is right when continuous scrolling is genuinely the interaction, such as a log viewer or a feed. Reaching for virtualisation to make a badly-designed screen feel fast is solving the wrong problem; the question of why a user is being shown ten thousand rows usually deserves an answer first."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Forms",
+  "difficulty": "Medium",
+  "question": "How do you handle a multi-step wizard where the user can navigate back and forth and refresh the page?",
+  "answer": "The requirements that make it non-trivial are persistence across refresh and navigation, so the state cannot live only in component state.\n\n**Where the state goes:**\n- **The current step belongs in the URL**, as a route segment or a query parameter. That makes the back button work correctly, makes a step linkable, and survives a refresh. Keeping it in component state is the single most common cause of a wizard where the browser back button exits the whole flow.\n- **The collected data belongs in one place above the steps** - a context, a store, or a form library instance spanning all steps - so moving between steps does not lose it.\n- **Persist it** to `sessionStorage` as it changes, or to the server as a draft if the flow is long or valuable. A refresh in the middle of a six-step application losing everything is the failure users complain about most.\n\n**Validation per step**, so the user cannot proceed with invalid data, with the whole thing revalidated on submit - because the user may have gone back and changed something that invalidates a later step.\n\n**The details that get missed:**\n- **Guard direct navigation.** Someone landing on step 4 via a link or a refresh must be redirected if the earlier steps are incomplete.\n- **Warn before leaving** with unsaved data, using `beforeunload` for tab closes and a router guard for in-app navigation.\n- **Submit once.** The final step must be idempotent or guarded against double submission, since users click twice on slow networks.\n- **Decide what a back navigation means** - does changing step 2 invalidate the choices made in step 3 based on it?\n\n**And the server revalidates everything**, because the client flow can be bypassed entirely.",
+  "tags": [
+   "react",
+   "forms",
+   "wizard",
+   "url-state",
+   "persistence"
+  ],
+  "followups": [
+   {
+    "q": "Where should the draft be stored - client or server?",
+    "a": "It depends on how much the user has invested and whether they may resume elsewhere. `sessionStorage` is enough for a short flow completed in one sitting - it survives refresh, costs nothing and disappears when the tab closes. A server-side draft is warranted when the flow is long, spans sessions or devices, or when losing it would mean a lost sale. The server option also lets you recover abandoned flows and, done carefully, allows a partially-complete submission to be picked up by support - which is worth having for anything like an application form."
+   },
+   {
+    "q": "How do you handle a change on an early step that invalidates a later one?",
+    "a": "Decide explicitly rather than letting it emerge. The options are clearing the dependent steps and telling the user why, keeping them and revalidating so the invalid ones are flagged when reached, or preventing the change once later steps are complete. Clearing silently is the version that produces complaints, because the user does not know what they lost. Modelling the dependency between steps - which answers a step depends on - is what makes this decidable rather than ad hoc."
+   }
+  ]
  }
 ]

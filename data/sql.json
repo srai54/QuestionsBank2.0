@@ -5022,5 +5022,29 @@
     "a": "Because it is expensive and rarely matches the decision being made - a report someone reads each morning does not need sub-second freshness, and asking for it forces reporting onto the transactional system where it does damage. The useful question is what decision the number supports and how quickly acting on stale data would be wrong. That usually reveals a tolerance of minutes or hours, which opens up replicas, scheduled loads and pre-aggregation. The genuine real-time cases - operational dashboards, fraud detection - are better served by streaming than by querying the transactional database harder."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How would you store hierarchical data such as an org chart or a category tree?",
+  "answer": "Four approaches, and the right one depends on whether you read subtrees or write moves more often.\n\n**1. Adjacency list** - each row holds a `ParentId`. Simple, writes are trivial, and a move is one update. The cost is that reading a whole subtree needs a recursive CTE, which is fine on modest depth and expensive on deep trees queried often.\n\n**2. Path enumeration** - each row stores its full path, such as `/1/14/92/`. Subtree reads become a single indexed `LIKE '/1/14/%'`, which is fast and simple. The cost is that moving a node requires rewriting the path of every descendant, and paths have a length limit.\n\n**3. Nested sets** - each row stores a left and right bound, so a subtree is a range query. Reads are very fast with no recursion. Writes are brutal: inserting or moving a node renumbers a large portion of the table. Suitable only for near-static hierarchies.\n\n**4. Closure table** - a separate table with a row for every ancestor-descendant pair and the distance between them. Both subtree and ancestor queries are simple indexed joins, and it handles arbitrary depth. The cost is storage - it grows with the product of depth and node count - and writes that touch several rows.\n\n**How I would choose:** adjacency list by default, because it is simplest and recursive CTEs are adequate for most real hierarchies. Closure table when reads dominate, the tree is deep, and you need both directions efficiently. Path enumeration when moves are rare and subtree reads are the main query.\n\n**And SQL Server has `hierarchyid`**, which is essentially path enumeration with built-in operations and a compact representation.",
+  "tags": [
+   "sql",
+   "hierarchical-data",
+   "closure-table",
+   "recursive-cte",
+   "modelling"
+  ],
+  "followups": [
+   {
+    "q": "What are the limits of a recursive CTE for this?",
+    "a": "They work well and the constraints are practical rather than absolute. The default recursion limit is 100 levels and must be raised explicitly with `MAXRECURSION` - and setting it to zero for unlimited is how an accidental cycle becomes an infinite query rather than an error. Performance degrades with depth because each level is a separate join, so a deep tree queried on every page load is where a closure table starts to pay. The other risk is cycles: nothing in an adjacency list prevents a node becoming its own ancestor, so if users can reorganise the tree you need a check on write."
+   },
+   {
+    "q": "How do you prevent cycles in an adjacency list?",
+    "a": "Validate on write rather than hoping - before setting a new parent, walk up from the proposed parent and reject if you encounter the node being moved. With a closure table it is cheaper, because a cycle means the proposed parent is already a descendant, which is one indexed lookup. Doing it in the database with a trigger or a constraint-backed check is more reliable than doing it in application code, since any path that writes directly bypasses the application check and corrupts the tree silently."
+   }
+  ]
  }
 ]

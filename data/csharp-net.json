@@ -13046,5 +13046,29 @@
     "a": "Friction at the boundaries - they need converters for EF, for JSON serialisation, for model binding in ASP.NET Core, and for anything that reflects over the model. That is real, repetitive work, and on a codebase with fifty entities it adds up. The counter-argument is that passing the wrong id is a bug that compiles, is easy to write, and can be expensive - so the friction buys something concrete. Source generators now remove most of the boilerplate, which has shifted the balance in favour of using them."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Diagnostics",
+  "difficulty": "Hard",
+  "question": "A production service is hung - requests come in and nothing responds. How do you find out why?",
+  "answer": "A hang with no errors means threads are blocked, not that code is failing. So the goal is to find out what every thread is waiting on, and the fastest route to that is a memory dump.\n\n**What I would do:**\n\n1. **Capture a dump before restarting.** `dotnet-dump collect` on the process. Restarting resolves the symptom and destroys the evidence, and the hang will recur - so capturing first is the difference between fixing it and waiting for it to happen again.\n2. **Check the cheap indicators first** while the dump is being taken: `dotnet-counters` shows thread-pool thread count and queue length, GC activity, and lock contention. A growing thread-pool queue with idle CPU is close to conclusive for starvation.\n3. **Analyse the dump** with `dotnet-dump analyze`. The commands that matter are `clrthreads` for all managed threads, `clrstack` for what each is doing, `syncblk` for monitor locks and who holds them, and `dumpheap -stat` if memory looks involved.\n\n**The patterns and what they mean:**\n- **Many threads parked in `Monitor.Wait` or on a semaphore, beneath a `.Result` or `.Wait()`** - sync-over-async causing thread-pool starvation. The pool injects threads slowly, so throughput collapses while CPU sits idle.\n- **Threads waiting on a connection pool** - connection leak or a pool sized too small, often from undisposed contexts or a long transaction.\n- **A cycle in `syncblk`** - a genuine deadlock between locks.\n- **All threads in GC** - memory pressure, not a lock problem.\n- **Threads in a native call** - a synchronous third-party SDK blocking.\n\n**And the preventative point:** most hangs of this kind come from blocking on async code, so the structural fix is async all the way down rather than better diagnostics.",
+  "tags": [
+   "dotnet",
+   "diagnostics",
+   "dumps",
+   "thread-pool",
+   "hang"
+  ],
+  "followups": [
+   {
+    "q": "How do you capture a dump in a container without disrupting the service?",
+    "a": "Install the diagnostic tools as a sidecar or use an ephemeral debug container sharing the process namespace, so you attach without modifying the running image. `dotnet-dump collect` pauses the process briefly while writing, which for a hung service costs nothing since it is not serving anyway. The detail to plan for in advance is that the dump can be several gigabytes and needs somewhere to go - a mounted volume or an upload to blob storage - because writing it to a container filesystem that then gets recycled loses it."
+   },
+   {
+    "q": "What does an increasing thread-pool queue with low CPU tell you specifically?",
+    "a": "That work is arriving faster than threads are available to run it, while the threads that exist are not computing - so they are blocked on something. That combination rules out a CPU bottleneck and points squarely at blocking: sync-over-async, a lock, or waiting on an exhausted pool of some kind. It is the single most diagnostic pair of counters for this class of problem, and it is available without a dump, which is why checking it first is worth the thirty seconds."
+   }
+  ]
  }
 ]

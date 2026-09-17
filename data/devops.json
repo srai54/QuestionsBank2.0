@@ -4257,5 +4257,29 @@
     "a": "A software bill of materials lists every component and version in the artefact, so when a vulnerability is announced you can answer \"are we affected and where\" by querying rather than by rebuilding and inspecting. Generated as part of the build and stored with the artefact, it makes the dependency set a recorded fact rather than something you reconstruct later. It is increasingly a procurement and regulatory requirement, and it is cheap to produce once builds are already pinned."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Releases",
+  "difficulty": "Medium",
+  "question": "How do you release a change that affects a database, an API and a mobile app together?",
+  "answer": "By never releasing them together - the three have different deployment cadences and one of them cannot be rolled back, so the design has to make each independently deployable.\n\n**The ordering principle:** deploy in the order that keeps every intermediate state valid, with the most constrained consumer last.\n\n**The sequence:**\n1. **Database first, additively.** Add the column or table as nullable, with no behaviour depending on it. Every running application version still works, so this is trivially reversible.\n2. **API next, supporting both shapes.** It writes the new field and continues to accept and return the old one. Old mobile clients are unaffected; new ones can start using it.\n3. **Mobile app last**, and it will trickle out over weeks. The API must keep supporting the old behaviour until usage of old versions is negligible, which you measure rather than assume.\n4. **Contract phase, much later.** Once nothing uses the old path, remove it from the API, then drop the column.\n\n**Why this order:** each step leaves the system working for every deployed combination. A mobile release cannot be recalled, so the API must never depend on a client change having happened. And during a rolling API deployment both versions run simultaneously, so the database must satisfy both.\n\n**What makes it workable:** feature flags to decouple the code being deployed from the behaviour being enabled, version telemetry so you know what is still in use, and a minimum-version mechanism as the escape hatch for a security fix.\n\n**And the thing to resist:** a coordinated release where all three go out together. It works until one needs rolling back.",
+  "tags": [
+   "devops",
+   "release-management",
+   "expand-contract",
+   "mobile",
+   "versioning"
+  ],
+  "followups": [
+   {
+    "q": "What do you do when the database change genuinely cannot be additive?",
+    "a": "Split it into additive steps that reach the same destination - add the new column, dual-write, backfill, switch reads, then drop the old one across separate releases. That is the expand-and-contract shape and it is almost always achievable. Where it genuinely is not, such as a change requiring data to be unavailable during transformation, you are into planned downtime, and that should be a deliberate decision with a communicated window rather than something discovered during deployment."
+   },
+   {
+    "q": "How long do you keep supporting the old API behaviour?",
+    "a": "Until traffic on it is low enough that cutting it off affects an acceptable number of users, which means instrumenting version usage from the start so the question is answerable with data. For mobile that is typically months rather than weeks, because a meaningful proportion of users update slowly or never. The decision should be a business one - here is who breaks and when - rather than an engineering deadline, and the cost of carrying both paths is the argument for making fewer breaking changes rather than for cutting off sooner."
+   }
+  ]
  }
 ]

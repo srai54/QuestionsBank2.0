@@ -2781,5 +2781,29 @@
     "a": "Count it. If the same shape of mistake has appeared three times, the expected cost of future occurrences usually exceeds the cost of preventing them - an analyser rule, a type change, a constraint, or an architecture test. Below that threshold, a regression test per occurrence is proportionate. Tracking bugs by cause rather than only by symptom is what makes the pattern visible; without it every occurrence looks like an isolated mistake."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Refactoring",
+  "difficulty": "Medium",
+  "question": "How do you safely refactor code that has no tests?",
+  "answer": "By getting a safety net in place before changing behaviour, and by separating the two activities rigorously - characterise, then refactor, never both at once.\n\n**The sequence:**\n\n1. **Characterisation tests first.** Capture what the code currently does, including behaviour that looks wrong. You are recording reality, not correctness, because you cannot yet distinguish a bug from a quirk something depends on. Running the code with real inputs and pinning the outputs gives you this quickly.\n2. **Find a seam.** If the code cannot be instantiated without a database, use the least invasive technique to make it testable - extract and override, or an added constructor overload that preserves the existing one. Do this with no behaviour change.\n3. **Refactor in small, mechanical steps** with the tests running constantly. Rename, extract method, introduce parameter - the ones your IDE can do automatically are the safest, because the tool guarantees equivalence.\n4. **Commit frequently**, so any step can be reverted individually rather than unpicking a large change.\n5. **Change behaviour only afterwards**, as a separate, reviewable commit - and update the characterisation test with an explanation of why the expected value changed.\n\n**What makes this fail:** mixing refactoring with behaviour change, so a bug appears and you cannot tell which part caused it. And starting with the most tangled part, when beginning at the edges usually makes the middle more tractable.\n\n**And be selective.** Effort should follow change frequency - refactoring code nobody touches is cost with no return, however unpleasant it is to read.",
+  "tags": [
+   "testing",
+   "legacy-code",
+   "characterisation-tests",
+   "refactoring",
+   "safety"
+  ],
+  "followups": [
+   {
+    "q": "How do you write a characterisation test for code with side effects everywhere?",
+    "a": "Start by capturing whatever is observable without restructuring - the return value, the rows written, the messages sent - even if that means the test is slow and touches a real database. An ugly, slow test that pins current behaviour is worth far more than an elegant one you cannot write yet. Then use it to make the code testable properly, at which point the ugly test can be replaced by faster ones. The order matters: trying to make it beautiful before you have any safety net is the risk you were trying to avoid."
+   },
+   {
+    "q": "What do you do when you find an actual bug while writing characterisation tests?",
+    "a": "Record it as the current behaviour, note it, and fix it separately afterwards - not in the same change. Something downstream may depend on the bug, and changing it while also restructuring means any resulting failure has two possible causes. Writing the test that documents the wrong behaviour feels perverse, and it is what lets you later change it deliberately with a clear commit saying \"this was wrong, here is what it now does\"."
+   }
+  ]
  }
 ]

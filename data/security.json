@@ -3010,5 +3010,29 @@
     "a": "A per-item data key encrypts the data, and a master key in the key service encrypts that data key, which is stored alongside the ciphertext. So bulk encryption happens locally at full speed while the master key never leaves the service, and rotating the master key means re-wrapping small data keys rather than re-encrypting terabytes. It is the standard pattern for encrypting large volumes with managed keys, and it is what most cloud storage encryption does internally."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Authorisation",
+  "difficulty": "Medium",
+  "question": "How do you handle authorisation for an API where permissions are hierarchical - organisations containing teams containing projects?",
+  "answer": "Hierarchical permissions are where simple role checks stop working, because access is inherited down the tree and a flat role list cannot express it.\n\n**The model:** permissions are granted at a node and inherit to descendants. Someone with admin on an organisation implicitly administers every team and project within it; someone granted access to a single project has it only there.\n\n**How I would implement it:**\n\n1. **Store the hierarchy in a way that makes ancestor queries cheap.** A closure table or a materialised path, so \"is X an ancestor of Y\" is one indexed lookup rather than a recursive walk on every request.\n2. **Resolve effective permissions** as: the permissions granted directly on this node, plus those inherited from its ancestors. That resolution should be one query, and it is worth caching per user for the duration of a request.\n3. **Enforce at the data layer as well as the endpoint.** A global filter or row-level security scoping queries to accessible nodes means a forgotten check fails closed rather than exposing data. Relying on every endpoint remembering is how insecure direct object reference happens.\n4. **Handle the awkward cases deliberately** - can a grant lower in the tree *deny* inherited access, can permissions be granted to groups as well as users, and what happens when a project moves between teams. Each of those changes the model significantly and should be decided before building.\n\n**What I would avoid:** resolving the hierarchy per request with a recursive query, and embedding the full permission set in a token - both fall over as the tree grows, and the token version cannot be revoked.\n\n**For anything more complex than this**, a relationship-based system such as OpenFGA models it directly rather than being reimplemented.",
+  "tags": [
+   "security",
+   "authorisation",
+   "hierarchical-permissions",
+   "rbac",
+   "closure-table"
+  ],
+  "followups": [
+   {
+    "q": "How do you keep permission checks fast without stale data?",
+    "a": "Cache the resolved permission set per user for the life of the request, which removes repeated lookups within one operation and cannot go stale within it. Caching across requests is where staleness bites - a revoked permission that persists for minutes is a real security gap - so it needs a short TTL plus explicit invalidation when a grant changes or the hierarchy moves. The compromise most systems settle on is a short cache with event-driven invalidation, and accepting a bounded window measured in seconds."
+   },
+   {
+    "q": "What happens when a project moves to a different team?",
+    "a": "Everyone whose access was inherited from the old ancestors loses it, and everyone inheriting from the new ones gains it - which may be a surprise to both groups and is occasionally a security incident if nobody thought about it. With a closure table the move means rewriting the ancestor rows for that subtree, which must be transactional. The product decisions to settle are whether direct grants on the moved node survive the move, and whether anyone is notified - and both are easier to answer before the first move than during it."
+   }
+  ]
  }
 ]
