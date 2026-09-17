@@ -2788,5 +2788,29 @@
     "a": "Per-tenant quotas sized to their plan rather than one global limit, plus a concurrency cap so a single tenant cannot monopolise workers even within their request quota. For shared backend resources, a fair-queuing or weighted approach keeps a heavy tenant from starving others. The failure mode to avoid is a global limit that a large customer exhausts, making the API unavailable for everyone else - that is a noisy-neighbour outage caused by the protection mechanism."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Search",
+  "difficulty": "Hard",
+  "question": "Design search for a site with 10 million products. Why not just use SQL LIKE?",
+  "answer": "`LIKE '%term%'` cannot use a normal index, so it scans the table on every search. At 10 million rows that is unusable. But the deeper problem is that it answers the wrong question - it matches substrings, not *relevance*.\n\n**What a search engine gives you that `LIKE` cannot:**\n- **Inverted index** - term to document list, so lookup is proportional to matches, not to table size.\n- **Analysis** - tokenising, lowercasing, stemming so \"running\" matches \"run\", stop words, and synonyms.\n- **Relevance ranking** - BM25 scoring so the best match is first, not an arbitrary row.\n- **Typo tolerance** via fuzzy matching, which matters enormously for real users.\n- **Faceting** - counts per category and per brand, computed alongside the results.\n\n**The architecture I would build:**\n\n1. **Primary store stays relational** - it is the source of truth.\n2. **A search index** - Elasticsearch, OpenSearch, or Azure AI Search - populated from the primary store.\n3. **Indexing pipeline** driven by change events rather than a periodic full rebuild, so updates land in seconds. Keep full reindex capability for schema changes, and make it possible to run against a new index and swap an alias atomically.\n4. **Query path** goes to the search index, returning ids and facets; hydrate details from the primary store or store them denormalised in the index.\n\n**The consistency point to state:** search becomes eventually consistent. A newly created product will not be findable for a few seconds, and the UI must not promise otherwise.\n\n**When `LIKE` is fine:** an admin lookup over a few thousand rows, or a prefix match (`LIKE 'term%'`) which *can* use an index. Do not build a search cluster for an internal tool.",
+  "tags": [
+   "system-design",
+   "search",
+   "elasticsearch",
+   "inverted-index",
+   "scaling"
+  ],
+  "followups": [
+   {
+    "q": "What is the middle ground between LIKE and a search cluster?",
+    "a": "The database s own full-text search - SQL Server full-text indexes, or PostgreSQL `tsvector` with GIN indexes. You get tokenisation, stemming and ranking without operating another system, and PostgreSQL in particular is capable enough for a great many applications. The limits are weaker relevance tuning, no built-in typo tolerance, and faceting that you assemble yourself - so it is a strong default until search becomes a primary product surface."
+   },
+   {
+    "q": "How do you keep the index in sync without drift?",
+    "a": "Publish change events transactionally with the write - the outbox pattern - so an update cannot be lost between the database and the indexer. Then run a periodic reconciliation that compares counts and checksums between source and index to detect drift, because over months something always slips. And make full reindexing routine and fast enough to be unremarkable: if rebuilding is frightening, you will avoid it exactly when you need it."
+   }
+  ]
  }
 ]

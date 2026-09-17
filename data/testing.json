@@ -2397,5 +2397,29 @@
     "a": "Assert on outputs and observable side effects rather than on interactions. Instead of verifying that a mock repository received `Save`, use a real or in-memory implementation and assert the item can be read back. Mock only at boundaries you do not own and cannot run - a payment gateway, an email sender - and even then assert on the message sent rather than on the call sequence."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How do you write a meaningful load test, and what do people usually get wrong?",
+  "answer": "A load test answers \"what happens at N concurrent users\", and it is only meaningful if N, the workload mix and the environment resemble reality.\n\n**What people usually get wrong:**\n\n1. **Testing a single endpoint.** Real load is a mix, and the interactions matter - the slow report query is what starves the connection pool that the fast endpoints need.\n2. **No think time.** Hammering with zero delay between requests produces a synthetic pattern no user creates, and usually measures your load generator rather than the system.\n3. **Testing against a scaled-down environment** and extrapolating. Performance is non-linear; half the hardware does not give half the throughput, and a database with a tenth of the data has completely different query plans.\n4. **Unrealistic data.** A test database with 1,000 rows will not reproduce the index behaviour of 10 million.\n5. **Cold caches, or a single warm key.** Testing with the same product id every time gives a 100% cache hit rate that production will never see.\n6. **Reporting averages.** The average hides everything. p95, p99 and the maximum are what users experience, and an average that looks fine can sit under a p99 of 8 seconds.\n\n**What I would actually measure:** throughput at a fixed latency target, not just latency at a fixed load. The useful statement is \"we sustain 2,000 requests per second with p99 under 400ms, and beyond that latency climbs sharply\" - that is a capacity number you can plan against.\n\n**And I would find the knee** by ramping load gradually until latency degrades, rather than testing one arbitrary level. The interesting result is where it breaks and how - gracefully, or by falling over.",
+  "tags": [
+   "testing",
+   "load-testing",
+   "performance",
+   "percentiles",
+   "capacity"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between a load test, a stress test and a soak test?",
+    "a": "A load test measures behaviour at expected volume. A stress test deliberately exceeds capacity to see *how* it fails - gradual degradation and shed load, or a cascade and total collapse. A soak test runs at moderate load for hours or days to find things that only appear over time: memory leaks, connection leaks, log disks filling, a cache growing unbounded. Teams usually run the first and skip the third, which is why leaks reach production."
+   },
+   {
+    "q": "How do you interpret a result where throughput rises then falls as you add load?",
+    "a": "That is saturation followed by collapse, and it usually means contention rather than raw resource exhaustion - queueing on a lock, a connection pool, or a thread pool. Past the knee, extra concurrency adds context switching and queue depth without adding useful work, so total throughput drops. The fix is nearly always to bound concurrency deliberately - a queue with a fixed number of workers, so excess load waits rather than degrading everyone - which is why admission control matters more than raw capacity."
+   }
+  ]
  }
 ]

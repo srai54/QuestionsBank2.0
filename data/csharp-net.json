@@ -12282,5 +12282,53 @@
     "a": "In normal control flow yes, including when an exception propagates, because it compiles to try/finally. It does not survive a process crash, a `StackOverflowException`, or `Environment.FailFast` - nothing does. The more common real gap is an object created before the `using` block is entered, or a disposable stored in a field where the `using` only covers a local, so the thing you meant to dispose is not the thing that was disposed."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Cancellation",
+  "difficulty": "Medium",
+  "question": "How does CancellationToken work, and what is the most common mistake you see with it?",
+  "answer": "A `CancellationTokenSource` owns the signal; the `CancellationToken` is a cheap struct handed to anyone who should observe it. Cancellation is **cooperative** - nothing is forcibly aborted. Code must either poll `IsCancellationRequested`, call `ThrowIfCancellationRequested()`, or pass the token to something that does.\n\n**The most common mistake by a wide margin: accepting a token and not passing it on.** A controller action takes a `CancellationToken`, calls a service, and the service calls `SaveChangesAsync()` with no token. The parameter is there, the API looks cancellable, and nothing actually cancels. It is the sort of thing that reviews miss because the signature looks right.\n\n**The others I look for:**\n- **Swallowing `OperationCanceledException`** in a general `catch (Exception)`, turning a cancellation into a logged error. Cancellation is expected, not a failure - catch it separately, and do not log it as an error when the client simply disconnected.\n- **Not disposing a `CancellationTokenSource`**, particularly one created with a timeout, which holds a timer.\n- **Using the request s token for work that must complete.** If the user navigates away mid-request, that token is cancelled - so writing an audit record or committing a transaction under it can abort half-done. Work that must finish should use `CancellationToken.None` or a separate token.\n- **Registering callbacks and not disposing the registration**, which leaks when the token is long-lived.\n\n**`CreateLinkedTokenSource`** is the tool for combining a request token with a timeout, which is the usual real requirement.",
+  "tags": [
+   "csharp",
+   "cancellation",
+   "async",
+   "aspnet-core",
+   "code-review"
+  ],
+  "followups": [
+   {
+    "q": "What happens to a database transaction when its token is cancelled mid-write?",
+    "a": "The command is cancelled and the transaction rolls back, so you do not get a half-applied transaction - the database protects you there. The danger is work that spans more than one transactional boundary: three saves in a loop where the token cancels after the second leaves the first two committed and the third not. That is why a multi-step operation either needs to be one transaction, or needs to be idempotent and resumable, rather than relying on cancellation being tidy."
+   },
+   {
+    "q": "How do you make a long CPU-bound loop cancellable?",
+    "a": "Check the token inside the loop - `token.ThrowIfCancellationRequested()` at the top of each iteration, or every N iterations if the body is very short and the check would dominate. There is no way to interrupt a tight loop from outside; cooperative means the loop must cooperate. If the work is in a third-party call that takes no token, you cannot cancel it at all - the honest options are to run it in a process you can kill, or to accept that the timeout only stops you waiting, not it working."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Minimal APIs",
+  "difficulty": "Medium",
+  "question": "When would you choose minimal APIs over controllers, and what do you lose?",
+  "answer": "Minimal APIs remove the controller and action-method ceremony - you map a route directly to a delegate. They start faster, allocate less per request, and are far easier to read for a small surface.\n\n**I would choose minimal APIs for:** small services, internal APIs, functions-style endpoints, anything with a handful of routes, and anything where startup time matters - they are also the path of least resistance for Native AOT, since controllers rely more on reflection.\n\n**I would choose controllers for:** large APIs with many endpoints sharing cross-cutting behaviour, teams already productive with the MVC conventions, and anywhere the filter pipeline and model-binding conventions are doing real work for you.\n\n**What you give up with minimal APIs, and what has since closed:**\n- **Action filters** do not apply; you use endpoint filters, which arrived in .NET 7 and cover most of the same ground.\n- **Model validation attributes** were not applied automatically for a long time. That gap has narrowed but validation is still something you wire up more explicitly, often with a validation library or an endpoint filter.\n- **Convention-based organisation.** With controllers, structure is given to you. With minimal APIs, a hundred `app.MapGet` calls in `Program.cs` is a mess, so you need your own discipline - grouping with `MapGroup`, and an endpoint-registration convention per feature.\n\n**The practical answer I would give:** the performance difference rarely decides it, because it is small next to a database call. Choose on how much structure the API needs. And note it is not either/or - both can run in the same application, which is the sensible migration path.",
+  "tags": [
+   "dotnet",
+   "minimal-apis",
+   "aspnet-core",
+   "controllers",
+   "api-design"
+  ],
+  "followups": [
+   {
+    "q": "How do you keep a large minimal API codebase organised?",
+    "a": "Define an interface such as `IEndpoint` with a `MapEndpoints` method, implement it per feature, and register them all by scanning the assembly at startup. Combined with `MapGroup` for shared prefixes, filters and auth policies, you get the structure controllers gave you without the ceremony. Without something like this, `Program.cs` becomes a thousand-line file and route conflicts are found at runtime."
+   },
+   {
+    "q": "What does TypedResults give you over Results?",
+    "a": "A concrete return type rather than `IResult`, which means the endpoint s possible responses are visible in the signature - so OpenAPI generation is accurate without extra attributes, and unit tests can assert on the typed result directly instead of casting. Declaring `Results<Ok<Product>, NotFound>` documents the contract in the type system, which is the closest minimal APIs get to the self-describing quality of well-attributed controllers."
+   }
+  ]
  }
 ]

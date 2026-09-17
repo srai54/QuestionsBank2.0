@@ -4430,5 +4430,29 @@
     "a": "Pin the inputs. Record an as-of timestamp and filter on it so re-running gives the same answer, include a unique tiebreaker in every ordering, use UTC internally and convert once at display, and state the user context the report ran under. For financial reporting, snapshot the underlying data into a reporting table so the numbers cannot move retrospectively - reconciliation is impossible against a moving target."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How would you model soft deletes, and what problems do they cause?",
+  "answer": "A soft delete marks a row as deleted - `IsDeleted`, or better `DeletedUtc` and `DeletedBy`, which carries when and by whom rather than just a flag.\n\n**Why teams want it:** accidental deletion recovery, audit and regulatory requirements, and preserving referential integrity for historical records - an order line pointing at a product that was withdrawn should still render.\n\n**The problems, which are underrated:**\n\n1. **Every query must filter.** Forget one and deleted data reappears. A global query filter in EF Core handles this centrally, but raw SQL, reports and integrations all sit outside it and each is a place to forget.\n2. **Unique constraints break.** A unique email becomes impossible to re-use after a soft delete, because the old row still holds it. The fix is a filtered unique index - unique *where* `DeletedUtc IS NULL` - which is easy to miss until a user cannot re-register.\n3. **The table only grows**, so indexes bloat with rows nobody queries. Filtered indexes and eventual archival are needed.\n4. **Cascades are manual.** Deleting a parent should usually soft-delete its children, and nothing in the database enforces that, so orphaned-but-visible children happen.\n5. **It does not satisfy \"delete my data\" requests.** Under GDPR erasure, soft delete is not deletion. You need real deletion or anonymisation, so the compliance story must be designed rather than assumed.\n\n**What I would consider instead:** moving deleted rows to an archive table, or an append-only audit log alongside real deletes. Both keep the main table clean and the history intact, at the cost of more machinery.",
+  "tags": [
+   "sql",
+   "soft-delete",
+   "data-modelling",
+   "ef-core",
+   "gdpr"
+  ],
+  "followups": [
+   {
+    "q": "How do global query filters in EF Core fail you?",
+    "a": "They apply to the entity when queried directly, but they can surprise you on navigation properties and in joins - a required relationship whose principal is filtered out can silently drop rows from the result, and the filter is not applied to raw SQL or to `IgnoreQueryFilters` paths. The bigger operational gap is everything outside EF: reporting tools, stored procedures, exports and another team s service reading the same database all see deleted rows unless each independently remembers."
+   },
+   {
+    "q": "What does a filtered unique index look like and what is the catch?",
+    "a": "In SQL Server, `CREATE UNIQUE INDEX IX ON Users(Email) WHERE DeletedUtc IS NULL` - uniqueness applies only among live rows, so a deleted user s email can be reused. The catch is that the query must match the filter predicate for the optimiser to use the index, and parameterised queries sometimes fail to match, so the index silently is not used for reads even though it still enforces the constraint. PostgreSQL has the same feature as a partial index."
+   }
+  ]
  }
 ]
