@@ -13070,5 +13070,29 @@
     "a": "That work is arriving faster than threads are available to run it, while the threads that exist are not computing - so they are blocked on something. That combination rules out a CPU bottleneck and points squarely at blocking: sync-over-async, a lock, or waiting on an exhausted pool of some kind. It is the single most diagnostic pair of counters for this class of problem, and it is available without a dump, which is why checking it first is worth the thirty seconds."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Generics",
+  "difficulty": "Medium",
+  "question": "What do generic constraints buy you, and which ones do you actually use?",
+  "answer": "Constraints tell the compiler what a type parameter can do, which turns runtime casts and reflection into compile-time guarantees and often removes boxing.\n\n**The ones I use in practice:**\n\n- **`where T : class` / `where T : struct`** - mostly to control nullability and to let the JIT specialise. `struct` in particular lets the runtime generate specialised code per value type, avoiding boxing entirely.\n- **`where T : IEquatable<T>`** combined with `struct` - this is the one that matters for performance. Without it, comparing struct values falls back to reflection-based `ValueType.Equals`, which boxes both operands on every comparison.\n- **`where T : new()`** - lets you construct inside the generic method. Useful, and limited to a parameterless constructor, which is often too restrictive; a factory delegate parameter is more flexible.\n- **`where T : SomeBaseType`** - the common case for a generic repository or handler, so you can access members of the base.\n- **`where T : notnull`** - for dictionary keys and anywhere null would be meaningless.\n\n**The newer ones worth knowing:**\n- **`where T : unmanaged`** - enables pointer operations and `stackalloc` on the type, for interop and high-performance code.\n- **Static abstract members in interfaces**, which finally allow generic maths - `where T : INumber<T>` lets you write one `Sum` that works for `int`, `double` and `decimal` without overloads or boxing. That closed a long-standing gap.\n\n**The general rule:** constrain as tightly as the code genuinely requires and no tighter. Over-constraining limits reuse; under-constraining forces casts and reflection back into the implementation.",
+  "tags": [
+   "csharp",
+   "generics",
+   "constraints",
+   "generic-math",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "Why does the struct constraint plus IEquatable matter so much for performance?",
+    "a": "Because `EqualityComparer<T>.Default` can only call your strongly-typed `Equals` if the compiler knows the type implements `IEquatable<T>`. Without it, every comparison goes through `ValueType.Equals`, which compares fields reflectively and boxes both instances - so a dictionary lookup on that struct allocates twice and runs far slower. With both constraints the JIT emits a direct call to your implementation and nothing is allocated. It is a large difference from two words of declaration."
+   },
+   {
+    "q": "What do static abstract interface members enable that was not possible before?",
+    "a": "Calling static members - operators, `Parse`, `Zero` - through a type parameter, which is what generic maths needs. Previously a generic `Sum<T>` could not use `+` because nothing guaranteed the operator existed, so libraries either wrote an overload per numeric type or used `dynamic` and paid for it. With `where T : INumber<T>` the operators are part of the contract and the JIT resolves them statically, so one implementation covers every numeric type with no boxing and no indirection."
+   }
+  ]
  }
 ]

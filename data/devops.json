@@ -4281,5 +4281,29 @@
     "a": "Until traffic on it is low enough that cutting it off affects an acceptable number of users, which means instrumenting version usage from the start so the question is answerable with data. For mobile that is typically months rather than weeks, because a meaningful proportion of users update slowly or never. The decision should be a business one - here is who breaks and when - rather than an engineering deadline, and the cost of carrying both paths is the argument for making fewer breaking changes rather than for cutting off sooner."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Reliability",
+  "difficulty": "Medium",
+  "question": "What is graceful shutdown and why does it matter more in a container?",
+  "answer": "Graceful shutdown means finishing in-flight work and releasing resources cleanly instead of being killed mid-request. It matters more in a container because containers are restarted constantly - every deploy, every scale-in, every node reschedule - so what is an occasional event on a long-lived server becomes routine.\n\n**The sequence that has to happen:**\n\n1. **The orchestrator sends SIGTERM** and removes the instance from the load balancer. Those are not simultaneous, and the gap is where requests get lost - so the application should continue serving briefly after receiving the signal rather than stopping immediately.\n2. **Stop accepting new work** - stop taking queue messages, stop accepting new connections.\n3. **Finish in-flight requests**, within a bounded time.\n4. **Flush what is buffered** - telemetry, logs, metrics. An instance that exits immediately loses the very logs explaining why it was struggling.\n5. **Release resources** - close connections, release leases and distributed locks so another instance can take over without waiting for expiry.\n6. **Exit**, before the orchestrator sends SIGKILL, which is unstoppable.\n\n**In .NET the host does much of this** - it handles SIGTERM, triggers the `ApplicationStopping` token, and waits for the shutdown timeout, which defaults to 30 seconds and is often too short for a service with long requests.\n\n**The details people miss:** `terminationGracePeriodSeconds` in Kubernetes must exceed the application s shutdown timeout, or the container is killed while still draining. And a `preStop` hook with a short sleep gives the load balancer time to stop routing before shutdown begins, which removes the dropped requests at the start of the sequence.",
+  "tags": [
+   "devops",
+   "graceful-shutdown",
+   "kubernetes",
+   "sigterm",
+   "reliability"
+  ],
+  "followups": [
+   {
+    "q": "Why does a preStop sleep help if the orchestrator already removed the instance from the load balancer?",
+    "a": "Because removal propagates asynchronously - the endpoint change has to reach every proxy, and in-flight connections may already be established. So for a second or two after SIGTERM, requests are still arriving at an instance that has begun shutting down. Sleeping in `preStop` before the signal reaches the application means it keeps serving normally during that window, and only then starts draining. It is a small delay that eliminates a class of intermittent 502s during every deployment."
+   },
+   {
+    "q": "What happens to a message a worker was processing when it is killed?",
+    "a": "With at-least-once delivery, the lock or lease expires and the message is redelivered to another worker - so nothing is lost, but the work may be partially done and then repeated, which is why handlers must be idempotent. A graceful shutdown improves on that by letting the current message finish and abandoning nothing, but it cannot help with SIGKILL or a node failure. So graceful shutdown reduces how often redelivery happens; idempotency is what makes it safe when it does."
+   }
+  ]
  }
 ]

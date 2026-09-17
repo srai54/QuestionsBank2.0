@@ -4022,5 +4022,29 @@
     "a": "Decide explicitly rather than letting it emerge. The options are clearing the dependent steps and telling the user why, keeping them and revalidating so the invalid ones are flagged when reached, or preventing the change once later steps are complete. Clearing silently is the version that produces complaints, because the user does not know what they lost. Modelling the dependency between steps - which answers a step depends on - is what makes this decidable rather than ad hoc."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Data",
+  "difficulty": "Medium",
+  "question": "How do you handle a search box that queries the server as the user types?",
+  "answer": "Several problems at once - too many requests, out-of-order responses, and wasted work - and each needs a specific answer.\n\n**The pieces:**\n\n1. **Debounce the input**, typically 300ms, so a request fires when typing pauses rather than per keystroke. That alone removes most of the load.\n2. **Cancel superseded requests.** Without cancellation, a slow response for `\"ca\"` can arrive after a fast one for `\"cat\"` and overwrite the newer results - the race that produces results not matching what is in the box. An `AbortController` per request, aborted in cleanup, fixes it properly by cancelling rather than ignoring.\n3. **Key the cache by the query term**, if using a query library. That gives you cancellation, deduplication and out-of-order protection for free, because each term is a separate cache entry and a stale response cannot overwrite a different key. This is the reason to use a library rather than hand-rolling.\n4. **Do not search on an empty or very short term** - one character matches everything and is expensive for no value.\n5. **Keep the input controlled and the results derived**, so the box never lags behind typing. A common mistake is making the input value depend on the request state, which makes typing feel sticky.\n\n**The UX details that matter:** show a subtle loading indicator rather than blanking the previous results, keep showing the old results while fetching so the list does not flash empty, and handle \"no results\" distinctly from \"still loading\".\n\n**And put the search term in the URL** if the results are worth sharing or returning to.",
+  "tags": [
+   "react",
+   "search",
+   "debounce",
+   "race-conditions",
+   "react-query"
+  ],
+  "followups": [
+   {
+    "q": "Why is debouncing not enough on its own?",
+    "a": "Because it reduces the number of requests without ordering them - a user who pauses, types more, and pauses again produces two requests, and if the first is slower the stale response still lands last. Debouncing addresses volume; cancellation or cache keying addresses correctness. The bug is intermittent and depends on network timing, so it survives testing on a fast connection and appears for users on mobile, which is what makes it worth handling explicitly rather than hoping."
+   },
+   {
+    "q": "Should you debounce or throttle here?",
+    "a": "Debounce, because you want the request to fire when the user stops typing, not at intervals while they type. Throttling would fire periodically during typing - more requests, and the intermediate ones are for terms the user was still composing. Throttle is right for continuous events where you want regular updates, such as scroll or resize handlers; debounce is right for \"act when the burst ends\", which is exactly what a search box is."
+   }
+  ]
  }
 ]

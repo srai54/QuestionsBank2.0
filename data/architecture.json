@@ -4816,5 +4816,29 @@
     "a": "Latency and a new dependency. In-memory access is nanoseconds and Redis is a network round trip, so for state accessed many times per request the difference is real - and you have made the cache a component whose failure affects you. That is usually still the right trade because interchangeable instances make deployment, scaling and failure recovery dramatically simpler. The cases where it is not are genuinely latency-critical paths, and there the answer is often a two-tier arrangement: in-memory for speed with a short TTL, distributed as the shared truth."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Scaling",
+  "difficulty": "Hard",
+  "question": "What is the difference between scaling up and scaling out, and what stops you doing either?",
+  "answer": "**Scaling up** means a bigger machine - more CPU, memory, faster disks. **Scaling out** means more machines sharing the load.\n\n**Scaling up is underrated.** It requires no application changes, no distributed state, no coordination, and modern hardware goes a very long way - a single server with hundreds of gigabytes of memory handles workloads people assume need a cluster. The limits are that there is a largest available machine, the price curve is steep at the top end, and it is a single point of failure with downtime for the resize.\n\n**Scaling out is what people reach for**, and it has prerequisites the application must actually meet:\n- **Statelessness**, or state externalised, so any instance can serve any request. In-memory session or cache state breaks this.\n- **No local file dependencies** - uploads and generated files must live in shared storage.\n- **Idempotent, concurrency-safe operations**, because work can now happen simultaneously on several instances.\n- **Something to coordinate scheduled work**, or every instance runs the nightly job.\n\n**What stops scaling out even when the application is ready:** the shared dependency underneath. Adding instances against a database with a connection limit exhausts the pool faster and makes things worse. That is the most common real ceiling - the application scales and the database does not.\n\n**So the order I would work in:** confirm the bottleneck, scale up if that is cheaper than the engineering work, and scale out when you need redundancy or have exceeded what one machine can do. Redundancy is often the better argument for scaling out than throughput is - two instances is about availability before it is about capacity.",
+  "tags": [
+   "architecture",
+   "scaling",
+   "horizontal-scaling",
+   "bottlenecks",
+   "availability"
+  ],
+  "followups": [
+   {
+    "q": "Why is the database usually the ceiling?",
+    "a": "Because writes ultimately serialise somewhere - a single primary accepts them, and connections, locks and log throughput are finite. Read load can be spread with replicas and caching, so reads scale relatively easily; writes need sharding, which is a substantial architectural change with real costs. So the practical pattern is that the application tier scales out cheaply until it saturates the database, and the interesting engineering starts there rather than in the application."
+   },
+   {
+    "q": "What does scaling out give you that scaling up cannot?",
+    "a": "Redundancy and rolling deployment. A single large machine means an outage when it fails or is patched, and a deployment means downtime unless you keep a second one anyway. Two smaller instances give you both continuous availability and the ability to deploy without a break, which is usually worth more than the throughput. That is why a minimum of two instances is a sensible default for production even when one would handle the load comfortably."
+   }
+  ]
  }
 ]

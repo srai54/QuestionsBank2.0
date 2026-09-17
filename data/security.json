@@ -3034,5 +3034,29 @@
     "a": "Everyone whose access was inherited from the old ancestors loses it, and everyone inheriting from the new ones gains it - which may be a surprise to both groups and is occasionally a security incident if nobody thought about it. With a closure table the move means rewriting the ancestor rows for that subtree, which must be transactional. The product decisions to settle are whether direct grants on the moved node survive the move, and whether anyone is notified - and both are easier to answer before the first move than during it."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Deserialisation",
+  "difficulty": "Hard",
+  "question": "Why is deserialisation dangerous, and what makes it safe?",
+  "answer": "Deserialisation turns attacker-controlled bytes into objects. If the format allows the payload to specify *which type* to construct, the attacker chooses which code runs - and constructors, property setters, callbacks and finalisers all execute during deserialisation. That is remote code execution, not merely bad data.\n\n**The mechanism is worth stating precisely:** an attacker does not need a vulnerability in your code. They find a \"gadget chain\" - types already present in your application or its dependencies whose deserialisation behaviour can be combined to do something useful, such as invoking a process start. Well-known chains exist for common libraries, so this is a catalogue attack rather than original research.\n\n**What makes it dangerous:**\n- **Polymorphic type handling** - `TypeNameHandling` in Newtonsoft, or anything that reads a type name from the payload and instantiates it.\n- **Binary formatters.** `BinaryFormatter` is removed from modern .NET precisely because it cannot be made safe.\n- **Any format that can express arbitrary object graphs** with type information.\n\n**What makes it safe:**\n1. **Deserialise to a known, concrete type.** If the target type is fixed by your code, the payload cannot choose it.\n2. **Use a data-only format** - JSON without type handling, where the worst outcome is wrong values rather than wrong code.\n3. **Where polymorphism is genuinely needed**, use an explicit closed set - `[JsonDerivedType]` with a discriminator - so only types you approved can be produced.\n4. **Validate after deserialising.** Deserialisation gives you an object of the right shape, not a valid one.\n5. **Keep dependencies current**, since gadget chains are found in libraries over time.",
+  "tags": [
+   "security",
+   "deserialisation",
+   "rce",
+   "binaryformatter",
+   "json"
+  ],
+  "followups": [
+   {
+    "q": "Why can BinaryFormatter not simply be fixed?",
+    "a": "Because its threat model is fundamentally that the payload describes the object graph including types, and any restriction strong enough to be safe removes the feature it exists to provide. Allow-lists of permitted types were offered as mitigation and proved insufficient, because a chain can often be built from types an application legitimately needs. Microsoft concluded it could not be secured and removed it rather than leaving a footgun that looked supported - which is a useful example of a design being unsafe rather than an implementation being buggy."
+   },
+   {
+    "q": "Is System.Text.Json safe by default?",
+    "a": "Considerably safer, yes - it deserialises to the type you specify and has no equivalent of unrestricted `TypeNameHandling`, so the payload cannot select a type. Polymorphism requires you to declare the permitted derived types explicitly, which keeps the set closed. That removes the code execution class, though it does not remove the need to validate: a payload can still contain values that are out of range, references to objects the caller should not access, or a deeply nested structure intended to exhaust resources, so depth limits and validation still matter."
+   }
+  ]
  }
 ]

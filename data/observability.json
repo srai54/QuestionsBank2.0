@@ -1839,5 +1839,29 @@
     "a": "Mark it as deliberately ignored with a reason and a review date, rather than leaving it in the active list or silently suppressing it at the source. Leaving it visible trains people to scroll past errors; suppressing it entirely means you lose the signal if its volume changes significantly, which is often the first sign that something else has broken. An explicit ignored state keeps the active list meaningful while retaining the data."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Tracing",
+  "difficulty": "Hard",
+  "question": "How do you use a trace to find why a request took 3 seconds?",
+  "answer": "A trace is a tree of spans with start times and durations, so reading it is about finding where the time is and, crucially, whether it was spent working or waiting.\n\n**How I read one:**\n\n1. **Look at the top-level span duration** and then at the children. The question is which child accounts for most of it.\n2. **Check for gaps.** Time in the parent span not covered by any child is time spent in your own code - serialisation, mapping, computation, or waiting for a thread. Those gaps are the ones people miss, because they look at the spans rather than at the space between them.\n3. **Look at sequential versus parallel.** Three 800ms calls laid out end to end is 2.4 seconds that could be 800ms if they are independent. That is visible immediately in the waterfall and is one of the most common findings.\n4. **Count repeated spans.** Fifty identical database spans is an N+1, and the trace makes it obvious in a way that reading code does not.\n5. **Check the leaf spans' own attributes** - the SQL statement, the HTTP status, the row count - to see whether the slow call was doing a lot of work or waiting.\n\n**What distinguishes slow from queued:** a span that is long but whose child accounts for nearly all of it is waiting; a span with no children and a long duration is either computing or blocked on something uninstrumented. Uninstrumented waiting is the hardest to see, which is why adding spans around suspicious internal sections is worth doing.\n\n**And compare against a fast example of the same operation**, because the difference between a 200ms and a 3s trace of the same endpoint localises the problem faster than reading either alone.",
+  "tags": [
+   "observability",
+   "tracing",
+   "latency",
+   "waterfall",
+   "sampling"
+  ],
+  "followups": [
+   {
+    "q": "What does a large gap between a parent span and its children usually mean?",
+    "a": "Time in your own process that nothing instrumented - most often serialisation of a large payload, mapping, or an expensive computation, but it can also be waiting for a thread-pool thread, which looks identical in a trace. That last case is worth suspecting when the gap appears under load and not in isolation. Adding an explicit span around the suspected section turns the guess into a measurement, and it is usually a few lines with `ActivitySource`."
+   },
+   {
+    "q": "How do you use traces to find something that is only occasionally slow?",
+    "a": "Sample deliberately rather than relying on head sampling, which keeps a fixed fraction and therefore mostly keeps fast successful requests. Tail sampling decides after completion, so you can retain every trace that was slow or errored while discarding most of the fast ones - which is exactly the data you want and a small fraction of the volume. Combined with exemplars linking a latency histogram bucket to a representative trace, you can go from \"the p99 got worse\" straight to an actual slow request rather than hunting for one."
+   }
+  ]
  }
 ]

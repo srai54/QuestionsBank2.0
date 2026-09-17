@@ -5046,5 +5046,29 @@
     "a": "Validate on write rather than hoping - before setting a new parent, walk up from the proposed parent and reject if you encounter the node being moved. With a closure table it is cheaper, because a cycle means the proposed parent is already a descendant, which is one indexed lookup. Doing it in the database with a trigger or a constraint-backed check is more reliable than doing it in application code, since any path that writes directly bypasses the application check and corrupts the tree silently."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Optimisation",
+  "difficulty": "Medium",
+  "question": "What does it mean for a predicate to be sargable, and what makes one non-sargable?",
+  "answer": "A sargable predicate is one the engine can satisfy with an index **seek** - it can use the index s ordering to jump straight to the matching range. A non-sargable predicate forces a scan, because the engine must evaluate it against every row.\n\n**The rule is simple: the indexed column must appear alone on one side of the comparison, unmodified.**\n\n**What breaks it:**\n\n1. **A function on the column.** `WHERE YEAR(CreatedUtc) = 2026` cannot seek, because the index is ordered by the date, not by the year of the date. Rewrite as a range: `WHERE CreatedUtc >= '2026-01-01' AND CreatedUtc < '2027-01-01'`.\n2. **Arithmetic on the column.** `WHERE Price * 1.2 > 100` - move the maths to the other side.\n3. **A leading wildcard.** `LIKE '%term'` has no prefix to seek on. `LIKE 'term%'` is fine.\n4. **Implicit conversion.** Comparing a `varchar` column to an `nvarchar` parameter converts the *column*, which is a function on the column by another name. This is the most common and least obvious cause, and it appears as a warning in the execution plan.\n5. **`OR` across different columns**, which often prevents a single index from serving the whole predicate.\n6. **`ISNULL(col, x) = y`** or `COALESCE` on the column, for the same reason as any other function.\n\n**The tell:** an index that exists and is not being used, with a scan in the plan. Before adding another index, check whether the predicate is the problem - rewriting it is free and adding an index is not.\n\n**And where the rewrite is impossible**, a computed persisted column with an index on it gives the engine something seekable.",
+  "tags": [
+   "sql",
+   "sargable",
+   "indexing",
+   "predicates",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "How would you make a case-insensitive search sargable?",
+    "a": "Rely on the column s collation rather than wrapping it in `UPPER` or `LOWER`. Most SQL Server collations are case-insensitive by default, so `WHERE Name = @name` already matches regardless of case and remains sargable - adding `UPPER()` makes it non-sargable for no benefit. If the collation is case-sensitive and you need insensitive matching, either change the column collation, specify one in the query with `COLLATE`, or add a persisted computed column holding the normalised value and index that."
+   },
+   {
+    "q": "Why is implicit conversion so easy to miss?",
+    "a": "Because nothing in the query text looks wrong - the comparison reads naturally and returns correct results. The conversion is inserted by the engine, and the only visible signs are a plan warning and a scan where you expected a seek. It is commonly caused by a parameter typed as `nvarchar` by an ORM or a driver against a `varchar` column, so the application code looks innocent too. Checking the plan for a `CONVERT_IMPLICIT` on the column side is the reliable way to find it."
+   }
+  ]
  }
 ]

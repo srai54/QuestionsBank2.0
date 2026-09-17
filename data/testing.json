@@ -2805,5 +2805,29 @@
     "a": "Record it as the current behaviour, note it, and fix it separately afterwards - not in the same change. Something downstream may depend on the bug, and changing it while also restructuring means any resulting failure has two possible causes. Writing the test that documents the wrong behaviour feels perverse, and it is what lets you later change it deliberately with a clear commit saying \"this was wrong, here is what it now does\"."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Snapshot",
+  "difficulty": "Medium",
+  "question": "When is snapshot testing useful and when does it become worthless?",
+  "answer": "Snapshot testing records output and asserts it has not changed. Its value depends entirely on whether a human meaningfully reviews the diff when it changes - and in practice that is where it succeeds or fails.\n\n**Where it works:**\n- **Small, stable, meaningful output** - a serialised DTO, a generated SQL statement, a formatted string, an API response shape. The diff is short enough to read and a change is significant.\n- **Guarding a contract** - the JSON your API returns, so an accidental field rename or removal fails the build. This is a genuinely good use, and it is close to a contract test.\n- **Generated code or configuration**, where the whole point is that output should be deterministic.\n\n**Where it becomes worthless:**\n- **Large component snapshots.** A 400-line rendered tree changes on every restyle, so it fails constantly, and the reviewer cannot tell a meaningful change from noise. The result is that people regenerate reflexively, which means the test asserts nothing while still costing review time.\n- **Anything with non-deterministic content** - timestamps, guids, ordering - which produces spurious failures until someone adds enough normalisation that little is actually being asserted.\n- **As a substitute for knowing what the behaviour should be.** A snapshot records what the code does, not what it ought to do, so an incorrect output gets enshrined the moment it is first recorded.\n\n**The test I apply:** would a reviewer seeing this diff be able to say whether it is correct? If not, the snapshot is too big or too volatile to be useful.\n\n**And keep snapshots in source control and review them in pull requests**, because a snapshot updated in the same commit as the change, unexamined, is the failure mode.",
+  "tags": [
+   "testing",
+   "snapshot-testing",
+   "approval-testing",
+   "contracts",
+   "maintainability"
+  ],
+  "followups": [
+   {
+    "q": "How do you handle non-deterministic values in a snapshot?",
+    "a": "Normalise them before recording - replace timestamps with a fixed placeholder, guids with a stable substitute, and sort anything whose order is not guaranteed. Most snapshot libraries provide scrubbers for exactly this. The important discipline is normalising only what is genuinely non-deterministic: it is tempting to scrub away anything that causes a failure, and each scrub removes something the test was checking, so a heavily-scrubbed snapshot can end up asserting almost nothing."
+   },
+   {
+    "q": "Is an approval-testing approach different from snapshot testing?",
+    "a": "It is the same mechanism with a stronger workflow emphasis - the tool presents the diff and requires an explicit approval step, often with a merge tool, rather than a flag that regenerates everything. That difference matters because the failure mode of snapshot testing is unconsidered regeneration, and making approval a deliberate act with the diff in front of you addresses it directly. Verify is the common .NET implementation, and it also handles scrubbing non-deterministic values well."
+   }
+  ]
  }
 ]
