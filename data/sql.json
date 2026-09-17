@@ -4902,5 +4902,29 @@
     "a": "It supports owned entity types mapped to JSON columns, so a complex property is stored as JSON and still modelled as a real type in C# with LINQ translating into JSON path queries. That gives you most of the ergonomics of a normal property. For table-per-type it has first-class inheritance mapping - TPT, or TPH with a discriminator column in a single table, which is the same trade-off as options 1 and 2 expressed in the ORM. Choosing TPH by default and moving to TPT when the null sprawl becomes a problem is a reasonable progression."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Would you use a GUID or an integer for a primary key? Argue both sides.",
+  "answer": "It is mostly a trade between distributed generation and index behaviour.\n\n**The case for integers (identity or sequence):** small - 4 or 8 bytes against 16 - and sequential, so inserts land at the end of the clustered index with no page splits and minimal fragmentation. The clustered key is also appended to every nonclustered index, so a narrow key keeps every index smaller. They are readable in logs and URLs, which matters more than people admit for support. The costs: generation requires a round trip to the database, they are guessable so they leak information and enable enumeration attacks if exposed, and merging data from two systems means collisions.\n\n**The case for GUIDs:** generated anywhere, so a client or a service can create an identifier without contacting the database - which matters for offline clients, distributed systems, and building an object graph before saving. No collisions when merging. Not guessable, so exposing one in a URL reveals nothing about volume.\n\n**The problem with a random GUID as a clustered key** is that inserts land in random positions, splitting pages, fragmenting the index and inflating the buffer pool. On a write-heavy table that is a measurable cost, and it is the standard objection.\n\n**Which is why the modern answer is usually a sequential GUID** - `UUIDv7`, or `NEWSEQUENTIALID` in SQL Server - which keeps distributed generation while inserting sequentially. That removes most of the objection at the cost of some timestamp leakage.\n\n**What I would actually do:** `UUIDv7` as the key for new systems, or an integer clustered key with a GUID as an external identifier where the internal key is never exposed.",
+  "tags": [
+   "sql",
+   "primary-keys",
+   "guid",
+   "clustered-index",
+   "design"
+  ],
+  "followups": [
+   {
+    "q": "What is the split-key approach and why use it?",
+    "a": "Keep a narrow sequential integer as the clustered primary key for storage efficiency, and a separate indexed GUID column as the public identifier used in URLs and APIs. You get compact indexes and sequential inserts internally, while externally nothing is guessable or enumerable. The cost is an extra column plus an index on it, and an extra lookup when resolving a public id - which is usually a good trade, and it also decouples your public contract from your storage, so the internal key can change without breaking clients."
+   },
+   {
+    "q": "Why does the clustered key size affect every other index?",
+    "a": "Because in SQL Server a nonclustered index stores the clustered key as its row locator - that is how it gets back to the full row. So a 16-byte clustered key adds 16 bytes to every row of every nonclustered index, against 4 for an integer. On a table with six indexes and millions of rows that is a substantial difference in storage, in how much fits in memory, and therefore in how much I/O the queries do. It is the strongest technical argument for a narrow clustered key."
+   }
+  ]
  }
 ]

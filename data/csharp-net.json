@@ -12926,5 +12926,29 @@
     "a": "The whole point of streaming - a server-sent events endpoint, a large file download or a chunked response is meant to reach the client progressively, and buffering it means nothing is sent until the response is complete. Memory use also becomes proportional to the response size rather than flat. So response-capturing middleware must exclude streaming endpoints explicitly, either by path or by checking the content type, which is another argument for the built-in logging middleware over a hand-written one."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "What is boxing, when does it happen unintentionally, and does it still matter?",
+  "answer": "Boxing wraps a value type in a heap-allocated object so it can be treated as `object` or as an interface. Unboxing extracts it again. Each box is an allocation, so boxing in a hot loop produces garbage proportional to iterations.\n\n**Where it happens without anyone writing a cast:**\n\n1. **Calling an interface method on a struct through the interface.** `IComparable` on an `int`, or a struct enumerator accessed via `IEnumerable` - the struct is boxed for the call.\n2. **Non-generic collections** - `ArrayList`, `Hashtable`. Rare in new code, common in old.\n3. **String formatting and interpolation with value types** - historically every `{count}` boxed. Modern C# uses interpolated string handlers that avoid it in many cases, including in logging, which is one reason structured logging with message templates is cheaper than it looks.\n4. **`params object[]`** parameters, which box every value argument.\n5. **Struct keys in a dictionary without `IEquatable<T>`**, where the default comparer falls back to reflection-based `ValueType.Equals` and boxes both operands - slow *and* allocating.\n6. **`enum` values passed as `object`**, or used with methods like `Enum.HasFlag`, which historically boxed.\n\n**Does it still matter?** For ordinary application code, no - one box next to a database call is noise, and optimising it is misplaced effort. It matters in genuinely hot paths: serialisers, parsers, per-message handling in a high-throughput service, tight numeric loops. There the allocations drive GC pressure, and GC time is a real latency cost.\n\n**How I would find it rather than guess:** an allocation profile. Boxing shows up clearly, and it is usually somewhere nobody suspected.",
+  "tags": [
+   "csharp",
+   "boxing",
+   "allocations",
+   "performance",
+   "gc"
+  ],
+  "followups": [
+   {
+    "q": "Why does implementing IEquatable<T> on a struct matter so much?",
+    "a": "Without it, `EqualityComparer<T>.Default` falls back to `ValueType.Equals`, which compares fields using reflection and boxes both instances to do it. So every dictionary lookup or `Contains` call on that struct allocates twice and runs far slower than a field comparison. Implementing `IEquatable<T>` lets the comparer call your strongly-typed `Equals` directly with no boxing and no reflection. It is a small amount of code with a large effect, and `record struct` generates it for you."
+   },
+   {
+    "q": "Do generics avoid boxing entirely?",
+    "a": "For value types, yes - the runtime specialises generic code per value type, so `List<int>` stores actual integers with no boxing, which is the main reason generics replaced `ArrayList`. The exception is when the generic code constrains to an interface and calls through it in a way the JIT cannot devirtualise, or when a generic value is assigned to `object`. Constraining with `where T : struct, IEquatable<T>` lets the JIT emit a direct call and keeps the boxing away."
+   }
+  ]
  }
 ]

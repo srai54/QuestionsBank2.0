@@ -1767,5 +1767,29 @@
     "a": "That you are allocating heavily enough that collection is a significant share of the work - so the fix is to allocate less rather than to tune the collector. Look for per-request allocations in hot paths: string concatenation, LINQ creating intermediate collections, boxing of value types, large buffers that could come from `ArrayPool<T>`, and closures capturing more than they need. Switching to Server GC helps throughput on multi-core machines and is worth checking, but it treats the symptom; the allocation is the cause."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Logs",
+  "difficulty": "Medium",
+  "question": "What is the difference between logs, metrics and traces, and when do you reach for each?",
+  "answer": "They answer different questions, and the usual mistake is trying to make one of them do all three.\n\n**Metrics** answer \"is something wrong, and how much\". Numeric aggregates over time with bounded labels - request rate, error rate, latency percentiles, queue depth. Cheap to store, cheap to query, ideal for dashboards and alerts. The limit is that you can only ask questions you instrumented in advance, and high-cardinality labels destroy them.\n\n**Traces** answer \"where is the time going, and what called what\". A tree of spans across services for one request. This is the only signal that shows causality across a distributed system, and it is what turns \"the API is slow\" into \"the API is slow because this downstream call takes 3 seconds\".\n\n**Logs** answer \"what exactly happened\". Arbitrary detail, high cardinality, expensive at volume. The right place for the specifics you cannot anticipate.\n\n**How I use them in an incident, in this order:** metrics tell me something is wrong and which service. Traces tell me where in the request the time or the failure is. Logs give me the specific detail for that request. Going straight to logs is the slow path, and it is what people do when the other two are missing.\n\n**The connection that makes them useful together** is correlation: a trace id on every log line, and exemplars linking a metric to a representative trace. Without that you have three disconnected systems and you are manually correlating by timestamp.\n\n**And the cardinality rule that follows:** user id belongs on a trace or a log, never on a metric label.",
+  "tags": [
+   "observability",
+   "telemetry",
+   "logs-metrics-traces",
+   "correlation",
+   "incident"
+  ],
+  "followups": [
+   {
+    "q": "Where do events and profiles fit alongside these three?",
+    "a": "Events are discrete, structured business or deployment occurrences - a release, a config change, a feature flag flip - and overlaying them on a dashboard answers \"what changed\" faster than anything else, since most incidents follow a change. Continuous profiling is the fourth signal for resource attribution: it tells you which code paths consume CPU or allocate memory in production over time, which traces cannot because they operate at the span level rather than the function level."
+   },
+   {
+    "q": "If you could only have one signal, which would you pick?",
+    "a": "Traces, because with them you can derive a good deal of what the other two give you - span durations aggregate into latency metrics, error spans give error rates, and span attributes carry much of the detail you would otherwise log. Logs alone leave you unable to see across services; metrics alone leave you knowing something is wrong and unable to find out why. That said, it is a slightly artificial question - the honest answer is that metrics for alerting plus traces for diagnosis is the minimum viable pair, and logs fill the gaps."
+   }
+  ]
  }
 ]

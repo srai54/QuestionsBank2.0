@@ -3375,5 +3375,29 @@
     "a": "When you need to answer \"why is the state like this\" after the fact - a complex workflow with many contributing actions, where a bug report means reconstructing a sequence of events. The action log and devtools make that tractable in a way ad-hoc service state does not. It also helps when many teams touch the same state and you want one enforced way to change it. For a feature owned by one team with a handful of transitions, a service with signals gives the same outcome with a fraction of the code."
    }
   ]
+ },
+ {
+  "category": "Angular",
+  "subcategory": "HTTP",
+  "difficulty": "Medium",
+  "question": "How do you handle authentication tokens, retries and errors across every HTTP call in Angular?",
+  "answer": "With interceptors, which sit in the `HttpClient` pipeline and see every request and response - so cross-cutting concerns live in one place rather than in every service.\n\n**What I would put in interceptors:**\n\n1. **Attaching the token.** One interceptor adds the `Authorization` header, with an exclusion for the auth endpoints themselves and for third-party URLs - sending your token to an unrelated domain is a real leak and the most common mistake here.\n2. **Refreshing on 401.** Catch the 401, refresh, retry the original request once. The essential detail is deduplicating concurrent refreshes: several requests will fail simultaneously and must all wait on one refresh rather than each triggering their own, which with refresh-token rotation would look like token reuse and revoke the session.\n3. **Correlation ids**, so a request can be traced from browser to backend.\n4. **Retry with backoff** for transient failures - but only for idempotent methods. Automatically retrying a POST can double-charge someone, so the interceptor must check the method or an explicit opt-in header.\n5. **Centralised error handling** - map status codes to user-facing messages and a toast, so services and components do not each implement it.\n\n**The ordering matters**, because interceptors run in registration order on the way out and in reverse on the way back. The retry interceptor should sit inside the auth one, so a retried request gets a fresh token rather than replaying an expired one.\n\n**And in modern Angular** these are functional interceptors registered with `withInterceptors`, which compose more clearly than the class-based form and are easier to test.",
+  "tags": [
+   "angular",
+   "http-interceptors",
+   "authentication",
+   "retry",
+   "error-handling"
+  ],
+  "followups": [
+   {
+    "q": "How do you deduplicate a token refresh across concurrent requests?",
+    "a": "Hold a shared subject or promise representing the in-flight refresh. The first 401 starts the refresh and stores it; subsequent 401s see it is in progress and wait on the same observable rather than starting another. When it completes, all of them retry with the new token. Without this, ten parallel requests produce ten refresh calls - which wastes work at best and, with rotation enabled, presents as a reused refresh token and revokes the whole family, logging the user out."
+   },
+   {
+    "q": "Why should retry never apply blindly to all requests?",
+    "a": "Because a timeout does not tell you whether the server processed the request - only that you did not get a response. Retrying a GET is harmless; retrying a POST that created an order may create a second one. So retries should be limited to idempotent methods by default, with non-idempotent operations opting in only when they carry an idempotency key the server uses to deduplicate. An interceptor that retries everything is a quiet source of duplicate records."
+   }
+  ]
  }
 ]

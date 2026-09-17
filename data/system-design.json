@@ -2980,5 +2980,29 @@
     "a": "Treat the durable store as authoritative and the queue as a hint: when the worker picks up an item, it re-reads the reminder and checks it is still due and still active before sending. That way a cancellation only has to update the store, and the stale queue entry is discarded harmlessly on pickup. Trying to remove the message from the queue instead couples you to the broker s capabilities and races with the worker already having taken it."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Analytics",
+  "difficulty": "Hard",
+  "question": "Design a system that counts page views for millions of pages in near real time.",
+  "answer": "Counting is deceptively hard at volume, because the naive design - increment a row per view - serialises on the hottest rows and dies under contention rather than under throughput.\n\n**The shape I would build:**\n\n1. **Do not write per event to a database.** The write path accepts the event and appends it to a log or a queue - that is cheap, sequential and absorbs bursts.\n2. **Aggregate in a stream processor** over short windows - counts per page per minute - so the database receives one row per page per minute instead of millions of increments. This is the step that makes the whole thing viable.\n3. **Store pre-aggregated counts** at several granularities: minute, hour, day. Queries then read a precomputed value rather than scanning raw events, and older fine-grained data can be rolled up and discarded.\n4. **Serve the hot path from a cache** - Redis with atomic increments for the current window, which handles the \"views in the last minute\" case without touching the database at all.\n5. **Keep the raw events** for a bounded period, so aggregates can be recomputed after a bug. Aggregates without the ability to rebuild are a liability.\n\n**The decisions I would make explicitly:**\n- **Exact or approximate?** If approximate counts are acceptable - and for view counts they usually are - HyperLogLog gives unique-visitor cardinality in kilobytes rather than storing every visitor id, which is an enormous saving.\n- **What counts as a view?** Bots, refreshes, prefetches. Deduplication rules are a product decision that dominates the accuracy of the number.\n- **At-least-once delivery** means duplicates, so either accept slight over-counting or deduplicate on an event id.\n\n**And the hot-key problem:** one viral page concentrates writes on one key, so the counter for it needs sharding across several keys summed on read.",
+  "tags": [
+   "system-design",
+   "analytics",
+   "stream-processing",
+   "aggregation",
+   "hyperloglog"
+  ],
+  "followups": [
+   {
+    "q": "Why is incrementing a row per view so bad?",
+    "a": "Because every increment takes a lock on that row, so concurrent views of the same page serialise - and the hottest page, which is exactly the one you care about, becomes the bottleneck. Throughput is limited by lock contention rather than by hardware, and the database spends its time on lock waits. Batching in a stream processor removes the contention entirely by turning many increments into one write, which is why aggregation before storage is the central idea rather than an optimisation."
+   },
+   {
+    "q": "What is HyperLogLog and when would you use it?",
+    "a": "A probabilistic structure that estimates the number of distinct values in a set using a fixed small amount of memory - a few kilobytes for billions of items - with an error of around 1%. You would use it for unique visitors per page per day, where storing every visitor id would be enormous and 1% error is irrelevant to the decision anyone makes from the number. It is the standard example of accepting approximation deliberately, and the interview point is recognising that exactness was never a requirement."
+   }
+  ]
  }
 ]

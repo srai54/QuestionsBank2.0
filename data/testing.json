@@ -2709,5 +2709,29 @@
     "a": "Write it as a matrix: for each protected resource type, assert what an owner, a non-owner in the same tenant, a user in another tenant, and an unauthenticated caller each receive. Generating those cases from a list rather than writing them individually keeps it maintainable as endpoints are added, and it makes gaps visible. Backing it with a global query filter or row-level security means a forgotten check fails closed, so the tests are verifying a safety net rather than being the only line of defence."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Architecture",
+  "difficulty": "Medium",
+  "question": "How do you test that an architecture rule is still being followed?",
+  "answer": "With architecture tests - executable assertions about structure, run in CI like any other test. Rules enforced only by review erode, because every individual violation looks reasonable at the time and nobody holds the whole picture.\n\n**What is worth asserting:**\n\n1. **Dependency direction.** The domain layer must not reference infrastructure, EF Core, or ASP.NET Core. This is the single most valuable rule, because it is the one that quietly breaks first and it is what keeps the domain testable.\n2. **Module boundaries.** Feature A must not reference feature B s internals - only its published contract. This is what stops a modular monolith becoming a tangle.\n3. **Naming and placement conventions** - handlers in the right namespace, all controllers ending in `Controller`, no public types in an `Internal` namespace.\n4. **Specific prohibitions** with real reasons - nothing calls `DateTime.Now` directly outside an approved abstraction, no `async void` outside event handlers, no `ConfigureAwait(true)` in library code.\n5. **Sealed by default**, or public types requiring documentation, if the team has agreed that.\n\n**In .NET the tool is NetArchTest or ArchUnitNET**, and the tests are ordinary unit tests asserting over reflected types - so they run in milliseconds and fail with a clear message naming the offending type.\n\n**The value is not catching the deliberate violation** - it is catching the accidental one, where someone adds a using statement for convenience and nobody notices in a large diff.\n\n**And the discipline that matters:** when a rule is genuinely wrong, change the rule deliberately rather than adding an exception. A rule with fifteen exclusions is no longer a rule, and the exclusion list is where these tests go to die.",
+  "tags": [
+   "testing",
+   "architecture-tests",
+   "netarchtest",
+   "boundaries",
+   "ci"
+  ],
+  "followups": [
+   {
+    "q": "How do you introduce these to a codebase that already violates them?",
+    "a": "Baseline the existing violations as an explicit allow-list, so the test passes today and fails on anything new. That stops the situation worsening immediately, which is the main win, and it makes the debt visible and countable rather than diffuse. Then reduce the list over time, ideally with a rule that it may only shrink. Trying to fix every existing violation before adopting the test usually means never adopting it."
+   },
+   {
+    "q": "What can architecture tests not catch?",
+    "a": "Anything about behaviour or quality rather than structure. They can assert that the domain does not reference EF Core; they cannot assert that the domain model is any good, that the boundaries are in sensible places, or that a method does what its name says. They also check only what someone thought to encode, so a new kind of coupling nobody anticipated passes. They are a ratchet that preserves decisions already made, not a substitute for making good ones."
+   }
+  ]
  }
 ]

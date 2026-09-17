@@ -5842,5 +5842,29 @@
     "a": "Ingestion is billed per gigabyte, so the levers are the same as any log platform: set the logging level appropriately per namespace, do not log request and response bodies by default, configure sampling deliberately, and set a daily cap so a runaway loop cannot produce a surprise invoice. Retention per table matters too - detailed traces rarely need the same retention as aggregated metrics. The most common single cause of a large bill is verbose logging left on after a debugging session."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Migration",
+  "difficulty": "Hard",
+  "question": "How would you plan moving an on-premises .NET application to Azure?",
+  "answer": "By deciding what kind of move it is first, because that determines everything else. The usual framing is rehost, replatform or refactor, and picking one per component rather than for the whole estate is what makes it tractable.\n\n**Rehost** - lift and shift onto VMs. Fastest, lowest risk, and gains you almost nothing beyond someone else running the hardware. Legitimate when the driver is a data-centre exit with a deadline.\n\n**Replatform** - move onto managed services without changing the application much: the web tier to App Service or Container Apps, SQL Server to Azure SQL Managed Instance. This is usually the sweet spot - you drop patching, backups and high availability without rewriting.\n\n**Refactor** - change the architecture. Only worth it where there is a specific problem to solve, and it should follow the migration rather than happen during it, because doing both at once means a failure has two possible causes.\n\n**The order I would work in:**\n1. **Inventory and assess** - dependencies, integrations, data volumes, and anything with a hard-coded server name or a local file path.\n2. **Networking and identity first.** Connectivity, DNS, and Entra ID integration underpin everything and are the usual source of surprises.\n3. **Data last and carefully.** Migrate the schema, do an initial bulk load, then replicate continuously so the cutover window is minutes rather than hours.\n4. **Move something low-risk first** to prove the pipeline and the operating model, before touching anything critical.\n\n**What I would insist on:** a rollback plan that works after cutover, and a rehearsal of the whole cutover with production-sized data before the real one.",
+  "tags": [
+   "azure",
+   "migration",
+   "cloud-adoption",
+   "replatform",
+   "planning"
+  ],
+  "followups": [
+   {
+    "q": "What usually catches teams out in an on-premises to Azure migration?",
+    "a": "Identity and networking, far more than the application. Windows authentication to SQL Server does not translate directly, so connection strings and service accounts all change. Hard-coded server names, UNC file paths and local file system dependencies appear everywhere once you look. Latency to anything left on-premises changes the performance profile of a chatty application dramatically - something that made forty database calls per page was fine on a local network and is not across a VPN. And scheduled tasks or Windows services running on the same box as the application are often undocumented and discovered only when something stops happening."
+   },
+   {
+    "q": "How do you handle an application that cannot move all at once?",
+    "a": "Run hybrid deliberately rather than accidentally - a period where some components are in Azure and some are not is normal, so plan the connectivity, the identity federation and the latency implications up front. Move the least coupled components first, and use the strangler approach at the boundary: route traffic per capability so each move is independently reversible. The thing to avoid is a partial state that depends on a chatty synchronous link across the boundary, because that becomes both slow and fragile, and it is the version of hybrid that gives the approach a bad name."
+   }
+  ]
  }
 ]
