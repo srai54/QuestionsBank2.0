@@ -4518,5 +4518,29 @@
     "a": "Strip the aggregates and run it as a detail query, then count rows and compare with the count of the parent table under the same filter. If the detail count exceeds the parent count, something is fanning out and the aggregates above it are inflated. Adding the parent key to the output and checking for repeated keys makes it obvious immediately."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Constraints",
+  "difficulty": "Medium",
+  "question": "Someone argues that validation belongs in the application, not in database constraints. How do you respond?",
+  "answer": "I would agree that the application should validate, and disagree that this replaces database constraints - they protect against different things.\n\n**Application validation gives good error messages** and catches problems early, close to the user. It is a user-experience feature.\n\n**Database constraints guarantee the data is valid** regardless of what wrote it. And in practice, the application is never the only writer: there are migration scripts, admin queries run at 2am, a bulk import, a second service, a bug in a new code path, and the developer fixing data by hand in production. Every one of those bypasses your application layer.\n\n**What only the database can do:**\n- **Uniqueness under concurrency.** An application check-then-insert has a race - two requests both check, both find nothing, both insert. Only a unique constraint makes that impossible.\n- **Referential integrity.** Nothing in the application can prevent a concurrent delete of a parent between your check and your insert.\n- **Invariants that survive bugs.** A `CHECK (Quantity >= 0)` means a negative quantity cannot exist, ever, from any source.\n\n**The argument I would actually make:** constraints are the last line of defence and they are cheap. The cost of a bad row is not just the row - it is every report, every downstream consumer and every hour spent reconstructing what happened. Data outlives code, so the guarantee belongs where the data is.\n\n**Where the concern is legitimate:** constraint violations produce poor error messages, so the application should still validate first and catch the constraint violation as the backstop, translating it into something useful.",
+  "tags": [
+   "sql",
+   "constraints",
+   "data-integrity",
+   "validation",
+   "design"
+  ],
+  "followups": [
+   {
+    "q": "How do you handle a unique constraint violation gracefully?",
+    "a": "Attempt the insert and catch the specific violation, mapping it to a domain error - rather than checking first and inserting, which is racy. Check-then-insert is not merely unreliable, it is wrong under any real concurrency, and it also costs an extra round trip. The one detail to get right is inspecting the error number and constraint name so you know *which* constraint failed, rather than treating every database exception as \"duplicate\"."
+   },
+   {
+    "q": "What about performance - do constraints slow down writes?",
+    "a": "Marginally, and the comparison is misleading. A unique constraint is backed by an index you would very likely want anyway for lookups. A foreign key costs a check per insert, which is small relative to the write itself. The cost that does matter is on bulk loads, where disabling and re-enabling constraints around a large import is a legitimate technique - provided you actually re-validate afterwards rather than leaving them untrusted, which silently excludes them from query plans in SQL Server."
+   }
+  ]
  }
 ]

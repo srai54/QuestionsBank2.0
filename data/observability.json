@@ -1599,5 +1599,29 @@
     "a": "By alerting on multiple windows at once. A fast burn - consuming a large share of the monthly budget within an hour - pages immediately, because at that rate you breach the SLO within the day. A slow burn over days raises a ticket instead. A short window alone is noisy and a long window alone detects catastrophes far too late, so the standard approach combines a short and a long window and requires both to be burning before firing."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Metrics",
+  "difficulty": "Medium",
+  "question": "What is cardinality in metrics and why does it cause outages?",
+  "answer": "Cardinality is the number of distinct label combinations on a metric. Each unique combination is a separate time series stored, indexed and queried independently.\n\nA counter `http_requests_total` with labels `method` (5 values) and `status` (10) is 50 series - trivial. Add `user_id` with a million users and it is 50 million series. The metrics backend is not designed for that, and the failure is not graceful: ingestion slows, memory climbs, queries time out, and in the worst case the monitoring system falls over - which happens precisely during the incident you needed it for.\n\n**The labels that cause it**, all of them tempting: user id, request id, trace id, session id, email address, full URL path with ids in it, error messages, and timestamps.\n\n**The rule:** labels must be **bounded and low cardinality**. A good label has a small, stable set of values you could list - status code, method, region, endpoint *template*. If you cannot enumerate the values, it is not a label.\n\n**Where the high-cardinality data belongs instead:** logs and traces. Those systems are built for it - a trace carries the user id and the request id naturally. The three signals divide precisely along this line: metrics for bounded aggregates, traces for per-request detail, logs for the specifics.\n\n**The practical trap:** `/orders/12345` as a path label creates a series per order. Normalising to the route template `/orders/{id}` is the fix, and most instrumentation libraries do it automatically - but hand-written instrumentation frequently does not.",
+  "tags": [
+   "observability",
+   "metrics",
+   "cardinality",
+   "prometheus",
+   "incident"
+  ],
+  "followups": [
+   {
+    "q": "How do you find a cardinality problem before it takes the system down?",
+    "a": "Most backends expose series counts per metric name - query for the top metrics by series count and you find the offender immediately. Set an alert on total active series so growth is visible before it is critical, since cardinality usually creeps rather than spiking. Many systems also support a per-metric series limit that drops new series rather than accepting unbounded growth, which degrades one metric instead of the whole platform."
+   },
+   {
+    "q": "What do you do when you genuinely need per-user analysis?",
+    "a": "Use exemplars or traces rather than metrics. Exemplars attach a sample trace id to a metric bucket, so you can go from \"the p99 got worse\" straight to an actual slow request without any high-cardinality label. For genuine per-user analytics, that is an analytics warehouse question, not a monitoring one - the access patterns and retention are entirely different, and trying to serve it from your metrics system is how you end up with neither working."
+   }
+  ]
  }
 ]

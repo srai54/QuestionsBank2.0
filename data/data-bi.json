@@ -2090,5 +2090,29 @@
     "a": "Aggregations double-count. The classic case is joining a fact at order-line grain to a dimension that implies order grain, so the order total is counted once per line and revenue is inflated. It is insidious because the numbers look reasonable - just wrong - and nobody notices until a reconciliation. Writing the grain down in one sentence before building anything, and testing totals against a known source, is the defence."
    }
   ]
+ },
+ {
+  "category": "Data & BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "A nightly ETL job silently produced wrong numbers for a week. What controls would have caught it?",
+  "answer": "Silent wrongness is the worst failure mode a pipeline has, because a job that crashes gets fixed the next morning and a job that succeeds with bad data gets believed.\n\n**The controls I would put in, roughly in order of value:**\n\n1. **Row count and volume checks.** If today s load is 10% of yesterday s, or triple, fail rather than publish. A large share of real incidents are caught by this alone.\n2. **Reconciliation against the source.** Compare totals - row counts, and the sum of a key measure - between source and destination. If they disagree beyond a tolerance, stop.\n3. **Schema and type assertions.** An upstream column that silently changed type or started arriving null is a common cause, and it does not throw - it just produces nulls that aggregate to a smaller number.\n4. **Freshness checks.** Assert the newest record is within the expected window. A source that stopped delivering looks exactly like a source with no new data.\n5. **Uniqueness and referential checks** on keys, so a duplicated load does not double every measure.\n6. **Anomaly detection on the output** - a measure that moves more than N standard deviations from its trend gets flagged for a human.\n\n**The structural part:** load into a staging area, run the checks, and only then publish to the tables consumers read. A pipeline that writes directly into the serving tables has no point at which it can decline to publish.\n\n**And make failure loud.** A failed check must page or block, not write a warning into a log nobody reads - which is usually what \"silently\" means in these incidents.",
+  "tags": [
+   "data-bi",
+   "etl",
+   "data-quality",
+   "pipelines",
+   "monitoring"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between this and just writing tests for the pipeline?",
+    "a": "Tests verify the transformation logic against known inputs, and they would not have caught this - the code was correct, the data was not. Data quality checks assert properties of the actual data flowing through in production, every run. You need both, and teams typically have the first and not the second. Frameworks like dbt tests, Great Expectations or Soda exist specifically for the second category."
+   },
+   {
+    "q": "How do you decide the tolerance for a volume check?",
+    "a": "From history rather than from a guess. Look at the distribution of daily volumes over several months and set bounds that would not have fired on normal variation, including known seasonality - a Monday load is not comparable to a Sunday one. Start deliberately loose so the check is trusted, and tighten it as you learn. A check that cries wolf gets disabled, which leaves you worse off than having no check at all."
+   }
+  ]
  }
 ]

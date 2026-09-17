@@ -2746,5 +2746,29 @@
     "a": "Triage by reachability and severity rather than treating every advisory as equal. A vulnerability in a code path you never call, in a dev-only dependency, is not the same as one in your request path - and tools that do reachability analysis cut the volume substantially. Automate the low-risk patch updates so they merge themselves when tests pass, and reserve human attention for the ones that need judgement. Alert fatigue applies here exactly as it does to monitoring."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Input",
+  "difficulty": "Hard",
+  "question": "Explain how SQL injection actually works and why parameterised queries stop it, when escaping does not.",
+  "answer": "Injection happens because string concatenation makes **data indistinguishable from code**. The database receives one string and parses the whole thing; if the data contains SQL syntax, that syntax is part of the statement.\n\n`\"SELECT * FROM Users WHERE Name = '\" + name + \"'\"` with a name of `' OR 1=1 --` becomes a query that returns every user. The database is behaving correctly - it was handed a statement that says that.\n\n**Parameterisation stops it structurally.** The SQL text and the parameter values travel separately. The database parses and plans the statement *first*, with placeholders, and then binds values into it. A value can never be reinterpreted as syntax, because parsing already finished. That is a categorical guarantee, not a filter that might miss a case.\n\n**Why escaping is not equivalent:** it is a blocklist problem, and blocklists lose. You must correctly handle every quoting rule, every character encoding, every dialect difference - and get it right everywhere, forever. Multi-byte encoding attacks have historically defeated escaping functions that looked correct. Parameterisation removes the class of bug rather than filtering instances of it.\n\n**What parameters cannot protect:** identifiers. You cannot parameterise a table or column name, so `ORDER BY ` + userInput is injectable even in otherwise parameterised code. Dynamic sorting must map user input against a **whitelist** of permitted column names. Dynamic SQL built inside a stored procedure has exactly the same exposure - a stored procedure is not inherently safe.\n\n**The layers I would add regardless:** least-privilege database accounts, so even successful injection cannot drop tables, and input validation for good error messages.",
+  "tags": [
+   "security",
+   "sql-injection",
+   "parameterisation",
+   "owasp",
+   "ef-core"
+  ],
+  "followups": [
+   {
+    "q": "Are ORMs automatically safe?",
+    "a": "Mostly, because they parameterise by default - `Where(u => u.Name == name)` becomes a parameterised query. They stop being safe the moment you use a raw SQL escape hatch with interpolation. EF Core draws this line well: `FromSqlInterpolated` and `FromSql` with a FormattableString parameterise the interpolated values, while `FromSqlRaw` with a concatenated string does not. Knowing which method you are calling is the whole difference."
+   },
+   {
+    "q": "How would you find injection risk in an existing codebase?",
+    "a": "Search for string concatenation and interpolation reaching anything that executes SQL - `FromSqlRaw`, `ExecuteSqlRaw`, `SqlCommand` with a built CommandText, and dynamic SQL inside stored procedures, which static analysis of application code will not see at all. Roslyn security analysers and most SAST tools flag the common shapes. Then look specifically at sorting and filtering parameters, since those are the places developers legitimately need dynamic SQL and therefore hand-build it."
+   }
+  ]
  }
 ]

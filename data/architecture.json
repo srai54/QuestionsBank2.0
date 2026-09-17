@@ -4408,5 +4408,29 @@
     "a": "When the platform is genuinely unsupportable - an unsupported runtime with security implications, or hardware that cannot be replaced - or when the existing system cannot meet a requirement that is not negotiable. Even then I would prefer strangling over a parallel rewrite, because a parallel rewrite has to hit a moving target and typically takes far longer than estimated. The decisive question is whether the business can afford a long period with no new features, since that is what a rewrite actually costs."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Domain Modelling",
+  "difficulty": "Hard",
+  "question": "What is an aggregate in DDD, and how do you decide its boundary?",
+  "answer": "An aggregate is a cluster of objects treated as a single unit for changes, with one **aggregate root** as the only entry point. Everything outside references the root by id, never the internals, and the root enforces the invariants of the whole cluster.\n\n**The boundary is decided by invariants, not by the object graph.** The question is: what must be *immediately* consistent? If a rule must hold at the moment a transaction commits - \"an order s total must equal the sum of its lines\", \"a booking cannot exceed room capacity\" - the things involved belong in one aggregate. If a rule can be satisfied a second later, the things belong in different aggregates and are coordinated by events.\n\n**The rules that follow from that:**\n1. **One aggregate per transaction.** If you routinely modify two aggregates together, the boundary is probably wrong - or the consistency between them is eventual and should be modelled that way.\n2. **Reference other aggregates by id.** An `Order` holds a `CustomerId`, not a `Customer`. This keeps the loading boundary honest and stops the graph becoming the whole database.\n3. **Keep them small.** The commonest mistake is a large aggregate - a `Customer` containing every order - which loads enormous graphs, creates contention because every change locks the same root, and makes concurrency conflicts constant.\n\n**The test I apply:** can I state, in one sentence, an invariant that spans these objects and must never be briefly false? If not, they are probably separate aggregates.\n\n**Where this gets misapplied:** DDD tactical patterns used on a CRUD application, where the \"aggregate\" has no invariants at all and is a table with extra ceremony.",
+  "tags": [
+   "architecture",
+   "ddd",
+   "aggregates",
+   "domain-modelling",
+   "consistency"
+  ],
+  "followups": [
+   {
+    "q": "What do you do when a business rule genuinely spans two aggregates?",
+    "a": "Decide whether it must be immediate or can be eventual - and it is usually eventual once you ask the business rather than assume. If eventual, the first aggregate commits and raises a domain event, and a handler updates the second, with a compensating action if it fails. If it truly must be immediate, that is evidence the boundary is wrong and the two should be one aggregate. Wrapping two aggregate saves in one database transaction works technically but abandons the model, so do it knowingly rather than by accident."
+   },
+   {
+    "q": "How does optimistic concurrency relate to aggregate boundaries?",
+    "a": "The version token belongs on the root, and it covers the whole aggregate - so two users editing different lines of the same order conflict, because they are changing one consistency boundary. That is correct behaviour, and it is also the practical cost of a large aggregate: the bigger the boundary, the more unrelated changes collide. Frequent concurrency conflicts in production are a strong signal that an aggregate is too big."
+   }
+  ]
  }
 ]

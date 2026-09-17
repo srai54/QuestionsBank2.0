@@ -3303,5 +3303,29 @@
     "a": "It is the nested-callback version of the same thing, with none of the cancellation or ordering guarantees - the inner subscription is not managed by the outer one, so it leaks, and nothing coordinates overlapping inners. It also loses error propagation, since an error in the inner stream does not reach the outer subscriber s error handler. Flattening with the right operator gives lifetime management, cancellation and error handling for free."
    }
   ]
+ },
+ {
+  "category": "Angular",
+  "subcategory": "Architecture",
+  "difficulty": "Medium",
+  "question": "How do you structure a large Angular application, and what has changed with standalone components?",
+  "answer": "Structure by **feature**, not by type. A `components/` folder holding 200 components tells you nothing; `features/orders/` holding everything about orders means a change is localised and a feature can be removed cleanly.\n\n**The layout I use:**\n- `core/` - singletons loaded once: auth, interceptors, error handling.\n- `shared/` - genuinely reusable presentational components, pipes, directives, with no feature knowledge.\n- `features/<name>/` - components, services, routes and models for one feature, lazy loaded.\n\n**What standalone components changed:** `NgModule` is no longer needed, and that removed a whole category of confusion - which module declares this, why is it \"not a known element\", why is this service a singleton in one module and not another. A standalone component declares its own imports, so dependencies are visible at the top of the file rather than in a distant module.\n\n**Lazy loading became simpler too:** `loadComponent` for a single route, `loadChildren` pointing at a routes array rather than a module. Each lazy route is a separate bundle, which is what keeps the initial download small as the app grows.\n\n**What has not changed:** the discipline. Standalone components make it easy to import anything from anywhere, so without a convention you get a tangle with no module boundary to stop it. I would enforce dependency rules with lint rules - features must not import from other features, shared must not import from features - because the structure is now purely conventional.\n\n**Also worth adopting:** `inject()` over constructor injection for terser code, and signals for state.",
+  "tags": [
+   "angular",
+   "architecture",
+   "standalone-components",
+   "lazy-loading",
+   "structure"
+  ],
+  "followups": [
+   {
+    "q": "What goes in shared/ and what is the usual mistake?",
+    "a": "Only things with no knowledge of any feature - a button, a date pipe, a formatting directive. The usual mistake is putting a feature-specific component there because two features happened to use it, at which point `shared` starts importing feature models and becomes a second core module that everything depends on. If two features need the same non-trivial component, either it is genuinely generic and should be made so, or one feature owns it and the other should be asking whether the coupling is real."
+   },
+   {
+    "q": "Is it worth migrating an existing NgModule application to standalone?",
+    "a": "Incrementally, and only where it pays. Standalone components and NgModules interoperate, so you can convert leaf components first and work upward, which is the low-risk order. The benefits are real - clearer dependencies, simpler lazy loading, better tree-shaking - but a big-bang migration of a large app is a lot of churn with no user-visible change. Converting as you touch files is usually the right pace."
+   }
+  ]
  }
 ]

@@ -12446,5 +12446,53 @@
     "a": "Not from application startup. Run them as a separate step - an init container, a Kubernetes Job, or a pipeline stage - that completes before the new version rolls out. EF Core takes a lock so concurrent migrations do not corrupt the schema, but they do serialise and can time out, and a failed migration mid-rollout leaves replicas on different schema versions. Making it a distinct, ordered step also forces the expand-and-contract discipline that zero-downtime schema changes need."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Logging",
+  "difficulty": "Medium",
+  "question": "What makes a log line useful at 3am, and what should never appear in one?",
+  "answer": "A log line is useful if someone who was not there can reconstruct what happened without reading the code.\n\n**What makes it useful:**\n- **Structured, not interpolated.** `LogInformation(\"Order {OrderId} rejected: {Reason}\", id, reason)` keeps `OrderId` as a queryable field. `LogInformation($\"Order {id} rejected\")` destroys that and leaves you grepping strings.\n- **Correlation identifiers** on every line - trace id, request id, tenant, user - so one request can be reconstructed across services. Logging scopes attach these once rather than per call.\n- **Enough context to act.** Not \"validation failed\" but which field, what value class, and which rule.\n- **The right level.** Error means someone must do something; Warning means it is degraded but handled; Information is the business narrative; Debug is for development. Logging everything at Information is the same as logging nothing.\n- **One log per event**, at the boundary. Logging the same failure at every layer produces five entries and no extra information.\n\n**What must never appear:**\n- **Passwords, tokens, API keys, connection strings, card numbers** - including inside a serialised request object, which is how they usually leak.\n- **Personal data** beyond what you can justify, with retention to match. Logs are usually the least-governed copy of production data in the company.\n- **Whole request or response bodies** by default - it is the fastest route to both a compliance problem and an enormous ingestion bill.\n- **Exception messages from external systems, unfiltered**, which sometimes contain credentials.\n\n**The control I would put in place:** a redaction layer on the logging pipeline rather than relying on every developer remembering, plus a CI check for obvious secret patterns.",
+  "tags": [
+   "dotnet",
+   "logging",
+   "structured-logging",
+   "observability",
+   "security"
+  ],
+  "followups": [
+   {
+    "q": "How do log levels interact with cost?",
+    "a": "Directly - ingestion is billed per gigabyte, so a level change is a cost change with no infrastructure change and usually no review gate. Debug logging left on in production is the most common cause of a surprise observability bill. The controls are configuring levels per namespace so you can raise verbosity for one component without the rest, sampling high-volume routine events, and a daily cap that protects you from a runaway loop."
+   },
+   {
+    "q": "What is a logging scope and when does it earn its place?",
+    "a": "It attaches properties to every log written inside a block, so you set the order id once at the top of a handler and every subsequent line carries it - including lines written by code that has no idea the order id exists. It earns its place any time you would otherwise pass context down purely for logging, and it is what makes filtering by a single request practical. The caveat is that scopes must be disposed, and their properties flow with async context, so starting one in a background task can attach stale context."
+   }
+  ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Interfaces",
+  "difficulty": "Medium",
+  "question": "When should a class implement an interface, and what is the argument against an interface per class?",
+  "answer": "An interface earns its place when it buys something concrete: an alternative implementation exists or is genuinely likely, a boundary needs to be testable without the real dependency, or you are publishing a contract others implement.\n\n**The anti-pattern is `IUserService` with exactly one implementation, `UserService`, forever.** That pattern is widespread and mostly costs rather than pays:\n\n- It doubles the files and adds indirection, so navigating the code means an extra hop to reach anything.\n- It is not abstraction - an interface that mirrors one class one-to-one has no design content, it just restates the class s public surface.\n- The usual justification is testability, but that argument has weakened: modern mocking can substitute concrete types, and the better answer is often that the collaborator should be a fake or the real thing anyway.\n\n**Where I would still put an interface without hesitation:**\n- **At boundaries I do not own** - a payment gateway, an email sender, a clock, a file system. These need substituting in tests and may genuinely change.\n- **Where a second implementation exists now** - a caching decorator, two storage backends.\n- **Where the contract is the point** - a plugin model, a handler abstraction, anything with several implementers.\n\n**The test I use:** if I can name the second implementation, or I need to swap it in a test I would otherwise be unable to write, the interface is justified. \"It might change one day\" is not a reason - adding the interface later is a small refactor, and doing it speculatively for every class is a large permanent cost.",
+  "tags": [
+   "csharp",
+   "interfaces",
+   "design",
+   "dependency-injection",
+   "abstraction"
+  ],
+  "followups": [
+   {
+    "q": "Does dependency injection require interfaces?",
+    "a": "No - containers resolve concrete types perfectly well, and injecting a concrete class is dependency injection. What people actually mean is dependency *inversion*, which requires an abstraction only where you genuinely want to depend on a contract rather than an implementation. Registering concrete types for internal collaborators and interfaces for external boundaries is a coherent and common position."
+   },
+   {
+    "q": "What do default interface methods change about this?",
+    "a": "They let you add a member to an interface without breaking existing implementers, which removes one of the historical arguments for abstract base classes in library design. They are useful for evolving a published contract. They do not change the core question of whether to have the interface at all, and using them heavily gets confusing quickly - diamond resolution rules and the fact that the default is only callable through the interface reference, not the concrete type, surprise people."
+   }
+  ]
  }
 ]
