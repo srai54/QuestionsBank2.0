@@ -2210,5 +2210,29 @@
     "a": "It tells you everywhere a person s data has propagated - which warehouse tables, which aggregates, which extracts sent to third parties, which backups. Without that map, an erasure request can only be honoured in the source system, leaving copies scattered through the analytics estate that you cannot even enumerate. Lineage turns an unanswerable question into a checklist, and it also informs the design: knowing how widely personal data spreads is usually an argument for pseudonymising it earlier in the pipeline."
    }
   ]
+ },
+ {
+  "category": "Data & BI",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "A warehouse query that used to take 2 minutes now takes 40. Where do you look?",
+  "answer": "In a warehouse the usual causes are different from an OLTP database - it is rarely a missing index, because columnar storage works differently.\n\n**What I would check, in order:**\n\n1. **Data volume growth**, and specifically whether partition or file pruning is still effective. A query filtering on a date should read only the relevant partitions - if the filter is wrapped in a function, or the partition column is not in the predicate, it reads everything, and that only becomes painful as the table grows.\n2. **Small file proliferation.** In a lakehouse, thousands of tiny files from frequent micro-batch writes destroy read performance because the overhead is per file. Compaction - `OPTIMIZE` in Delta, or equivalent - is routine maintenance that is often not scheduled.\n3. **Statistics and clustering.** Whether the engine still has accurate metadata, and whether the physical ordering still matches the query pattern. Clustering degrades as data is appended.\n4. **A join that changed shape.** A dimension that grew, or a join key with skew so one reducer handles most of the rows - data skew is the classic distributed-query problem and it presents exactly like this.\n5. **Spill to disk.** A query that used to fit in memory no longer does, so it spills, and performance falls off a cliff rather than degrading gradually.\n6. **Concurrency.** The query may be unchanged and simply queueing behind other work on a shared warehouse.\n\n**The diagnostic to run first** is the query profile, which shows bytes scanned, partitions pruned, and where the time went. Bytes scanned rising faster than the data grew points straight at pruning having stopped working.",
+  "tags": [
+   "data-bi",
+   "warehouse",
+   "performance",
+   "partition-pruning",
+   "skew"
+  ],
+  "followups": [
+   {
+    "q": "What is data skew and how do you deal with it?",
+    "a": "It is when a join or grouping key has a very uneven distribution, so one partition receives a large share of the rows - a `customer_id` where one customer accounts for a third of the data, or a null key that all collects together. The result is that most workers finish quickly and one runs for the remaining time, so adding compute does not help. The usual mitigations are salting the key to spread the hot value across partitions, broadcasting the smaller side of the join so no shuffle is needed, or filtering out the degenerate values such as nulls before the join."
+   },
+   {
+    "q": "Why do small files hurt so much in a lakehouse?",
+    "a": "Because every file carries fixed overhead - opening it, reading its metadata, planning around it - so a query reading ten thousand 1MB files does vastly more work than one reading a hundred 100MB files with the same total bytes. Streaming or frequent micro-batch writes produce exactly this, and it degrades steadily until someone notices. Scheduled compaction plus tuning the write batch size is the fix, and it is ordinary maintenance rather than an optimisation."
+   }
+  ]
  }
 ]

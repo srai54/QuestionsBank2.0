@@ -4696,5 +4696,29 @@
     "a": "It stores the schema for each event type and version, validates that producers publish conforming messages, and can enforce compatibility rules - rejecting a change that would break existing consumers before it is deployed. That catches accidental breaking changes at the right moment, which is its main value. What it does not solve is semantic change: a field that keeps its name and type while its meaning shifts passes every compatibility check and breaks every consumer silently. That still requires human discipline and review."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Cost",
+  "difficulty": "Medium",
+  "question": "How do architectural decisions affect running cost, and where is the biggest lever?",
+  "answer": "The biggest lever is almost always **how much work the system does per user action**, not which services you picked. A design that makes five database calls and two external requests per page view costs several times one that makes one, regardless of how well-tuned the infrastructure is.\n\n**The decisions with the largest cost consequences:**\n\n1. **Chattiness.** An N+1 across a service boundary multiplies both latency and cost. Caching, batching and better-shaped APIs address the cause.\n2. **Data volume and retention.** Storage is cheap, but scanning it is not - and the biggest surprise in most cloud bills is telemetry ingestion, which is driven entirely by code-level logging decisions rather than by architecture.\n3. **Data movement.** Cross-region and egress traffic is billed and easy to introduce accidentally by deploying a dependency in the wrong region.\n4. **Idle capacity.** Provisioned resources running at low utilisation, and non-production environments running continuously.\n5. **Synchronous coupling.** A chain of synchronous calls means every service must be provisioned for the peak of the whole chain; a queue lets downstream services run at their own steady rate with far less headroom.\n6. **Choice of consistency.** Strong consistency across regions costs latency and money on every write; accepting eventual consistency where the business allows it is a substantial saving.\n\n**Where I would push back on a common instinct:** microservices are often adopted partly for scaling efficiency and frequently cost *more* - more instances with their own baseline, more network traffic, more observability volume, more infrastructure. That may be worth it for organisational reasons, but it should not be sold as a cost saving.\n\n**And design so cost is attributable** - tags and per-tenant metering - or you cannot make any of these decisions with evidence.",
+  "tags": [
+   "architecture",
+   "cost",
+   "finops",
+   "trade-offs",
+   "design"
+  ],
+  "followups": [
+   {
+    "q": "How do you estimate running cost before building something?",
+    "a": "Work from the unit economics: what does one user action cost in requests, compute time, storage written and telemetry emitted, multiplied by expected volume. That is rough but it exposes the order of magnitude and, more usefully, which component dominates - which is often not the one people expected. Doing it early also changes designs: discovering that a per-event log line will cost more than the compute usually results in a better logging decision than discovering it on the invoice."
+   },
+   {
+    "q": "When is it worth paying more for a simpler architecture?",
+    "a": "Almost always at small scale, because engineering time dominates infrastructure cost by a wide margin. A managed service that costs twice the raw compute but removes an operational burden is a clear win when the team is small - a few hundred pounds a month against days of engineering attention is not a close comparison. The calculus inverts at scale, where infrastructure becomes the larger number and optimisation work pays for itself, which is why cost-driven rearchitecting is usually premature before you have the volume to justify it."
+   }
+  ]
  }
 ]

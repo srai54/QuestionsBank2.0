@@ -4878,5 +4878,29 @@
     "a": "New rows inserted above the highest value in the histogram fall outside it, so the optimiser estimates very few rows for a predicate targeting recent data - which is the most common kind of query on a time-series table. The result is a plan sized for one row processing thousands. Modern SQL Server versions estimate better for this case under the current cardinality estimator, but on large tables the reliable fix is updating statistics more frequently than the automatic threshold allows, which usually means a scheduled job targeting the volatile tables specifically."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "How would you model a field that can hold different shapes of data depending on the record type?",
+  "answer": "This is the polymorphic data problem, and there are three answers with quite different trade-offs.\n\n**1. Single table with nullable columns** - one table with every possible column, most null for any given row. Simple and fast to query, and it degrades badly: dozens of nullable columns, no way for the database to enforce which combinations are valid, and adding a type means adding columns everyone else ignores. Reasonable when the types are few and share most fields.\n\n**2. Table per type**, with a shared base table holding common columns and a child table per variant joined one-to-one. The database enforces the shape of each variant, which is the main benefit. The costs are a join for every read and awkward queries across all types. This is the right answer when the variants are genuinely different and the set is stable.\n\n**3. A JSON column** for the variable part, alongside typed columns for anything queried or constrained. Modern engines index into JSON - SQL Server with computed columns over `JSON_VALUE`, PostgreSQL with `jsonb` and GIN indexes - so it is no longer the performance dead end it once was.\n\n**How I would choose:** if the variants are known, stable and few, table per type. If they are open-ended, defined by configuration, or genuinely arbitrary per customer, JSON.\n\n**The rule I would apply to the JSON option:** anything you filter, sort or join on should be a real column, promoted out of the JSON - either duplicated or as a computed column. JSON is for the payload you retrieve as a unit, not for the fields you query. A design where every query digs into JSON has given up the database s strengths for flexibility it may not need.",
+  "tags": [
+   "sql",
+   "polymorphism",
+   "json",
+   "schema-design",
+   "ef-core"
+  ],
+  "followups": [
+   {
+    "q": "What do you lose by putting data in a JSON column?",
+    "a": "Constraints and type safety, mainly - the database cannot enforce that a required field is present, that a number is in range, or that a reference points at an existing row. You also lose straightforward schema evolution: there is no migration to add a field, which sounds like an advantage until you have five years of documents in three shapes and nothing recording which is which. Versioning the document and upcasting on read is the discipline that makes it sustainable, and it is easy to skip until it hurts."
+   },
+   {
+    "q": "How does EF Core handle this?",
+    "a": "It supports owned entity types mapped to JSON columns, so a complex property is stored as JSON and still modelled as a real type in C# with LINQ translating into JSON path queries. That gives you most of the ergonomics of a normal property. For table-per-type it has first-class inheritance mapping - TPT, or TPH with a discriminator column in a single table, which is the same trade-off as options 1 and 2 expressed in the ORM. Choosing TPH by default and moving to TPT when the null sprawl becomes a problem is a reasonable progression."
+   }
+  ]
  }
 ]

@@ -3926,5 +3926,29 @@
     "a": "The mutation continues, because it is not tied to the component - but the component that would have handled the error is gone, so a failure can be silently lost and the user never learns their change did not save. Handle mutation errors at a level that outlives the component, such as a global error handler or a toast system mounted at the app root, and make sure the cache is invalidated on settle so the data is correct when they return. Optimistic updates plus unhandled errors on unmount is a reliable way to lose user work quietly."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Refs",
+  "difficulty": "Medium",
+  "question": "When do you need a ref in React, and what is the mistake people make with them?",
+  "answer": "A ref is an escape hatch to something React does not manage - a DOM node, or a mutable value that should persist across renders without causing one.\n\n**The legitimate uses:**\n- **Direct DOM access** for things React has no declarative API for: focusing an input, measuring an element, scrolling to a position, playing media, or integrating a library that manipulates the DOM itself.\n- **Holding a mutable value that must survive re-renders but must not trigger them** - an interval id, a WebSocket instance, the previous value of a prop, a flag tracking whether a component is still mounted.\n\n**The mistake people make is using a ref to hold state that should be state.** Writing to a ref does not re-render, so the UI silently does not update - and the bug looks like React being broken rather than like a design error. The rule: if the value appears in the rendered output, it is state. If it only affects imperative behaviour, it can be a ref.\n\n**The second mistake is reading `ref.current` during render.** It may be null on the first render, before the DOM exists, and reading it during render makes the output depend on something React does not track - which breaks under concurrent rendering. Refs belong in effects and event handlers.\n\n**The third is reaching into a child component s DOM** to manipulate it directly, which bypasses React s model and breaks the moment the child re-renders and overwrites your change. Pass a prop instead.\n\n**Worth knowing:** in React 19 `ref` is an ordinary prop on function components, so `forwardRef` is no longer needed for the common case, and a ref callback can return a cleanup function.",
+  "tags": [
+   "react",
+   "refs",
+   "dom",
+   "state",
+   "hooks"
+  ],
+  "followups": [
+   {
+    "q": "How do you know whether something should be state or a ref?",
+    "a": "Ask whether the UI needs to change when it changes. A counter displayed on screen is state; a counter used only to decide whether to fire an effect is a ref. The test that settles most cases is: if you changed this value and React did not re-render, would that be a bug? If yes, it is state. Using a ref to avoid a re-render for something that is displayed is the shortcut that produces a stale UI with no obvious cause."
+   },
+   {
+    "q": "What is the mounted-ref pattern and is it still needed?",
+    "a": "A ref set to false on cleanup, checked before setting state after an async operation, to avoid updating an unmounted component. It was widely used because React warned about it - but React removed that warning, since setting state on an unmounted component is harmless rather than a leak. The pattern is now usually a sign that the async work should be cancelled instead, with an `AbortController` in the effect cleanup, which actually stops the request rather than ignoring its result."
+   }
+  ]
  }
 ]

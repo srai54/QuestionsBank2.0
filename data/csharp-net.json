@@ -12902,5 +12902,29 @@
     "a": "Both defer, but they defer different things. `IEnumerable<T>` holds compiled delegates, so composition happens in memory - adding a `Where` to an `IEnumerable` from EF means the filter runs client-side after all rows are fetched. `IQueryable<T>` holds an expression tree the provider inspects, so composition is translated into the SQL. The bug is assigning an `IQueryable` to an `IEnumerable` variable, which silently switches subsequent operators to in-memory evaluation and turns an indexed query into a full table read."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Middleware",
+  "difficulty": "Medium",
+  "question": "How would you add request/response logging to an ASP.NET Core API without wrecking performance or leaking data?",
+  "answer": "Carefully, because the naive implementation is both the largest single cause of surprise observability bills and a common source of credential leaks.\n\n**The mechanics that matter:**\n\n1. **The request body is a forward-only stream.** Reading it in middleware consumes it, so the endpoint gets nothing. You must call `EnableBuffering()` and rewind, which buffers the body in memory or to disk - and that is a real cost on large requests.\n2. **The response body is written directly to the client.** To capture it you swap in a `MemoryStream`, let the pipeline write to that, then copy it to the real stream. That defeats streaming responses and buffers the whole payload.\n\n**So the default should be: do not log bodies.** Log method, path template (not the raw path with ids in it), status, duration, and correlation identifiers. That covers most diagnostic needs at a fraction of the volume.\n\n**When bodies are genuinely needed:**\n- **Only for failures**, or behind a flag you can enable for one tenant. Buffer, and if the response is a success, discard without logging.\n- **Cap the size** you will capture, and truncate rather than logging a 10MB payload.\n- **Redact.** Passwords, tokens, card numbers and personal data must be stripped before the text reaches a logger - and a redaction layer in the pipeline is more reliable than expecting every developer to remember.\n- **Skip binary and file uploads** entirely.\n\n**Use the framework s own `UseHttpLogging`** rather than hand-rolling, since it already handles buffering, size limits and field selection.\n\n**And place it deliberately** - outside the exception handler so failures are logged, inside anything that shortens the pipeline.",
+  "tags": [
+   "dotnet",
+   "middleware",
+   "logging",
+   "aspnet-core",
+   "security"
+  ],
+  "followups": [
+   {
+    "q": "Why log the route template rather than the actual path?",
+    "a": "Because the raw path contains identifiers - `/orders/4471` - and using it as a log field or a metric label creates one distinct value per order, which destroys metric cardinality and makes log aggregation useless. The template `/orders/{id}` groups all of them, so you can see the endpoint s error rate and latency as a single series, with the id captured as a separate field for when you need the specific request. This is one of the most common instrumentation mistakes and it usually surfaces as a surprise bill."
+   },
+   {
+    "q": "What breaks if you buffer the response for a streaming endpoint?",
+    "a": "The whole point of streaming - a server-sent events endpoint, a large file download or a chunked response is meant to reach the client progressively, and buffering it means nothing is sent until the response is complete. Memory use also becomes proportional to the response size rather than flat. So response-capturing middleware must exclude streaming endpoints explicitly, either by path or by checking the content type, which is another argument for the built-in logging middleware over a hand-written one."
+   }
+  ]
  }
 ]

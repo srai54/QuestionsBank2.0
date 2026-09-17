@@ -2685,5 +2685,29 @@
     "a": "Then the scheduled contract test has to run against production with a read-only or deliberately trivial operation, or not at all - and if not at all, that limitation should be recorded as a known risk rather than quietly accepted. Compensate by being defensive at runtime: validate their responses against your expected shape and fail loudly with a clear message when it differs, so a provider change surfaces as an obvious error rather than as nulls propagating into your data. Monitoring their error rate separately also turns their change into an alert rather than a mystery."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Security",
+  "difficulty": "Medium",
+  "question": "How do you test for security problems as part of normal development?",
+  "answer": "By automating what can be automated and being deliberate about what cannot, rather than treating security as an annual penetration test.\n\n**What goes into the pipeline:**\n\n1. **Dependency scanning** on every build, with the results triaged by reachability rather than by raw CVSS score.\n2. **Secret scanning**, ideally with push protection so a committed credential never reaches the remote at all.\n3. **Static analysis** for the common code-level flaws - injection, path traversal, insecure deserialisation, weak cryptography. The .NET security analysers catch a useful subset for free.\n4. **Infrastructure-as-code scanning** for misconfiguration: public storage, permissive network rules, unencrypted resources.\n5. **Container image scanning** for vulnerable OS packages, which is a frequently-forgotten layer.\n\n**What needs tests written by hand**, because tools do not find it:\n- **Authorisation.** Tools cannot know that this user should not see that record. Write tests asserting that a user from tenant A gets a 404 or 403 for tenant B s resource - this is the single most valuable security test class, because broken object-level authorisation is consistently among the most common real-world API flaws and is invisible to scanners.\n- **Authentication edge cases** - expired tokens, wrong audience, missing scopes.\n- **Input validation boundaries**, including the cases meant to be rejected.\n\n**What still needs humans:** business logic flaws - can I apply the same discount twice, can I move an order to a state that skips payment. Those are design problems no scanner models.\n\n**And treat findings as work with owners and deadlines**, or the scanners become a permanently red dashboard nobody reads.",
+  "tags": [
+   "testing",
+   "security-testing",
+   "sast",
+   "authorisation",
+   "pipeline"
+  ],
+  "followups": [
+   {
+    "q": "What is broken object-level authorisation and why do scanners miss it?",
+    "a": "It is an endpoint that checks you are authenticated and have the right role, then loads a resource by an id from the request without checking the resource belongs to you - so changing the id in the URL returns someone else s data. Scanners miss it because nothing is syntactically wrong: the code is well-formed, uses parameterised queries, and has an authorisation attribute. Only someone who knows the intended ownership model can tell it is broken, which is why it needs explicit tests and why it remains so common."
+   },
+   {
+    "q": "How do you make authorisation testing systematic rather than ad hoc?",
+    "a": "Write it as a matrix: for each protected resource type, assert what an owner, a non-owner in the same tenant, a user in another tenant, and an unauthenticated caller each receive. Generating those cases from a list rather than writing them individually keeps it maintainable as endpoints are added, and it makes gaps visible. Backing it with a global query filter or row-level security means a forgotten check fails closed, so the tests are verifying a safety net rather than being the only line of defence."
+   }
+  ]
  }
 ]

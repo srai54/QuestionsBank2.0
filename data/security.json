@@ -2938,5 +2938,29 @@
     "a": "Do not key solely on IP, because corporate NAT and mobile carrier networks put thousands of legitimate users behind one address - a strict per-IP limit locks out an entire office. Key on the account for authenticated attempts, and use IP only as a coarse backstop with a generous threshold. Combining signals is better than tightening any one: an IP with a high failure *rate across many distinct accounts* is a much stronger indicator than volume alone, and it does not punish a busy shared connection."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Encryption",
+  "difficulty": "Hard",
+  "question": "What is the difference between encryption at rest and in transit, and what does each not protect against?",
+  "answer": "**In transit** protects data moving over a network - TLS between client and server, and between your services. It defends against interception and tampering on the wire. It does nothing once the data arrives: the receiving application sees plaintext, so a compromised service or a logging statement leaks it regardless.\n\n**At rest** protects data on storage - disk encryption, transparent database encryption, encrypted blobs. It defends against physical theft of a disk and against someone obtaining the raw storage files.\n\n**What at-rest encryption does not protect against, and this is the part people overstate:** it is transparent to any authenticated connection. An attacker with a valid connection string, or SQL injection, or a compromised application, reads plaintext - the database decrypts for them exactly as it does for you. TDE satisfies a compliance requirement about stolen media; it is not a defence against application-level compromise, which is how data is actually stolen.\n\n**The gap between them is data in use** - decrypted in application memory, in logs, in caches, in temporary files, in backups taken from a live system. That gap is where most real breaches occur.\n\n**What closes it for genuinely sensitive fields is application-level encryption:** encrypt before it reaches the database, decrypt only where needed, with keys held separately - so a database compromise yields ciphertext. The cost is significant and worth stating: you lose the ability to query, sort, index and join on those fields, and you take on key management and rotation.\n\n**So the honest answer:** at rest and in transit are baseline hygiene and should always be on. Field-level encryption is the control for data where a database compromise must not equal a data breach.",
+  "tags": [
+   "security",
+   "encryption",
+   "tde",
+   "key-management",
+   "compliance"
+  ],
+  "followups": [
+   {
+    "q": "If TDE does not stop an attacker with database access, why use it?",
+    "a": "Because it closes a real if narrower threat: stolen backup files, decommissioned disks, a copied database file, and a backup restored somewhere it should not have been - which are genuinely common ways data escapes. It is also frequently a regulatory requirement, and it costs almost nothing in performance or in code. The mistake is not using it; it is treating it as the answer to \"is our data encrypted\" when the realistic threat is application compromise, which it does not address at all."
+   },
+   {
+    "q": "What do you lose by encrypting a column at the application level?",
+    "a": "Queryability, mostly. You cannot do a range query, a sort, a `LIKE` or a join on ciphertext, and equality only works if the encryption is deterministic - which leaks information, because identical plaintexts produce identical ciphertexts and an attacker can infer distribution. So the practical pattern is encrypting fields you retrieve but never search on, and keeping a separate searchable surrogate such as a hash or a truncated value for lookup. Deciding which fields genuinely need it, rather than encrypting everything, is what keeps the design workable."
+   }
+  ]
  }
 ]

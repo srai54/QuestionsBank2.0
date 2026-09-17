@@ -4185,5 +4185,29 @@
     "a": "Because it tries a chain of credential sources and succeeds locally via your Azure CLI or Visual Studio login, so the code appears to work without any managed identity configured. In the cluster those sources are absent and it falls through to the workload identity, which may have no role assignments - and the failure is an authorisation error far from the cause. Being explicit about which credential to use in each environment, or at least logging which one was selected, turns a confusing runtime failure into an obvious configuration one."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Observability",
+  "difficulty": "Medium",
+  "question": "How do you decide what should page someone at 3am versus wait until morning?",
+  "answer": "By user impact and by whether acting now changes the outcome. If nobody is affected and the situation will not worsen, it waits.\n\n**Pages at 3am:**\n- **Users cannot complete a critical journey** - checkout is failing, login is down, payments are rejected. Revenue or trust is being lost every minute.\n- **Data is being lost or corrupted.** This gets worse with time and may become unrecoverable, so it is the clearest case for waking someone.\n- **A security incident** - active exploitation, suspected breach.\n- **Something is on a trajectory to total failure** and intervention now prevents it: a disk filling, a queue growing unboundedly, a certificate expiring in hours.\n\n**Waits until morning:**\n- **Degraded but working** - one instance unhealthy while others serve, a slow report, a non-critical feature failing.\n- **A background job failed** and can be re-run, with no deadline before morning.\n- **Elevated errors within the error budget**, which is precisely what the budget is for.\n- **Anything with no action available** - a third party is down and you have no lever, so waking someone achieves nothing but fatigue.\n\n**The test I apply:** is there something a human can usefully do right now that a human cannot usefully do in six hours? If not, it is a ticket.\n\n**And the corollary:** every page needs a runbook. If nobody can write down what to do about it, it should not wake anyone - that is strong evidence it is not actionable.\n\n**Review the pages monthly**, and downgrade the ones nobody acted on. Alert fatigue is how the genuine 3am incident gets missed.",
+  "tags": [
+   "devops",
+   "alerting",
+   "on-call",
+   "runbooks",
+   "incident"
+  ],
+  "followups": [
+   {
+    "q": "How do you handle something that is degraded now but will be critical by morning?",
+    "a": "That is a legitimate page, because the window for cheap intervention is now - a queue growing at a rate that exhausts storage by 6am is a different situation from one that is merely long. The judgement is about the trajectory rather than the current state. It is worth encoding that in the alert itself: alert on predicted exhaustion rather than on a static threshold, so the page fires when action is still easy rather than when the disk is already full."
+   },
+   {
+    "q": "What do you do when the same alert fires every night and someone always just acknowledges it?",
+    "a": "Treat it as a defect in the alert, not in the person. Either it is not actionable, in which case delete it or turn it into a dashboard, or it is actionable and the underlying problem should be fixed so it stops firing, or the threshold is wrong. An alert that is habitually acknowledged without action is actively harmful, because it trains the on-call engineer to dismiss pages - and that habit transfers to the one that matters."
+   }
+  ]
  }
 ]
