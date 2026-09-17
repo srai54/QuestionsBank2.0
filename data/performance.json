@@ -303,5 +303,126 @@
     "a": "Correlate timestamps: capture GC pause durations from the runtime counters and check whether the slow requests fall inside pause windows. If they line up, that is conclusive. The follow-up is to find why gen 2 collections are frequent or long - usually a large heap, a high allocation rate promoting objects, or large object heap pressure - and reduce allocations rather than tune the GC. Server GC with concurrent collection reduces pause length, and pooling buffers reduces the frequency."
    }
   ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Diagnostics",
+  "difficulty": "Medium",
+  "question": "A service that was fine last week now takes 4 seconds on a page that used to take 300ms. Nothing in that code path changed. Walk me through what you do.",
+  "answer": "The opening move is to resist changing anything until I can see where the time goes. \"Nothing changed in that code path\" is almost always true and almost never relevant - what changed is data volume, a dependency, or the plan the database picked.\n\n**1. Confirm the shape of the regression.** Is it every request or the tail? A p50 that moved from 300ms to 4s is a different problem from a p50 that is unchanged and a p99 that exploded. The second points at contention, GC pauses, or a specific data subset; the first points at something systemic.\n\n**2. Split the time.** Use whatever tracing exists to attribute the 4 seconds: time in my process, time waiting on the database, time waiting on other services. Without distributed tracing, a stopwatch around the three or four coarse blocks in the handler gets me the same answer in ten minutes. This single step eliminates most of the search space, and skipping it is how people spend a day optimising code that accounts for 5% of the wall clock.\n\n**3. Follow the biggest slice.**\n- *Database dominant* - capture the actual query and its plan. Look for a plan change (parameter sniffing, stale statistics), a missing index that only started mattering as the table grew, or an N+1 that was invisible at 100 rows and is brutal at 100,000.\n- *In-process dominant* - take a profile. Allocation-heavy code shows up as GC time; a CPU profile finds hot loops.\n- *Waiting on a dependency* - check that side's latency directly, and check whether we are queueing behind a connection-pool or thread-pool limit rather than the dependency being slow.\n\n**4. Check what actually changed.** Data volume is the most common answer: a table crossed a size where the plan flipped, or a customer imported ten times their usual records. Deployment of a shared library, a config change, or a database maintenance job that rebuilt statistics are the next candidates.\n\n**What I would say out loud in an interview:** the mistake to avoid is optimising the code you can see rather than the time you measured. I want the profile before the fix.",
+  "tags": [
+   "performance",
+   "dotnet",
+   "scenario",
+   "diagnostics",
+   "latency",
+   "troubleshooting"
+  ],
+  "followups": [
+   {
+    "q": "Tracing says 3.6 of the 4 seconds is database time on one query. What next?",
+    "a": "Get the execution plan for the real parameter values, not a sanitised version - parameter sniffing means the plan for one customer can differ wildly from another. Compare estimated against actual row counts: a large gap points at stale statistics or a non-sargable predicate the optimiser cannot estimate. Then check whether the plan uses a seek or a scan, and whether the row count it returns is reasonable for the page being rendered."
+   },
+   {
+    "q": "p50 is unchanged but p99 went from 400ms to 6s. What does that pattern suggest?",
+    "a": "Something intermittent and usually contended: lock waits, connection-pool exhaustion, thread-pool starvation from sync-over-async, a GC pause, or one slow dependency being called only on some paths. A uniform slowdown would move p50 too. I would look at wait statistics on the database side and at GC and thread-pool counters on the app side before touching any query."
+   },
+   {
+    "q": "The team wants to add a cache immediately. What is your response?",
+    "a": "That caching is a reasonable outcome but a bad first step. A cache over an unexplained regression hides the cause, and a 4-second cold path is still 4 seconds on eviction, deploy or a cache miss storm. It also introduces staleness and invalidation bugs you now own. Find the cause first; then decide whether the correct fix is an index, a query rewrite, or a cache with a deliberate consistency story."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Allocations",
+  "difficulty": "Medium",
+  "question": "Show me how string concatenation in a loop hurts, and when the obvious advice is wrong.",
+  "answer": "Every `+=` on a string allocates a new string and copies both operands, so a loop doing n concatenations allocates O(n) strings and copies O(n^2) characters. `StringBuilder` mutates one growable buffer instead, giving O(n) copying amortised.\n\nThe part worth knowing for an interview is **when this advice does not apply**:\n\n- A fixed, small number of concatenations in one expression (`a + b + c + d`) compiles to a single `String.Concat` call that allocates once. Rewriting that as a `StringBuilder` makes it slower and uglier.\n- Concatenating string *literals* is folded at compile time and costs nothing at runtime.\n- For a known set of parts, `string.Join` or interpolation is clearer than a builder and about as fast.\n\nSo the rule is not \"never use +\", it is \"never use + in a loop whose length you do not control\".\n\n**Program**\n\n```csharp\nusing System;\nusing System.Diagnostics;\nusing System.Text;\n\npublic static class Program\n{\n    const int N = 20000;\n\n    public static void Main()\n    {\n        // --- naive concatenation in a loop ---\n        var before = GC.GetTotalAllocatedBytes(precise: true);\n        var sw = Stopwatch.StartNew();\n        string s = \"\";\n        for (int i = 0; i < N; i++) s += \"x\";\n        var naiveMs = sw.Elapsed.TotalMilliseconds;\n        var naiveBytes = GC.GetTotalAllocatedBytes(precise: true) - before;\n\n        // --- StringBuilder ---\n        before = GC.GetTotalAllocatedBytes(precise: true);\n        sw.Restart();\n        var sb = new StringBuilder();\n        for (int i = 0; i < N; i++) sb.Append('x');\n        var built = sb.ToString();\n        var builderMs = sw.Elapsed.TotalMilliseconds;\n        var builderBytes = GC.GetTotalAllocatedBytes(precise: true) - before;\n\n        Console.WriteLine($\"both produced the same string : {s == built} (length {s.Length})\");\n        Console.WriteLine();\n\n        // Ratios, not raw timings - raw numbers would differ on every machine.\n        Console.WriteLine($\"concat allocated more bytes than builder : {naiveBytes > builderBytes}\");\n        // The exact ratio drifts between runs, so assert a floor rather than a figure.\n        Console.WriteLine($\"more than 100x the allocations           : {naiveBytes > builderBytes * 100}\");\n        Console.WriteLine($\"concat was slower                        : {naiveMs > builderMs}\");\n        Console.WriteLine();\n\n        // The case where StringBuilder is the WRONG answer.\n        var parts = new[] { \"order\", \"1041\", \"acme\", \"shipped\" };\n        before = GC.GetTotalAllocatedBytes(precise: true);\n        var joined = parts[0] + \"-\" + parts[1] + \"-\" + parts[2] + \"-\" + parts[3];\n        var concatBytes = GC.GetTotalAllocatedBytes(precise: true) - before;\n\n        before = GC.GetTotalAllocatedBytes(precise: true);\n        var sb2 = new StringBuilder();\n        sb2.Append(parts[0]).Append('-').Append(parts[1]).Append('-').Append(parts[2]).Append('-').Append(parts[3]);\n        var viaBuilder = sb2.ToString();\n        var builder2Bytes = GC.GetTotalAllocatedBytes(precise: true) - before;\n\n        Console.WriteLine($\"fixed 4-part concat  : '{joined}'\");\n        Console.WriteLine($\"same via builder     : '{viaBuilder}'\");\n        Console.WriteLine($\"builder allocated more for the fixed case : {builder2Bytes > concatBytes}\");\n        Console.WriteLine();\n        Console.WriteLine(\"a + b + c + d is one String.Concat call, so the builder is pure overhead here.\");\n    }\n}\n```\n\n**Output**\n\n```\nboth produced the same string : True (length 20000)\n\nconcat allocated more bytes than builder : True\nmore than 100x the allocations           : True\nconcat was slower                        : True\n\nfixed 4-part concat  : 'order-1041-acme-shipped'\nsame via builder     : 'order-1041-acme-shipped'\nbuilder allocated more for the fixed case : True\n\na + b + c + d is one String.Concat call, so the builder is pure overhead here.\n```\n\nNote the program reports a *ratio* and boolean comparisons rather than millisecond figures. A single unwarmed `Stopwatch` loop is not a benchmark - for real numbers use BenchmarkDotNet, which handles warm-up, multiple iterations and statistics. The allocation difference, measured with `GC.GetTotalAllocatedBytes`, is the robust signal here.",
+  "tags": [
+   "performance",
+   "dotnet",
+   "scenario",
+   "strings",
+   "allocations",
+   "gc"
+  ],
+  "followups": [
+   {
+    "q": "Why is the allocation ratio so much larger than the time ratio?",
+    "a": "Because allocation is cheap in .NET - a pointer bump - while the *copying* and the later garbage collection are the real costs. Twenty thousand short-lived strings mostly die in gen 0, which is very cheap to collect, so the wall-clock penalty is far smaller than the byte count suggests. It still matters under load: gen 0 collections are cheap individually but they are not free, and at high throughput this kind of code is what pushes a service into constant GC."
+   },
+   {
+    "q": "Does `StringBuilder` have a downside?",
+    "a": "It allocates its own internal buffers and grows by chunking, so for very small or fixed workloads it is slower and allocates more than a plain concat - the output shows exactly that. Setting an initial capacity when you know the rough size avoids repeated growth. For hot paths building small strings, `string.Create` or `Span<char>` with `stackalloc` beats both, at the cost of much less readable code."
+   },
+   {
+    "q": "How would you build a string efficiently if the parts come from a collection?",
+    "a": "`string.Join(separator, items)` - it enumerates once, computes the total length where the collection has a known count, and allocates a single result string. It is clearer than a manual builder loop and avoids the trailing-separator bug people write by hand. For an `IEnumerable<T>` of unknown length it falls back to a builder internally, so you lose nothing."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "A colleague uses List.Contains inside a loop over another list. At what size does this actually matter, and how would you show it?",
+  "answer": "`List<T>.Contains` is a linear scan - O(n). Calling it inside a loop over m items is O(n*m). A `HashSet<T>` lookup is O(1) on average, making the same work O(n + m).\n\nThe honest answer includes the threshold: **for small collections the list wins.** Building a hash set costs an allocation and a hash per element, and for a handful of items a linear scan over contiguous memory is faster than hashing - it is cache-friendly and has no indirection. The crossover is usually somewhere in the low tens of elements, which is why this is not a blanket rule.\n\nWhat makes it a real bug is when n is unbounded or grows with data. Ten thousand against ten thousand is a hundred million comparisons; the same work with a set is twenty thousand operations.\n\n**Program**\n\n```csharp\nusing System;\nusing System.Collections.Generic;\nusing System.Linq;\n\npublic static class Program\n{\n    static (long Comparisons, int Found) WithList(List<int> haystack, List<int> needles)\n    {\n        long comparisons = 0;\n        int found = 0;\n        foreach (var needle in needles)\n        {\n            // Count what Contains does internally: a scan until it matches.\n            for (int i = 0; i < haystack.Count; i++)\n            {\n                comparisons++;\n                if (haystack[i] == needle) { found++; break; }\n            }\n        }\n        return (comparisons, found);\n    }\n\n    static (long Lookups, int Found) WithSet(HashSet<int> haystack, List<int> needles)\n    {\n        long lookups = 0;\n        int found = 0;\n        foreach (var needle in needles)\n        {\n            lookups++;\n            if (haystack.Contains(needle)) found++;\n        }\n        return (lookups, found);\n    }\n\n    static void Compare(int size)\n    {\n        // Half the needles are present, half are not - misses are the worst case\n        // for the list, because a miss scans the entire collection.\n        var haystack = Enumerable.Range(0, size).ToList();\n        var needles = Enumerable.Range(size / 2, size).ToList();\n        var set = new HashSet<int>(haystack);\n\n        var list = WithList(haystack, needles);\n        var hash = WithSet(set, needles);\n\n        // No micro-timings here: at these sizes a single Stopwatch reading is noise.\n        // Comparison counts are exact and make the same point far more strongly.\n        Console.WriteLine($\"  n={size,-6} list comparisons={list.Comparisons,-12:n0} set lookups={hash.Lookups,-8:n0} \" +\n                          $\"same answer={list.Found == hash.Found,-5} ratio={(double)list.Comparisons / hash.Lookups,8:n0}:1\");\n    }\n\n    public static void Main()\n    {\n        Console.WriteLine(\"matching two collections, half the lookups miss:\");\n        foreach (var size in new[] { 10, 100, 1000, 5000 })\n            Compare(size);\n\n        Console.WriteLine();\n        Console.WriteLine(\"the work grows quadratically for the list and linearly for the set:\");\n        long previous = 0;\n        foreach (var size in new[] { 1000, 2000, 4000 })\n        {\n            var haystack = Enumerable.Range(0, size).ToList();\n            var needles = Enumerable.Range(size / 2, size).ToList();\n            var c = WithList(haystack, needles).Comparisons;\n            Console.WriteLine($\"  n={size,-6} comparisons={c,-14:n0}\" +\n                              (previous == 0 ? \"\" : $\"  ({(double)c / previous:0.0}x the previous, for 2x the data)\"));\n            previous = c;\n        }\n    }\n}\n```\n\n**Output**\n\n```\nmatching two collections, half the lookups miss:\n  n=10     list comparisons=90           set lookups=10       same answer=True  ratio=       9:1\n  n=100    list comparisons=8,775        set lookups=100      same answer=True  ratio=      88:1\n  n=1000   list comparisons=875,250      set lookups=1,000    same answer=True  ratio=     875:1\n  n=5000   list comparisons=21,876,250   set lookups=5,000    same answer=True  ratio=   4,375:1\n\nthe work grows quadratically for the list and linearly for the set:\n  n=1000   comparisons=875,250       \n  n=2000   comparisons=3,500,500       (4.0x the previous, for 2x the data)\n  n=4000   comparisons=14,001,000      (4.0x the previous, for 2x the data)\n```",
+  "tags": [
+   "performance",
+   "dotnet",
+   "scenario",
+   "collections",
+   "hashset",
+   "complexity"
+  ],
+  "followups": [
+   {
+    "q": "At n=10 the ratio is only 9:1. Does that mean the optimisation is pointless below some size?",
+    "a": "At that size the list is very likely faster in wall-clock terms despite doing more comparisons, because a scan over contiguous memory beats hashing and the counts are tiny. So yes - pointless *at that size*, which is a different claim from pointless. The risk is that collection sizes are rarely fixed - code written when a lookup list held eight entries is still there when configuration grows it to eight hundred. I would use a set when the collection size is driven by data, and not bother when it is a hard-coded handful. The cost of using a set unnecessarily is small and constant; the cost of a list at scale is quadratic."
+   },
+   {
+    "q": "What do you need from T for HashSet to actually be O(1)?",
+    "a": "A good `GetHashCode`. If every element hashes to the same bucket the set degenerates to a linked list and you are back to O(n) with worse constants than the list had. This bites with custom classes that override `Equals` but not `GetHashCode`, or that hash on a field with very low cardinality. It also bites with mutable keys: mutate a field that participates in the hash after insertion and the element becomes unreachable in its own set."
+   },
+   {
+    "q": "What would you use if you need the matched values, not just membership?",
+    "a": "A `Dictionary<TKey, TValue>` keyed by the join key, or LINQ `Join`/`GroupJoin`, which build a lookup internally and are O(n + m). A `ToLookup` is the right tool when one side has duplicate keys. The anti-pattern to name is a nested `Where(...)` inside a `Select(...)`, which reads like a join but executes as a nested loop."
+   }
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Async",
+  "difficulty": "Hard",
+  "question": "Your API works fine in testing but under load the response times climb into tens of seconds and the CPU is nearly idle. What is your hypothesis?",
+  "answer": "Idle CPU with climbing latency means requests are **waiting**, not computing. My first hypothesis is thread-pool starvation, and the most common cause in .NET is sync-over-async - code calling `.Result`, `.Wait()` or `GetAwaiter().GetResult()` on a task.\n\nThe mechanism is worth being able to explain precisely. A thread-pool thread calls an async method and then blocks waiting for it. That thread is now consumed doing nothing. The continuation needs a thread-pool thread to resume on, but the pool is full of blocked threads. The pool injects new threads only slowly - roughly one or two per second beyond the minimum - so throughput collapses while every core sits idle. It is a self-inflicted deadlock-shaped queue, and load tests with low concurrency never reveal it.\n\n**How I would confirm it:**\n- Look at `ThreadPool.ThreadCount` and the thread-pool queue length counters. A growing queue with idle CPU is close to conclusive.\n- Take a dump and look at the stacks. Dozens of threads parked in `Monitor.Wait` beneath a `.Result` is the signature.\n- Grep the codebase for `.Result`, `.Wait()`, `GetAwaiter().GetResult()` and `Task.Run(...).Result`.\n\n**Other candidates to rule out**, in order of likelihood: connection-pool exhaustion (the default SQL Server pool is 100 - past that, requests queue for a connection and the symptom looks identical), an external dependency that has become slow so requests pile up, and lock contention on a shared resource.\n\n**The fix** is to make the path async end to end. Half-measures - adding `ConfigureAwait(false)`, raising `ThreadPool.SetMinThreads` - reduce the symptom and leave the cause. Raising min threads is a legitimate *stopgap* during an incident, and I would say so, but it buys time rather than fixing anything.",
+  "tags": [
+   "performance",
+   "dotnet",
+   "scenario",
+   "async",
+   "thread-pool",
+   "starvation",
+   "troubleshooting"
+  ],
+  "followups": [
+   {
+    "q": "Why does raising ThreadPool.SetMinThreads help at all if it does not fix the cause?",
+    "a": "Because the pool creates threads up to the minimum immediately, without the injection delay. If the starvation is a burst at startup or a spike, having the threads already there absorbs it. It fails when the blocking is proportional to load: each extra request still burns a thread, so you have just moved the cliff further out at the cost of more memory and more context switching. It is an incident mitigation, not a design."
+   },
+   {
+    "q": "Does ConfigureAwait(false) prevent this problem?",
+    "a": "Not this one. `ConfigureAwait(false)` avoids capturing a synchronization context, which prevents the classic single-threaded deadlock in UI and legacy ASP.NET apps. ASP.NET Core has no synchronization context, so it changes nothing about starvation - the blocked thread is still blocked. It is still worth using in library code for a small performance gain and for callers who do have a context, but presenting it as the fix for starvation is wrong."
+   },
+   {
+    "q": "How would you distinguish thread-pool starvation from connection-pool exhaustion?",
+    "a": "Both show queueing with idle CPU. Connection-pool exhaustion surfaces as timeouts with a specific message about obtaining a connection from the pool, and the stacks sit in the data provider rather than in generic task machinery. It is usually caused by connections not being disposed, or by long-running transactions holding connections open. Checking active connection counts on the database side separates the two quickly."
+   },
+   {
+    "q": "Everything is already async and you still see the symptom. Where do you look?",
+    "a": "Something is blocking that is not obviously a task: a `lock` held across an await-heavy section, a synchronous file or DNS call, a third-party SDK that is async on the surface and blocks internally, or `Task.Run` being used to wrap blocking work so it merely moves the blocking onto the pool. Async streaming over a slow client can also pin resources. A dump with stacks remains the fastest way to see it rather than guess."
+   }
+  ]
  }
 ]
