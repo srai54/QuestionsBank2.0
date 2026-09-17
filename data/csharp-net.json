@@ -12590,5 +12590,29 @@
     "a": "Only within a single process - it prevents two threads in the same instance overlapping, which is a real and separate concern worth handling. It does nothing across instances, and the failure is invisible in development where you run one instance. This is the version that reaches production and then runs three times a night in a nightly billing job, which is how people discover it."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Source Generators",
+  "difficulty": "Medium",
+  "question": "What problem do source generators solve, and where have you seen them used?",
+  "answer": "They generate code at **compile time** from the code and files already in the project, replacing work that would otherwise be done at runtime with reflection.\n\n**The problem they solve** is that reflection is slow, allocates, and is invisible to the trimmer and to Native AOT - so an application that discovers types and builds delegates at startup cannot be trimmed safely and pays a startup cost. A source generator moves that work to build time, producing ordinary C# the compiler sees, which is fast, trimmable and debuggable.\n\n**Where they are used in the framework:**\n- **`System.Text.Json`** source generation, which emits serialisers at compile time. This is what makes JSON work under Native AOT and removes the reflection-based startup cost.\n- **Logging** - `[LoggerMessage]` generates a strongly-typed, allocation-free logging method, avoiding boxing of the arguments and the cost of formatting when the level is disabled.\n- **Regex** - `[GeneratedRegex]` compiles the pattern into a method at build time rather than interpreting or emitting IL at runtime.\n- **`INotifyPropertyChanged`** implementations in MVVM toolkits, removing a large amount of boilerplate.\n- **Interop** with `[LibraryImport]`, replacing the older reflection-based marshalling.\n\n**The trade-offs to mention:** they add build time, debugging generated code needs `EmitCompilerGeneratedFiles` to see it, and they cannot modify existing code - only add to it, which is why the target must be `partial`. Writing one is also a fair amount of work for the incremental API, so the bar for writing your own is higher than for consuming the ones that ship.",
+  "tags": [
+   "csharp",
+   "source-generators",
+   "roslyn",
+   "aot",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "Why can a source generator only add code and not modify it?",
+    "a": "Because the design deliberately keeps compilation predictable and avoids the problems that post-compile IL rewriters have - you can always read the source and know what the type contains, plus what was generated into its partial parts. Allowing modification would mean the code you read is not the code that runs, which breaks debugging and tooling. The practical consequence is the `partial` requirement on every target, which is why generated APIs have that shape."
+   },
+   {
+    "q": "What is the difference between ISourceGenerator and IIncrementalGenerator?",
+    "a": "The original `ISourceGenerator` re-ran fully on every keystroke in the IDE, which made large projects sluggish. `IIncrementalGenerator` builds a pipeline of cached transformations, so unchanged inputs are not recomputed and only the affected outputs regenerate. It is the one to use for anything new; the older interface is effectively deprecated. Getting the caching right - making the pipeline values equatable so they compare cheaply - is the main skill in writing one well."
+   }
+  ]
  }
 ]

@@ -1654,5 +1654,29 @@
     "a": "Keep a pool of N workers each pulling from a shared queue: create an index counter, spawn N async functions that loop taking the next index until the array is exhausted, and `await Promise.all` on the workers. It is about ten lines and avoids the common broken approach of chunking into fixed batches - batching waits for the slowest item in each batch before starting the next, so one slow item stalls the whole group."
    }
   ]
+ },
+ {
+  "category": "JavaScript/TypeScript",
+  "subcategory": "Semantics",
+  "difficulty": "Medium",
+  "question": "Explain `==` versus `===`, and when you would deliberately use loose equality.",
+  "answer": "`===` compares type and value with no conversion. `==` applies the abstract equality algorithm, which coerces operands before comparing - producing results people cannot predict without memorising the table. `'' == 0` is true, `'0' == false` is true, `null == 0` is false but `null == undefined` is true.\n\n**The default is `===`**, and most style guides enforce it, because coercion rules are a source of bugs that read as correct.\n\n**The one genuinely useful case for `==`:** checking for null *or* undefined in a single comparison. `if (value == null)` is true for both and false for everything else, including `0`, `''` and `false`. The explicit alternative is `value === null || value === undefined`, and the loose version is idiomatic enough that linters usually permit this specific exception.\n\n**The related trap is truthiness**, which catches people more often than `==` does. `if (count)` is false when `count` is `0`, and `if (name)` is false when `name` is an empty string - both usually valid values you meant to accept. When you mean \"was this provided\", test for null explicitly rather than relying on truthiness.\n\n**And `??` versus `||`** follows the same distinction: `||` falls back on any falsy value, so `port || 3000` overrides a deliberate `0`. `??` falls back only on `null` or `undefined`, which is almost always what was meant.",
+  "tags": [
+   "javascript",
+   "equality",
+   "coercion",
+   "typescript",
+   "gotchas"
+  ],
+  "followups": [
+   {
+    "q": "Does TypeScript remove the need to care about this?",
+    "a": "It reduces it but does not remove it. Types are erased at runtime, so any value arriving from JSON, a form, a third-party library or an `any` can be whatever it actually is, and the coercion rules still apply. TypeScript also cannot distinguish an optional property that is absent from one explicitly set to `undefined` without `exactOptionalPropertyTypes`. Runtime validation at the boundary is what actually closes the gap."
+   },
+   {
+    "q": "What does Object.is do differently?",
+    "a": "It is `===` with two corrections: `NaN` is equal to itself, where `NaN === NaN` is false, and `+0` is not equal to `-0`, where `===` says they are. It is what React uses to compare dependencies and state, which is why depending on a `NaN` value behaves more sensibly than you might expect. For everyday comparisons `===` is still the right default; `Object.is` matters when `NaN` handling is significant."
+   }
+  ]
  }
 ]

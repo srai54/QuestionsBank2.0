@@ -3993,5 +3993,29 @@
     "a": "Remove the possibility. Secrets that are managed identities or vault references have nothing to paste, which eliminates the class. Where a string is unavoidable, use push protection and pre-commit hooks with a scanner so the commit fails before it leaves the machine, and scan the whole history periodically for what predates the controls. Relying on developer vigilance for something this easy to do accidentally is not a control."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Kubernetes",
+  "difficulty": "Medium",
+  "question": "What do resource requests and limits actually do, and what goes wrong when you get them wrong?",
+  "answer": "**Requests** are what the scheduler uses to place a pod - it finds a node with that much capacity reserved. **Limits** are the hard ceiling the runtime enforces. They are different mechanisms with different failure modes, which is the distinction to get right.\n\n**Memory and CPU behave differently at the limit, and this is the important part:**\n- **Exceeding a memory limit gets the container OOM-killed.** There is no throttling - the process dies and restarts.\n- **Exceeding a CPU limit gets the container throttled.** It is not killed; it simply gets fewer cycles, so latency climbs while CPU usage appears to sit exactly at the limit.\n\n**What goes wrong:**\n- **No requests set:** the scheduler assumes nearly nothing and overcommits the node. Everything runs until the node is under pressure, then eviction starts with whatever has no requests.\n- **Requests too high:** you reserve capacity nobody uses, nodes fill up with reservations, and you pay for idle compute.\n- **Memory limit too low:** periodic OOM kills that look like crashes. For .NET this is compounded because the GC sizes heaps against what it believes is available - a container limit the runtime cannot see leads it to use more than allowed.\n- **CPU limit too low:** the subtle one. Throttling shows up as intermittent latency with no errors and no obvious cause, and people chase it in application code for days.\n\n**The guidance I would give:** set requests from observed usage (p95 or so), set memory limit close to the request since memory is not compressible, and be cautious with CPU limits - many teams set requests without CPU limits deliberately to avoid throttling.",
+  "tags": [
+   "devops",
+   "kubernetes",
+   "resources",
+   "oom",
+   "throttling"
+  ],
+  "followups": [
+   {
+    "q": "Why do people argue against setting CPU limits at all?",
+    "a": "Because CPU is compressible - if the node has spare cycles, letting a container burst above its request costs nobody anything and improves latency. A limit prevents that burst even when the capacity is idle, so you get throttling for no benefit. The counter-argument is predictability and preventing a noisy neighbour, which matters on shared clusters. The middle ground most teams reach is: always set requests, set memory limits, and set CPU limits only where isolation genuinely matters."
+   },
+   {
+    "q": "What are the QoS classes and why do they matter?",
+    "a": "Guaranteed - requests equal limits for every resource - is evicted last. Burstable - requests set and lower than limits - is in the middle. BestEffort - nothing set - is evicted first when the node is under pressure. So the class falls out of how you configure resources, and a pod with no requests is implicitly volunteering to be killed first. For anything important, setting requests is what moves it out of BestEffort."
+   }
+  ]
  }
 ]

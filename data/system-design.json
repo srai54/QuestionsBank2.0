@@ -2860,5 +2860,29 @@
     "a": "Either count rows in a fast first pass - cheap if you only count newlines and the file is in blob storage - or report progress against bytes consumed rather than rows, which needs no pre-pass since the blob size is known. Byte progress is slightly uneven with variable row lengths but is honest and costs nothing. What to avoid is estimating a total and then exceeding it, which users read as a broken progress bar."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Notifications",
+  "difficulty": "Hard",
+  "question": "Design a notification system supporting email, SMS and push, with user preferences and no duplicates.",
+  "answer": "The shape is an event-driven pipeline with clear separation between *what happened*, *who should be told*, and *how to reach them*.\n\n**The flow:**\n1. **Producers publish domain events** - `OrderShipped`, `PaymentFailed`. They know nothing about channels or preferences, which is the key decoupling. A service that calls the email API directly is the design to avoid.\n2. **A notification service subscribes**, and for each event resolves *who* should be notified and *which* notification type applies.\n3. **Preference resolution** - per user, per notification type, per channel, plus quiet hours, timezone and locale. Defaults matter: a new notification type needs a sensible default, and opt-out for anything non-transactional is usually a legal requirement rather than a nicety.\n4. **A per-channel queue** so a slow SMS provider does not block email, and each channel can have its own retry policy and rate limit.\n5. **Channel adapters** call the providers, handling their specific failure modes and bounce or delivery callbacks.\n\n**Preventing duplicates** needs two separate mechanisms, and conflating them is the common mistake:\n- **Idempotency** on delivery - a key derived from the event id, user and channel, stored before sending, so an at-least-once redelivery does not send twice.\n- **Deduplication and batching** at the product level - if ten items ship in a minute, the user wants one message, not ten. That is a windowing decision with a digest, and it is a product question as much as a technical one.\n\n**Also required in practice:** a template system with versioning and localisation, delivery status tracking, and a suppression list for bounces and complaints that no send path can bypass.",
+  "tags": [
+   "system-design",
+   "notifications",
+   "event-driven",
+   "idempotency",
+   "queues"
+  ],
+  "followups": [
+   {
+    "q": "How do you handle a provider outage without losing notifications?",
+    "a": "The queue absorbs it - messages accumulate rather than being lost, and a circuit breaker stops hammering the failing provider while it is down. For channels where it matters, a fallback provider gives continuity, though that needs templates and sender identities configured on both, so it is worth deciding in advance rather than during the incident. What you must also decide is expiry: a \"your order shipped\" notification delivered two days late is worth sending; a one-time code is not, so time-sensitive messages need a TTL after which they are dropped rather than delivered."
+   },
+   {
+    "q": "Why keep a suppression list separate from user preferences?",
+    "a": "Because they answer different questions and have different authority. Preferences are what the user chose; suppression is what you are *compelled* to honour - hard bounces, spam complaints, unsubscribes, regulatory opt-outs. Suppression must be enforced at the send path for every channel and every message type, including ones that bypass preferences such as transactional mail. Storing it as just another preference means a bug in preference resolution becomes a compliance incident."
+   }
+  ]
  }
 ]

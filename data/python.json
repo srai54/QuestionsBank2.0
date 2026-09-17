@@ -713,5 +713,29 @@
     "a": "No, and this is a common confusion. `asyncio` is cooperative concurrency on a single thread - it lets you interleave many waiting operations efficiently, which is excellent for thousands of concurrent network calls. A CPU-bound coroutine does not yield, so it blocks the entire event loop and makes things worse. If you must run CPU work in an async application, push it to a process pool via `run_in_executor`."
    }
   ]
+ },
+ {
+  "category": "Python",
+  "subcategory": "Data Model",
+  "difficulty": "Medium",
+  "question": "Why is a mutable default argument a bug in Python, and how do you avoid it?",
+  "answer": "Default argument values are evaluated **once**, when the function is defined - not on each call. So a mutable default like `def add(item, items=[])` creates one list that is shared by every call that omits the argument. Items accumulate across calls, which is almost never what was intended and produces bugs that look like state leaking between unrelated operations.\n\nThe same applies to dictionaries, sets, and to any expression evaluated at definition time - `def log(msg, when=datetime.now())` captures the import time, permanently.\n\n**The fix** is the standard idiom: default to `None` and create the mutable value inside the function.\n\n**Why the language works this way:** functions are objects and defaults are attributes evaluated once, which is consistent with the rest of the model and makes the common case cheap. It is not a wart so much as a consequence people are not expecting - and it is exactly the kind of thing an interviewer uses to see whether you have internalised the object model or memorised syntax.\n\n**Where it bites hardest:** a cache or accumulator default that silently shares state across every caller in a long-running service, so behaviour depends on how many requests have been handled. Linters flag it, and enabling that rule is worth doing.\n\n**The related trap:** `@dataclass` fields with mutable defaults. Python raises an error there rather than letting you do it, and the fix is `field(default_factory=list)`.",
+  "tags": [
+   "python",
+   "gotchas",
+   "mutable-defaults",
+   "data-model",
+   "code-review"
+  ],
+  "followups": [
+   {
+    "q": "Is a mutable default ever useful deliberately?",
+    "a": "It is occasionally used as a memoisation cache - `def f(n, _cache={})` - which works and is genuinely fast because the dictionary persists. But it is obscure, it makes the function impossible to reset or test in isolation, and it surprises every reader. `functools.lru_cache` does the same job explicitly, with bounds and introspection, so the deliberate use of the quirk is hard to justify now."
+   },
+   {
+    "q": "What is the equivalent trap with class attributes?",
+    "a": "A mutable value assigned at class level is shared by every instance, because attribute lookup falls back to the class when the instance has no such attribute. Appending to it mutates the shared object for all instances, while assigning to it creates an instance attribute that shadows the class one - so the behaviour differs depending on whether you mutate or rebind, which is deeply confusing. Mutable state belongs in `__init__`."
+   }
+  ]
  }
 ]

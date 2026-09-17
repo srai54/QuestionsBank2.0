@@ -2114,5 +2114,29 @@
     "a": "From history rather than from a guess. Look at the distribution of daily volumes over several months and set bounds that would not have fired on normal variation, including known seasonality - a Monday load is not comparable to a Sunday one. Start deliberately loose so the check is trusted, and tighten it as you learn. A check that cries wolf gets disabled, which leaves you worse off than having no check at all."
    }
   ]
+ },
+ {
+  "category": "Data & BI",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "A Power BI report is slow. Where do you look?",
+  "answer": "The cost is almost always in the model rather than in the visuals, so I would resist the instinct to simplify the report page first.\n\n**1. The data model.** A star schema with narrow dimension tables and one fact table performs dramatically better than a flat wide table or a snowflake with many hops. Relationships should be one-to-many on integer surrogate keys. Bi-directional relationships are a common culprit - they create ambiguity and force expensive filter propagation, so they should be rare and deliberate.\n\n**2. Cardinality and column types.** The engine is columnar and compresses by cardinality, so a high-cardinality column - a timestamp with seconds, a GUID, a free-text field - inflates the model disproportionately. Splitting a datetime into date and time columns is a standard and effective fix. Removing columns nobody uses is the cheapest win available and is usually significant.\n\n**3. The DAX.** Measures that iterate row by row where a set-based aggregate would do, `FILTER` over a whole table rather than a column, and calculated columns doing work that belongs upstream in the source or in Power Query. Performance Analyzer gives the per-visual timing, and the DAX query can then be examined directly.\n\n**4. The storage mode.** Import is fastest because data sits in memory. DirectQuery pushes every visual interaction to the source, so a slow warehouse makes every click slow - and many DAX patterns cannot be folded into SQL and fall back to something expensive.\n\n**5. The report page itself.** Each visual is a separate query; twenty visuals on a page means twenty queries on load.\n\n**The general rule:** push work as far upstream as possible - into the warehouse, then Power Query, then the model, and only then DAX.",
+  "tags": [
+   "data-bi",
+   "power-bi",
+   "dax",
+   "star-schema",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "Why are bi-directional relationships discouraged?",
+    "a": "They make filter propagation ambiguous when there is more than one path between tables, which can produce wrong numbers rather than merely slow ones - and the engine also has to evaluate more relationship paths, which costs performance. The usual legitimate need is a many-to-many scenario or a filter on a bridge table, and `CROSSFILTER` inside a specific measure is the targeted alternative, so the behaviour applies only where intended rather than model-wide."
+   },
+   {
+    "q": "When is DirectQuery the right choice despite the performance cost?",
+    "a": "When the data is too large to import, when near-real-time freshness is a genuine requirement rather than a preference, or when security must be enforced at the source. Composite models are usually the better answer now - import the aggregated tables people actually browse and leave the large detail fact table in DirectQuery, with aggregations configured so the engine answers from the imported summary whenever it can and only falls through for detail."
+   }
+  ]
  }
 ]
