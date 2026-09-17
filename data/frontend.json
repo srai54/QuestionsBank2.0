@@ -2324,5 +2324,29 @@
     "a": "Length - browsers and servers cap URLs at a few thousand characters, so a complex filter set with many selections can exceed it, and very long URLs break when pasted into chat clients. It is also visible, so nothing sensitive belongs there, and it ends up in server logs, analytics and referrer headers. For large or private state, put an identifier in the URL and hold the rest server-side or in storage keyed by that id."
    }
   ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "How do you make sure users get new frontend code after a deploy, without breaking caching?",
+  "answer": "With content hashing and two different caching policies for two different kinds of file, which is the part people get wrong by applying one rule to everything.\n\n**The arrangement:**\n\n1. **Hashed asset filenames.** The bundler emits `app.4f3a2b.js`, so the filename changes whenever the content does. These are served with a long `Cache-Control: max-age=31536000, immutable` - a year - because the URL can never refer to different content. That gives you maximum caching with no staleness risk.\n2. **The HTML entry point is never cached**, or cached only briefly with revalidation - `no-cache` means the browser revalidates every time rather than not caching at all. The HTML references the current hashed filenames, so fetching fresh HTML is what delivers the new version.\n\nThat combination means a deploy changes one small file that is always revalidated, and everything else is cached aggressively and correctly.\n\n**What goes wrong:**\n- **Caching the HTML**, so users keep loading an old page referencing old bundles long after the deploy.\n- **Unhashed filenames with a long cache time**, which is how you get users stuck on old code for days with no way to fix it.\n- **A service worker caching aggressively** and never updating, which is by far the hardest version of this to recover from because it persists across reloads.\n- **Deleting old bundles immediately on deploy**, so a user who loaded the old HTML then requests a chunk that no longer exists and gets a blank screen. Keep previous versions for a while.\n\n**And handle the mid-session deploy:** detect a version change and prompt the user to reload rather than letting a lazy-loaded chunk 404.",
+  "tags": [
+   "frontend",
+   "caching",
+   "cache-busting",
+   "deployment",
+   "service-worker"
+  ],
+  "followups": [
+   {
+    "q": "Why keep old bundles after deploying a new version?",
+    "a": "Because a user who loaded the page before the deploy has HTML referencing the old chunk names, and with code splitting they fetch those chunks lazily as they navigate. If the files are gone, the navigation fails with a chunk-load error and often a blank screen - which is a common and confusing production symptom after a deploy. Keeping a few previous versions for a day or two costs almost nothing in storage and removes it entirely, alongside handling the error by prompting a reload."
+   },
+   {
+    "q": "What is the safe way to use a service worker without trapping users on old code?",
+    "a": "Use a maintained tool rather than hand-writing it, and make updating explicit - on detecting a new service worker, either prompt the user to reload or activate the new one and reload automatically, rather than waiting for every tab to close, which may be never. Keep the HTML network-first so a new version is always discoverable, and cache-first only for hashed assets that cannot go stale. A service worker that caches the entry point cache-first is the configuration that strands users, and recovering requires shipping code that the strand prevents them from receiving."
+   }
+  ]
  }
 ]

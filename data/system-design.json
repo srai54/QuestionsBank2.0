@@ -3004,5 +3004,29 @@
     "a": "A probabilistic structure that estimates the number of distinct values in a set using a fixed small amount of memory - a few kilobytes for billions of items - with an error of around 1%. You would use it for unique visitors per page per day, where storing every visitor id would be enormous and 1% error is irrelevant to the decision anyone makes from the number. It is the standard example of accepting approximation deliberately, and the interview point is recognising that exactness was never a requirement."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Reliability",
+  "difficulty": "Hard",
+  "question": "How would you design a system to survive its database being unavailable for ten minutes?",
+  "answer": "By deciding, per operation, what \"survive\" means - because full functionality without the database is rarely achievable, and pretending otherwise produces a design that fails anyway.\n\n**The triage I would apply:**\n\n1. **Reads that tolerate staleness** - a product catalogue, reference data, a user s profile. Serve from cache, and deliberately serve stale rather than failing when the source is down. A cache that only serves fresh data is useless in exactly the situation you built it for.\n2. **Writes that can be deferred** - analytics, audit entries, notifications, non-urgent updates. Accept them into a durable queue and process when the database returns. The user gets a success and the work happens later.\n3. **Writes that cannot be deferred** - a payment, an order that must be confirmed now. These genuinely fail, and the design decision is to fail clearly and quickly rather than hanging, so the user can retry rather than wondering.\n\n**What makes it work:**\n- **Circuit breakers** so requests fail fast instead of each waiting for a timeout and exhausting the connection pool - without this the whole service becomes unresponsive rather than partially degraded.\n- **A cache that can serve stale entries** on source failure, with the staleness surfaced in the UI where it matters.\n- **Idempotent, durable queues** for deferred writes, with a bounded backlog and a plan for what happens if it fills.\n- **Feature-level degradation** - hide or disable the parts that cannot work, rather than letting them error.\n\n**And exercise it.** A design that has never been tested with the database actually unavailable is a hypothesis - a game day where you cut the connection finds the paths nobody considered.",
+  "tags": [
+   "system-design",
+   "resilience",
+   "graceful-degradation",
+   "caching",
+   "queues"
+  ],
+  "followups": [
+   {
+    "q": "What are the risks of serving stale data during an outage?",
+    "a": "It depends entirely on the data, which is why the decision has to be per operation rather than global. A stale product description is harmless; a stale price may be a legal commitment; a stale permission check is a security failure. So the rule I would apply is that anything affecting money, authorisation or safety fails rather than serving stale, and everything else degrades. Surfacing the staleness to the user - a quiet indicator that data may be out of date - turns a silent wrongness into an understandable degradation."
+   },
+   {
+    "q": "What happens when the database comes back and the queue is full of deferred work?",
+    "a": "A thundering herd on a database that has just recovered, which can knock it over again - the classic secondary outage. The queue consumers need rate limiting and a gradual ramp rather than draining at full speed, and a circuit breaker that reopens if the database starts failing again. Processing order matters too: if the deferred writes conflict with each other or with live traffic, you need either ordering guarantees or idempotent operations that converge regardless of order."
+   }
+  ]
  }
 ]

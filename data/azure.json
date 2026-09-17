@@ -5866,5 +5866,29 @@
     "a": "Run hybrid deliberately rather than accidentally - a period where some components are in Azure and some are not is normal, so plan the connectivity, the identity federation and the latency implications up front. Move the least coupled components first, and use the strangler approach at the boundary: route traffic per capability so each move is independently reversible. The thing to avoid is a partial state that depends on a chatty synchronous link across the boundary, because that becomes both slow and fragile, and it is the version of hybrid that gives the approach a bad name."
    }
   ]
+ },
+ {
+  "category": "Azure",
+  "subcategory": "Resilience",
+  "difficulty": "Medium",
+  "question": "What does zone redundancy actually give you, and how is it different from geo-redundancy?",
+  "answer": "**Availability zones** are physically separate data centres within one region, with independent power, cooling and networking, connected by low-latency links. Zone redundancy spreads your resource across them, so losing one data centre does not take you down.\n\n**Regions** are geographically separate - different cities or countries. Geo-redundancy replicates across them.\n\n**The practical differences:**\n\n| | Zone redundant | Geo redundant |\n|---|---|---|\n| Protects against | A data centre failure | A whole-region failure |\n| Latency between | A millisecond or two | Tens of milliseconds |\n| Synchronous replication | Practical | Costly - every write pays the round trip |\n| Failover | Usually automatic and transparent | Often manual, or a deliberate decision |\n| Data residency | Same region | Data leaves the region |\n\n**What I would take from that:** zone redundancy is close to free insurance and should be the default for anything production - it is usually a configuration option, the latency cost is negligible, and it protects against by far the more common failure. Whole-region outages are rare; a single data centre having a problem is not.\n\n**Geo-redundancy is a bigger decision** - it costs real money, it introduces eventual consistency or write latency, it may raise data residency questions, and failing over is a judgement call with its own risk. It is justified by an RTO and RPO that a single region cannot meet, and it should follow from stated requirements rather than from a general wish to be safe.\n\n**And the thing to check:** zone redundancy has to be enabled, and for some resources it can only be set at creation - so retrofitting means recreating.",
+  "tags": [
+   "azure",
+   "availability-zones",
+   "geo-redundancy",
+   "resilience",
+   "disaster-recovery"
+  ],
+  "followups": [
+   {
+    "q": "Does zone redundancy protect against a bad deployment?",
+    "a": "No, and this is the most common misunderstanding about it. Zones protect against infrastructure failure, not against your own code - a bad deployment goes to every zone, and a corrupt write replicates to every replica synchronously. The protections for those are different: staged rollouts and canaries for deployment risk, and point-in-time restore or backups for data corruption. Teams sometimes treat zone redundancy as general resilience and are surprised when a bad release takes everything down simultaneously."
+   },
+   {
+    "q": "How do you decide whether you need multi-region at all?",
+    "a": "From the RTO and RPO the business states, and from what a region outage would actually cost. For most internal and many customer-facing systems, a few hours of downtime during a rare regional event is tolerable, and the correct answer is backups plus infrastructure-as-code so you could rebuild elsewhere - a cold standby. Active-active is a different architecture with conflict resolution and eventual consistency baked in, so it is a decision about the application rather than about infrastructure, and it should not be taken because it sounds more robust."
+   }
+  ]
  }
 ]

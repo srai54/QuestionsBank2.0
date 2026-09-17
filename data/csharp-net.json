@@ -12974,5 +12974,29 @@
     "a": "The container disposes what it created, when the owning scope ends - so scoped instances are disposed at the end of the request, and singletons at application shutdown. The trap is a transient `IDisposable`, which is tracked by the scope that resolved it and only disposed when that scope ends; in a singleton or the root scope that means never, which is a real leak for anything holding a connection. Registering with a factory and disposing yourself, or avoiding disposable transients, is how you avoid it."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Exceptions",
+  "difficulty": "Medium",
+  "question": "Where should you catch exceptions in a layered application, and what should each layer do?",
+  "answer": "The guiding rule is: catch where you can do something about it. Everywhere else, let it propagate.\n\n**What each layer should do:**\n\n- **Data access** - catch only to translate. A provider-specific exception such as a unique constraint violation becomes a domain concept like `DuplicateEmailException`, so upper layers do not depend on the database provider. Catching and swallowing here hides real failures.\n- **Domain** - throws for invariant violations, rarely catches. A domain object should refuse to enter an invalid state, and that refusal is an exception or a result, not a caught-and-logged error.\n- **Application or service** - catches where there is a meaningful alternative: a fallback, a retry, a degraded response. If there is no alternative, do not catch.\n- **The boundary - a global exception handler** - catches everything remaining, logs it once with full detail, and maps it to a response the client can use. This is the only place that should convert an exception into an HTTP status code.\n\n**What I would push back on in review:**\n- **Catch, log, rethrow at every layer.** Produces the same error five times in the logs with no added information, and makes finding the real one harder.\n- **`catch (Exception)` that swallows.** Hides bugs and produces the silent failure that is hardest to diagnose.\n- **Using exceptions for expected outcomes** - validation failures, not-found - which are ordinary results and should be returned rather than thrown.\n\n**And catch specifically.** A broad catch intended for a transient network failure also swallows the `NullReferenceException` that indicates a real bug, so the bug ships and manifests as something unrelated.",
+  "tags": [
+   "csharp",
+   "exceptions",
+   "layering",
+   "error-handling",
+   "code-review"
+  ],
+  "followups": [
+   {
+    "q": "What belongs in a global exception handler beyond returning a 500?",
+    "a": "Logging once with the full exception and the correlation id, mapping known exception types to appropriate status codes - not-found to 404, domain rule violations to 409 or 422, authorisation failures to 403 - and returning a problem-details body containing a machine-readable code and the correlation id but no internal detail. The distinction that matters is that the user gets something they can quote to support while the stack trace stays in your logs. In ASP.NET Core `IExceptionHandler` is the current mechanism for this."
+   },
+   {
+    "q": "When is catching and swallowing genuinely correct?",
+    "a": "When the operation is genuinely optional and its failure should not affect the caller - a best-effort cache write, a metrics emission, an analytics call. Even then, log at debug or warning rather than silently discarding, because a cache that has been failing for a month is worth knowing about. The test is whether you could explain to someone why continuing is correct; if the honest answer is \"I did not know what else to do\", the exception should propagate."
+   }
+  ]
  }
 ]

@@ -2757,5 +2757,29 @@
     "a": "Distinguish the test being flaky from the system being unreliable, because they need opposite responses. If the dependency is genuinely unstable, the test is telling you something true and the answer is to fix the system or add resilience, not to retry. If the flakiness is from timing - the test asserting before an asynchronous step completed - the fix is polling for the expected state with a timeout rather than sleeping. Retrying without deciding which it is hides real reliability problems, and end-to-end tests are exactly where those show up first."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Regression",
+  "difficulty": "Medium",
+  "question": "A bug reaches production twice. What does that tell you and what do you change?",
+  "answer": "That the first fix addressed the symptom rather than the cause, or that nothing was added to stop it recurring. A bug appearing twice is a process finding, not just a code finding.\n\n**What I would establish:**\n\n1. **Was a regression test written for the first occurrence?** If not, that is the immediate answer - the fix was verified manually and nothing preserved it. Writing the failing test *before* fixing should be the standard for every bug, because it also proves you have actually reproduced it.\n2. **Was the root cause fixed, or the instance?** The same bug in a second code path means the underlying design permits it - a validation rule enforced in one handler and not another, a null check added at one call site. The durable fix is usually structural: enforce the invariant where it cannot be bypassed rather than at each call site.\n3. **Did the test exist but not run?** Quarantined, skipped, or in a suite that only runs nightly and was red already.\n4. **Was it reintroduced by a revert or a merge?** Which points at branching and release process rather than at testing.\n\n**What I would change:** make the regression test mandatory as part of the fix, not optional. Move the check to where it cannot be forgotten - a constraint, a global filter, an analyser rule, an architecture test. And if it is a class of bug rather than one bug, consider whether a lint rule or a type-level change can make it unrepresentable.\n\n**And I would resist blame.** The useful question is why the system allowed it twice, not who missed it.",
+  "tags": [
+   "testing",
+   "regression",
+   "root-cause",
+   "process",
+   "quality"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between fixing the instance and fixing the cause?",
+    "a": "Fixing the instance corrects the observed behaviour - adding the missing null check in this method. Fixing the cause removes the possibility - making the value non-nullable so the check is unnecessary, or moving the validation into the type so every path gets it. The instance fix is faster and leaves the next occurrence waiting somewhere else in the codebase. The cause fix is more work and is what stops the bug recurring, which is exactly what a second occurrence is telling you is needed."
+   },
+   {
+    "q": "How do you know whether a class of bug justifies a structural fix?",
+    "a": "Count it. If the same shape of mistake has appeared three times, the expected cost of future occurrences usually exceeds the cost of preventing them - an analyser rule, a type change, a constraint, or an architecture test. Below that threshold, a regression test per occurrence is proportionate. Tracking bugs by cause rather than only by symptom is what makes the pattern visible; without it every occurrence looks like an isolated mistake."
+   }
+  ]
  }
 ]

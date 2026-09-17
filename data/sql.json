@@ -4950,5 +4950,29 @@
     "a": "The engine estimates how much memory a query needs for sorts and hash operations and reserves it before execution. If the estimate is too low - usually because of bad cardinality estimates - the operation cannot fit in memory and spills to tempdb, turning memory-speed work into disk-speed work. If the estimate is too high, the query reserves memory it does not use and other queries queue waiting for a grant. Both trace back to estimate quality, which is why statistics problems show up as erratic performance rather than as consistently slow queries."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Migrations",
+  "difficulty": "Hard",
+  "question": "How do you add a NOT NULL column to a large table that is in constant use?",
+  "answer": "Not in one statement, because adding a non-nullable column with a value requires writing every row, which locks the table for the duration.\n\n**The safe sequence is expand and contract:**\n\n1. **Add the column as nullable**, with no default. On modern SQL Server and PostgreSQL this is a metadata-only change and is effectively instant, because no existing row needs rewriting.\n2. **Deploy application code that writes the new column** on every insert and update, while still tolerating nulls on read. Now new rows are correct.\n3. **Backfill existing rows in batches** - a few thousand at a time, committing each batch, with a pause between them so other work gets through and the transaction log can truncate. Track progress so a failure resumes rather than restarting.\n4. **Verify there are no nulls left.**\n5. **Add the NOT NULL constraint**, which is now a quick check rather than a rewrite. Where the engine supports it, add it as `NOT VALID` and validate separately to avoid a long lock.\n\n**The detail that catches people out:** adding a column *with a default* used to rewrite every row. Modern SQL Server and PostgreSQL store the default as metadata and apply it on read, making it instant - but the behaviour differs by version and by whether the default is a constant, so it is worth confirming rather than assuming on a large table.\n\n**And the deployment constraint that forces all of this:** during a rolling deployment both the old and new application versions run simultaneously. The old version does not know about the column, so it must remain nullable until every instance is updated.",
+  "tags": [
+   "sql",
+   "migrations",
+   "zero-downtime",
+   "backfill",
+   "locking"
+  ],
+  "followups": [
+   {
+    "q": "Why does the batched backfill need a pause between batches?",
+    "a": "To let other work through and to let the transaction log truncate. A tight loop of batched updates holds locks nearly continuously, so from a concurrent query s point of view it is barely better than one large statement - and in full recovery model the log grows until a backup runs, which without pauses can outpace the backup schedule. A short delay between batches turns a blocking operation into a background one, and makes it safe to run during business hours."
+   },
+   {
+    "q": "What do you do if a batch fails halfway through the backfill?",
+    "a": "Resume rather than restart, which is why progress must be tracked durably - the last processed key in a checkpoint table, or a predicate that naturally excludes already-updated rows. That also makes the operation idempotent, so re-running is harmless. A backfill written as a single script with no checkpoint means a failure at 80% costs you the whole run, and on a table large enough to need batching that is hours."
+   }
+  ]
  }
 ]

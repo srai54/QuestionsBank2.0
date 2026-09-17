@@ -1791,5 +1791,29 @@
     "a": "Traces, because with them you can derive a good deal of what the other two give you - span durations aggregate into latency metrics, error spans give error rates, and span attributes carry much of the detail you would otherwise log. Logs alone leave you unable to see across services; metrics alone leave you knowing something is wrong and unable to find out why. That said, it is a slightly artificial question - the honest answer is that metrics for alerting plus traces for diagnosis is the minimum viable pair, and logs fill the gaps."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Dashboards",
+  "difficulty": "Medium",
+  "question": "How do you make a dashboard that is useful during an incident rather than just impressive?",
+  "answer": "By designing it for one question at a time, in the order someone actually asks them under pressure.\n\n**The questions, and what each needs:**\n\n1. **\"Is something wrong?\"** - error rate and latency against the SLO, large and at the top. This should be answerable from across the room.\n2. **\"How bad, and who is affected?\"** - the proportion of traffic failing, which journeys, which tenants or regions. This determines whether it is a page or a ticket.\n3. **\"Is it us or a dependency?\"** - error rate and latency per downstream, side by side with your own. This single panel saves the most time in practice, because it halves the search space immediately.\n4. **\"What changed?\"** - deployment and configuration-change markers overlaid on the timeline. Most incidents follow a change, and seeing the deploy line next to the error spike often ends the investigation.\n5. **\"Where is the constraint?\"** - saturation of the things that actually run out: connection pools, thread pool queue depth, queue backlogs, disk.\n\n**What I would keep off it:** CPU and memory as headline metrics, per-instance detail, anything nobody has acted on, and vanity metrics. Every panel that does not answer one of those questions makes the ones that do harder to find.\n\n**Design details that matter under stress:** consistent time ranges across panels so they are comparable, absolute numbers as well as percentages (a 50% error rate on four requests is not an incident), and links from panels to the relevant logs or traces so the next step is one click.\n\n**And keep the detail on a second dashboard**, reached from the first. One screen to orient, then drill down.",
+  "tags": [
+   "observability",
+   "dashboards",
+   "incident-response",
+   "slo",
+   "design"
+  ],
+  "followups": [
+   {
+    "q": "Why show absolute counts alongside percentages?",
+    "a": "Because percentages mislead at low volume in both directions - a 50% error rate from two failed requests out of four looks alarming and is usually noise, while a 0.5% error rate at high volume can be thousands of affected users and an actual incident. Showing both means the person reading it can judge significance immediately rather than doing arithmetic under pressure. It also prevents the common mistake of alerting on a rate that fires every night when traffic is low."
+   },
+   {
+    "q": "How do you keep a dashboard from going stale as the system changes?",
+    "a": "Treat it as code - defined in the repository, versioned, and deployed with the service, so a new dependency or a renamed metric is updated in the same change rather than being noticed months later when a panel has been empty. Reviewing dashboards as part of incident retrospectives is the other half: every incident where someone had to go elsewhere to answer one of the core questions is evidence of a missing panel, and every panel nobody looked at is a candidate for removal."
+   }
+  ]
  }
 ]
