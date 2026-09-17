@@ -12998,5 +12998,29 @@
     "a": "When the operation is genuinely optional and its failure should not affect the caller - a best-effort cache write, a metrics emission, an analytics call. Even then, log at debug or warning rather than silently discarding, because a cache that has been failing for a month is worth knowing about. The test is whether you could explain to someone why continuing is correct; if the honest answer is \"I did not know what else to do\", the exception should propagate."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "Which collection would you choose for a lookup table loaded once and read by many threads?",
+  "answer": "`FrozenDictionary<TKey, TValue>`, if it is built once and never changes. It spends extra time at construction analysing the keys to produce a structure optimised purely for reading, so lookups are meaningfully faster than `Dictionary` - which is exactly the trade you want for reference data loaded at startup.\n\n**The options and when each is right:**\n\n- **`FrozenDictionary`** - built once, read forever, read-heavy. The construction cost is real, so it is wrong for anything rebuilt frequently.\n- **`ImmutableDictionary`** - when it must change, but changes are rare and readers must never see a partial update. Every \"modification\" produces a new instance sharing most of its structure, so readers holding the old reference are unaffected. Lookups are slower than `Dictionary` because of the tree structure.\n- **`ConcurrentDictionary`** - when writes are frequent and interleaved with reads. Lock striping makes concurrent writes scale, at the cost of overhead on every operation.\n- **A plain `Dictionary`** - only if it is genuinely never written after publication. It is safe for concurrent *reads* provided no thread writes, and the danger is that safety depending on \"nobody writes\" is not enforced by anything.\n- **Copy-on-write with a `volatile` field** - build a new dictionary and swap the reference atomically. Readers get a consistent snapshot with zero synchronisation cost, which is ideal for a cache refreshed periodically.\n\n**For the case as described** - loaded once, read by many threads - `FrozenDictionary` is the answer, and copy-on-write is what I would move to if it needed periodic refreshing.",
+  "tags": [
+   "csharp",
+   "collections",
+   "frozen-dictionary",
+   "concurrency",
+   "immutability"
+  ],
+  "followups": [
+   {
+    "q": "Why is a plain Dictionary safe for concurrent reads but not for read-while-write?",
+    "a": "Because reading traverses buckets and entries without mutating anything, so any number of readers see a consistent structure. A concurrent write can resize the internal arrays and rehash entries, and a reader mid-traversal then follows indices into a structure being rebuilt - producing wrong results, an infinite loop, or an exception. Crucially it does not reliably throw, so the corruption is silent and load-dependent. That is why the guarantee is \"safe if no thread writes\", and why relying on it needs the type to be genuinely unreachable for writing."
+   },
+   {
+    "q": "What is the risk of ConcurrentDictionary GetOrAdd with an expensive factory?",
+    "a": "The factory is not called under a lock, so several threads missing the same key simultaneously will each run it - you get one winner stored and the others discarded. That is harmless for a pure computation and a real problem when the factory is expensive, opens a connection, or has side effects. The fix is to store a `Lazy<T>` as the value, so the dictionary deduplicates cheaply and only the winning `Lazy` is ever evaluated."
+   }
+  ]
  }
 ]

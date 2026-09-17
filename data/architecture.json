@@ -4744,5 +4744,29 @@
     "a": "Announce in-app well ahead of the date, use the `Deprecation` and `Sunset` headers so tooling can see it, and track adoption so you know exactly how many users remain. Then prompt increasingly firmly inside the app before enforcing, rather than switching off on the announced date - because the users still on the old version are by definition the ones who do not update promptly, and a silent failure looks to them like the app is broken. Brownouts, where the old path fails briefly at scheduled times, reliably surface anyone who missed the messaging."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Data",
+  "difficulty": "Hard",
+  "question": "Two services need to join data they each own. How do you handle that without a shared database?",
+  "answer": "By deciding which of four approaches fits, because a join across a service boundary is a signal worth examining rather than a requirement to satisfy directly.\n\n**1. API composition.** One service queries the other and joins in memory. Simple and always fresh. It fails on volume - joining a thousand orders to their customers means a thousand lookups or one large batch call - and it couples availability, since the composing service is down when either dependency is.\n\n**2. Data replication.** The owning service publishes changes; the consumer maintains a local read-only copy and joins locally. Fast, no runtime coupling, and the cost is eventual consistency plus the ongoing obligation to handle missed events with reconciliation.\n\n**3. A dedicated read model.** A separate store subscribing to both services and maintaining a denormalised view built for this query. This is CQRS at the system level and is the right answer when the join is a first-class use case - a search screen, a reporting view - rather than an incidental need.\n\n**4. Reconsider the boundary.** If two services constantly need each other s data in the same transaction, the boundary may be wrong. Data that is always queried together often belongs together.\n\n**How I would choose:** composition for low volume and genuine freshness requirements; replication when the read is frequent and staleness of seconds is acceptable; a read model when the query is central to the product.\n\n**And the anti-pattern to name:** letting one service read the other s database directly. It looks like the cheap version of replication and it permanently couples both to a schema neither fully owns.",
+  "tags": [
+   "architecture",
+   "microservices",
+   "data-ownership",
+   "cqrs",
+   "replication"
+  ],
+  "followups": [
+   {
+    "q": "How do you keep a replicated copy correct over months?",
+    "a": "Assume events will be missed and design for reconciliation rather than relying on the subscription. Publish with an outbox so events cannot be lost at the producer, include a sequence number so the consumer can detect gaps, and run a periodic comparison of counts or checksums against the owner. Provide a full-resync path the consumer can trigger, because drift accumulates from redeployments, bugs and infrastructure incidents - and without a resync mechanism the only remedy is manual repair."
+   },
+   {
+    "q": "What is the practical limit of API composition?",
+    "a": "It breaks down as soon as the join is over more than a small, bounded set, or needs filtering and sorting across both sides. You cannot efficiently page a result ordered by a field one service owns and filtered by a field the other owns without fetching far more than you need from at least one of them. That specific requirement - cross-service filtering and sorting with pagination - is the clearest signal that a materialised read model is needed rather than composition."
+   }
+  ]
  }
 ]

@@ -4233,5 +4233,29 @@
     "a": "Design for it - a break-glass path that does not require a second person, with the access granted immediately, heavily logged, alarmed to the security team, and expiring automatically. The control is detection and review rather than prevention, because a process that blocks an incident response will simply be circumvented, and then you have neither the access control nor the audit trail. Reviewing every break-glass use the next working day is what keeps it honest."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Builds",
+  "difficulty": "Medium",
+  "question": "How do you make builds reproducible, and why does it matter?",
+  "answer": "A reproducible build produces identical output from identical inputs. It matters because without it you cannot say with confidence what is running in production - the artefact was built from that commit on some machine at some time with whatever dependencies resolved that day.\n\n**What breaks reproducibility:**\n\n1. **Floating dependency versions.** A range rather than an exact version means today s build differs from yesterday s with no code change. Lock files pinned and committed are the fix, and for .NET that means central package management with exact versions and a committed lock file.\n2. **Mutable base images.** `FROM aspnet:9.0` moves under you; pinning by digest does not.\n3. **Timestamps and paths embedded in output**, which make byte-for-byte comparison impossible even when behaviour is identical. `SourceLink` and deterministic build settings in .NET address this - `<Deterministic>true</Deterministic>` and `ContinuousIntegrationBuild` normalise embedded paths.\n4. **Build-machine state** - globally installed tools at whatever version happens to be there. Containerised builds or pinned tool manifests remove it.\n5. **Network access during the build** pulling something that can change.\n\n**Why it matters in practice:**\n- **Traceability.** You can prove which commit produced which artefact, which matters for incident response and for audit.\n- **Supply chain.** A reproducible build lets someone else verify that the artefact really came from the claimed source, which is the foundation of provenance attestation.\n- **Debugging.** Reproducing a build from six months ago to investigate a bug is only possible if the inputs are pinned.\n\n**And it is the prerequisite for build-once-promote**, because otherwise \"the same artefact\" in each environment is an assumption rather than a fact.",
+  "tags": [
+   "devops",
+   "reproducible-builds",
+   "supply-chain",
+   "sbom",
+   "ci"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between deterministic and reproducible here?",
+    "a": "Deterministic usually means the compiler produces identical output for identical input on the same machine and toolchain - which .NET gives you with the deterministic flag. Reproducible is the stronger property: anyone, on a different machine, can rebuild from the same source and get the same bytes, which additionally requires pinning the toolchain, the dependencies and the environment. Deterministic compilation is a setting; reproducible builds are a discipline about everything around the compiler."
+   },
+   {
+    "q": "What does SBOM generation add on top of this?",
+    "a": "A software bill of materials lists every component and version in the artefact, so when a vulnerability is announced you can answer \"are we affected and where\" by querying rather than by rebuilding and inspecting. Generated as part of the build and stored with the artefact, it makes the dependency set a recorded fact rather than something you reconstruct later. It is increasingly a procurement and regulatory requirement, and it is cheap to produce once builds are already pinned."
+   }
+  ]
  }
 ]

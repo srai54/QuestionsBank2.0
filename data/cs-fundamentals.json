@@ -3060,5 +3060,29 @@
     "a": "It depends on frame size and the thread s stack, which defaults to 1MB on Windows for the main thread - so a few thousand frames for a typical method, and far fewer if each frame holds large structs or many locals. Treating a few thousand as the working ceiling is reasonable, and anything that might exceed it needs the iterative form. You can create a thread with a larger stack for a specific deep computation, but that is a workaround rather than a design and it does not scale to many concurrent operations."
    }
   ]
+ },
+ {
+  "category": "CS Fundamentals",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "Explain race conditions and the difference between a data race and a logical race.",
+  "answer": "A **data race** is two threads accessing the same memory location concurrently with at least one write, and no synchronisation. It is a memory-model violation - the result is undefined, and beyond wrong values you can get torn reads, stale caches and reordering that makes the code do something no sequential reading of it would predict.\n\nA **logical race** is when the outcome depends on timing even though every individual access is properly synchronised. Classic example: check-then-act. Two threads each call `if (!dictionary.ContainsKey(k)) dictionary.Add(k, v)` on a `ConcurrentDictionary` - every operation is individually thread-safe, and both threads can still pass the check before either adds, so one throws. The collection did its job; the *composition* of two safe operations is not itself safe.\n\n**Why the distinction matters:** eliminating data races with locks or concurrent collections does not eliminate logical races, and people assume it does. \"I used a ConcurrentDictionary so it is thread-safe\" is the exact misunderstanding - thread-safe per operation is not the same as correct under concurrency.\n\n**How each is fixed:**\n- **Data races** - synchronise access: a lock, `Interlocked`, `volatile` for visibility only, or an immutable or concurrent type.\n- **Logical races** - make the composite operation atomic: `GetOrAdd` or `TryAdd` instead of check-then-act, a conditional update in the database (`UPDATE ... WHERE Status = 'Pending'`), a unique constraint, or a lock spanning the whole sequence.\n\n**And the general principle:** atomicity must cover the whole invariant, not each step of it.",
+  "tags": [
+   "cs-fundamentals",
+   "concurrency",
+   "race-condition",
+   "memory-model",
+   "thread-safety"
+  ],
+  "followups": [
+   {
+    "q": "Why can a data race produce results that no interleaving explains?",
+    "a": "Because compilers and CPUs reorder reads and writes for performance, under the assumption that the code is free of data races - the memory model only guarantees ordering between properly synchronised accesses. So with a race you can observe a write to one variable without the write that preceded it in program order, which no sequential interleaving would produce. That is why the classic double-checked locking bug needs `volatile`: without it, the reference can become visible before the constructor s writes."
+   },
+   {
+    "q": "How do you find races that only appear under load?",
+    "a": "Code review focused on shared mutable state is more effective than testing, because tests rarely reproduce the interleaving. Beyond that: stress tests with high concurrency and randomised delays at suspicious points, deliberately yielding inside critical sections to widen the window, and assertions on invariants that would be violated. For data races specifically, tooling exists - thread sanitizers in some ecosystems - but in .NET the practical approach is to reduce shared mutable state until races are structurally impossible rather than trying to detect them."
+   }
+  ]
  }
 ]

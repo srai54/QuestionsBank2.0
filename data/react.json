@@ -3974,5 +3974,29 @@
     "a": "Preventing everything outside the modal from being focusable or reachable by assistive technology while it is open - the `inert` attribute on the background container does both in modern browsers, and `aria-hidden` on it is the older approach that hides it from screen readers without stopping focus. Combined with a focus trap inside the modal and restoring focus to the trigger on close, that is what makes a dialog usable by keyboard and screen reader. Getting all of it right by hand is fiddly enough that using the native `<dialog>` element or a tested library is the sensible default."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "A table with 10,000 rows freezes the browser. Walk me through fixing it.",
+  "answer": "The browser is not slow at JavaScript - it is slow at maintaining 10,000 DOM nodes with their styles, layout and event listeners. So the fix is to stop creating them.\n\n**In order:**\n\n1. **Virtualise.** Render only the rows in the viewport plus a small overscan, and translate a container to simulate the full scroll height. Thirty nodes instead of ten thousand, and it scales to a million rows because the cost is now bound by viewport size rather than by data size. TanStack Virtual or react-window handle the mechanics. **This is the fix** - everything else is secondary.\n2. **Do not render 10,000 rows at all if the user cannot use them.** Pagination or server-side filtering is often the better product answer, and it also removes the cost of transferring and holding the data.\n3. **Memoise the row component**, once virtualised, so scrolling does not re-render rows whose data has not changed - with stable callbacks via `useCallback`, or memo compares unequal every time and does nothing.\n4. **Move filtering and sorting off the render path.** Sorting 10,000 rows inside render runs on every keystroke; memoise it against the inputs, or do it on the server.\n5. **Check the row itself.** A heavy cell component - a chart, a date formatter constructing an `Intl` formatter per cell - multiplies by row count. Hoist the formatter out.\n\n**What will not fix it:** `React.memo` alone, `useMemo` alone, or switching state library. Those reduce re-render work on rows that still all exist in the DOM. The node count is the problem.\n\n**And measure before and after** with the Profiler and the browser s performance panel, because \"it feels faster\" is not evidence.",
+  "tags": [
+   "react",
+   "virtualisation",
+   "performance",
+   "tables",
+   "dom"
+  ],
+  "followups": [
+   {
+    "q": "What are the hard parts of virtualisation in practice?",
+    "a": "Variable row heights, because the container height and the offset of each row depend on heights you do not know until rendering - libraries handle it by measuring dynamically and correcting, which can cause scroll jumps if done naively. Accessibility is the other: a screen reader sees only the rendered rows, so the table needs `aria-rowcount` and `aria-rowindex` to convey the real size and position. Keyboard navigation, find-in-page and anchor links to off-screen rows also stop working, which is why virtualising is a real trade rather than a free win."
+   },
+   {
+    "q": "When is pagination better than virtualisation?",
+    "a": "When the user does not actually need to scan all the rows - which is most of the time. Pagination reduces what you fetch and hold, not just what you render, so it helps the network and memory as well as the DOM. Virtualisation is right when continuous scrolling is genuinely the interaction, such as a log viewer or a feed. Reaching for virtualisation to make a badly-designed screen feel fast is solving the wrong problem; the question of why a user is being shown ten thousand rows usually deserves an answer first."
+   }
+  ]
  }
 ]

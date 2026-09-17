@@ -4974,5 +4974,29 @@
     "a": "Resume rather than restart, which is why progress must be tracked durably - the last processed key in a checkpoint table, or a predicate that naturally excludes already-updated rows. That also makes the operation idempotent, so re-running is harmless. A backfill written as a single script with no checkpoint means a failure at 80% costs you the whole run, and on a table large enough to need batching that is hours."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Concurrency",
+  "difficulty": "Hard",
+  "question": "How would you implement a job queue in a relational database that several workers poll safely?",
+  "answer": "The core requirement is that two workers must never claim the same row, and a crashed worker must not hold a job forever. Both are solvable in SQL, and the naive version gets both wrong.\n\n**The naive approach - `SELECT` the next pending row, then `UPDATE` it as claimed - is racy.** Two workers can select the same row before either updates it. Adding a transaction and a higher isolation level fixes correctness by making workers block on each other, which destroys throughput.\n\n**The correct approach claims atomically and skips locked rows:**\n\n- **PostgreSQL:** `SELECT ... FOR UPDATE SKIP LOCKED` inside a transaction. Each worker takes a different row because locked rows are skipped rather than waited on.\n- **SQL Server:** an `UPDATE` with `READPAST` and `ROWLOCK` hints and an `OUTPUT` clause, which claims and returns the row in one statement.\n\nEither way it is a single statement, so there is no window between selecting and claiming.\n\n**The other things it needs:**\n1. **A lease, not a flag.** Store `ClaimedBy` and `ClaimedUntil` rather than a boolean, so a worker that dies has its jobs reclaimed when the lease expires. A boolean means a crash leaves the job claimed forever.\n2. **Lease renewal** for long jobs, or the job is reclaimed while still running and processed twice.\n3. **Idempotent handlers**, because lease expiry means at-least-once processing regardless.\n4. **An attempt counter and a dead-letter state**, so a poison message does not retry forever.\n5. **An index on the claim predicate** - status plus available-from - or every poll scans a growing table.\n\n**And be honest about when to stop:** at high throughput a real broker is better. A database queue is excellent up to moderate volume and when transactional consistency with your data matters.",
+  "tags": [
+   "sql",
+   "job-queue",
+   "skip-locked",
+   "concurrency",
+   "leases"
+  ],
+  "followups": [
+   {
+    "q": "Why is a lease better than a simple claimed flag?",
+    "a": "Because a flag has no expiry, so a worker that crashes after claiming leaves the job permanently unavailable - and nothing in the system can tell the difference between \"being worked on\" and \"abandoned\". A lease encodes both facts: who has it and until when. Reclaiming becomes an ordinary query for rows whose lease has passed, which needs no failure detection. The cost is that lease expiry while a worker is merely slow produces duplicate processing, which is why idempotency is required rather than optional."
+   },
+   {
+    "q": "When does a database queue stop being appropriate?",
+    "a": "When polling cost or contention starts to dominate - thousands of jobs per second, or many workers polling frequently enough that the queries themselves load the database you are also using for application data. You also give up features a broker provides: fan-out to multiple consumers, topic subscriptions, delayed delivery, and built-in dead-lettering. The strongest reason to stay with a database queue is transactional enqueue - writing the job in the same transaction as the business data, which is the outbox pattern and is genuinely hard to replicate with an external broker."
+   }
+  ]
  }
 ]

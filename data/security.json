@@ -2986,5 +2986,29 @@
     "a": "Idle timeout ends a session after a period of inactivity, which handles the unattended machine; absolute timeout ends it a fixed time after login regardless of activity, which bounds how long a stolen session is useful even if the attacker keeps it alive. With only an idle timeout, an attacker who has the cookie can refresh it indefinitely and the session never expires. With only an absolute one, an abandoned session stays valid on a shared computer until the limit. The pair covers both, which is why standards recommend both."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Cryptography",
+  "difficulty": "Hard",
+  "question": "What mistakes do developers make when using cryptography, and what is the guidance?",
+  "answer": "The overwhelming guidance is: **do not assemble primitives yourself.** Almost every real failure comes from composing correct building blocks incorrectly, not from a broken algorithm.\n\n**The recurring mistakes:**\n\n1. **Encryption without authentication.** Encrypting with AES-CBC and no MAC leaves the ciphertext malleable, and padding-oracle attacks recover plaintext. Use an AEAD mode - AES-GCM or ChaCha20-Poly1305 - which provides confidentiality and integrity together.\n2. **Reusing a nonce or IV.** With GCM, reusing a nonce with the same key is catastrophic - it can reveal the authentication key, not merely leak a relationship between messages. Nonces must be unique per encryption, and a random 96-bit nonce is only safe for a bounded number of messages per key.\n3. **Using a password directly as a key.** Passwords have far too little entropy. Derive with a proper KDF - Argon2id, or PBKDF2 with a high iteration count where that is all you have.\n4. **Rolling your own protocol** - sign-then-encrypt versus encrypt-then-sign, session establishment, key agreement. This is where subtle breaks live.\n5. **Comparing secrets with `==`**, which short-circuits and leaks length and content through timing. Use `CryptographicOperations.FixedTimeEquals`.\n6. **Ignoring key management** - keys hard-coded, never rotated, stored beside the data they protect. This is usually the weakest part of any real system.\n7. **ECB mode**, which leaks structure so visibly it is a standard illustration.\n\n**What I would actually do:** use the platform s high-level APIs - in .NET, `AesGcm`, data protection for local scenarios, and a managed key service for keys. Where a protocol is needed, use TLS or an established standard rather than designing one.",
+  "tags": [
+   "security",
+   "cryptography",
+   "aead",
+   "key-management",
+   "nonce"
+  ],
+  "followups": [
+   {
+    "q": "How should keys be managed if not stored in configuration?",
+    "a": "In a dedicated key management service - Azure Key Vault, or an HSM for higher assurance - where the key material can be generated and used without ever being exported to the application. The application asks the service to encrypt or decrypt, or receives a short-lived data key wrapped by the master key, so a compromise of the application does not yield the master key. That also gives rotation as a supported operation, audit of every use, and the ability to revoke - none of which a key in configuration provides."
+   },
+   {
+    "q": "What does envelope encryption give you?",
+    "a": "A per-item data key encrypts the data, and a master key in the key service encrypts that data key, which is stored alongside the ciphertext. So bulk encryption happens locally at full speed while the master key never leaves the service, and rotating the master key means re-wrapping small data keys rather than re-encrypting terabytes. It is the standard pattern for encrypting large volumes with managed keys, and it is what most cloud storage encryption does internally."
+   }
+  ]
  }
 ]
