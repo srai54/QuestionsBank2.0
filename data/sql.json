@@ -4758,5 +4758,29 @@
     "a": "Almost always, where the platform supports it for your query shape - the database guarantees consistency, so there is no drift and no reconciliation job. The constraints are what limits it: SQL Server indexed views have a restrictive set of permitted constructs and add cost to every write on the base tables, and PostgreSQL materialised views must be refreshed explicitly so they are stale by design. When the query fits the restrictions, let the database do it; when it does not, you are back to maintaining it and owning the reconciliation."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Text Search",
+  "difficulty": "Medium",
+  "question": "A user search box does LIKE %term% across three columns and it is slow. What are the options?",
+  "answer": "`LIKE '%term%'` cannot use a normal B-tree index, because the index is ordered by prefix and a leading wildcard gives it nothing to seek on. Across three columns with `OR`, the optimiser usually gives up and scans.\n\n**The options, from cheapest to most involved:**\n\n1. **Check whether you actually need the leading wildcard.** `LIKE 'term%'` - a prefix match - *can* use an index and is often what users expect from a search box anyway. This is worth asking before building anything.\n2. **Full-text search in the database.** SQL Server full-text indexes with `CONTAINS`, or PostgreSQL `tsvector` with a GIN index. You get tokenisation, stemming so \"running\" matches \"run\", stop words and relevance ranking, without operating another system. For most applications this is the right answer and it is under-used.\n3. **A trigram index** - `pg_trgm` in PostgreSQL - which genuinely accelerates arbitrary substring matching including leading wildcards, and supports fuzzy matching. This is the closest thing to making `LIKE '%term%'` fast.\n4. **A computed, indexed search column** concatenating and normalising the three columns, so one index serves the search instead of three predicates OR-ed together.\n5. **A dedicated search engine** - Elasticsearch or Azure AI Search - when search is a product feature rather than a lookup: typo tolerance, faceting, per-field weighting, synonyms. The cost is another system to run and an eventual-consistency indexing pipeline.\n\n**How I would choose:** start at the top. A search cluster for an admin lookup over 50,000 rows is over-engineering, and database full-text search covers a surprising amount of ground.",
+  "tags": [
+   "sql",
+   "full-text-search",
+   "like",
+   "indexing",
+   "performance"
+  ],
+  "followups": [
+   {
+    "q": "Why does the OR across three columns make it worse?",
+    "a": "Because the optimiser cannot satisfy an OR across different columns with a single index seek - it either scans, or in some cases evaluates each branch separately and combines them, which multiplies the work. Rewriting as a `UNION` of three indexed queries sometimes helps where each column is individually indexable, but with a leading wildcard none of them are. That is exactly why a single computed column combining the three, indexed once, or a full-text index across all three, is the structural fix rather than a query rewrite."
+   },
+   {
+    "q": "What is the practical difference between full-text search and a trigram index?",
+    "a": "Full-text search works on words - it tokenises, stems and ranks, so it understands that \"running\" and \"runs\" are related and can score relevance. Trigram matching works on three-character sequences, so it handles substrings and typos within words but has no concept of word meaning or relevance. Full-text is better for natural language; trigram is better for partial identifiers, product codes and fuzzy name matching. They solve different problems and PostgreSQL lets you use both."
+   }
+  ]
  }
 ]

@@ -4576,5 +4576,29 @@
     "a": "When you can name a concrete benefit you cannot get in-process: it needs to scale independently and that is measurably costing you, a separate team needs to deploy on its own cadence, it needs a different technology stack, or regulation demands isolation. Absent one of those, extracting it buys network latency, partial failure and operational overhead for nothing. The good news is that a well-bounded module is already shaped for extraction, so waiting costs little."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Migration",
+  "difficulty": "Hard",
+  "question": "How would you migrate a system from one database engine to another with minimal downtime?",
+  "answer": "In phases, with dual running, and with the ability to abort at every stage until the final cutover.\n\n**The phases:**\n\n1. **Assess and adapt.** Find what does not port - dialect-specific SQL, stored procedures, data types with no direct equivalent, collation and case-sensitivity differences, identity generation. The behavioural differences matter more than the syntax: NULL ordering, string comparison, transaction isolation defaults and date handling all differ and produce silently wrong results rather than errors.\n2. **Schema migration**, with types chosen deliberately rather than by an automated mapping tool. Automated conversion is a starting point, not an answer.\n3. **Initial bulk load** of historical data, which can take hours and happens while the old system runs normally.\n4. **Continuous replication** to keep the new database current - CDC from the source, applying changes to the target. This is what shrinks the cutover window from hours to minutes, because at cutover the target is already nearly current.\n5. **Validation while both run.** Compare row counts and checksums, and run read queries against both to compare results. This is the phase people shorten and should not.\n6. **Cutover** - stop writes briefly, let replication drain, switch the connection string, verify, resume. Minutes rather than hours.\n\n**The part I would insist on: a rollback plan that works after cutover.** Either keep replicating back to the old database for a period, or accept a documented data-loss window. Cutting over with no way back is how a migration becomes an incident.\n\n**And do it as a rehearsal first**, end to end, in a lower environment with production-sized data. The first time you run the cutover should not be the real one.",
+  "tags": [
+   "architecture",
+   "migration",
+   "database",
+   "cdc",
+   "cutover"
+  ],
+  "followups": [
+   {
+    "q": "What differences between engines cause silent wrong results rather than errors?",
+    "a": "Collation and case sensitivity - a query matching `Smith` and `smith` on one engine and not the other. NULL ordering in `ORDER BY`, which differs by default. Integer division, string concatenation with NULL, and implicit type conversion rules. Default transaction isolation levels, so code relying on blocking behaviour changes meaning. Empty string versus NULL, which Oracle famously conflates. None of these throw; they return plausible data, which is why comparing query results between the two systems during dual running is the only reliable way to find them."
+   },
+   {
+    "q": "How do you handle the application code during the transition?",
+    "a": "Put the data access behind an abstraction early, so the engine is a configuration choice rather than assumptions spread through the codebase - and in the dual-running phase, that is what lets you read from either or compare both. Where raw SQL exists, inventory it first, since it is where the dialect differences live. The temptation is to rewrite the application and migrate the database at the same time; separating them means that when something breaks you know which change caused it."
+   }
+  ]
  }
 ]

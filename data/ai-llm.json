@@ -3503,5 +3503,29 @@
     "a": "Pin to a dated model version wherever the provider offers it, so the change happens when you choose. Then run the evaluation suite against the new version before switching - which is exactly what the suite exists for, and it turns a provider update from a risk into a routine check. Without pinning and without evaluation, you find out from a change in user behaviour, and you cannot tell whether it was the model or something you shipped."
    }
   ]
+ },
+ {
+  "category": "AI & LLM",
+  "subcategory": "Architecture",
+  "difficulty": "Hard",
+  "question": "When should a feature use an LLM, and when is it the wrong tool?",
+  "answer": "The question I ask is whether the task requires understanding unstructured language or generating it. If not, an LLM is usually a slower, costlier, less reliable version of something else.\n\n**Where an LLM is genuinely right:**\n- **Unstructured input** - summarising documents, extracting fields from free text, classifying messages where the categories need judgement rather than keywords.\n- **Generation** - drafting text, rewriting, translating.\n- **Long-tail intent** - a support assistant handling questions you cannot enumerate in advance.\n- **Prototyping a capability** before deciding whether a cheaper specialised model is worth building.\n\n**Where it is the wrong tool:**\n- **Anything deterministic.** Arithmetic, date manipulation, formatting, sorting, a rules lookup. These have exact answers, and a model gives you a probabilistic approximation at a hundred times the latency. Give it a tool that does the calculation instead.\n- **Anything requiring a guarantee.** Authorization decisions, financial calculations, compliance checks. A model that is right 99% of the time is not a control.\n- **High-volume, low-value, well-specified classification** where a small trained model or a regex is faster, cheaper and testable.\n- **Exact retrieval.** If a database query answers it, query the database.\n\n**The pattern that usually wins:** an LLM for the language-shaped part, deterministic code for everything else - the model decides *which* tool to call and formats the answer, while the tool does the work and provides the guarantee.\n\n**And the question to ask before shipping any of it:** what happens when it is wrong? If the answer is \"the user notices and corrects it\", the risk is tolerable. If it is \"we undercharge by £4,000\", it is not.",
+  "tags": [
+   "ai-llm",
+   "architecture",
+   "tool-use",
+   "determinism",
+   "product"
+  ],
+  "followups": [
+   {
+    "q": "How do you handle the non-determinism in testing?",
+    "a": "Accept that identical output is not the assertion. Test properties rather than exact strings - the output is valid JSON matching the schema, it contains the required fields, the classification is within the permitted set, the extracted number matches the source. Set temperature low for tasks where variation is not wanted, and use an evaluation set with a scored threshold rather than pass/fail per case. The mistake is asserting on exact text, which produces a suite that fails on every model update regardless of whether quality changed."
+   },
+   {
+    "q": "What is the cheapest way to make an LLM feature more reliable?",
+    "a": "Constrain the output. Structured output or function calling with a schema removes the entire class of parsing failures and stops the model wandering into prose. Then validate the result against your own rules and fail closed rather than passing through something unvalidated. Those two steps typically fix more real failures than prompt tuning does, and they are code you can test - which is the general principle: move as much of the guarantee as possible out of the model and into the surrounding system."
+   }
+  ]
  }
 ]

@@ -2866,5 +2866,29 @@
     "a": "Security logs are personal data - they record identifiable people and their actions - so they fall under the same retention, access and erasure obligations as anything else, while security teams want to keep them long and share them widely. The reconciliation is to log the minimum that answers the security question, pseudonymise identifiers where correlation is still possible, set retention deliberately per log type rather than keeping everything forever, and document the lawful basis. An erasure request that cannot be honoured because the data is in immutable security logs is a real conflict, and it is better resolved by design than by argument afterwards."
    }
   ]
+ },
+ {
+  "category": "Security",
+  "subcategory": "Secrets in Code",
+  "difficulty": "Medium",
+  "question": "How do you handle a secret that must be available to a client application, such as a mobile app or a SPA?",
+  "answer": "The starting position is that **there is no such thing as a secret in a client application**. Anything shipped to a device can be extracted - decompiled, read from the bundle, or observed in network traffic. Obfuscation raises the effort slightly and changes nothing fundamental.\n\nSo the question becomes: how do you design so that no secret needs to be there?\n\n**The approaches:**\n\n1. **Move the secret server-side.** If the client needs data from a third-party API that requires a key, proxy it through your backend. Your server holds the key, applies your own authentication and rate limiting, and the client never sees it. This is the correct answer in most cases.\n2. **Use a flow designed for public clients.** OAuth s authorization code flow with **PKCE** exists precisely because a public client cannot hold a client secret - PKCE substitutes a per-request proof that an interceptor cannot reuse. The implicit flow, which people still reach for, is deprecated for exactly these reasons.\n3. **Short-lived, narrowly-scoped tokens** issued by your backend after authenticating the user, rather than a long-lived key. A token that expires in minutes and can do one thing is a much smaller problem if extracted.\n4. **Attestation** where the platform supports it, to raise confidence the client is genuine - useful, but not a secret store.\n\n**Where a \"key\" in a client is acceptable:** identifiers that are public by design - a Google Maps browser key, an analytics key - which are restricted by referrer, bundle id or domain on the provider side. That restriction is the control, not the secrecy of the string.\n\n**And assume extraction:** rate limit and monitor per user, so an extracted credential being abused is detectable.",
+  "tags": [
+   "security",
+   "secrets",
+   "pkce",
+   "oauth",
+   "mobile"
+  ],
+  "followups": [
+   {
+    "q": "Why is PKCE necessary if the client is already redirecting to a known URI?",
+    "a": "Because on mobile, a malicious app can register the same custom URI scheme and intercept the authorization code. Without PKCE the code alone is enough to exchange for a token. PKCE has the client generate a random verifier, send its hash with the authorization request, and present the original verifier at the token exchange - so an intercepted code is useless without the verifier, which never left the legitimate app. It is now recommended for confidential clients too, since it costs almost nothing and closes the same class of interception."
+   },
+   {
+    "q": "What do you do when a third-party SDK requires its key in the client?",
+    "a": "Check whether the provider supports restricting the key by origin, bundle identifier or referrer - most do for browser and mobile keys, and that restriction is the real control. If the key is genuinely privileged and unrestrictable, that SDK is not suitable for client-side use and the integration belongs on your server. It is worth pushing back on the vendor too; a provider that requires an unrestricted privileged key in a client has a design problem you will inherit."
+   }
+  ]
  }
 ]

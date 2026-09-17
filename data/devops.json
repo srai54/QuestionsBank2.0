@@ -4089,5 +4089,29 @@
     "a": "Attribute it to teams and features through enforced tagging, and show it where the people who cause it will see it - a channel post per team, not a monthly report to finance. Budgets with alerts at a percentage of forecast catch drift early. And add cost to the definition of done for new services, so someone estimates the running cost before it is built rather than discovering it on the invoice. The pattern to avoid is a cost-cutting project every year, which means nobody owns it in between."
    }
   ]
+ },
+ {
+  "category": "DevOps",
+  "subcategory": "Testing in Production",
+  "difficulty": "Hard",
+  "question": "What does testing in production mean, and how do you do it without breaking things?",
+  "answer": "It means validating in the environment that actually matters, because staging never matches production in data volume, traffic shape, configuration or dependency behaviour. It is not a substitute for testing before release - it is recognition that some classes of problem only exist in production.\n\n**The techniques, each addressing a different risk:**\n\n1. **Canary releases.** Route a small percentage of traffic to the new version, watch error rate and latency against the old one, and promote or roll back automatically. This limits blast radius to the percentage you chose.\n2. **Feature flags.** Ship the code dark, enable for internal users, then a small cohort, then everyone. The reversal is a config change in seconds, not a deployment.\n3. **Shadow traffic.** Send a copy of real requests to the new version without using its responses, so you exercise real inputs at real volume with zero user impact. Excellent for validating a rewrite - with the essential caveat that the shadow path must not write or cause side effects.\n4. **Synthetic monitoring.** Scripted journeys running continuously against production, so you detect breakage before a user reports it.\n5. **Chaos experiments** - deliberately failing a dependency to verify the resilience you believe you have. Start in a lower environment, with a hypothesis and a stop condition, not by randomly killing things in production.\n\n**What makes it safe rather than reckless:** the ability to roll back fast, observability good enough to detect a problem within the canary window, a defined stop condition, and automation that acts on it. Without those, \"testing in production\" is just deploying and hoping.\n\n**And the discipline people skip:** deciding what would make you abort *before* you start.",
+  "tags": [
+   "devops",
+   "testing-in-production",
+   "canary",
+   "feature-flags",
+   "chaos-engineering"
+  ],
+  "followups": [
+   {
+    "q": "What does a canary need to be meaningful?",
+    "a": "Enough traffic to produce a statistically usable signal in a reasonable window - a canary at 1% of a low-traffic service may see three requests an hour and tell you nothing. It also needs comparison against the baseline rather than an absolute threshold, since error rates vary by time of day, and it needs to run long enough to catch problems that only appear with warm caches or under a particular workload. Automated analysis against the control group, with an automatic rollback, is what makes it a control rather than a dashboard someone is meant to watch."
+   },
+   {
+    "q": "How do you shadow traffic without duplicating side effects?",
+    "a": "Run the shadow instance in a mode where writes go nowhere - a separate database or a no-op implementation of anything that mutates state or calls a third party. The failure people hit is a shadow path that sends emails or charges cards because the side effect was two layers down and nobody traced it. So the safe version requires knowing every outbound effect, which is itself a useful exercise, and it is why shadow testing is most straightforward for read paths."
+   }
+  ]
  }
 ]

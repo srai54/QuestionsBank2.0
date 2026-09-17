@@ -2565,5 +2565,29 @@
     "a": "Call `StartAsync` and `StopAsync` directly rather than running the host, so the test controls the lifecycle. Inject a fake clock so the loop delay is instant, and use a signal - a `TaskCompletionSource` completed by the work - so the test knows when an iteration has finished rather than sleeping. Testing it through the full host is an integration test and worth having, but the unit-level test of the work itself should not involve the hosting machinery at all."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Coverage",
+  "difficulty": "Medium",
+  "question": "What does code coverage actually tell you, and how would you use it well?",
+  "answer": "Coverage tells you which lines executed during the test run. That is all it tells you - it says nothing about whether anything was asserted, whether the assertions were meaningful, or whether the behaviour is correct.\n\nSo it is useful as a **finder** and harmful as a **target**.\n\n**As a finder:** looking at what is *not* covered is genuinely informative. Uncovered code is code no test exercised, and reviewing it tells you whether that matters - often it is error handling, which is exactly the code that fails in production because it was never run. Coverage that drops on a pull request is a useful signal that new code arrived untested.\n\n**As a target it fails**, because people meet it by writing tests that execute code without asserting anything. A test that calls a method and asserts nothing adds coverage and no safety. Ninety-five per cent coverage with bugs reaching production is the usual evidence.\n\n**How I would use it:**\n- **Track the trend**, not the absolute number, and pay attention when it drops.\n- **Look at uncovered lines in review** - it is a prompt for a conversation, not a gate.\n- **Differentiate by area.** Coverage on a pricing calculation matters far more than on a DTO.\n- **Prefer branch coverage to line coverage**, since line coverage counts an `if` as covered when only one path was taken.\n\n**And the better metrics to watch alongside:** escaped defects, mean time to detect, and how often a test suite catches a regression before merge. Those measure the outcome that tests exist for.\n\n**Mutation testing** is the honest version of this question - it deliberately changes the code and checks whether a test fails, which measures assertion quality rather than execution.",
+  "tags": [
+   "testing",
+   "coverage",
+   "mutation-testing",
+   "metrics",
+   "quality"
+  ],
+  "followups": [
+   {
+    "q": "Is there a coverage number below which you would be worried?",
+    "a": "Very low coverage - under about 30% - usually indicates there is no testing habit at all, which is worth addressing regardless of the number itself. Above that, the figure tells you little: a 60% suite covering the complex domain logic is far more valuable than a 90% suite dominated by tests of getters and mapping. So I would look at *what* is covered before reacting to the number, and I would be more concerned by an untested payment path at 90% overall than by 60% with the risky code well covered."
+   },
+   {
+    "q": "What does mutation testing add and why is it not used more?",
+    "a": "It changes the code deliberately - flipping a comparison, removing a statement - and reports whether any test failed. A surviving mutant means the code was executed but nothing asserted the behaviour it changed, which is the gap coverage cannot see. It is the closest thing to measuring test quality. It is not used more because it is slow: running the suite once per mutation is expensive, so it needs to be scoped to critical modules and run on a schedule rather than on every commit."
+   }
+  ]
  }
 ]

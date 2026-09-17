@@ -12758,5 +12758,29 @@
     "a": "They can, because they are static and cannot be substituted - if a class calls an extension method that hits the database or the clock, there is no seam to intercept. That is fine for pure functions, where substituting would be pointless, and a problem for anything with a dependency. The guideline that follows is to keep extension methods pure: transform the input and return a result, with no I/O and no ambient state. An extension method that calls a service is a dependency in disguise."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "API Design",
+  "difficulty": "Medium",
+  "question": "What makes a good library API in C#, and what mistakes make one painful to use?",
+  "answer": "A good API makes the correct usage obvious and the incorrect usage difficult or impossible to express.\n\n**What I aim for:**\n- **Hard to misuse.** If an object is only valid in certain states, do not expose methods that are invalid in the current state - or make the type system carry it, so the compiler rejects the wrong call rather than a runtime exception doing it.\n- **A small surface.** Every public member is a commitment. Start with the minimum and add on evidence, because removing anything later is a breaking change.\n- **Predictable naming and async conventions** - `Async` suffix, `CancellationToken` as the last parameter with a default, `Try` prefix for the non-throwing variant.\n- **Sensible defaults**, so the common case needs no configuration and the unusual case is still reachable.\n- **Failure that is visible.** Throw for programmer errors, return a result for expected outcomes, and never fail silently.\n\n**The mistakes that make a library painful:**\n- **Booleans as parameters.** `Process(true, false)` at the call site is unreadable - use an enum or named arguments.\n- **Returning `null` to mean \"not found\"**, forcing every caller to check and some to forget. `TryGet` or a result type says it in the signature.\n- **Exposing mutable internal collections**, so callers can modify your state without going through you.\n- **No `CancellationToken` on async methods**, which makes the library unusable in any context that needs to cancel.\n- **Requiring a specific initialisation order** with nothing enforcing it.\n- **Leaking implementation types** in the public signature, which pins you to that dependency forever.\n\n**And the thing people skip:** write the call site first. If the usage reads badly before the implementation exists, the API is wrong.",
+  "tags": [
+   "csharp",
+   "api-design",
+   "library-design",
+   "breaking-changes",
+   "usability"
+  ],
+  "followups": [
+   {
+    "q": "How do you evolve a library API without breaking consumers?",
+    "a": "Add rather than change - new overloads, optional parameters with defaults, new types alongside old ones. Mark the old path `[Obsolete]` with a message naming the replacement and a version when it will go, so consumers get a compile-time warning rather than discovering it on upgrade. Note that adding an optional parameter is a *binary* breaking change even though it compiles, because the default is baked into the call site at compile time - so a caller that is not recompiled breaks. New overloads avoid that."
+   },
+   {
+    "q": "When is throwing an exception the right choice over returning a result?",
+    "a": "For programmer errors and for genuinely exceptional conditions - a null argument that should never be null, an invalid state that indicates a bug, an unreachable dependency. Those should be loud and should not be swallowed by a caller who was not expecting them. For outcomes that are part of the normal operation of the API - not found, validation failed, already exists - a result is better, because it forces the caller to acknowledge the case and costs nothing at runtime."
+   }
+  ]
  }
 ]
