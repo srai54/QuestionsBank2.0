@@ -12686,5 +12686,29 @@
     "a": "When per-instance copies become a problem rather than an optimisation: you need invalidation to reach every instance, hit rates are poor because traffic is spread across replicas, or the cached data is expensive enough that duplicating it per instance wastes real memory. The cost is a network hop and serialisation, so the very hottest small values often stay in memory with a short TTL even when a distributed cache exists - a two-tier arrangement is common and sensible."
    }
   ]
+ },
+ {
+  "category": "C#/.NET",
+  "subcategory": "Nullability",
+  "difficulty": "Medium",
+  "question": "You enable nullable reference types on an existing project and get 2,000 warnings. What is your plan?",
+  "answer": "Not fixing 2,000 warnings in one pull request. That produces an unreviewable diff, and the annotations added under time pressure are usually wrong - people silence warnings with `!` rather than thinking about whether the value can be null.\n\n**The plan:**\n\n1. **Turn it on project-wide but treat warnings as warnings**, so the build stays green and the information starts accumulating. Set `<Nullable>enable</Nullable>` and do not yet promote to errors.\n2. **Annotate from the outside in.** Public APIs and boundaries first - the contracts other code depends on. Getting those right removes warnings downstream in bulk, because the compiler can then reason about what flows in.\n3. **Do the highest-churn files first**, or annotate as you touch code. Files nobody edits gain little from being annotated.\n4. **Use `#nullable disable` at the top of files you are not ready for**, so the rest of the project can be strict. This is the mechanism that makes incremental adoption practical, and it is far better than a blanket suppression.\n5. **Promote to errors per-project once clean**, so it cannot regress.\n\n**The rule I would set for the team:** the null-forgiving `!` operator needs a justification, ideally a comment. It is an assertion that you know better than the compiler, and it is correct sometimes - after a runtime check the compiler cannot see, or with a framework that initialises a field by reflection. Used to make a warning disappear, it is worse than not having NRT at all, because it looks annotated.\n\n**What NRT does not give you:** runtime protection. It is compile-time analysis only, so data from JSON, a database or an `object` can still be null despite the annotation.",
+  "tags": [
+   "csharp",
+   "nullable-reference-types",
+   "migration",
+   "code-quality",
+   "ef-core"
+  ],
+  "followups": [
+   {
+    "q": "What do you do about EF Core entities where the compiler complains about uninitialised required navigation properties?",
+    "a": "Use `required` on the properties where the caller genuinely must supply them, and the `= null!;` initialiser for navigations EF populates - which is the documented pattern rather than a hack, because the compiler cannot know EF will fill them. For a non-nullable collection navigation, initialise it to an empty list. The alternative of making everything nullable to silence the warnings is worse: it pushes null checks into every consumer for values that are never actually null."
+   },
+   {
+    "q": "How does nullability interact with generics?",
+    "a": "Awkwardly, because `T` might be a value type or a reference type and `T?` means different things for each. `default(T)` for an unconstrained `T` is `null` for reference types and zero for value types, which is why APIs like `TryGetValue` use `[MaybeNullWhen(false)]` attributes rather than relying on `T?` alone. For library code you end up using the nullability attributes - `NotNullWhen`, `MaybeNull`, `NotNullIfNotNull` - to describe conditional behaviour the type system cannot express on its own."
+   }
+  ]
  }
 ]

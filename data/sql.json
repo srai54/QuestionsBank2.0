@@ -4686,5 +4686,29 @@
     "a": "You cannot, directly - system versioning records what changed and when, not who or why. The usual approach is a `ModifiedBy` column on the main table that the application sets, which then flows into the history row automatically. If you need richer context - a reason, a correlation id, the originating request - that is an argument for an audit table alongside, because the temporal mechanism deliberately captures state rather than intent."
    }
   ]
+ },
+ {
+  "category": "SQL",
+  "subcategory": "Bulk Operations",
+  "difficulty": "Medium",
+  "question": "You need to update 20 million rows. How do you do it without taking the table offline?",
+  "answer": "Not in one statement. A single `UPDATE` over 20 million rows takes a long-held lock, escalates to a table lock, generates an enormous transaction log, and if cancelled takes as long to roll back as it took to run.\n\n**The approach is batching:**\n\n1. **Update in chunks** - a few thousand rows per transaction, driven by a key range so each batch is a seek rather than a scan. `UPDATE TOP (5000) ... WHERE <not yet updated>` in a loop, committing each batch, is the simple form; driving by explicit key ranges is better because the predicate stays sargable as the work progresses.\n2. **Track progress durably** so a failure resumes rather than restarting - a checkpoint table holding the last key processed.\n3. **Pause between batches.** A short delay lets other work through and lets the log truncate, which is what keeps the system usable while it runs.\n4. **Make it idempotent** - the predicate should naturally exclude already-updated rows, so re-running is safe.\n5. **Run it during low traffic** and monitor blocking while it goes.\n\n**The things that catch people out:**\n- **Lock escalation** at around 5,000 locks converts row locks to a table lock, which is why batch size matters and why it should stay below that threshold.\n- **Triggers** firing 20 million times, which can dominate the runtime.\n- **Index maintenance** - each update maintains every affected index, so dropping and rebuilding a non-critical index can be faster overall.\n- **Transaction log growth**, particularly in full recovery model. Ensure log backups run during the operation.\n\n**The alternative worth considering:** for a change to most rows, creating a new table, populating it in batches, and switching with a rename is often faster and gives an instant rollback.",
+  "tags": [
+   "sql",
+   "bulk-update",
+   "batching",
+   "locking",
+   "maintenance"
+  ],
+  "followups": [
+   {
+    "q": "Why does a batched loop sometimes get slower as it progresses?",
+    "a": "Usually because the predicate identifying remaining rows stops being sargable. `WHERE Processed = 0` scans a growing prefix of already-processed rows to find the unprocessed ones, so each batch scans further than the last. Driving by key range instead - `WHERE Id BETWEEN @start AND @start + 5000` - keeps every batch a seek regardless of progress. A filtered index on the flag is the other fix if you must keep the flag-based predicate."
+   },
+   {
+    "q": "When is the create-new-table-and-swap approach better?",
+    "a": "When you are changing most rows, changing a column type, or the update would rewrite the pages anyway. Writing a fresh table is sequential and minimally logged under the right recovery model, while an in-place update of most rows causes page splits and heavy logging. The swap is a metadata operation, so cutover is near-instant and rollback is renaming back. The costs are double the storage during the operation, and having to handle writes that arrive while you build - usually with a trigger capturing changes or a short maintenance window for the final catch-up."
+   }
+  ]
  }
 ]

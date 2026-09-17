@@ -2908,5 +2908,29 @@
     "a": "Cap what any one tenant can consume: per-tenant rate limits at the API, a concurrency cap so one tenant cannot occupy all workers, and query timeouts so a single expensive report cannot dominate. Monitor per-tenant usage so you can see it happening rather than discovering it as a general slowdown. When a tenant consistently exceeds what pooling can absorb, that is the signal to move them to dedicated resources - which is why the hybrid model tends to emerge naturally rather than being designed up front."
    }
   ]
+ },
+ {
+  "category": "System Design",
+  "subcategory": "Feeds",
+  "difficulty": "Hard",
+  "question": "Design a social feed. Fan-out on write or fan-out on read?",
+  "answer": "The two approaches put the cost in opposite places, and the right answer is usually both.\n\n**Fan-out on write (push).** When someone posts, write a copy into every follower s feed. Reads are then a single lookup on a precomputed list - fast and cheap, which matters because reads vastly outnumber writes. The cost is write amplification: a user with a million followers generates a million writes for one post, which is slow and expensive, and most of those feeds are never read.\n\n**Fan-out on read (pull).** Store posts once; build the feed at read time by querying the people you follow and merging. Writes are trivial. Reads are expensive and get worse the more people you follow, and reads are the common operation - so this scales badly for the main use case.\n\n**The hybrid is what production systems actually do:** fan out on write for ordinary accounts, and handle high-follower accounts on read. A user s feed is then the merge of their precomputed list plus a live query for the handful of celebrities they follow. That keeps write amplification bounded and reads cheap.\n\n**The other decisions that matter as much:**\n- **Inactive users.** Do not fan out to accounts that have not opened the app in months - a large share of writes otherwise go to feeds nobody reads. Backfill on their return.\n- **Cursor pagination**, because a feed is the canonical case where offset paging duplicates and skips items as new posts arrive.\n- **Ranking versus chronology.** A ranked feed cannot be a simple precomputed list; you fan out candidates and rank at read time, which shifts work back to reads deliberately.\n- **Deletes and privacy changes** must propagate to every copied entry, which is the ongoing cost of denormalising.",
+  "tags": [
+   "system-design",
+   "feeds",
+   "fan-out",
+   "scaling",
+   "denormalisation"
+  ],
+  "followups": [
+   {
+    "q": "What storage would you use for the precomputed feeds?",
+    "a": "Something optimised for append and range reads by key - a Redis sorted set per user keyed by timestamp is the common choice for the hot window, backed by a wide-column store such as Cassandra for the longer tail. The important property is that you only keep a bounded window per user, typically a few hundred entries, because nobody scrolls further and unbounded feeds multiply storage by the follower graph. Anything older is served by falling back to a query."
+   },
+   {
+    "q": "How do you handle the moment a user follows someone new?",
+    "a": "Backfill their feed with that person s recent posts, or accept that the new follow only affects future posts. Backfilling is better for the experience - the feed immediately reflects the change - and it is a bounded operation since you only need the recent window. The case to watch is a bulk import or someone following thousands of accounts at once, which turns a user action into a large amount of work, so it belongs on a queue with rate limiting rather than inline in the request."
+   }
+  ]
  }
 ]

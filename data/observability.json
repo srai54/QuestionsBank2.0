@@ -1671,5 +1671,29 @@
     "a": "Cache the result for a few seconds, so a probe every second does not mean a database query every second across every instance - with many instances and several dependencies that adds up to real traffic aimed at the thing you are worried about. Give each individual check a tight timeout so one slow dependency cannot make the endpoint hang and cause a false negative. And keep the probe interval and failure threshold sensible: probing every second with a threshold of one is asking for restarts on noise."
    }
   ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Correlation",
+  "difficulty": "Medium",
+  "question": "How does a trace id propagate across HTTP calls, queues and background jobs in .NET?",
+  "answer": "Over HTTP it is largely automatic. .NET implements the W3C Trace Context standard, so `ActivitySource` creates an `Activity` per request, `HttpClient` adds the `traceparent` header on outgoing calls, and ASP.NET Core reads it on incoming ones. With OpenTelemetry configured, the whole chain links up without you writing propagation code.\n\n**The gaps are everywhere that is not HTTP**, and that is where correlation usually breaks:\n\n1. **Message queues.** Nothing adds `traceparent` to a Service Bus or RabbitMQ message for you unless the instrumentation library does it. You inject the current context into the message properties on publish and extract it on consume, starting a new Activity with the extracted context as its parent. Without that, every message handler starts a fresh unrelated trace, and you cannot follow a request past the queue.\n2. **Background jobs and timers.** A `BackgroundService` loop has no incoming request, so there is no context to continue. Start a new Activity per iteration so the work has *an* id, and where the job was triggered by something, carry that context through.\n3. **`Task.Run` and fire-and-forget.** Context flows through async/await via `AsyncLocal`, so it usually survives - but work started and deliberately detached, or anything crossing a `SuppressFlow`, loses it.\n4. **Database calls** get their own spans through instrumentation, which is what lets you attribute latency to the query rather than the handler.\n\n**The practical test:** take a real request that goes through a queue and confirm you can see the whole path in one trace. Teams assume propagation works because HTTP works, and discover the queue gap during an incident.",
+  "tags": [
+   "observability",
+   "tracing",
+   "w3c-trace-context",
+   "opentelemetry",
+   "messaging"
+  ],
+  "followups": [
+   {
+    "q": "What is the difference between the trace id and a correlation id people add manually?",
+    "a": "The trace id is part of a standard with defined propagation and a span hierarchy, so tooling understands parent-child relationships and can render a waterfall. A hand-rolled correlation id is a flat string you pass around and log - it lets you filter logs to one request, which is genuinely useful, but it carries no structure, so you cannot see what called what or where the time went. Where a legacy correlation id already exists, the usual approach is to keep logging it as a tag on the span rather than replacing the standard mechanism."
+   },
+   {
+    "q": "How do you make sure the trace id appears in every log line?",
+    "a": "Configure the logging provider to include it from the current `Activity`, which most structured logging setups support - Serilog with an enricher, or the OpenTelemetry logging integration which attaches trace and span ids automatically. Doing it manually per call site guarantees inconsistency. The value is being able to pivot from a slow span in the trace straight to the log lines emitted during it, which is the workflow that makes tracing worth the setup."
+   }
+  ]
  }
 ]

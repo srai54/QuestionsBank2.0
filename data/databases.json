@@ -1837,5 +1837,29 @@
     "a": "Plan for it before it happens, because it always does - the distribution of tenant sizes is usually extreme. The common approaches are to give very large tenants a dedicated shard (which also simplifies their compliance and performance story), and to keep a tenant-to-shard mapping in a lookup table rather than computing placement from a hash, so a tenant can be moved without changing the routing scheme. Migration itself needs dual-write plus backfill plus cutover, so the routing indirection is what makes it feasible at all."
    }
   ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Replication",
+  "difficulty": "Hard",
+  "question": "You add a read replica and users start reporting that their changes disappear. What is happening?",
+  "answer": "Replication lag plus reads going to the replica - the user writes to the primary, is redirected, the read goes to a replica that has not yet applied the change, and they see the old value. Refreshing might fix it or might not, depending on which replica they land on, which is why it reads as \"sometimes it works\".\n\nThis is the **read-your-own-writes** problem, and it is the predictable consequence of adding replicas without deciding routing policy.\n\n**The fixes, in the order I would consider them:**\n\n1. **Return the result from the write.** If the command response contains the updated resource, the UI does not need to read at all. This removes the problem for the common case and is usually the smallest change.\n2. **Session consistency.** After a user writes, route *their* reads to the primary for a short window - a cookie or a token carrying a timestamp or an LSN. Everyone else keeps using replicas, so you retain most of the scaling benefit.\n3. **Wait for the replica to catch up.** Some databases let you read with a minimum applied position, so the read blocks briefly rather than returning stale data. Correct, but it converts a consistency problem into a latency one.\n4. **Route by operation type deliberately** - reporting and analytics to replicas, anything a user just changed to the primary. The mistake is routing all reads to replicas because they are there.\n\n**What I would not do:** send everything back to the primary, which discards the reason for adding replicas.\n\n**And I would monitor lag explicitly**, with an alert, because lag grows under exactly the load where you are relying on replicas most - a large batch job on the primary can push it from milliseconds to minutes.",
+  "tags": [
+   "databases",
+   "replication",
+   "read-replicas",
+   "consistency",
+   "scaling"
+  ],
+  "followups": [
+   {
+    "q": "Why does replication lag spike at the worst times?",
+    "a": "Because the replica applies changes with less parallelism than the primary generates them. A bulk update, an index rebuild or a large delete produces a burst of changes that the replica applies more slowly, so lag grows precisely when the system is busiest. Long-running queries on the replica can also block apply, which is a nasty feedback loop: heavy read traffic slows replication, which makes the data staler, which is when people complain. Monitoring lag and shedding replica reads when it exceeds a threshold is the practical defence."
+   },
+   {
+    "q": "How does this differ with synchronous replication?",
+    "a": "Synchronous replication commits on the primary only after a replica has acknowledged, so reads from that replica are current and the problem disappears - at the cost of write latency, since every commit now includes a network round trip, and of availability, because a slow or unreachable replica can stall writes. It is the right trade for a small number of replicas in the same region protecting against data loss, and the wrong one for read-scaling replicas spread across regions, where the latency would be paid on every write."
+   }
+  ]
  }
 ]

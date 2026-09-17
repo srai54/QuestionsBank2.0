@@ -4528,5 +4528,29 @@
     "a": "It cannot - the fact already happened, so the only options are to compensate or to raise a new event describing the problem. `PaymentFailed` published in response to `OrderPlaced` is how that conversation works, and the order service then decides what to do with its own state. Code that tries to \"fail\" an event handler in a way that undoes the publisher s change has really discovered that the two operations belong in one transaction, which is a boundary problem rather than a messaging one."
    }
   ]
+ },
+ {
+  "category": "Architecture",
+  "subcategory": "Integration",
+  "difficulty": "Medium",
+  "question": "A third-party API you depend on is unreliable and slow. How do you design around it?",
+  "answer": "Contain it, so their reliability is not your reliability.\n\n**The structural moves:**\n\n1. **Put it behind your own abstraction.** Your domain code talks to your interface, not their SDK. That gives you one place to add resilience, one place to change when they version, and the ability to swap providers without touching business logic.\n2. **Get it off the synchronous path if you can.** If the call does not need to happen before you respond to the user, queue it. Their 8-second response then affects a background worker rather than a user request, and their outage becomes a growing queue rather than failed requests.\n3. **Cache aggressively** where the data tolerates it. For reference data - exchange rates, address lookups, catalogue information - a cache with a generous TTL turns most calls into no calls, and lets you serve stale data during an outage rather than failing.\n4. **Timeout, retry with backoff and jitter, and a circuit breaker**, in that combination - timeouts so a slow call cannot pin a resource, retry for transient blips, breaker so a sustained outage fails fast instead of consuming your capacity.\n5. **Bulkhead it** - a bounded concurrency limit for calls to them, so their slowness cannot exhaust your thread or connection pool and take down unrelated features.\n6. **Define the degraded behaviour explicitly.** What does the product do when they are down? Hide the feature, use stale data, queue for later, or fail - it should be a decision, not whatever the exception happens to produce.\n\n**And instrument them separately**, so their error rate and latency are on your dashboard. When someone asks \"is it us\", you need the answer in seconds, and it gives you the evidence for the conversation with their account manager.",
+  "tags": [
+   "architecture",
+   "third-party",
+   "resilience",
+   "anti-corruption-layer",
+   "integration"
+  ],
+  "followups": [
+   {
+    "q": "How do you test your own resilience code against them?",
+    "a": "Not against their sandbox, which is usually healthy and therefore tests nothing. Use a local fake you control - WireMock or a hand-written stub - configured to be slow, to return 500s, to time out, to return malformed responses and to fail intermittently. Those are the cases your retry and breaker logic exists for, and they are the ones never exercised otherwise. Contract tests against their real API are a separate concern, covering whether your understanding of the shape is still correct."
+   },
+   {
+    "q": "What do you do about their rate limits?",
+    "a": "Respect them proactively rather than discovering them through 429s. Implement client-side rate limiting to stay under the documented ceiling, honour `Retry-After` when you do get a 429 rather than retrying on your own schedule, and make sure your retry logic does not treat 429 as a transient error to hammer. If several of your instances call them, the limit is shared across all of them, so the rate limiter needs to be distributed - otherwise each instance stays under the limit individually and the total exceeds it."
+   }
+  ]
  }
 ]

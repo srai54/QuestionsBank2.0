@@ -2517,5 +2517,29 @@
     "a": "The broker tracks which contract versions are verified against which provider versions, so you can ask \"is it safe to deploy this provider version given what is currently in production\" before releasing. That check belongs in the pipeline as a gate. Without it you have contract tests that tell you about compatibility in the abstract but not about the specific versions actually deployed, which is where the real incident happens."
    }
   ]
+ },
+ {
+  "category": "Testing",
+  "subcategory": "Legacy",
+  "difficulty": "Hard",
+  "question": "How do you write tests for a class with a constructor that opens a database connection and reads config from a static?",
+  "answer": "This is the classic untestable shape, and the answer is to create a **seam** - a place you can change behaviour without changing the code much - before trying to test the behaviour itself.\n\n**The safest sequence, in the spirit of working with legacy code:**\n\n1. **Do not refactor first without any safety net.** That is the trap - the refactor you need to enable testing is itself untested. Start with the least invasive seam available.\n2. **Extract and override.** Move the connection creation into a `protected virtual` method, subclass it in the test, and override to return a fake. The production class is barely changed, the risk is low, and you now have a test.\n3. **Introduce a parameter.** Add a constructor overload taking the dependency, with the existing constructor delegating to it using the current behaviour. No caller changes, and tests use the new one. This is usually the cleanest small step.\n4. **Wrap the static.** Put an interface around the static config accessor, with the default implementation calling the static. Now it can be substituted, and you have not had to find and change every usage.\n5. **Once tests exist, refactor properly** - constructor injection, no work in constructors, config as an injected options object.\n\n**The principles worth stating:** constructors should not do work, because that makes the object impossible to create in a test without its dependencies. And static access is a hidden dependency the signature does not admit to, which is why it makes testing so hard.\n\n**And characterisation tests first** if you do not know what the class is supposed to do - capture current behaviour, then change it deliberately.",
+  "tags": [
+   "testing",
+   "legacy-code",
+   "seams",
+   "dependency-injection",
+   "refactoring"
+  ],
+  "followups": [
+   {
+    "q": "Is extract-and-override not just a hack?",
+    "a": "It is a transitional step, and being explicit about that matters. Its virtue is that it is nearly risk-free on code with no tests - a `virtual` method and a subclass in the test project, with no production call sites touched. Its cost is that it exposes an extension point you did not want and couples the test to the class hierarchy. The intent is to use it to get tests in place and then do the proper refactor under their protection, not to leave it as the design."
+   },
+   {
+    "q": "What do you do when the class also uses DateTime.Now and Guid.NewGuid?",
+    "a": "Same treatment - they are hidden dependencies on ambient state. Wrap them behind `TimeProvider` and an id generator interface, injected. Until you can, extract them into virtual methods you override in tests. The tell that they are dependencies rather than language features is that the test cannot control them, so the assertion has to be loose - and loose assertions are what let real bugs through."
+   }
+  ]
  }
 ]

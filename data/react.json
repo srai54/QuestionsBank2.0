@@ -3806,5 +3806,29 @@
     "a": "They now cover different halves. Read-only data that the server can fetch does not need a client cache at all. Anything the user mutates and must then see updated still needs client-side caching, optimistic updates and invalidation, so the query library keeps that role. The practical arrangement is server components for initial data, with client components using a query library for interactive state - and prefetching on the server to hydrate the client cache so the first interaction is not a fresh fetch."
    }
   ]
+ },
+ {
+  "category": "React",
+  "subcategory": "Accessibility",
+  "difficulty": "Medium",
+  "question": "How do you make a React single-page application accessible to screen reader users?",
+  "answer": "The hard part is specific to SPAs: navigation does not reload the page, so a screen reader gets no signal that anything changed. A user activates a link, the URL changes, the content changes, and nothing is announced - focus is still on the link they clicked, on a page that no longer exists.\n\n**What to do about it:**\n\n1. **Manage focus on route change.** Move focus to the main heading or the main landmark after navigation. That both announces the new content and puts keyboard navigation at the top of it rather than wherever it was.\n2. **Announce the change** with a live region or by updating the document title, so users get confirmation even if focus management is subtle.\n3. **Manage focus in dialogs** - trap it inside while open, return it to the trigger on close. An untrapped modal lets keyboard users tab into the page behind it, which is invisible to them.\n4. **Announce async results.** A form submission that shows a success message must put that message in a live region, or the screen reader user never hears it. The same applies to validation errors, loading completion and toasts.\n5. **Use semantic elements** rather than divs with click handlers. React makes it easy to build a fully custom \"button\" and easy to forget it is unreachable by keyboard.\n\n**The React-specific traps:** conditionally rendering an element into a live region can fail to announce because the region itself was not present before - render the region always and change its contents. And portals move DOM position but not the accessibility tree relationship, so a portalled menu may need explicit `aria-controls` and focus management.\n\n**Test with a keyboard first**, then a screen reader. Automated tools catch perhaps a third of this.",
+  "tags": [
+   "react",
+   "accessibility",
+   "spa",
+   "focus-management",
+   "aria-live"
+  ],
+  "followups": [
+   {
+    "q": "Where exactly should focus go after a route change?",
+    "a": "To a container for the new content, usually the `<h1>` or the `<main>` element, made focusable with `tabIndex={-1}` so it can receive programmatic focus without entering the tab order. Focusing the heading announces the page title and places the user at the start of the content, which is what a full page load would have done. Focusing `document.body` is a common attempt that does not work - it announces nothing and resets tab order to the browser chrome."
+   },
+   {
+    "q": "What is the difference between aria-live polite and assertive?",
+    "a": "`polite` queues the announcement until the screen reader finishes what it is saying, which is right for almost everything - a search result count, a saved confirmation, a loading state. `assertive` interrupts immediately, which is appropriate only for genuinely urgent messages such as a session about to expire or an error blocking the user. Overusing assertive makes the experience hostile, because every minor update cuts off whatever the user was listening to."
+   }
+  ]
  }
 ]
