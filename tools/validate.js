@@ -21,20 +21,24 @@ const hasCsharp = text => String(text || '').includes('```csharp');
 
 // _enrich/*.json files are partial patches keyed by question text, so the
 // required-field rules for a full row do not apply to them.
-const patch = process.argv.includes('--patch');
-const file = process.argv.find(a => a !== '--patch' && a.endsWith('.json')) || SOURCE;
-const rows = load(file);
+function validateRows(rows, file = SOURCE, patch = false) {
 const errors = [];
 const warnings = [];
 const seen = new Map();
+if (!Array.isArray(rows)) return { errors: [`${file}: expected a JSON array`], warnings };
 
 rows.forEach((row, i) => {
   const where = `${file}[${i}]`;
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    errors.push(`${where}: expected a question object`);
+    return;
+  }
   const required = patch ? ['question'] : ['category', 'subcategory', 'difficulty', 'question', 'answer'];
   for (const field of required) {
     if (typeof row[field] !== 'string' || !row[field].trim()) errors.push(`${where}: missing ${field}`);
   }
   if (!patch && (!Array.isArray(row.tags) || row.tags.length === 0)) errors.push(`${where}: missing tags`);
+  if (Array.isArray(row.tags) && row.tags.some(t => typeof t !== 'string' || !t.trim())) errors.push(`${where}: tags must be non-empty strings`);
   if (row.difficulty && !DIFFICULTIES.has(row.difficulty)) errors.push(`${where}: bad difficulty "${row.difficulty}"`);
   if (row.question && row.question.length < MIN_QUESTION) errors.push(`${where}: question too short`);
   if (row.answer && row.answer.length < MIN_ANSWER) errors.push(`${where}: answer too short (${row.answer.length} chars): ${String(row.question).slice(0, 60)}`);
@@ -77,6 +81,20 @@ rows.forEach((row, i) => {
   if (row.answer && row.answer.length > 4000) warnings.push(`${where}: unusually long answer (${row.answer.length} chars)`);
 });
 
+return { errors, warnings };
+}
+
+module.exports = { validateRows };
+if (require.main === module) {
+const patch = process.argv.includes('--patch');
+const file = process.argv.find(a => a !== '--patch' && a.endsWith('.json')) || SOURCE;
+const rows = load(file);
+const { errors, warnings } = validateRows(rows, file, patch);
+if (!Array.isArray(rows) || rows.some(r => !r || typeof r !== 'object' || Array.isArray(r))) {
+  console.error(errors.join('\n'));
+  process.exit(1);
+}
+
 console.log(`rows: ${rows.length}`);
 for (const [cat, n] of countBy(rows, 'category')) console.log(`  ${cat}: ${n}`);
 console.log(`difficulty: ${countBy(rows, 'difficulty').map(([k, v]) => `${k}=${v}`).join(' ')}`);
@@ -92,3 +110,4 @@ if (errors.length) {
   process.exit(1);
 }
 console.log('\nOK');
+}

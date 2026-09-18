@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Compile the question bank into a searchable SQLite (FTS5) DB + a merged JSON file.
 
-Source of truth: questions.json (a single JSON array of all questions).
-(For backward compatibility, if questions.json is absent it falls back to data/*.json.)
+Source of truth: data/*.json (one JSON array per category).
+For backward compatibility, questions.json is accepted if data files are absent.
 
 Usage: python3 build.py
 Outputs:
@@ -62,7 +62,7 @@ def build_sqlite(rows):
             id INTEGER PRIMARY KEY,
             category TEXT, subcategory TEXT, difficulty TEXT,
             question TEXT, answer TEXT, tags TEXT,
-            followups TEXT          -- JSON array of {q, a} interviewer follow-ups
+            followups TEXT,         -- JSON array of {q, a} interviewer follow-ups
             companies TEXT          -- comma separated, commonly reported
         )""")
     cur.execute("CREATE INDEX idx_cat ON questions(category)")

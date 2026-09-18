@@ -1,5 +1,9 @@
 # Project Context Handoff — Interview Question Bank + Search Backend
 
+> Historical handoff: counts, layout, repository URL, and deployment claims below
+> predate the current checkout. Read README.md and PROGRESS.md for current status:
+> 10,000 top-level questions across 24 categories; the target is complete.
+
 ## Goal
 Build a searchable interview-prep question bank (target **1,000 questions now, ~30,000 later**) that any human or LLM can search in **milliseconds**. Topics span: .NET/C#/ASP.NET Core, Angular, React, SQL & stored-procedure optimization, Azure (Entra ID, API Management, Redis [hashset vs KVP], Service Bus queue/topic, Logic Apps, Function Apps [http/timer/event triggers], Blob [block/append/page], Hangfire), MongoDB, microservices, event-driven architecture, Semantic Kernel / AI agents / AI orchestration, REST APIs, auth/security, Docker/K8s, CI/CD, logging/monitoring, testing (incl. Cucumber/BDD, Selenium, Karate, TestNG, Jest), Clean Architecture & SOLID, Power BI/SSIS/ETL, JS/TS, system design, and behavioral.
 

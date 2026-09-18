@@ -12,6 +12,7 @@ create table if not exists questions (
   tags        text,
   -- nested interviewer follow-ups: [{ "q": ..., "a": ... }]
   followups   jsonb not null default '[]'::jsonb,
+  companies   text,
   search tsvector generated always as (
     setweight(to_tsvector('english', coalesce(question,'')), 'A') ||
     setweight(to_tsvector('english', coalesce(tags,'')),     'B') ||

@@ -62,14 +62,14 @@ B = 200
 cols = "(category, subcategory, difficulty, question, answer, tags, followups, companies)"
 for i in range(0, len(rows), B):
     chunk = rows[i:i+B]
-    lines.append(f"insert into questions {cols} values")
+    header = f"insert into questions {cols} values"
     vals = []
     for r in chunk:
         tags = ", ".join(r.get("tags", []))
         followups = json.dumps(r.get("followups", []), ensure_ascii=False)
         companies = ", ".join(r.get("companies", []))
         vals.append(f"  ('{esc(r.get('category'))}', '{esc(r.get('subcategory'))}', '{esc(r.get('difficulty'))}', '{esc(r.get('question'))}', '{esc(r.get('answer'))}', '{esc(tags)}', '{esc(followups)}'::jsonb, '{esc(companies)}')")
-    lines.append(",\n".join(vals) + ";")
+    lines.append(header + "\n" + ",\n".join(vals) + ";")
 lines.append("")
 lines.append("-- Done. Quick test:")
 lines.append("--   select id, category, question")
@@ -89,13 +89,15 @@ open("supabase_01_schema.sql", "w", encoding="utf-8").write(schema)
 
 part, buf, size, written = 1, [], 0, 0
 for stmt in lines[1:]:
-    buf.append(stmt)
-    size += len(stmt)
-    if size >= MAX_BYTES:
+    stmt_size = len((stmt + "\n").encode("utf-8"))
+    if buf and size + stmt_size > MAX_BYTES:
         part += 1
         open(f"supabase_{part:02d}_seed.sql", "w", encoding="utf-8").write("\n".join(buf))
         written += 1
         buf, size = [], 0
+    # Never split a SQL statement, even when one batch exceeds the soft limit.
+    buf.append(stmt)
+    size += stmt_size
 if buf:
     part += 1
     open(f"supabase_{part:02d}_seed.sql", "w", encoding="utf-8").write("\n".join(buf))

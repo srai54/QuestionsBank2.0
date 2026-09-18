@@ -12,11 +12,27 @@
  * hand. Ids are reassigned 1..N so the file stays consistent with build.py.
  */
 const fs = require('fs');
+const { validateRows } = require('./validate');
 const { SOURCE, normalize, load, writeSource, incomingFiles, countBy } = require('./lib');
 
 const dry = process.argv.includes('--dry');
 const tIndex = process.argv.indexOf('--threshold');
 const THRESHOLD = tIndex > -1 ? Number(process.argv[tIndex + 1]) : 0.6;
+if (!Number.isFinite(THRESHOLD) || THRESHOLD <= 0 || THRESHOLD > 1) {
+  console.error('--threshold must be a number greater than 0 and at most 1');
+  process.exit(2);
+}
+
+// Validate every batch before changing source files or clearing staging.
+const batches = incomingFiles();
+for (const file of batches) {
+  const { errors } = validateRows(load(file), file);
+  if (errors.length) {
+    console.error(errors.join('\n'));
+    console.error('Merge aborted; source and incoming batches are unchanged.');
+    process.exit(1);
+  }
+}
 
 const STOP = new Set(['what', 'is', 'the', 'a', 'an', 'and', 'or', 'of', 'in', 'to', 'for', 'how', 'do', 'does', 'you', 'your', 'why', 'when', 'it', 'its', 'are', 'with', 'on', 'at', 'by', 'from', 'that', 'this', 'these', 'those', 'be', 'can', 'would', 'should', 'their', 'them', 'they', 'as', 'vs', 'versus', 'between', 'difference', 'differences', 'use', 'using', 'used', 'work', 'works', 'explain', 'describe', 'which', 'not', 'if', 'but', 'so', 'into', 'about', 'over', 'than', 'then', 'there', 'each', 'have', 'has']);
 
@@ -42,7 +58,7 @@ const index = existing.map(r => ({ question: r.question, category: r.category, t
 const added = [];
 const rejected = [];
 
-for (const file of incomingFiles()) {
+for (const file of batches) {
   const name = file.split(/[\\/]/).pop();
   const batch = load(file);
   let kept = 0;
@@ -62,7 +78,7 @@ for (const file of incomingFiles()) {
       const limit = other.category === row.category ? THRESHOLD : CROSS_CATEGORY_THRESHOLD;
       const score = jaccard(tokens, other.tokens);
       // Rank by how far each candidate exceeds its own applicable threshold.
-      if (score >= limit && score - limit > (best.score - (best.limit ?? 0))) {
+      if (score >= limit && (!best.other || score - limit > best.score - best.limit)) {
         best = { score, limit, other };
       }
     }

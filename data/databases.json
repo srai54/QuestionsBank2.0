@@ -1138,10 +1138,6 @@
    {
     "q": "What if the client genuinely needs to jump to an arbitrary page?",
     "a": "Then keep offset for that surface and bound it - most systems cap the reachable depth, because page 5,000 of a search result has no real user behind it. If deep random access is a genuine requirement, precompute page boundary keys into a side table on a schedule, so \"page 400\" becomes a lookup of the boundary key followed by a keyset read. That only works when the underlying ordering is stable enough for the precomputed boundaries to stay meaningful."
-   },
-   {
-    "q": "How do you handle a cursor when the underlying row ordering can change?",
-    "a": "If the sort key is mutable - a score that updates, a last-modified timestamp - a cursor can skip or repeat rows when a row moves across the boundary. The mitigations are to page on an immutable key where possible (creation time and id rather than modified time), or to accept the imprecision explicitly for feed-like data where it does not matter. For anything requiring an exact one-pass read, snapshot the set first and page over the snapshot."
    }
   ]
  },
@@ -1748,14 +1744,6 @@
   ],
   "followups": [
    {
-    "q": "Why does the working set fitting in RAM matter so much?",
-    "a": "Because the difference between a memory read and a disk read is several orders of magnitude, and Mongo's cache holds both documents and index pages. While the working set fits, most operations are memory-speed; once it does not, the cache thrashes and nearly every query pays disk latency - so performance does not degrade gradually, it falls off a cliff at the point the set exceeds the cache. That non-linearity is why the symptom appears suddenly after months of steady growth."
-   },
-   {
-    "q": "What makes a bad shard key?",
-    "a": "Low cardinality, so the data cannot be divided finely - sharding on a status field with four values gives four chunks. Monotonically increasing, such as a timestamp or an ObjectId, so every insert goes to the highest chunk and one shard takes all the write load. And a key absent from your common queries, which forces scatter-gather to every shard and makes reads slower than before sharding. A hashed key fixes distribution but destroys range queries, so the choice has to come from the actual access patterns."
-   },
-   {
     "q": "The documents contain arrays that grow unboundedly. Why is that a problem specifically?",
     "a": "Because the document is the unit of storage and update - a growing array means the whole document is rewritten on each append and eventually exceeds the 16MB limit. Indexes on array fields grow with the number of elements, and reading one element means loading the entire document. The usual remedy is the bucket pattern, storing fixed-size groups per document, or moving the items to their own collection with a reference. Unbounded arrays inside documents are the most common schema mistake people bring from relational thinking."
    }
@@ -1774,20 +1762,6 @@
    "trade-offs",
    "system-design",
    "scenario"
-  ],
-  "followups": [
-   {
-    "q": "Why enforce tenant scoping in the database rather than the application?",
-    "a": "Because application-level filtering depends on every query being written correctly forever, and one omission is a cross-tenant data breach rather than an ordinary bug. Row-level security enforces the predicate in the engine, so even a raw SQL query or a direct connection from a reporting tool is filtered. It moves the guarantee from discipline to mechanism. The cost is a performance consideration and a degree of operational complexity in managing the session context, which is small next to the failure it prevents."
-   },
-   {
-    "q": "What makes cross-tenant reporting hard with database-per-tenant?",
-    "a": "There is no single place to query - an aggregate across all tenants means fanning out to n databases and combining the results, which is slow, fragile and gets worse as tenants are added. The usual answer is a separate analytics store fed from all the tenant databases, which is another pipeline to build and keep consistent. That cost is frequently underestimated when the isolation decision is made, because reporting requirements tend to arrive after the architecture is settled."
-   },
-   {
-    "q": "How would you move one large tenant out of a shared database later?",
-    "a": "It is straightforward only if you designed for it: the schema is identical, so the move is an export of that tenant's rows into a new database, a connection-string switch keyed by tenant, and a cutover with a brief write freeze or a dual-write window. What makes it hard is anything that assumed a single database - cross-tenant joins, global sequences, shared reference data with tenant-specific overrides. Keeping the data access strictly tenant-scoped from the start is what preserves the option, which is why I would build it that way even while using a shared database."
-   }
   ]
  },
  {
@@ -1807,10 +1781,6 @@
    {
     "q": "What is write skew and which levels allow it?",
     "a": "Two transactions each read an overlapping set, each decides independently that its write is safe, and together they violate an invariant neither broke alone - the classic example is two doctors each going off-call because the other is still on, leaving nobody. Repeatable read permits it, because both reads were stable and neither wrote the same row. Only serialisable prevents it. It is the anomaly that catches people out, because it does not involve any obvious conflict."
-   },
-   {
-    "q": "How does MVCC change the picture?",
-    "a": "It lets readers see a consistent snapshot without blocking writers, which removes most of the reader-writer contention that makes higher isolation expensive in a purely lock-based system. PostgreSQL is MVCC throughout; SQL Server offers it via READ COMMITTED SNAPSHOT and SNAPSHOT isolation. The costs move rather than vanish: you need a version store (tempdb in SQL Server, table bloat and vacuum in PostgreSQL), and snapshot isolation introduces update conflicts that the application must handle."
    }
   ]
  },
@@ -1828,10 +1798,6 @@
    "distributed"
   ],
   "followups": [
-   {
-    "q": "What makes a bad shard key?",
-    "a": "Anything that concentrates load or forces cross-shard queries. A monotonically increasing key sends all new writes to one shard - a hotspot. A low-cardinality key cannot spread across many shards. And a key that does not match your access patterns means most queries must scatter to every shard, which gives you the costs of sharding and none of the benefit. If your most common query cannot be answered from one shard, the key is wrong."
-   },
    {
     "q": "How do you handle a tenant that outgrows its shard?",
     "a": "Plan for it before it happens, because it always does - the distribution of tenant sizes is usually extreme. The common approaches are to give very large tenants a dedicated shard (which also simplifies their compliance and performance story), and to keep a tenant-to-shard mapping in a lookup table rather than computing placement from a hash, so a tenant can be moved without changing the routing scheme. Migration itself needs dual-write plus backfill plus cutover, so the routing indirection is what makes it feasible at all."
@@ -1853,13 +1819,1622 @@
   ],
   "followups": [
    {
-    "q": "Why does replication lag spike at the worst times?",
-    "a": "Because the replica applies changes with less parallelism than the primary generates them. A bulk update, an index rebuild or a large delete produces a burst of changes that the replica applies more slowly, so lag grows precisely when the system is busiest. Long-running queries on the replica can also block apply, which is a nasty feedback loop: heavy read traffic slows replication, which makes the data staler, which is when people complain. Monitoring lag and shedding replica reads when it exceeds a threshold is the practical defence."
-   },
-   {
     "q": "How does this differ with synchronous replication?",
     "a": "Synchronous replication commits on the primary only after a replica has acknowledged, so reads from that replica are current and the problem disappears - at the cost of write latency, since every commit now includes a network round trip, and of availability, because a slow or unreachable replica can stall writes. It is the right trade for a small number of replicas in the same region protecting against data loss, and the wrong one for read-scaling replicas spread across regions, where the latency would be paid on every write."
    }
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "How do you handle a cursor when the underlying row ordering can change?",
+  "answer": "If the sort key is mutable - a score that updates, a last-modified timestamp - a cursor can skip or repeat rows when a row moves across the boundary. The mitigations are to page on an immutable key where possible (creation time and id rather than modified time), or to accept the imprecision explicitly for feed-like data where it does not matter. For anything requiring an exact one-pass read, snapshot the set first and page over the snapshot.",
+  "tags": [
+   "pagination",
+   "keyset",
+   "performance",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "MongoDB",
+  "difficulty": "Medium",
+  "question": "Why does the working set fitting in RAM matter so much?",
+  "answer": "Because the difference between a memory read and a disk read is several orders of magnitude, and Mongo's cache holds both documents and index pages. While the working set fits, most operations are memory-speed; once it does not, the cache thrashes and nearly every query pays disk latency - so performance does not degrade gradually, it falls off a cliff at the point the set exceeds the cache. That non-linearity is why the symptom appears suddenly after months of steady growth.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "indexing",
+   "working-set",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "MongoDB",
+  "difficulty": "Medium",
+  "question": "What makes a bad shard key?",
+  "answer": "Low cardinality, so the data cannot be divided finely - sharding on a status field with four values gives four chunks. Monotonically increasing, such as a timestamp or an ObjectId, so every insert goes to the highest chunk and one shard takes all the write load. And a key absent from your common queries, which forces scatter-gather to every shard and makes reads slower than before sharding. A hashed key fixes distribution but destroys range queries, so the choice has to come from the actual access patterns.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "indexing",
+   "working-set",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "Why enforce tenant scoping in the database rather than the application?",
+  "answer": "Because application-level filtering depends on every query being written correctly forever, and one omission is a cross-tenant data breach rather than an ordinary bug. Row-level security enforces the predicate in the engine, so even a raw SQL query or a direct connection from a reporting tool is filtered. It moves the guarantee from discipline to mechanism. The cost is a performance consideration and a degree of operational complexity in managing the session context, which is small next to the failure it prevents.",
+  "tags": [
+   "databases",
+   "multi-tenancy",
+   "isolation",
+   "trade-offs",
+   "system-design",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "What makes cross-tenant reporting hard with database-per-tenant?",
+  "answer": "There is no single place to query - an aggregate across all tenants means fanning out to n databases and combining the results, which is slow, fragile and gets worse as tenants are added. The usual answer is a separate analytics store fed from all the tenant databases, which is another pipeline to build and keep consistent. That cost is frequently underestimated when the isolation decision is made, because reporting requirements tend to arrive after the architecture is settled.",
+  "tags": [
+   "databases",
+   "multi-tenancy",
+   "isolation",
+   "trade-offs",
+   "system-design",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Design",
+  "difficulty": "Hard",
+  "question": "How would you move one large tenant out of a shared database later?",
+  "answer": "It is straightforward only if you designed for it: the schema is identical, so the move is an export of that tenant's rows into a new database, a connection-string switch keyed by tenant, and a cutover with a brief write freeze or a dual-write window. What makes it hard is anything that assumed a single database - cross-tenant joins, global sequences, shared reference data with tenant-specific overrides. Keeping the data access strictly tenant-scoped from the start is what preserves the option, which is why I would build it that way even while using a shared database.",
+  "tags": [
+   "databases",
+   "multi-tenancy",
+   "isolation",
+   "trade-offs",
+   "system-design",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Consistency",
+  "difficulty": "Hard",
+  "question": "How does MVCC change the picture?",
+  "answer": "It lets readers see a consistent snapshot without blocking writers, which removes most of the reader-writer contention that makes higher isolation expensive in a purely lock-based system. PostgreSQL is MVCC throughout; SQL Server offers it via READ COMMITTED SNAPSHOT and SNAPSHOT isolation. The costs move rather than vanish: you need a version store (tempdb in SQL Server, table bloat and vacuum in PostgreSQL), and snapshot isolation introduces update conflicts that the application must handle.",
+  "tags": [
+   "databases",
+   "isolation-levels",
+   "transactions",
+   "mvcc",
+   "concurrency",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Replication",
+  "difficulty": "Hard",
+  "question": "Why does replication lag spike at the worst times?",
+  "answer": "Because the replica applies changes with less parallelism than the primary generates them. A bulk update, an index rebuild or a large delete produces a burst of changes that the replica applies more slowly, so lag grows precisely when the system is busiest. Long-running queries on the replica can also block apply, which is a nasty feedback loop: heavy read traffic slows replication, which makes the data staler, which is when people complain. Monitoring lag and shedding replica reads when it exceeds a threshold is the practical defence.",
+  "tags": [
+   "databases",
+   "replication",
+   "read-replicas",
+   "consistency",
+   "scaling",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied NoSQL",
+  "difficulty": "Medium",
+  "question": "During a production incident involving nosql concerns around types, nosql, databases, document, key value, graph, column, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Document (MongoDB, Cosmos DB)—JSON documents. Key-value (Redis, DynamoDB)—simple fast lookups. Column-family (Cassandra, HBase)—wide columns for big data/time-series. Graph (Neo4j, Cosmos Gremlin)—nodes/edges for relationships. Each optimizes different access patterns. Choose by data shape and query needs; NoSQL trades some relational features for scalability and flexibility.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "nosql",
+   "document",
+   "key-value",
+   "graph",
+   "column",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving caching concerns around common, caching, strategies, cache aside, write through, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Cache-aside (lazy): app loads from DB on miss and populates cache. Read-through: cache loads from DB automatically on miss. Write-through: writes go to cache and DB synchronously (consistent, slower writes). Write-behind (write-back): write to cache, async to DB (fast, risk of loss). Refresh-ahead: proactively refresh hot keys before expiry. Choose based on read/write ratio and consistency needs.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "caching",
+   "cache-aside",
+   "write-through",
+   "strategies",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Hard",
+  "question": "During a dependency outage involving caching concerns around keep, cache, consistent, database, caching, consistency, invalidation, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Prefer cache-aside with invalidation: on write, update the DB then delete/invalidate the cache key (don't just update it—races cause staleness). Use short TTLs as a safety net, versioned keys, and event-driven invalidation for cross-service caches. Accept that caches are eventually consistent; for strict needs, minimize caching of that data or use write-through with careful ordering. Beware dual-write inconsistencies.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "caching",
+   "consistency",
+   "invalidation",
+   "ttl",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving caching concerns around distributed, cache, memory, caching, in memory, redis, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: An in-memory (local) cache (IMemoryCache) lives inside one app instance—fastest but not shared, so instances have inconsistent data and it's lost on restart. A distributed cache (Redis) is shared across instances over the network—consistent across a scaled-out app, survives instance restarts, but has network latency. Use local caching for per-instance hot data and distributed for shared state behind a load balancer.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "caching",
+   "distributed",
+   "in-memory",
+   "redis",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving performance concerns around connection, pooling, important, database, connection pooling, performance, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Connection pooling reuses a set of open database connections instead of opening/closing one per request—opening connections is expensive (handshake, auth). The pool hands out idle connections and returns them after use, dramatically improving throughput and latency under load. ADO.NET/EF Core pool automatically; ensure connections are disposed promptly (using/DbContext scope) and the pool size fits concurrency.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "database",
+   "connection-pooling",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a design review involving design concerns around horizontal, vertical, database, scaling, sharding, replicas, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Vertical scaling adds more power (CPU/RAM/storage) to a single DB server—simple but has a ceiling and single point of failure. Horizontal scaling distributes data/load across multiple servers via read replicas (scale reads), sharding/partitioning (scale writes/storage), or clustering—more scalable and resilient but complex (consistency, routing). SQL scales vertically more easily; NoSQL is designed to scale horizontally.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "database",
+   "scaling",
+   "sharding",
+   "replicas",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Replication",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving replication concerns around synchronous, asynchronous, replication, database, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Synchronous replication confirms a write only after replicas acknowledge it—guaranteeing no data loss on failover but adding write latency and reduced availability if a replica is slow/down. Asynchronous replication acknowledges after the primary writes, replicating in the background—lower latency and higher availability but risk of losing recent writes on failover (replica lag). Choose per RPO/latency requirements.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "database",
+   "replication",
+   "synchronous",
+   "asynchronous",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Performance",
+  "difficulty": "Hard",
+  "question": "During a cost-reduction review involving performance concerns around read, write, splitting, database, read write splitting, replicas, scaling, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Read/write splitting routes writes to the primary and reads to one or more read replicas, offloading read-heavy traffic to scale reads and protect the primary. It works when the app tolerates slight replica lag (eventual consistency on reads). Route consistency-critical reads (read-your-writes) to the primary. It's a common scaling technique for read-dominant workloads.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "database",
+   "read-write-splitting",
+   "replicas",
+   "scaling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving caching concerns around cache, eviction, policies, exist, databases, cache eviction, lru, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Eviction removes entries when the cache is full. Policies: LRU (evict least recently used—good general default), LFU (least frequently used), FIFO (oldest first), MRU, and TTL-based (expire by age). LRU suits temporal locality (recently-used likely reused); LFU suits stable hot sets. Choose based on access patterns and whether the cache holds pure cache data (evict freely) or must-keep data (bound by TTL). Redis supports several policies.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "cache-eviction",
+   "lru",
+   "lfu",
+   "ttl",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Hard",
+  "question": "During a reliability review involving caching concerns around cache, stampede, prevent, databases, cache stampede, thundering herd, locking, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: A cache stampede (thundering herd) happens when a popular key expires and many concurrent requests miss and hammer the database to rebuild it. Prevent with: a lock/mutex so only one request rebuilds while others wait or serve stale, probabilistic early recomputation (refresh before expiry), request coalescing (single-flight), and staggered/jittered TTLs. Serving slightly stale data during rebuild smooths the spike.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "cache-stampede",
+   "thundering-herd",
+   "locking",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving caching concerns around trade, offs, write, through, behind, caching, databases, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Write-through writes to cache and database synchronously—strong consistency and durability, but slower writes. Write-behind (write-back) writes to cache immediately and to the DB asynchronously—fast writes and reduced DB load, but risk of data loss if the cache fails before flushing and temporary inconsistency. Use write-through when consistency/durability matter; write-behind for write-heavy workloads tolerant of eventual persistence, with careful failure handling.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "write-through",
+   "write-behind",
+   "caching",
+   "trade-offs",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving design concerns around database, connection, pooling, pool, size, important, databases, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Connection pooling reuses a set of open DB connections instead of opening one per request (opening is expensive). Pool size must balance concurrency and DB limits: too small causes waits/timeouts under load; too large exhausts DB connections/memory and causes contention. Size it to expected concurrent queries and the DB's max connections, and ensure connections are released promptly (dispose contexts). Serverless apps use external poolers (PgBouncer, Supabase pooler).\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "connection-pooling",
+   "pool-size",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Design",
+  "difficulty": "Hard",
+  "question": "During a disaster-recovery exercise involving design concerns around change, data, capture, cases, databases, cdc, change data capture, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: CDC captures inserts/updates/deletes from a database (via transaction logs or triggers) and streams them to consumers. Use cases: syncing to a data warehouse/search index/cache, event-driven integration (outbox alternative), replication, and auditing—without polling. Tools: Debezium, SQL Server CDC, Postgres logical replication, Cosmos/Mongo change feeds/streams. It enables near-real-time propagation of data changes across systems reliably.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "cdc",
+   "change-data-capture",
+   "streaming",
+   "debezium",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving design concerns around materialized, view, regular, databases, materialized view, aggregation, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: A regular view is a stored query executed each time it's referenced—always current but recomputed (can be slow for complex aggregations). A materialized view stores the precomputed result physically, so reads are fast, but it must be refreshed (manually, on schedule, or incrementally) and can be stale between refreshes. Use materialized views for expensive, frequently-read aggregations where some staleness is acceptable; regular views for always-fresh, lightweight logic.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "materialized-view",
+   "view",
+   "aggregation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving performance concerns around read, replicas, help, replication, databases, read replica, replication lag, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Read replicas are copies of the primary that serve read queries, offloading the primary and scaling reads. Writes go to the primary and replicate asynchronously, so replicas can be slightly behind—replication lag—meaning a read right after a write might return stale data. Route consistency-critical (read-your-writes) reads to the primary and tolerant reads (reports, listings) to replicas. Monitor lag and design for eventual consistency on replica reads.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "read-replica",
+   "replication-lag",
+   "scaling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Design",
+  "difficulty": "Hard",
+  "question": "During a capacity-planning exercise involving design concerns around polyglot, persistence, databases, polyglot persistence, architecture, nosql, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Polyglot persistence uses different databases for different needs within one system—e.g., a relational DB for transactions, a document store for flexible content, Redis for caching, Elasticsearch for search, and a graph DB for relationships. Each subsystem uses the store best suited to its access patterns. Trade-offs: operational complexity, consistency across stores, and more expertise required. Adopt it deliberately where a single database can't serve all workloads well.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "polyglot-persistence",
+   "architecture",
+   "nosql",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving design concerns around eventual, consistency, caching, context, databases, eventual consistency, cache, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: With caching, the cache and source database can temporarily disagree after a write until the cache is invalidated/updated—that window is eventual consistency. It's acceptable when brief staleness doesn't harm users (product listings, counts). Bound it with short TTLs, invalidate on writes, and use versioning. For strict needs (balances), bypass or carefully synchronize the cache. Accepting eventual consistency is the trade-off for cache performance/scalability.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "eventual-consistency",
+   "cache",
+   "staleness",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving concepts concerns around covering, index, versus, clustered, general, database, terms, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: A clustered index determines the physical order of rows, so there can be only one and range scans on it are cheap. A covering index contains all the columns a query needs, so the query is answered without touching the table. Engines differ in terminology, but the two ideas exist in almost all of them.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "indexing",
+   "performance",
+   "fundamentals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving concepts concerns around write, amplification, appear, databases, performance, storage, internals, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: One logical write causing several physical writes - index maintenance, journalling, replication, and compaction in log-structured engines. It matters because storage throughput and SSD lifetime are consumed by the amplified figure, not the logical one, which is why adding indexes has a cost far beyond the table itself.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "performance",
+   "storage",
+   "internals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving concepts concerns around write, ahead, guarantee, databases, wal, durability, internals, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Changes are appended to a durable log before being applied to data pages, so a crash can be recovered by replaying committed transactions and undoing incomplete ones. It is what makes durability possible without flushing every random page write, and it is also the foundation for replication and point-in-time recovery.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "wal",
+   "durability",
+   "internals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a security review involving concepts concerns around mvcc, cost, databases, concurrency, internals, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Multi-version concurrency control keeps multiple versions of a row so readers see a consistent snapshot without blocking writers. The costs are storage for old versions, a cleanup process to reclaim them, and the possibility of long transactions preventing that cleanup - which is exactly how table bloat happens.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "mvcc",
+   "concurrency",
+   "internals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving concepts concerns around lost, update, prevent, databases, concurrency, transactions, bugs, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Two transactions read the same row, both compute a new value from what they read, and the second overwrites the first - so one update disappears with no error. Prevent it with an atomic update expressed in SQL, optimistic concurrency using a version column, or a pessimistic lock at read time.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "concurrency",
+   "transactions",
+   "bugs",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving concepts concerns around connection, pooling, pool, sizing, counterintuitive, databases, connection pool, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: A pool reuses established connections because creating one is expensive. Sizing is counterintuitive because a larger pool often reduces throughput - the database has finite cores and disks, so excess concurrency causes context switching and lock contention. A small pool with queueing usually gives better latency than a large one.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "connection-pool",
+   "performance",
+   "tuning",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving concepts concerns around materialised, view, regular, databases, views, performance, design, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: A regular view is a stored query executed on every reference, always current and costing full execution. A materialised view stores the result, giving fast reads at the cost of staleness and a refresh strategy - full or incremental, scheduled or on commit. The choice is a read-cost versus freshness trade.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "views",
+   "performance",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving concepts concerns around index, busy, production, table, databases, indexing, operations, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Use the engine's online or concurrent index build so it does not hold an exclusive lock, run it during lower traffic since it consumes IO and CPU, and monitor replication lag because the build must also be applied on replicas. Verify afterwards that the planner actually uses it.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "indexing",
+   "operations",
+   "migrations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving concepts concerns around buffer, pool, rate, important, databases, buffer pool, performance, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: An in-memory cache of data and index pages. A high hit rate means most reads are served without disk IO, which is one to two orders of magnitude faster. A falling hit rate usually indicates the working set has outgrown memory or a query is scanning far more data than it needs.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "buffer-pool",
+   "performance",
+   "internals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving concepts concerns around logical, physical, backup, databases, recovery, operations, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: A logical backup exports statements or data rows, so it is portable across versions and selective but slow to restore at scale. A physical backup copies data files or blocks, restoring far faster but tied to the engine version and platform. Large databases use physical backups with logical exports for portability.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "backup",
+   "recovery",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a design review involving concepts concerns around point, time, recovery, require, databases, backup, operations, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Restoring to an arbitrary moment by applying a base backup plus the transaction log up to that point. It requires continuous log archiving and enough retention to cover your recovery window. Without log backups you can only restore to the last full or differential backup, which sets a floor on data loss.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "recovery",
+   "backup",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving concepts concerns around lock, hierarchy, databases, intent, locks, locking, internals, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Locks are taken at row, page and table level, and an intent lock at the higher level advertises that a lower-level lock exists, so a table-level request can detect conflict without inspecting every row. Without intent locks, checking whether a table can be locked exclusively would require scanning all row locks.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "locking",
+   "internals",
+   "concurrency",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving concepts concerns around optimistic, concurrency, implemented, level, databases, design, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Each row carries a version or timestamp; an update includes the original value in its predicate and affects zero rows if someone else changed it, which the application detects and handles by reloading and retrying. It avoids locks entirely and scales well when conflicts are rare.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "concurrency",
+   "optimistic",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving concepts concerns around serialisation, anomaly, snapshot, isolation, permit, databases, write skew, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Two transactions each read a consistent snapshot and write based on it, producing a combined result impossible under any serial order - write skew, such as two doctors both going off-call because each saw the other still on. Snapshot isolation prevents dirty and non-repeatable reads but not this, which is why serialisable isolation exists.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "isolation",
+   "write-skew",
+   "concurrency",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving concepts concerns around database, cursor, cursors, discouraged, databases, performance, practices, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: A cursor iterates a result set row by row, allowing per-row logic. They are discouraged because set-based SQL is usually orders of magnitude faster, and cursors hold resources and locks for their duration. They are justified for genuinely sequential operations such as controlled batch processing.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "cursors",
+   "performance",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied NoSQL",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving nosql concerns around wide, column, store, data, model, differ, nosql, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Rows are keyed by a partition key with a clustering key ordering columns within the partition, so the model is designed around the queries rather than normalised entities. Cassandra-style stores excel at high-volume writes and time-series reads within a partition, and cannot do ad hoc joins or aggregate across partitions cheaply.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "nosql",
+   "cassandra",
+   "modelling",
+   "architecture",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied NoSQL",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving nosql concerns around secondary, index, distributed, nosql, store, problematic, indexing, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: It indexes a non-key attribute, but the index must either live with each partition - so queries fan out to all partitions - or be globally partitioned by the indexed value, which makes writes cross-partition. Both undermine the guarantees that made the store fast, which is why access patterns are usually modelled into the key instead.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "nosql",
+   "indexing",
+   "distributed-systems",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving caching concerns around eviction, policies, caches, differ, caching, performance, algorithms, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: LRU evicts the least recently used and suits temporal locality. LFU evicts the least frequently used and resists one-off scans polluting the cache. FIFO is simplest and rarely optimal. TTL-only expiry bounds staleness but does not bound memory. Real caches often combine LFU with an admission policy.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "caching",
+   "eviction",
+   "performance",
+   "algorithms",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving caching concerns around cache, pollution, prevent, caching, performance, eviction, design, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: A large scan or a batch job loads data that will never be read again, evicting genuinely hot entries. Prevent it by bypassing the cache for bulk operations, using a separate cache or namespace for them, or an admission policy that only caches entries seen more than once - which is what modern designs do by default.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "caching",
+   "performance",
+   "eviction",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving caching concerns around choose, cache, caching, design, security, performance, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Include every input that changes the result - identity, filters, locale, permissions or tenant - and nothing that does not, or the hit rate collapses. Omitting a dimension such as tenant or user role is how one user's data is served to another, which is the most serious cache bug class.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "caching",
+   "design",
+   "security",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a security review involving caching concerns around negative, caching, matter, design, performance, patterns, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Caching the fact that something does not exist, so repeated lookups for a missing key do not hit the origin. It matters because a hot missing key - a scraped URL, a deleted resource - otherwise passes every request through. Use a short TTL so a newly created item appears promptly.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "caching",
+   "design",
+   "performance",
+   "patterns",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Search",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving search concerns around inverted, index, fast, text, search, inverted index, indexing, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: It maps each term to the list of documents containing it, so a query intersects a few small posting lists rather than scanning documents. That is why full-text search is fast where a LIKE with a leading wildcard is a full scan. The cost is index size and an analysis pipeline at write time.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "search",
+   "inverted-index",
+   "indexing",
+   "fundamentals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Search",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving search concerns around analyser, search, engine, analysers, tokenisation, elasticsearch, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: It tokenises text, lowercases, removes stop words, applies stemming or lemmatisation, and may add synonyms - and the same analyser must be applied to queries or they will not match the index. Analyser mismatch between index and query time is the most common cause of a search that finds nothing.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "search",
+   "analysers",
+   "tokenisation",
+   "elasticsearch",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Search",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving search concerns around bm25, default, relevance, function, search, ranking, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: It scores documents by term frequency and inverse document frequency with saturation and length normalisation, so a term appearing fifty times does not score ten times higher than five, and long documents are not unfairly favoured. It is a robust default that needs no training data, unlike learned ranking models.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "search",
+   "bm25",
+   "relevance",
+   "ranking",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Search",
+  "difficulty": "Medium",
+  "question": "During a production incident involving search concerns around dedicated, search, engine, rather, database, full, text, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: When you need relevance tuning, faceting, aggregations over search results, typo tolerance, synonyms and multi-language analysis at scale. Database full-text search is sufficient for straightforward keyword matching over moderate volumes and avoids operating and synchronising a second system, which is a real ongoing cost.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "search",
+   "architecture",
+   "trade-offs",
+   "elasticsearch",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Search",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving search concerns around keep, search, index, synchronised, database, cdc, consistency, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Drive it from change data capture or an outbox rather than dual writing, so the index is derived from committed changes. Make indexing idempotent, keep a version per document to detect out-of-order updates, and retain the ability to rebuild the index from source - which you will need after any mapping change.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "search",
+   "cdc",
+   "consistency",
+   "integration",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During a design review involving postgresql concerns around autovacuum, postgresql, breaks, disable, postgres, mvcc, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Autovacuum reclaims dead tuples left by MVCC updates/deletes, freezes old transaction IDs to prevent wraparound, and refreshes planner statistics. Disabling it causes table bloat, ever-slower sequential scans, stale stats with bad plans, and eventually a forced anti-wraparound vacuum that locks tables. Keep it on and tune scale-factor thresholds per write-heavy table.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "autovacuum",
+   "mvcc",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving postgresql concerns around update, postgresql, fillfactor, help, postgres, hot updates, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: A HOT (heap-only tuple) update stores the new row version on the same page when no indexed column changes, avoiding new index entries and making cleanup cheap. It needs free page space, so setting fillfactor to 70-85 on update-heavy tables reserves room. Without it every update writes full index entries and bloat grows fast.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "hot-updates",
+   "fillfactor",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving postgresql concerns around workload, favors, jsonb, indexing, plain, json, storage, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Use JSONB almost always: it stores a decomposed binary form supporting GIN indexes, containment operators (@>, ?), and partial updates. Plain JSON only preserves exact input whitespace and is slower to query. Choose JSONB with a GIN index on the queried paths, and add generated columns for frequently filtered fields needing btree stats.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "jsonb",
+   "gin",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Hard",
+  "question": "During a reliability review involving postgresql concerns around gist, indexes, differ, postgresql, postgres, gin, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: GIN is an inverted index ideal for composite values: arrays, JSONB, full-text vectors; fast search, slower writes, larger size. GiST is a balanced tree for overlapping ranges, geometry, nearest-neighbour (KNN) with lossy compression; faster writes, supports ordering. Rule: containment/tag search uses GIN, range/geo/KNN uses GiST.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "gin",
+   "gist",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving postgresql concerns around toast, postgresql, care, postgres, storage, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: TOAST transparently compresses and out-of-lines wide column values (over ~2KB) into a side table. It keeps narrow queries fast but makes SELECT * on wide rows expensive and bloats updates touching toasted columns. Design: split hot narrow columns from cold wide text/JSONB, and avoid updating toasted columns in hot paths.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "toast",
+   "storage",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Hard",
+  "question": "During a high-latency user journey involving postgresql concerns around analyze, buffers, find, slow, query, cause, postgres, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Run EXPLAIN (ANALYZE, BUFFERS, TIMING OFF) and read inside-out: look for high actual rows vs estimates (stale stats), Seq Scan with filter removing 99% (missing index), nested loops over large inputs, temp files (work_mem spill), and Buffers shared hit vs read (cache misses). Fix order: correct stats/index, rewrite SARGable predicates, then tune work_mem per query.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "explain",
+   "query-tuning",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving postgresql concerns around causes, unexpected, sequential, scans, postgresql, postgres, seq scan, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Small tables (correct), stale statistics, non-SARGable predicates (functions on columns, LIKE '%x'), wrong data types forcing casts, low selectivity estimates, or disabled index knobs. Check pg_stat_user_tables seq_scan vs idx_scan, verify column types match, and use generated columns or expression indexes for function predicates instead of wrapping columns.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "seq-scan",
+   "indexing",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving postgresql concerns around index, only, scan, visibility, matter, postgres, index only scan, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: An index-only scan answers the query from the index without heap fetches, but only for pages marked all-visible in the visibility map. Without recent vacuuming it silently degrades to heap fetches. Maintain autovacuum so the map stays current, and INCLUDE extra columns to make covering indexes for hot queries.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "index-only-scan",
+   "visibility-map",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving postgresql concerns around brin, right, index, postgresql, postgres, time series, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: BRIN suits huge naturally ordered tables like append-only time series: it stores min/max per block range, tiny size, cheap writes. It fails on unordered data or selective point lookups needing btree. Use BRIN on event timestamps with clustered inserts, btree/GIN where random access dominates.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "brin",
+   "time-series",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Hard",
+  "question": "During a capacity-planning exercise involving postgresql concerns around declarative, partitioning, help, 500m, table, postgres, scale, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Range/list partitioning by date or tenant prunes irrelevant partitions at plan time, makes bulk drops instant (DETACH), and localizes vacuum/index builds. Key rules: partition key in every unique constraint, matching indexes per partition, and constraint exclusion on. Hash partition only for uniform write spread, not time expiry.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "partitioning",
+   "scale",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving postgresql concerns around stat, statements, tell, week, postgres, pg stat statements, monitoring, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Top queries by total/mean time, calls, rows, and shared buffers plus temp usage. Sort by total_time to find the real load drivers, then by mean_time for latency outliers. Reset weekly, track the top 20, and tie each to an index or rewrite action. It needs shared_preload_libraries and modest track settings.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "pg-stat-statements",
+   "monitoring",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Hard",
+  "question": "During a large-data workload involving postgresql concerns around find, blocking, locks, postgresql, postgres, locking, pg locks, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Query pg_stat_activity joined to pg_locks: wait_event_type = Lock, find blocked pid and blocking pid via ungranted vs granted locks on same relation. Log lock_timeout breaches, set statement_timeout on app roles, keep transactions short, and take DDL with lock_timeout plus retry. Never kill -9 the postmaster; cancel the blocker pid.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "locking",
+   "pg-locks",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving postgresql concerns around advisory, locks, good, postgres, advisory locks, coordination, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Application-level mutexes without tables: pg_try_advisory_lock for leader election, cron singleton, or ordered migration runners. They die with the session, never bloat, and show in pg_locks. Scope keys per job, always use try-variants with timeouts, and release in finally blocks.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "advisory-locks",
+   "coordination",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Pooling",
+  "difficulty": "Hard",
+  "question": "During a security review involving pooling concerns around prepared, statements, break, transaction, pooling, pgbouncer, prepared statements, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Named prepared statements bind to a backend session, but transaction pooling reassigns backends per transaction, so the next checkout misses the plan or errors. Fix with unnamed protocol-level prepares per transaction, driver settings disabling server prepares under PgBouncer, or session pooling for that workload only.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "pgbouncer",
+   "prepared-statements",
+   "pooling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Redis",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving redis concerns around persistence, differ, redis, rdb, aof, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: RDB takes point-in-time snapshots: compact, fast restarts, risk of minutes of loss. AOF logs every write: safer (fsync everysec default), bigger files, slower replays. Production uses both: AOF for durability plus periodic RDB for fast recovery. Never put persistence on the same disk as swap without monitoring fork latency.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "redis",
+   "rdb",
+   "aof",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Redis",
+  "difficulty": "Hard",
+  "question": "During a global rollout involving redis concerns around redis, cluster, distribute, keys, clustering, hash slots, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: 16384 hash slots mapped by CRC16(key hash tag). Each primary owns slot ranges with replicas for failover. Multi-key ops must share a hash tag ({user:123}) to land on one slot or they fail with CROSSSLOT. Scale by adding primaries and resharding slots live; clients must follow MOVED/ASK redirects.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "redis",
+   "clustering",
+   "hash-slots",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Redis",
+  "difficulty": "Hard",
+  "question": "During a concurrency bug involving redis concerns around redlock, controversial, single, redis, lock, enough, distributed lock, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Redlock across independent masters defends against a single node failing, but clock drift, GC pauses, and failover can still grant two holders; fencing tokens are required for correctness. A single-instance SET NX PX lock with owner token plus Lua release is fine for best-effort cron dedupe, not for money movements which need consensus like Raft.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "redis",
+   "redlock",
+   "distributed-lock",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Redis",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving redis concerns around scripts, make, redis, operations, atomic, lua, atomicity, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Scripts run atomically on the server: check-and-set, token-validated release, rate-limit buckets happen without race windows. Keep them short (under ~5ms), pass keys via KEYS and args via ARGV for cluster tags, and avoid cross-slot keys. Prefer functions (FUNCTION LOAD) over EVALSHA for versioning.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "redis",
+   "lua",
+   "atomicity",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Cassandra",
+  "difficulty": "Medium",
+  "question": "During a design review involving cassandra concerns around pick, partition, cassandra, partitioning, data model, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Choose a key spreading writes evenly with bounded partition size (under ~100MB, ideally few MB): tenant+day bucket rather than raw user_id for hot users. All queries must include it; cross-partition scans fail at scale. Model one table per query pattern (denormalize) instead of joins.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "cassandra",
+   "partitioning",
+   "data-model",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Cassandra",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving cassandra concerns around compaction, strategy, matter, cassandra, storage, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Compaction merges SSTables and evicts tombstones. STCS suits write-heavy, LCS suits read-heavy with bounded sstables, TWCS suits TTL time series. Wrong choice means read amplification or disk blowup. Monitor pending compactions and tombstone warnings, and never run major manual compactions in peak.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "cassandra",
+   "compaction",
+   "storage",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Cassandra",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving cassandra concerns around hinted, handoff, cassandra, availability, repair, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: When a replica is briefly down, coordinators store hints and replay them on recovery, preserving availability without immediate repair. It covers minutes to hours, not days; longer outages need nodetool repair to sync digests. Size hint windows small to avoid coordinator memory pressure.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "cassandra",
+   "availability",
+   "repair",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Search",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving search concerns around shards, replicas, elasticsearch, sharding, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: An index splits into primary shards for parallelism; each has replica copies for HA and read scale. Search fans out to one copy per shard then merges. Too many small shards waste heap; too few limit throughput. Size shards 10-50GB, keep replicas >=1 in prod, and use ILM to roll hot to warm to delete.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "elasticsearch",
+   "sharding",
+   "replicas",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Search",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving search concerns around elasticsearch, refresh, interval, matter, tuning, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: It controls how often the in-memory buffer becomes searchable (default 1s). Lower gives fresher search but more segments and CPU; bulk loads set it to 30s or -1 then restore. Durability still comes from translog, not refresh. Tune per index: 1s for user-facing search, 30s+ for logs ingest.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "elasticsearch",
+   "refresh",
+   "tuning",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Graph",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving graph concerns around makes, good, cypher, query, fast, neo4j, indexing, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Anchor on indexed labels/properties first, then expand with bounded hop limits and direction. Profile for Eager operators signalling cartesian products, split big writes into batches with periodic commit, and parameterize everything. Add composite indexes matching the MATCH predicates.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "neo4j",
+   "cypher",
+   "indexing",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Cloud",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving cloud concerns around dynamodb, partitions, happen, hot partitions, throughput, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: One partition key value exceeds ~1000 WCU/3000 RCU or 10GB, throttling despite low average use. Fix with write sharding (suffix buckets like order#1..N), higher-cardinality keys, SQS buffering for bursts, and on-demand only for spiky unknowns. Monitor throttled requests by key via contributor insights.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "dynamodb",
+   "hot-partitions",
+   "throughput",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Cloud",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving cloud concerns around cosmos, request, unit, cosmosdb, throughput, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: A normalized cost of throughput combining CPU, memory, and IO per operation. Point reads cost ~1 RU, writes ~5 RU, queries scale with scanned documents. Provision autoscale with a cap, partition by high-cardinality key, and rewrite cross-partition queries to single-partition filters to cut RU burn.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "cosmosdb",
+   "ru",
+   "throughput",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving operations concerns around snapshot, pitr, restore, right, backup, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Snapshots restore whole volumes fast for AZ loss or bad deployments. PITR replays WAL/binlog to a second before human error or bad migration, but is slower and needs continuous archiving. Keep daily snapshots plus WAL archiving, and practice table-level restore so you never restore 2TB for one dropped table.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "backup",
+   "pitr",
+   "restore",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving postgresql concerns around trgm, power, fuzzy, search, postgresql, postgres, pg trgm, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: pg_trgm splits text into trigrams and indexes them with GIN/GiST for LIKE '%term%', similarity (%), and word_similarity ranking. It tolerates typos without an external engine up to millions of rows. Set similarity_threshold ~0.3, combine with FTS ranking, and move to dedicated search past 10M docs or complex facets.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "pg-trgm",
+   "fuzzy-search",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied PostgreSQL",
+  "difficulty": "Medium",
+  "question": "During a security review involving postgresql concerns around fillfactor, trade, read, mostly, tables, postgres, storage, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Keep fillfactor at 100 for read-mostly tables to pack pages densely and cut IO. Lower it only for update-heavy tables needing HOT room. Changing it requires rewrite (VACUUM FULL or CLUSTER) to take effect, so set it at creation based on write pattern.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "postgres",
+   "fillfactor",
+   "storage",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving operations concerns around safely, backfill, live, table, migrations, safety, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Batch by primary key in small transactions (1000-5000 rows) with sleeps and idempotent WHERE clauses, throttled by replica lag. Make it resumable via last-processed key checkpoint, run during low traffic, and monitor locks plus bloat. Avoid one giant UPDATE that holds locks and explodes WAL.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "backfill",
+   "migrations",
+   "safety",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving operations concerns around belongs, database, runbook, call, oncall, operations, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Symptoms to dashboards (lag, pool waits, bloat), safe read-only checks, thresholds for failover vs wait, exact promotion and fencing steps, PITR commands with tested timings, and rollback contacts. Include copy-paste queries for locks, long transactions, and top queries. Review quarterly with a game-day restore.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "runbook",
+   "oncall",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a production incident involving performance concerns around size, connection, pool, correctly, pooling, sizing, performance, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Pool to backend limits, not app threads: start near (2 x CPU cores) + disks for OLTP, measure wait events and queue depth, then grow slowly. Too large causes context switching and lock contention; too small queues requests. Separate pools for OLTP, reporting, and migrations with statement timeouts per role.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "pooling",
+   "sizing",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Design",
+  "difficulty": "Hard",
+  "question": "During a backward-compatibility review involving design concerns around keep, reporting, queries, oltp, primary, olap, replicas, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Route analytics to read replicas or a warehouse via CDC, with separate pools and statement timeouts. Materialize daily aggregates, precompute rollups with incremental refresh, and cache dashboards. If replicas lag, serve stale-with-timestamp rather than hitting the primary and risking lock queues.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "oltp",
+   "olap",
+   "replicas",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving concepts concerns around logical, physical, deletion, consider, databases, soft delete, design, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Physical removes the row; logical marks it deleted. Logical preserves history and referential integrity but complicates every query, unique constraint and index, and it conflicts with data deletion obligations. Consider an archive table instead, which gives history without polluting the operational schema.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "soft-delete",
+   "design",
+   "compliance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving concepts concerns around call, external, service, inside, database, transaction, databases, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: The transaction holds locks and a connection for the duration of a call whose latency you do not control, and the external effect cannot be rolled back if the transaction fails. Commit first and then act, using an outbox if the two must be reliably linked.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "transactions",
+   "integration",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving concepts concerns around clustered, index, scan, table, databases, indexing, execution plans, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: In an engine where the clustered index is the table, they are the same operation named differently depending on whether the table has a clustered index. Either way it means reading everything, so the distinction matters less than the fact that no seek was possible.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "indexing",
+   "execution-plans",
+   "terminology",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving concepts concerns around query, sometimes, slower, after, adding, rows, even, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: The optimiser may switch plans once the estimated row count crosses a threshold - a seek with lookups becomes more expensive than a scan - or the index no longer fits in memory. Both are expected behaviour, and both are diagnosed by comparing the plan before and after.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "optimizer",
+   "performance",
+   "diagnostics",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving operations concerns around validate, database, restore, actually, worked, databases, backup, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Restore to an isolated environment, check row counts and checksums against expectations, run application smoke tests against it, and record the elapsed time against your recovery objective. A restore that completes without error can still produce a database missing recent data or with broken permissions.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "backup",
+   "recovery",
+   "verification",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a production incident involving concepts concerns around covering, query, differ, index, databases, indexing, performance, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: A covering index contains all columns a query needs; a covering query is one that can be answered from an index alone. The distinction is that the same index covers some queries and not others, so index design must target specific query shapes rather than columns in isolation.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "indexing",
+   "performance",
+   "terminology",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving concepts concerns around logical, physical, data, model, databases, modelling, design, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: The logical model describes entities, attributes and relationships independent of technology; the physical model adds tables, types, indexes and storage decisions for a specific engine. Skipping the logical model is why physical schemas often encode the first implementation's assumptions rather than the domain.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "modelling",
+   "design",
+   "fundamentals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving operations concerns around risk, running, schema, changes, data, same, migration, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: They have different durations, locking behaviour and rollback characteristics, so a failure partway leaves an inconsistent state that is hard to reason about. Separating them - schema change deployed, then data backfilled in batches - makes each independently verifiable and reversible.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "migrations",
+   "risk",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving concepts concerns around important, transaction, span, user, interaction, databases, transactions, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Because the locks are held for as long as the user takes to respond, which may be minutes or forever if they close the browser. Read the data, let the user act, then apply the change in a short transaction with optimistic concurrency to detect intervening edits.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "transactions",
+   "locking",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving concepts concerns around deleting, rows, always, reclaim, disk, space, databases, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Most engines mark space as reusable within the file rather than returning it to the operating system, so the file stays the same size and is reused by subsequent inserts. Reclaiming it requires a shrink or rebuild, which is IO-intensive and often unnecessary since the space will be reused anyway.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "storage",
+   "maintenance",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied MongoDB",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving mongodb concerns around mongodb, collection, grew, 50gb, queries, slowed, dramatically, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: **Sharding is a large commitment and rarely the first answer**\n\nIt adds operational complexity permanently: a config server replica set, routers, a shard key that cannot easily be changed, and queries that do not include the shard key become scatter-gather across every shard. Before accepting it, I would check whether the problem is something cheaper.\n\n**What I would check**\n\n**1. Are the queries using indexes?** `explain()` shows the winning plan. A `COLLSCAN` on 50GB is the whole explanation, and an index is a much smaller change than sharding.\n\n**2. Does the working set fit in RAM?** Mongo's performance depends heavily on the frequently-accessed data and indexes fitting in the WiredTiger cache. If the working set exceeds RAM, every query hits disk and performance falls off a cliff. Adding memory is often the entire fix, and it is far cheaper than sharding.\n\n**3. Is the schema right for the access pattern?** Unbounded array growth inside a document is a classic Mongo problem — documents grow, get moved, and queries against the array slow down. If the collection is 50GB because documents contain arrays of thousands of subdocuments, the fix is a schema change.\n\n**4. Is all the data hot?** Fifty gigabytes of which two are queried means archiving or a TTL index solves it. Old data in a separate collection or cold storage restores performance without architectural change.\n\n**5. Are the indexes themselves too large?** Indexes compete for the same cache. Unused indexes are pure cost, and `$indexStats` identifies them.\n\n**If sharding is genuinely needed**\n\nThe shard key decision dominates everything and is difficult to change later. It needs high cardinality, even distribution, and — critically — it should appear in the common queries, or every query fans out to all shards and you have added latency rather than removed it. A monotonically increasing key such as a timestamp creates a hot shard, because all new writes go to one place.\n\n**The order I would argue for**\n\nIndex, then memory, then schema and archival, then sharding. Fifty gigabytes is not large for a well-indexed replica set with adequate RAM — reaching for horizontal scale at that size usually means something more basic is wrong.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "indexing",
+   "working-set",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Design",
+  "difficulty": "Hard",
+  "question": "During a large-data workload involving design concerns around multi, tenant, saas, being, designed, team, asks, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: **The decision is driven by requirements, not preference**\n\n**Questions I would ask first**\n\n**How many tenants, and how do they grow?** Ten enterprise customers and ten thousand self-service accounts are different problems. Database-per-tenant does not scale to thousands — connection pools, migrations and backups all multiply.\n\n**What is the isolation requirement?** If a contract or regulation demands physical separation, that decides it. If not, do not pay for it.\n\n**How variable are tenant sizes?** One tenant with 80% of the data is a strong argument for isolating that one, possibly in a hybrid.\n\n**What is the operational capability?** Running a thousand databases means automating migrations, monitoring and backups across all of them. Without that automation it becomes unmanageable quickly.\n\n**The three options**\n\n**Shared database, tenant column.** Cheapest to operate, easiest to migrate, best resource utilisation, and the natural choice for many small tenants. The risks are that a missing `WHERE TenantId` leaks data across tenants — a single bug is a breach — and noisy-neighbour effects. Mitigations: global query filters, row-level security enforced by the database rather than the application, and the tenant id as the leading column of the clustered index.\n\n**Schema per tenant.** Middle ground: some logical separation, one database to operate. In practice it combines the disadvantages — migrations multiply like database-per-tenant, while isolation is weaker. I rarely find it the best answer.\n\n**Database per tenant.** Strongest isolation, per-tenant backup and restore, easy to move a tenant to dedicated hardware, and noisy neighbours cannot occur. Costs: migrations across n databases, connection pool pressure, higher per-tenant cost, and cross-tenant reporting becomes genuinely hard.\n\n**What I would usually propose**\n\nStart with a shared database and a tenant column, enforced by row-level security rather than by developer discipline, and design so a tenant *can* be moved out. Then isolate specific tenants when a contract, a size or a performance profile justifies it. That hybrid covers the common case cheaply and keeps the expensive option available where it is earned.\n\n**The thing to get right from day one**\n\nEvery table has the tenant id, every query is scoped by it at a level below the application code, and the test suite proves tenant A cannot read tenant B. Retrofitting tenancy into a schema that did not have it is one of the most painful migrations there is.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "multi-tenancy",
+   "isolation",
+   "trade-offs",
+   "system-design",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Consistency",
+  "difficulty": "Hard",
+  "question": "During a gradual rollout involving consistency concerns around read, committed, versus, repeatable, serialisable, concrete, anomaly, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Isolation levels are defined by which anomalies they permit, so the clearest way to explain them is by the anomaly each one still allows.\n\n**Read uncommitted** permits **dirty reads** - you see another transaction s uncommitted change, which may then roll back, so you acted on data that never existed. Rarely justified.\n\n**Read committed** prevents dirty reads: you only see committed data. It still permits a **non-repeatable read** - you read a row, another transaction updates and commits, you read the same row again in the same transaction and get a different value. This is the default in SQL Server and PostgreSQL.\n\n**Repeatable read** holds your view of rows you have read stable for the transaction. It still permits a **phantom read** - you query \"all orders over 100\", someone inserts a new qualifying row and commits, and re-running the query returns an extra row. Existing rows are stable; the *set* is not.\n\n**Serialisable** prevents phantoms too: the result is as if transactions ran one after another. The cost is either range locks or, in PostgreSQL s SSI implementation, transactions being aborted with a serialisation failure that the application must retry.\n\n**The practical framing I would give:** higher isolation trades concurrency and throughput for correctness guarantees. Most systems run read committed and handle the specific anomalies that matter with explicit concurrency control - an optimistic concurrency token, or `SELECT ... FOR UPDATE` on the rows that need it - rather than raising the global level.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "isolation-levels",
+   "transactions",
+   "mvcc",
+   "concurrency",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Scaling",
+  "difficulty": "Hard",
+  "question": "During a legacy-system integration involving scaling concerns around point, shard, database, breaks, databases, sharding, scaling, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Much later than people think. Sharding is the last resort because it breaks things that are free in a single database, and most \"we need to shard\" situations are solved by cheaper means.\n\n**What I would exhaust first:** indexing and query tuning, a read replica for read-heavy load, caching, archiving cold data out of hot tables, vertical scaling (which goes a very long way on modern hardware), and partitioning within one database - which gives you manageability benefits without the distributed problems.\n\n**The genuine triggers:** the write volume exceeds what one primary can take, the working set no longer fits in memory on the largest instance available, or regulatory data residency forces geographic separation.\n\n**What breaks:**\n- **Cross-shard joins and aggregates.** A query spanning shards must be scattered and gathered in application code, and it is as slow as the slowest shard.\n- **Transactions across shards.** You lose ACID across the boundary; you get sagas and eventual consistency instead.\n- **Unique constraints across shards** - a globally unique email cannot be enforced by the database. You need a separate lookup service or a naturally partitioned key.\n- **Auto-increment ids.** You move to UUIDv7, Snowflake ids, or per-shard ranges.\n- **Rebalancing.** Adding a shard means moving data. Hash sharding with a fixed number of logical shards mapped onto physical nodes makes this far less painful than hashing on node count directly.\n- **Operations** - migrations, backups and restores now run N times, and a partial failure leaves shards at different schema versions.\n\n**The decision that matters most is the shard key.** It should distribute evenly and keep data that is queried together on the same shard - usually tenant id in a B2B system, which is the case where sharding works best because the boundary already exists in the domain.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "sharding",
+   "scaling",
+   "partitioning",
+   "distributed",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Replication",
+  "difficulty": "Hard",
+  "question": "During a security review involving replication concerns around read, replica, users, start, reporting, changes, disappear, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Replication lag plus reads going to the replica - the user writes to the primary, is redirected, the read goes to a replica that has not yet applied the change, and they see the old value. Refreshing might fix it or might not, depending on which replica they land on, which is why it reads as \"sometimes it works\".\n\nThis is the **read-your-own-writes** problem, and it is the predictable consequence of adding replicas without deciding routing policy.\n\n**The fixes, in the order I would consider them:**\n\n1. **Return the result from the write.** If the command response contains the updated resource, the UI does not need to read at all. This removes the problem for the common case and is usually the smallest change.\n2. **Session consistency.** After a user writes, route *their* reads to the primary for a short window - a cookie or a token carrying a timestamp or an LSN. Everyone else keeps using replicas, so you retain most of the scaling benefit.\n3. **Wait for the replica to catch up.** Some databases let you read with a minimum applied position, so the read blocks briefly rather than returning stale data. Correct, but it converts a consistency problem into a latency one.\n4. **Route by operation type deliberately** - reporting and analytics to replicas, anything a user just changed to the primary. The mistake is routing all reads to replicas because they are there.\n\n**What I would not do:** send everything back to the primary, which discards the reason for adding replicas.\n\n**And I would monitor lag explicitly**, with an alert, because lag grows under exactly the load where you are relying on replicas most - a large batch job on the primary can push it from milliseconds to minutes.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "replication",
+   "read-replicas",
+   "consistency",
+   "scaling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied NoSQL",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving nosql concerns around types, nosql, databases, document, key value, graph, column, how would you validate correctness before attempting to optimize the implementation while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Document (MongoDB, Cosmos DB)—JSON documents. Key-value (Redis, DynamoDB)—simple fast lookups. Column-family (Cassandra, HBase)—wide columns for big data/time-series. Graph (Neo4j, Cosmos Gremlin)—nodes/edges for relationships. Each optimizes different access patterns. Choose by data shape and query needs; NoSQL trades some relational features for scalability and flexibility.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "nosql",
+   "document",
+   "key-value",
+   "graph",
+   "column",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving caching concerns around common, caching, strategies, cache aside, write through, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Cache-aside (lazy): app loads from DB on miss and populates cache. Read-through: cache loads from DB automatically on miss. Write-through: writes go to cache and DB synchronously (consistent, slower writes). Write-behind (write-back): write to cache, async to DB (fast, risk of loss). Refresh-ahead: proactively refresh hot keys before expiry. Choose based on read/write ratio and consistency needs.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "caching",
+   "cache-aside",
+   "write-through",
+   "strategies",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Hard",
+  "question": "During a data-quality incident involving caching concerns around keep, cache, consistent, database, caching, consistency, invalidation, how would you reduce risk while preserving the required behavior while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Prefer cache-aside with invalidation: on write, update the DB then delete/invalidate the cache key (don't just update it—races cause staleness). Use short TTLs as a safety net, versioned keys, and event-driven invalidation for cross-service caches. Accept that caches are eventually consistent; for strict needs, minimize caching of that data or use write-through with careful ordering. Beware dual-write inconsistencies.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "caching",
+   "consistency",
+   "invalidation",
+   "ttl",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a design review involving caching concerns around distributed, cache, memory, caching, in memory, redis, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: An in-memory (local) cache (IMemoryCache) lives inside one app instance—fastest but not shared, so instances have inconsistent data and it's lost on restart. A distributed cache (Redis) is shared across instances over the network—consistent across a scaled-out app, survives instance restarts, but has network latency. Use local caching for per-instance hot data and distributed for shared state behind a load balancer.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "caching",
+   "distributed",
+   "in-memory",
+   "redis",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving performance concerns around connection, pooling, important, database, connection pooling, performance, how would you test the relevant edge cases and failure paths while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Connection pooling reuses a set of open database connections instead of opening/closing one per request—opening connections is expensive (handshake, auth). The pool hands out idle connections and returns them after use, dramatically improving throughput and latency under load. ADO.NET/EF Core pool automatically; ensure connections are disposed promptly (using/DbContext scope) and the pool size fits concurrency.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "database",
+   "connection-pooling",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving design concerns around horizontal, vertical, database, scaling, sharding, replicas, how would you diagnose the issue without masking it with retries or extra capacity while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Vertical scaling adds more power (CPU/RAM/storage) to a single DB server—simple but has a ceiling and single point of failure. Horizontal scaling distributes data/load across multiple servers via read replicas (scale reads), sharding/partitioning (scale writes/storage), or clustering—more scalable and resilient but complex (consistency, routing). SQL scales vertically more easily; NoSQL is designed to scale horizontally.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "database",
+   "scaling",
+   "sharding",
+   "replicas",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Replication",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving replication concerns around synchronous, asynchronous, replication, database, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Synchronous replication confirms a write only after replicas acknowledge it—guaranteeing no data loss on failover but adding write latency and reduced availability if a replica is slow/down. Asynchronous replication acknowledges after the primary writes, replicating in the background—lower latency and higher availability but risk of losing recent writes on failover (replica lag). Choose per RPO/latency requirements.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "database",
+   "replication",
+   "synchronous",
+   "asynchronous",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Performance",
+  "difficulty": "Hard",
+  "question": "During a reliability review involving performance concerns around read, write, splitting, database, read write splitting, replicas, scaling, how would you decide what to measure at the component and user-facing boundaries while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Read/write splitting routes writes to the primary and reads to one or more read replicas, offloading read-heavy traffic to scale reads and protect the primary. It works when the app tolerates slight replica lag (eventual consistency on reads). Route consistency-critical reads (read-your-writes) to the primary. It's a common scaling technique for read-dominant workloads.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "database",
+   "read-write-splitting",
+   "replicas",
+   "scaling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving caching concerns around cache, eviction, policies, exist, databases, cache eviction, lru, how would you design a safe experiment that tests the most important assumption while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Eviction removes entries when the cache is full. Policies: LRU (evict least recently used—good general default), LFU (least frequently used), FIFO (oldest first), MRU, and TTL-based (expire by age). LRU suits temporal locality (recently-used likely reused); LFU suits stable hot sets. Choose based on access patterns and whether the cache holds pure cache data (evict freely) or must-keep data (bound by TTL). Redis supports several policies.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "cache-eviction",
+   "lru",
+   "lfu",
+   "ttl",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Databases",
+  "subcategory": "Applied Caching",
+  "difficulty": "Hard",
+  "question": "During a high-latency user journey involving caching concerns around cache, stampede, prevent, databases, cache stampede, thundering herd, locking, how would you explain the decision to reviewers who did not build the original system while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: A cache stampede (thundering herd) happens when a popular key expires and many concurrent requests miss and hammer the database to rebuild it. Prevent with: a lock/mutex so only one request rebuilds while others wait or serve stale, probabilistic early recomputation (refresh before expiry), request coalescing (single-flight), and staggered/jittered TTLs. Serving slightly stale data during rebuild smooths the spike.\n\nFor the applied scenario, Evaluate workload shape, data distribution, isolation, durability, indexing, backup recovery, and behavior during failover or contention. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "databases",
+   "cache-stampede",
+   "thundering-herd",
+   "locking",
+   "scenario-practice",
+   "applied"
   ]
  }
 ]

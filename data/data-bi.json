@@ -2056,19 +2056,11 @@
    {
     "q": "Why is delete-then-insert usually preferred over MERGE?",
     "a": "Because it is simpler to reason about and does not depend on having a reliable unique key, which warehouse source data frequently lacks. MERGE also has performance and locking characteristics that surprise people at volume, and its behaviour with duplicate keys in the source is to fail or to produce non-deterministic results. Delete-then-insert has one obvious semantic: after this runs, the partition contains exactly what the source says. MERGE earns its place when you need to preserve rows not present in the incoming batch."
-   },
-   {
-    "q": "What should happen when yesterday's source file arrives late, after the job ran?",
-    "a": "The job should be re-runnable for that date and produce the correct result, which is exactly what idempotency gives you - so the answer is to run it again for the affected partition rather than to write special handling. What you need alongside is a way to know it happened: a control table recording which dates loaded successfully and when, so a late arrival can be detected and reprocessed rather than silently missing. Late and out-of-order arrival is normal in data pipelines, not an exception."
-   },
-   {
-    "q": "How do you clean up the duplicates already in the warehouse?",
-    "a": "Identify them by the business key with a window function ranking rows within each key, then delete everything but one - keeping the most recently loaded, usually. Do it in batches for a large table so the transaction log does not explode, and take a backup first, since a de-duplication with a slightly wrong key definition deletes real data. The important part is to fix the job before cleaning, or the cleanup is undone by the next run."
    }
   ]
  },
  {
-  "category": "Data & BI",
+  "category": "Data/BI",
   "subcategory": "Modelling",
   "difficulty": "Medium",
   "question": "Explain the difference between a star schema and a snowflake schema, and which you would build.",
@@ -2084,15 +2076,11 @@
    {
     "q": "What is a slowly changing dimension and why does the type matter?",
     "a": "It is a dimension attribute that changes over time - a customer moves region, a product changes category. Type 1 overwrites, so history is lost and last year s report changes when you rerun it. Type 2 adds a new row with validity dates and a surrogate key, preserving history so facts stay attached to the attribute values that were true at the time. The choice is a business decision: if anyone will ever ask \"what did this look like last year\", you need Type 2, and retrofitting it later is painful."
-   },
-   {
-    "q": "What goes wrong if the fact grain is wrong?",
-    "a": "Aggregations double-count. The classic case is joining a fact at order-line grain to a dimension that implies order grain, so the order total is counted once per line and revenue is inflated. It is insidious because the numbers look reasonable - just wrong - and nobody notices until a reconciliation. Writing the grain down in one sentence before building anything, and testing totals against a known source, is the defence."
    }
   ]
  },
  {
-  "category": "Data & BI",
+  "category": "Data/BI",
   "subcategory": "Pipelines",
   "difficulty": "Medium",
   "question": "A nightly ETL job silently produced wrong numbers for a week. What controls would have caught it?",
@@ -2108,15 +2096,11 @@
    {
     "q": "What is the difference between this and just writing tests for the pipeline?",
     "a": "Tests verify the transformation logic against known inputs, and they would not have caught this - the code was correct, the data was not. Data quality checks assert properties of the actual data flowing through in production, every run. You need both, and teams typically have the first and not the second. Frameworks like dbt tests, Great Expectations or Soda exist specifically for the second category."
-   },
-   {
-    "q": "How do you decide the tolerance for a volume check?",
-    "a": "From history rather than from a guess. Look at the distribution of daily volumes over several months and set bounds that would not have fired on normal variation, including known seasonality - a Monday load is not comparable to a Sunday one. Start deliberately loose so the check is trusted, and tighten it as you learn. A check that cries wolf gets disabled, which leaves you worse off than having no check at all."
    }
   ]
  },
  {
-  "category": "Data & BI",
+  "category": "Data/BI",
   "subcategory": "Performance",
   "difficulty": "Medium",
   "question": "A Power BI report is slow. Where do you look?",
@@ -2127,20 +2111,10 @@
    "dax",
    "star-schema",
    "performance"
-  ],
-  "followups": [
-   {
-    "q": "Why are bi-directional relationships discouraged?",
-    "a": "They make filter propagation ambiguous when there is more than one path between tables, which can produce wrong numbers rather than merely slow ones - and the engine also has to evaluate more relationship paths, which costs performance. The usual legitimate need is a many-to-many scenario or a filter on a bridge table, and `CROSSFILTER` inside a specific measure is the targeted alternative, so the behaviour applies only where intended rather than model-wide."
-   },
-   {
-    "q": "When is DirectQuery the right choice despite the performance cost?",
-    "a": "When the data is too large to import, when near-real-time freshness is a genuine requirement rather than a preference, or when security must be enforced at the source. Composite models are usually the better answer now - import the aggregated tables people actually browse and leave the large detail fact table in DirectQuery, with aggregations configured so the engine answers from the imported summary whenever it can and only falls through for detail."
-   }
   ]
  },
  {
-  "category": "Data & BI",
+  "category": "Data/BI",
   "subcategory": "Incremental Loads",
   "difficulty": "Medium",
   "question": "How do you load only what changed from a source system, and what goes wrong?",
@@ -2154,17 +2128,13 @@
   ],
   "followups": [
    {
-    "q": "Why make the load idempotent rather than getting the watermark exactly right?",
-    "a": "Because exactness is not achievable in the presence of clock skew, long-running source transactions committing out of timestamp order, and failures part-way through a load. If reprocessing an overlapping window is harmless, you can deliberately overlap by a safety margin and stop worrying about the boundary. A `MERGE` on the business key gives you that, and it also means a failed load can simply be re-run rather than requiring someone to work out how far it got."
-   },
-   {
     "q": "How do you detect that incremental loading has silently drifted from the source?",
     "a": "Periodic reconciliation - compare row counts and checksums of key measures between source and target on a schedule, for a window you can afford to check. Drift accumulates quietly over months from exactly the failure modes above, and without a comparison nobody notices until a number is questioned. Pair it with a full reload capability that is routine and fast enough to actually use, so the fix is a re-run rather than a project."
    }
   ]
  },
  {
-  "category": "Data & BI",
+  "category": "Data/BI",
   "subcategory": "Quality",
   "difficulty": "Medium",
   "question": "How do you decide what a \"customer\" is when three systems disagree?",
@@ -2178,17 +2148,13 @@
   ],
   "followups": [
    {
-    "q": "Is a master data management tool the answer?",
-    "a": "It is a tool for implementing decisions, not for making them - and buying one before the definitions and ownership exist produces an expensive system that encodes the same confusion. For a small number of entities, the matching and survivorship logic is a manageable amount of code in your warehouse, and starting there forces the definitional work. A dedicated platform earns its place at scale, with many sources, complex survivorship rules and a stewardship workflow involving non-technical users."
-   },
-   {
     "q": "How do you handle a bad merge that has already propagated downstream?",
     "a": "This is why lineage and reversibility matter more than match accuracy. Keep the source records intact and treat the golden record as a derived view rather than overwriting the originals, so unmerging is recomputing rather than reconstructing from backups. Downstream systems should reference the master identifier, and you need a defined process for propagating a split - which is harder than a merge, because consumers may have accumulated their own data against the merged id."
    }
   ]
  },
  {
-  "category": "Data & BI",
+  "category": "Data/BI",
   "subcategory": "Governance",
   "difficulty": "Medium",
   "question": "What does data lineage mean in practice, and why would you invest in it?",
@@ -2199,20 +2165,10 @@
    "governance",
    "dbt",
    "impact-analysis"
-  ],
-  "followups": [
-   {
-    "q": "What is the difference between table-level and column-level lineage?",
-    "a": "Table-level tells you that report A depends on table B, which is enough for impact analysis on a table drop and is much easier to produce. Column-level tells you that a specific figure derives from a specific column through a specific expression, which is what you need to answer \"why is this number wrong\" and to assess whether a column change actually affects a given output. Column-level is substantially more work to capture and maintain, so the sensible progression is table-level everywhere first, column-level for the critical reporting paths."
-   },
-   {
-    "q": "How does lineage help with a GDPR erasure request?",
-    "a": "It tells you everywhere a person s data has propagated - which warehouse tables, which aggregates, which extracts sent to third parties, which backups. Without that map, an erasure request can only be honoured in the source system, leaving copies scattered through the analytics estate that you cannot even enumerate. Lineage turns an unanswerable question into a checklist, and it also informs the design: knowing how widely personal data spreads is usually an argument for pseudonymising it earlier in the pipeline."
-   }
   ]
  },
  {
-  "category": "Data & BI",
+  "category": "Data/BI",
   "subcategory": "Performance",
   "difficulty": "Medium",
   "question": "A warehouse query that used to take 2 minutes now takes 40. Where do you look?",
@@ -2228,11 +2184,1912 @@
    {
     "q": "What is data skew and how do you deal with it?",
     "a": "It is when a join or grouping key has a very uneven distribution, so one partition receives a large share of the rows - a `customer_id` where one customer accounts for a third of the data, or a null key that all collects together. The result is that most workers finish quickly and one runs for the remaining time, so adding compute does not help. The usual mitigations are salting the key to spread the hot value across partitions, broadcasting the smaller side of the join so no shuffle is needed, or filtering out the degenerate values such as nulls before the join."
-   },
-   {
-    "q": "Why do small files hurt so much in a lakehouse?",
-    "a": "Because every file carries fixed overhead - opening it, reading its metadata, planning around it - so a query reading ten thousand 1MB files does vastly more work than one reading a hundred 100MB files with the same total bytes. Streaming or frequent micro-batch writes produce exactly this, and it degrades steadily until someone notices. Scheduled compaction plus tuning the write batch size is the fix, and it is ordinary maintenance rather than an optimisation."
    }
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "What should happen when yesterday's source file arrives late, after the job ran?",
+  "answer": "The job should be re-runnable for that date and produce the correct result, which is exactly what idempotency gives you - so the answer is to run it again for the affected partition rather than to write special handling. What you need alongside is a way to know it happened: a control table recording which dates loaded successfully and when, so a late arrival can be detected and reprocessed rather than silently missing. Late and out-of-order arrival is normal in data pipelines, not an exception.",
+  "tags": [
+   "data-bi",
+   "etl",
+   "idempotency",
+   "data-quality",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "How do you clean up the duplicates already in the warehouse?",
+  "answer": "Identify them by the business key with a window function ranking rows within each key, then delete everything but one - keeping the most recently loaded, usually. Do it in batches for a large table so the transaction log does not explode, and take a backup first, since a de-duplication with a slightly wrong key definition deletes real data. The important part is to fix the job before cleaning, or the cleanup is undone by the next run.",
+  "tags": [
+   "data-bi",
+   "etl",
+   "idempotency",
+   "data-quality",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Modelling",
+  "difficulty": "Medium",
+  "question": "What goes wrong if the fact grain is wrong?",
+  "answer": "Aggregations double-count. The classic case is joining a fact at order-line grain to a dimension that implies order grain, so the order total is counted once per line and revenue is inflated. It is insidious because the numbers look reasonable - just wrong - and nobody notices until a reconciliation. Writing the grain down in one sentence before building anything, and testing totals against a known source, is the defence.",
+  "tags": [
+   "data-bi",
+   "dimensional-modelling",
+   "star-schema",
+   "warehouse",
+   "etl",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Pipelines",
+  "difficulty": "Medium",
+  "question": "How do you decide the tolerance for a volume check?",
+  "answer": "From history rather than from a guess. Look at the distribution of daily volumes over several months and set bounds that would not have fired on normal variation, including known seasonality - a Monday load is not comparable to a Sunday one. Start deliberately loose so the check is trusted, and tighten it as you learn. A check that cries wolf gets disabled, which leaves you worse off than having no check at all.",
+  "tags": [
+   "data-bi",
+   "etl",
+   "data-quality",
+   "pipelines",
+   "monitoring",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "Why are bi-directional relationships discouraged?",
+  "answer": "They make filter propagation ambiguous when there is more than one path between tables, which can produce wrong numbers rather than merely slow ones - and the engine also has to evaluate more relationship paths, which costs performance. The usual legitimate need is a many-to-many scenario or a filter on a bridge table, and `CROSSFILTER` inside a specific measure is the targeted alternative, so the behaviour applies only where intended rather than model-wide.",
+  "tags": [
+   "data-bi",
+   "power-bi",
+   "dax",
+   "star-schema",
+   "performance",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "When is DirectQuery the right choice despite the performance cost?",
+  "answer": "When the data is too large to import, when near-real-time freshness is a genuine requirement rather than a preference, or when security must be enforced at the source. Composite models are usually the better answer now - import the aggregated tables people actually browse and leave the large detail fact table in DirectQuery, with aggregations configured so the engine answers from the imported summary whenever it can and only falls through for detail.",
+  "tags": [
+   "data-bi",
+   "power-bi",
+   "dax",
+   "star-schema",
+   "performance",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Incremental Loads",
+  "difficulty": "Medium",
+  "question": "Why make the load idempotent rather than getting the watermark exactly right?",
+  "answer": "Because exactness is not achievable in the presence of clock skew, long-running source transactions committing out of timestamp order, and failures part-way through a load. If reprocessing an overlapping window is harmless, you can deliberately overlap by a safety margin and stop worrying about the boundary. A `MERGE` on the business key gives you that, and it also means a failed load can simply be re-run rather than requiring someone to work out how far it got.",
+  "tags": [
+   "data-bi",
+   "etl",
+   "incremental-load",
+   "cdc",
+   "watermark",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Quality",
+  "difficulty": "Medium",
+  "question": "Is a master data management tool the answer?",
+  "answer": "It is a tool for implementing decisions, not for making them - and buying one before the definitions and ownership exist produces an expensive system that encodes the same confusion. For a small number of entities, the matching and survivorship logic is a manageable amount of code in your warehouse, and starting there forces the definitional work. A dedicated platform earns its place at scale, with many sources, complex survivorship rules and a stewardship workflow involving non-technical users.",
+  "tags": [
+   "data-bi",
+   "master-data",
+   "data-quality",
+   "governance",
+   "matching",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Governance",
+  "difficulty": "Medium",
+  "question": "What is the difference between table-level and column-level lineage?",
+  "answer": "Table-level tells you that report A depends on table B, which is enough for impact analysis on a table drop and is much easier to produce. Column-level tells you that a specific figure derives from a specific column through a specific expression, which is what you need to answer \"why is this number wrong\" and to assess whether a column change actually affects a given output. Column-level is substantially more work to capture and maintain, so the sensible progression is table-level everywhere first, column-level for the critical reporting paths.",
+  "tags": [
+   "data-bi",
+   "lineage",
+   "governance",
+   "dbt",
+   "impact-analysis",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Governance",
+  "difficulty": "Medium",
+  "question": "How does lineage help with a GDPR erasure request?",
+  "answer": "It tells you everywhere a person s data has propagated - which warehouse tables, which aggregates, which extracts sent to third parties, which backups. Without that map, an erasure request can only be honoured in the source system, leaving copies scattered through the analytics estate that you cannot even enumerate. Lineage turns an unanswerable question into a checklist, and it also informs the design: knowing how widely personal data spreads is usually an argument for pseudonymising it earlier in the pipeline.",
+  "tags": [
+   "data-bi",
+   "lineage",
+   "governance",
+   "dbt",
+   "impact-analysis",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "Why do small files hurt so much in a lakehouse?",
+  "answer": "Because every file carries fixed overhead - opening it, reading its metadata, planning around it - so a query reading ten thousand 1MB files does vastly more work than one reading a hundred 100MB files with the same total bytes. Streaming or frequent micro-batch writes produce exactly this, and it degrades steadily until someone notices. Scheduled compaction plus tuning the write batch size is the fix, and it is ordinary maintenance rather than an optimisation.",
+  "tags": [
+   "data-bi",
+   "warehouse",
+   "performance",
+   "partition-pruning",
+   "skew",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied ETL",
+  "difficulty": "Medium",
+  "question": "During a production incident involving etl concerns around differ, etl, elt, data pipeline, warehouse, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: ETL (Extract, Transform, Load) pulls data from sources, transforms it (clean, join, aggregate) in a staging/processing engine, then loads it into the target (warehouse). ELT loads raw data first, then transforms inside the powerful target database/warehouse (Snowflake, Synapse). ELT suits cloud warehouses with elastic compute and large volumes; ETL suits when transformation must happen before landing or the target is less powerful.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "elt",
+   "data-pipeline",
+   "warehouse",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied ETL",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving etl concerns around incremental, loading, important, etl, incremental load, cdc, watermark, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Incremental loading processes only new/changed records since the last run (using a watermark like a timestamp or an ID, or Change Data Capture) instead of reloading everything (full load). It dramatically reduces run time, resource usage, and load on sources—essential for large, frequently-updated datasets. Requires reliable change tracking and idempotency to handle reruns/failures without duplicating data.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "incremental-load",
+   "cdc",
+   "watermark",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied SSIS",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving ssis concerns around ssis, main, components, etl, control flow, data flow, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: SQL Server Integration Services is Microsoft's ETL platform for building data integration/transformation workflows. Key parts: Control Flow (tasks and containers orchestrating the package—precedence constraints, loops), Data Flow (source → transformations → destination for row-level processing), Connection Managers, Variables/Parameters, and Event Handlers. Packages are developed in Visual Studio (SSDT) and deployed to the SSIS Catalog (SSISDB).\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "ssis",
+   "etl",
+   "control-flow",
+   "data-flow",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied SSIS",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving ssis concerns around control, flow, data, ssis, control flow, data flow, transformations, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Control Flow orchestrates the overall workflow—executing tasks (Execute SQL, File System, Data Flow Task, Script) in order using precedence constraints and containers (loops). Data Flow (inside a Data Flow Task) handles the actual movement/transformation of data row-by-row from sources through transformations (Lookup, Derived Column, Merge, Conditional Split) to destinations. Control flow = 'what runs when'; data flow = 'how data is transformed'.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "ssis",
+   "control-flow",
+   "data-flow",
+   "transformations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied SSIS",
+  "difficulty": "Hard",
+  "question": "During a data-quality incident involving ssis concerns around optimize, ssis, package, performance, optimization, fast load, buffers, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Reduce data early (source queries with WHERE, only needed columns), avoid blocking/semi-blocking transforms (Sort, Aggregate)—do sorting/aggregation in SQL instead; use fast-load OLE DB destination with appropriate batch/commit sizes; tune DefaultBufferMaxRows/Size for larger buffers; use Lookup with cache mode wisely; run data flows in parallel where possible; and disable unneeded logging. Push set-based work to the database and keep the SSIS pipeline streaming.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "ssis",
+   "optimization",
+   "performance",
+   "fast-load",
+   "buffers",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a design review involving power bi concerns around power, main, components, power bi, reporting, visualization, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Power BI is Microsoft's business-intelligence platform for data modeling, visualization, and reporting. Components: Power BI Desktop (author reports/models), Power BI Service (cloud publishing, dashboards, sharing, scheduled refresh), Power BI Mobile, Power Query (ETL/data prep), the data model (relationships, DAX), and Power BI Gateway (connect to on-prem sources). You transform data, build a model, write DAX measures, and create interactive visuals.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "bi",
+   "reporting",
+   "visualization",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving power bi concerns around import, directquery, live, connection, modes, power bi, live connection, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Import loads data into Power BI's in-memory VertiPaq engine—fastest queries, full DAX/Power Query, but data is a snapshot needing refresh and is size-limited. DirectQuery queries the source live per interaction—always current, handles huge/real-time data, but slower and limited transformations. Live Connection connects to an existing Analysis Services/Power BI dataset model. Choose Import for performance, DirectQuery for freshness/scale, and use composite models to mix them.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "import",
+   "directquery",
+   "live-connection",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving power bi concerns around measure, calculated, column, power bi, dax, calculated column, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: DAX (Data Analysis Expressions) is Power BI's formula language for calculations. A calculated column is computed row-by-row and stored in the model (uses memory, evaluated at refresh)—good for row-level attributes used in slicers/relationships. A measure is computed at query time based on filter context (aggregations like Total Sales)—dynamic, memory-efficient, and the right choice for most aggregations. Prefer measures over calculated columns for performance.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "dax",
+   "measure",
+   "calculated-column",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Hard",
+  "question": "During an on-call investigation involving power bi concerns around filter, context, power bi, dax, filter context, row context, calculate, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Row context is the 'current row' during iteration (calculated columns, iterators like SUMX)—it knows the row's values but doesn't automatically filter. Filter context is the set of filters applied (slicers, rows/columns of a visual, WHERE-like conditions) that constrains what a measure sees. CALCULATE modifies filter context. Understanding how contexts interact (and context transition via CALCULATE) is key to correct DAX.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "dax",
+   "filter-context",
+   "row-context",
+   "calculate",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving power bi concerns around calculate, function, power bi, dax, filter context, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: CALCULATE evaluates an expression in a modified filter context—it's the most important DAX function. It applies filter arguments (adding, removing, or overriding filters) and performs context transition (turning row context into filter context). Example: CALCULATE(SUM(Sales), Region=\"US\") sums sales filtered to the US regardless of the current context. Mastering CALCULATE (with ALL, FILTER, KEEPFILTERS) unlocks advanced measures like YTD, % of total, and comparisons.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "dax",
+   "calculate",
+   "filter-context",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving power bi concerns around star, schema, recommended, power, power bi, star schema, fact, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: A star schema has a central fact table (measures/events) surrounded by dimension tables (attributes for filtering/grouping) related one-to-many. Power BI's engine is optimized for star schemas: simpler relationships, faster queries, smaller models, and clearer DAX. Avoid snowflaking or single flat tables where possible. Design dimensions and facts deliberately for performance and correct aggregations.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "star-schema",
+   "fact",
+   "dimension",
+   "modeling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power Query",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving power query concerns around power, query, folding, power bi, power query, query folding, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Power Query (M language) is the data-prep/ETL layer in Power BI/Excel for connecting, cleaning, shaping, and merging data via a step-based UI. Query folding is when Power Query translates your transformation steps into a single native source query (e.g., SQL) executed at the source—pushing work down for efficiency. Steps that break folding (certain transforms) force local processing; keep foldable steps early to maximize performance.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "power-query",
+   "m",
+   "query-folding",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Data Warehouse",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving data warehouse concerns around data, warehouse, lake, mart, data warehouse, data lake, data mart, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: A data warehouse stores structured, processed data optimized for BI/reporting (schema-on-write, relational). A data lake stores raw data of any format cheaply at scale (schema-on-read) for data science/big data. A data mart is a subject-specific subset of a warehouse for a department. Modern 'lakehouse' architectures combine lake storage with warehouse-like structure/performance (Delta Lake, Fabric).\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-warehouse",
+   "data-lake",
+   "data-mart",
+   "lakehouse",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Data Warehouse",
+  "difficulty": "Hard",
+  "question": "During a performance regression involving data warehouse concerns around slowly, changing, dimensions, types, scd, dimension, data warehouse, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: SCDs handle changes to dimension attributes over time. Type 1 overwrites the old value (no history). Type 2 adds a new row with versioning (start/end dates, current flag) preserving full history—most common for tracking changes. Type 3 keeps limited history in extra columns (previous value). Choose based on whether historical accuracy of reporting matters (Type 2) or only current values (Type 1).\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "scd",
+   "dimension",
+   "data-warehouse",
+   "history",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving python concerns around list, tuple, dictionary, python, set, dict, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: List: ordered, mutable, allows duplicates ([]). Tuple: ordered, immutable (()), usable as dict keys. Set: unordered, mutable, unique elements ({}), fast membership tests. Dictionary: key-value mapping, mutable, keys unique and hashable ({k:v}). Choose by needs: list for ordered mutable sequences, tuple for fixed records, set for uniqueness/membership, dict for lookups by key.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "list",
+   "tuple",
+   "set",
+   "dict",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving python concerns around list, comprehension, generator, expression, python, lazy, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: A list comprehension builds a list concisely: [x*2 for x in items if x>0]—readable and often faster than loops. A generator expression uses parentheses (x*2 for x in items) and yields items lazily one at a time without building the whole list—memory-efficient for large/streamed data. Use list comprehensions when you need the full list; generators for large sequences or pipelines.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "comprehension",
+   "generator",
+   "lazy",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving python concerns around shallow, deep, copy, python, deepcopy, mutability, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: copy.copy() makes a shallow copy—a new object but nested objects are shared references. copy.deepcopy() recursively copies everything so the result is fully independent. Assignment (=) doesn't copy at all—both names reference the same object. Use deepcopy when you must avoid shared mutable nested state (e.g., nested lists/dicts); it's slower, so use shallow copy when nesting won't be mutated.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "copy",
+   "deepcopy",
+   "mutability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving python concerns around decorators, python, functools, cross cutting, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: A decorator is a callable that takes a function (or class) and returns a modified version, applied with @decorator syntax—used to add behavior (logging, timing, caching, auth) without changing the function's code. Example: @functools.lru_cache memoizes results; @staticmethod/@property modify methods. They implement cross-cutting concerns cleanly and are common in frameworks (Flask routes, pytest fixtures).\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "decorators",
+   "functools",
+   "cross-cutting",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving python concerns around pandas, dataframe, python, data analysis, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: pandas is Python's data-analysis library. A DataFrame is a 2D labeled, tabular structure (rows/columns) like an in-memory spreadsheet/SQL table, built on NumPy. It supports filtering, grouping (groupby), joining/merging, aggregation, reshaping (pivot/melt), handling missing data, and I/O (CSV, Excel, SQL). It's the workhorse for ETL/data cleaning and analysis in Python. A Series is a single labeled column.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "pandas",
+   "dataframe",
+   "data-analysis",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving python concerns around sqlalchemy, core, layers, python, orm, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: SQLAlchemy is Python's SQL toolkit and ORM. The Core layer provides a SQL expression language and connection/engine abstraction—write composable, database-agnostic queries close to SQL. The ORM layer maps Python classes to tables (models), managing objects, relationships, sessions (unit of work), and identity map. Use ORM for object-centric CRUD/domain logic and Core for fine-grained SQL control or bulk/analytics queries.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "sqlalchemy",
+   "orm",
+   "core",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Hard",
+  "question": "During a security review involving python concerns around python, affect, concurrency, gil, multiprocessing, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: The Global Interpreter Lock allows only one thread to execute Python bytecode at a time, so CPU-bound multithreading doesn't achieve true parallelism. I/O-bound work still benefits from threads/async (the GIL releases during I/O). For CPU-bound parallelism use multiprocessing (separate processes/GILs) or native extensions/NumPy that release the GIL. (Note: recent CPython is introducing an optional no-GIL build.)\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "gil",
+   "concurrency",
+   "multiprocessing",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving python concerns around python, equality, identity, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: == compares values (calls __eq__)—are the objects equal in content? 'is' compares identity—do both names reference the exact same object in memory? Use == for value comparison and 'is' only for singletons like None (x is None). Small integers/strings may be interned (cached), making 'is' accidentally true—never rely on that for value comparison.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "equality",
+   "identity",
+   "is",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied ETL",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving etl concerns around ensure, data, quality, pipeline, etl, data quality, validation, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Validate at each stage: schema/type checks, null/range/format validation, referential integrity, deduplication, and reconciliation counts (source vs target). Quarantine or log bad rows rather than failing silently, add data-quality rules/tests (Great Expectations), monitor freshness and volume anomalies, make loads idempotent for safe reruns, and maintain audit columns (load date, source). Alert on threshold breaches so issues are caught before they reach reports.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "data-quality",
+   "validation",
+   "reconciliation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied ETL",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving etl concerns around idempotency, matter, etl, upsert, reliability, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: An idempotent ETL job produces the same result whether run once or multiple times, so reruns after failures don't duplicate or corrupt data. Achieve it with upserts/merge on keys (not blind inserts), deterministic partitions (delete-then-load a date partition), and watermark tracking. It's essential because pipelines fail and get retried—idempotency makes recovery safe and simple without manual cleanup.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "idempotency",
+   "upsert",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving power bi concerns around relationship, cardinality, cross, filter, direction, power, power bi, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Cardinality defines how tables relate: one-to-many (typical: dimension to fact), one-to-one, or many-to-many (needs care). Cross-filter direction controls how filters propagate: single (dimension filters fact—recommended for star schemas) or both (bidirectional—powerful but can cause ambiguity/performance issues and circular filters). Prefer single-direction one-to-many relationships in a star schema; use bidirectional sparingly for specific many-to-many needs.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "cardinality",
+   "cross-filter",
+   "relationships",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving power bi concerns around level, security, power, power bi, rls, dax, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: RLS restricts which rows a user can see by defining roles with DAX filter expressions (e.g., [Region] = USERPRINCIPALNAME()) applied to tables. When users view a report, they only see data permitted by their role. It's enforced in the model (static roles or dynamic based on the logged-in user). Combine with Entra ID group membership for scalable, secure data access without building separate reports per audience.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "rls",
+   "security",
+   "dax",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied SSIS",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving ssis concerns around lookup, transformation, cache, modes, ssis, cache mode, etl, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: The Lookup transformation joins pipeline rows to a reference dataset (like a foreign-key lookup) to enrich or validate data. Cache modes: Full cache (load all reference data into memory upfront—fast for repeated lookups, memory-heavy), Partial cache (cache on demand with a size limit), and No cache (query per row—low memory, slow). Use Full cache for moderate reference sets that fit in memory; partial/no cache for very large references.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "ssis",
+   "lookup",
+   "cache-mode",
+   "etl",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving python concerns around handle, large, datasets, memory, pandas, python, large data, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Options: process in chunks (pd.read_csv(chunksize=...) and aggregate incrementally), select only needed columns and downcast dtypes to reduce memory, use categorical types for repeated strings, filter early, or switch to out-of-core/parallel libraries (Dask, Polars) or a database/warehouse for the heavy lifting. For truly big data, push computation to SQL/Spark rather than loading everything into pandas.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "pandas",
+   "large-data",
+   "chunking",
+   "dask",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving python concerns around merge, join, concat, pandas, python, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: merge joins DataFrames on columns/keys (SQL-style: inner/left/right/outer) — the most flexible. join is a convenience that merges on the index (or a key) — shorthand for index-based joins. concat stacks DataFrames vertically (rows) or horizontally (columns) by alignment, not by key matching. Use merge for key-based relational joins, join for index alignment, and concat to append/combine datasets.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "pandas",
+   "merge",
+   "join",
+   "concat",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving python concerns around vectorization, pandas, numpy, faster, python, performance, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Vectorization performs operations on whole arrays/columns at once using optimized C-level loops instead of Python-level element-by-element loops (apply/for). It's dramatically faster and more memory-efficient because it avoids Python interpreter overhead and leverages SIMD/contiguous memory. Prefer vectorized operations (df['a'] + df['b'], boolean masks) and NumPy ufuncs over iterrows/apply for performance on large data.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "pandas",
+   "numpy",
+   "vectorization",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving python concerns around context, manager, statement, python, context manager, with, cleanup, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: A context manager defines setup/teardown via __enter__ and __exit__ (or @contextmanager), and the with statement guarantees cleanup even on exceptions (with open(f) as file: ...). It's used for resources needing deterministic release—files, connections, locks. It's Python's equivalent of C#'s using/IDisposable. Custom context managers manage transactions, timers, or temporary state cleanly and safely.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "context-manager",
+   "with",
+   "cleanup",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving modelling concerns around fact, table, versus, dimension, data warehouse, dimensional modelling, design, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: A fact table holds measurements at a defined grain with foreign keys to dimensions - one row per sale line, for instance. Dimensions hold the descriptive attributes used to slice those measures. Getting the fact grain wrong and mixing levels of detail in one table is the most common modelling error.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-warehouse",
+   "dimensional-modelling",
+   "bi",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving modelling concerns around grain, fact, table, must, declared, first, data warehouse, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: The grain is what one row represents - one order line per day per store. Declaring it first determines which dimensions apply and which measures are additive. Adding rows at a different grain later produces double counting that is extremely hard to detect, because totals look plausible.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-warehouse",
+   "grain",
+   "modelling",
+   "bi",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving modelling concerns around junk, dimension, degenerate, data warehouse, dimensional modelling, patterns, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: A junk dimension consolidates several low-cardinality flags and indicators into one dimension table, avoiding a proliferation of tiny dimensions. A degenerate dimension is an identifier such as an order number kept on the fact table with no dimension of its own, because it has no attributes worth storing separately.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-warehouse",
+   "dimensional-modelling",
+   "bi",
+   "patterns",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied ETL",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving etl concerns around slowly, changing, dimension, type, data warehouse, scd, modelling, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Type 3 keeps a previous-value column alongside the current, supporting one level of history for a specific attribute. Type 6 combines types 1, 2 and 3 - a new row per change plus current-value columns on every row - so reports can slice by either the historical or the current attribute value.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-warehouse",
+   "scd",
+   "modelling",
+   "etl",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied ETL",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving etl concerns around handle, late, arriving, facts, dimensions, data warehouse, etl, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: A late fact needs the dimension version that was current at the event time, so lookups must be effective-dated rather than current-row. A late dimension may require an inferred member - a placeholder row created when the fact arrives first, updated when the real record turns up. Both need to be designed in, not discovered.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-warehouse",
+   "etl",
+   "scd",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving power bi concerns around auto, date, time, feature, modellers, disable, power bi, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Power BI creates a hidden date table for every date column, which inflates the model and produces inconsistent time intelligence across tables. Disabling it and using one explicit marked date table gives consistent behaviour, better performance and control over the fiscal calendar.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "date-table",
+   "modelling",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving power bi concerns around need, dedicated, date, dimension, table, power bi, dax, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Time intelligence functions require a contiguous date table marked as such, and a shared date dimension lets several fact tables be filtered consistently. Without one, year-to-date and same-period-last-year calculations either fail or silently produce wrong results when dates are missing from the fact data.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "dax",
+   "date-table",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Hard",
+  "question": "During a large-data workload involving power bi concerns around filter, argument, table, calculate, power bi, dax, filters, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: A simple boolean filter is shorthand for FILTER over the whole column, replacing any existing filter on it. Passing a table expression gives full control including KEEPFILTERS behaviour. The replacement semantics catch people out - a filter on a column overrides the slicer rather than intersecting with it.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "dax",
+   "calculate",
+   "filters",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a security review involving power bi concerns around handle, many, relationship, power, model, power bi, relationships, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Introduce a bridge table of the distinct combinations with single-direction relationships from both sides, and control filter propagation with CROSSFILTER in the measures that need it. The native many-to-many relationship is available but makes filter behaviour and totals harder to reason about.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "relationships",
+   "many-to-many",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving power bi concerns around debug, measure, returning, unexpected, total, power bi, dax, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Totals are evaluated in their own filter context rather than summing the visible rows, so a measure with division, ranking or conditional logic produces a total that is correct for the total context and looks wrong. Wrap in an iterator such as SUMX over the relevant granularity when the total should be the sum of rows.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "dax",
+   "totals",
+   "debugging",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving power bi concerns around manage, deployment, power, content, across, environments, power bi, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Deployment pipelines with development, test and production workspaces, parameterised data source connections rebound per stage, and version-controlled artefacts using the project file format. Manual publishing from a desktop file gives no history, no review and no way to know what is deployed where.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "deployment",
+   "alm",
+   "governance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Reporting",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving reporting concerns around makes, dashboard, actually, useful, rather, merely, dense, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: One clear question per view, the most important number first, comparison against a target or prior period so a value has meaning, consistent units and colour semantics, and an obvious next action. Dashboards that show everything answer nothing, and get replaced by someone's spreadsheet.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "dashboards",
+   "design",
+   "communication",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Reporting",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving reporting concerns around choose, appropriate, chart, type, visualisation, design, communication, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: By the question: trend over time uses a line, comparison across categories a bar, part-to-whole a stacked bar or treemap rather than a pie beyond a few slices, distribution a histogram or box plot, and correlation a scatter. Dual axes and 3D effects usually mislead and should be avoided.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "visualisation",
+   "design",
+   "communication",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Reporting",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving reporting concerns around present, metric, people, will, metrics, communication, design, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Show the value, the comparison, the trend and the confidence or volume behind it, and define the metric where it is displayed. A number without a denominator or a baseline invites misinterpretation, and a metric based on twelve data points presented like one based on twelve thousand causes bad decisions.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "metrics",
+   "communication",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Reporting",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving reporting concerns around simpson, paradox, matter, reporting, statistics, analysis, pitfalls, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: A trend present in each subgroup can reverse when the groups are combined, because group sizes differ. It matters because an aggregate dashboard can show improvement while every segment worsens. The defence is segmenting important metrics by the dimensions that plausibly confound them.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "statistics",
+   "analysis",
+   "pitfalls",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Reporting",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving reporting concerns around average, often, wrong, summary, statistic, statistics, metrics, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: It is distorted by outliers and hides distribution, so an average response time can look acceptable while a quarter of users have a poor experience. Percentiles, medians and distribution charts communicate the reality. Averaging already-averaged values is a further error that compounds it.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "statistics",
+   "metrics",
+   "pitfalls",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Analytics",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving analytics concerns around metric, dimension, segment, analytics, fundamentals, modelling, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: A metric is a measured quantity, a dimension is an attribute used to slice it, and a segment is a defined subset of the population. Confusing them produces metrics that cannot be aggregated correctly - counting a dimension, or averaging a rate across segments of different sizes.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "analytics",
+   "fundamentals",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Analytics",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving analytics concerns around vanity, metric, avoid, metrics, product, practices, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: A number that reliably rises and never informs a decision - total registered users, cumulative page views. Avoid it by asking what action a change in the metric would trigger; if none, it is reporting rather than measurement. Rates, cohorts and comparisons are usually more decision-relevant than totals.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "metrics",
+   "product",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Analytics",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving analytics concerns around makes, test, valid, ab testing, statistics, experimentation, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Random assignment at the right unit, a sample size determined in advance for the effect you want to detect, a fixed duration covering weekly cycles, a single primary metric with guardrails, and no peeking to stop early. Violating any of them turns the result into a coin flip that feels like evidence.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "ab-testing",
+   "statistics",
+   "experimentation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Analytics",
+  "difficulty": "Hard",
+  "question": "During a privacy assessment involving analytics concerns around stopping, test, early, looks, significant, problem, ab testing, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Repeatedly testing significance as data arrives inflates the false positive rate dramatically - with enough peeking almost any test eventually crosses the threshold by chance. Either fix the sample size in advance, or use a sequential testing method designed to allow continuous monitoring.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "ab-testing",
+   "statistics",
+   "pitfalls",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Analytics",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving analytics concerns around guardrail, metric, experimentation, ab testing, metrics, product, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: A metric you do not expect to improve but must not damage - latency, error rate, unsubscribe rate, revenue. It catches a change that wins on the primary metric by harming something else, which is common: engagement often rises when notifications become annoying, right up until churn follows.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "ab-testing",
+   "metrics",
+   "product",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Data Quality",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving data quality concerns around handle, records, fail, validation, pipeline, data quality, etl, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Quarantine them with the reason and the source reference rather than dropping them silently or failing the whole load, alert when the rate exceeds a threshold, and provide a path to correct and reprocess. Silent dropping produces reports that are quietly wrong, which is worse than a visible failure.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-quality",
+   "etl",
+   "error-handling",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Data Quality",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving data quality concerns around detect, data, drift, pipeline, data quality, monitoring, etl, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Track distributional statistics per load - row counts, null rates, distinct counts, min and max, category proportions - and alert on deviation from the recent baseline. It catches upstream changes that remain schema-valid, such as a field that starts arriving empty or a category that disappears.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-quality",
+   "monitoring",
+   "etl",
+   "drift",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Data Quality",
+  "difficulty": "Medium",
+  "question": "During a security review involving data quality concerns around master, data, management, problem, solve, data governance, mdm, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Establishing a single authoritative record for core entities - customer, product, supplier - across systems that each hold their own version. It solves the reporting problem where the same customer appears three times with different identifiers. The hard part is matching and survivorship rules, not the technology.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-governance",
+   "mdm",
+   "modelling",
+   "integration",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Warehouse",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving warehouse concerns around handle, dimension, attribute, arrives, after, fact, data warehouse, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Create an inferred dimension member with a placeholder when the fact loads, then update it when the real record arrives, keeping the surrogate key stable so the fact does not need rewriting. Rejecting the fact until the dimension exists loses data that may never be reprocessed.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-warehouse",
+   "late-arriving",
+   "etl",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Warehouse",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving warehouse concerns around surrogate, pipeline, management, matter, data warehouse, keys, etl, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: The process assigning and looking up warehouse keys during loading. It matters because facts must reference the dimension version current at their event time, lookups must be fast at volume, and keys must be stable across reloads - a regenerated key set orphans every previously loaded fact.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-warehouse",
+   "keys",
+   "etl",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Analytics",
+  "difficulty": "Medium",
+  "question": "During a design review involving analytics concerns around handle, outliers, analysis, statistics, practices, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Investigate before removing - an outlier is often a data quality problem or the most interesting case rather than noise. If removal is justified, document the rule, apply it consistently, and report both figures. Silently trimming is how an analysis becomes unreproducible and quietly wrong.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "statistics",
+   "analysis",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Analytics",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving analytics concerns around metric, sometimes, change, nothing, changed, metrics, reproducibility, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: A definition change, a late-arriving data load, a time zone or boundary shift, a backfill correcting history, or a dimension reclassification. Version metric definitions, timestamp the data load, and make it possible to reproduce yesterday's number - otherwise every such change looks like a data error.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "metrics",
+   "reproducibility",
+   "data-quality",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Analytics",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving analytics concerns around make, analysis, reproducible, reproducibility, practices, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Version the query and the transformation code, pin the data snapshot or record the load timestamp, document the filters and definitions, and keep the output alongside the code that produced it. An analysis reproduced only by the person who wrote it is not a result, it is an opinion with charts.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "reproducibility",
+   "practices",
+   "analysis",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Governance",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving governance concerns around data, steward, actually, data governance, roles, organisation, practices, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: An accountable owner for a data domain who defines terms, sets quality expectations, approves access and resolves conflicts about meaning. The role exists because data quality problems are usually definitional and organisational rather than technical, and technical teams cannot resolve them alone.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-governance",
+   "roles",
+   "organisation",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Pipelines",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving pipelines concerns around make, pipeline, restartable, after, failure, etl, reliability, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Checkpoint progress at a granularity that makes rerunning cheap, make each step idempotent, write to a staging location and swap atomically on completion, and record the watermark only after a successful commit. Partial writes visible to consumers are what makes a failed run damaging rather than merely inconvenient.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "reliability",
+   "idempotency",
+   "pipelines",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Pipelines",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving pipelines concerns around data, contract, producer, warehouse, team, etl, data contracts, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: An agreement on schema, semantics, freshness, volume expectations and change notice, enforced by automated validation at ingestion. It converts the common failure - an upstream team renames a column without warning - from a silent downstream break into a caught contract violation with a named owner.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "data-contracts",
+   "governance",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Pipelines",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving pipelines concerns around orchestrate, dependencies, pipeline, jobs, etl, orchestration, scheduling, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: With a scheduler expressing them as a directed acyclic graph so a downstream job runs only when its inputs succeeded, with retries, timeouts and alerting per task. Chaining jobs by scheduling them at fixed times separated by a guess is what produces reports built from yesterday's half-loaded data.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "orchestration",
+   "scheduling",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Pipelines",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving pipelines concerns around backfilling, makes, risky, etl, backfill, operations, reliability, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Reprocessing historical periods after a logic change or a failure. The risks are producing duplicates if the load is not idempotent, overwhelming shared resources, and changing published historical numbers without anyone expecting it. Backfills should be partitioned, rate-limited and announced.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "backfill",
+   "operations",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Pipelines",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving pipelines concerns around batch, streaming, given, case, etl, architecture, trade offs, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Batch is simpler, cheaper and easier to reprocess, with latency measured in minutes to hours. Streaming gives seconds of latency at the cost of complexity in state, ordering, late data and exactly-once semantics. Choose streaming only when the business decision genuinely depends on freshness at that scale.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "streaming",
+   "architecture",
+   "trade-offs",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Pipelines",
+  "difficulty": "Medium",
+  "question": "During a security review involving pipelines concerns around test, change, transformation, affects, historical, data, etl, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Run the new logic into a parallel output, compare aggregates and a row-level sample against the current output across several periods, and explain every difference before switching. Differences that cannot be explained are either a bug in the new logic or a bug in the old one, and both need resolving.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "testing",
+   "data-quality",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving practices concerns around handle, metric, different, departments, define, differently, governance, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Document each definition with its owner and purpose, name them distinctly rather than pretending there is one revenue, and implement both in the semantic layer. Forcing a single definition usually fails politically; making the difference explicit and traceable is what stops meetings arguing about whose number is right.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "governance",
+   "metrics",
+   "organisation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving practices concerns around report, dashboard, analysis, reporting, practices, product, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: A report answers a fixed question on a schedule, a dashboard monitors ongoing state, and an analysis investigates a specific question once. Building a dashboard when the need was a one-off analysis creates something nobody maintains, and the reverse leaves a recurring question answered manually.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "reporting",
+   "practices",
+   "product",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving practices concerns around retire, report, nobody, uses, governance, maintenance, practices, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Instrument usage, publish the intent to retire with a deadline, and observe who objects. Reports accumulate indefinitely because deleting feels risky, but each one is a maintenance obligation and a source of contradictory numbers - so usage telemetry is what makes retirement defensible.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "governance",
+   "maintenance",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a production incident involving practices concerns around communicate, data, quality, problem, business, stakeholders, communication, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: State the impact in terms of the decisions affected, the period and scope, what is known and unknown, the interim workaround, and the fix timeline. Leading with the technical cause loses the audience; leading with which numbers they should not trust today does not.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "communication",
+   "data-quality",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving practices concerns around analysis, move, spreadsheet, managed, pipeline, practices, governance, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: When it is repeated, when others depend on it, when the logic is complex enough that nobody else can verify it, or when the data volume exceeds what a spreadsheet handles reliably. Until then a spreadsheet is a legitimate and fast tool - the failure is when a critical monthly process lives in one person's file.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "practices",
+   "governance",
+   "pipelines",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving practices concerns around systems, report, different, numbers, same, thing, reconciliation, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Establish each definition precisely including filters, timing and grain, then reconcile row by row on a sample to find where they diverge. The difference is almost always definitional rather than a bug, and documenting the resolution prevents the same investigation recurring every quarter.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "reconciliation",
+   "data-quality",
+   "communication",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving practices concerns around handle, report, must, show, data, specific, moment, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Snapshot the data with the timestamp and report from the snapshot, rather than querying live and hoping nothing changed. Financial and regulatory reporting requires reproducibility, which live queries against a changing source cannot provide even if they are correct at the instant they run.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "reporting",
+   "reproducibility",
+   "compliance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving practices concerns around role, semantic, model, preventing, conflicting, numbers, semantic layer, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: It defines each measure once with its filters and business rules, so every report consuming it produces the same number. Without it, each report author reimplements revenue with slightly different assumptions, and the resulting disagreement is discovered in a meeting rather than in a review.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "semantic-layer",
+   "governance",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Analytics",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving analytics concerns around look, distribution, rather, summary, statistic, statistics, distributions, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Because different distributions produce identical means - a bimodal distribution of very fast and very slow requests averages to a moderate value that describes nobody's experience. Plotting the distribution or reporting several percentiles reveals what the summary conceals.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "statistics",
+   "distributions",
+   "analysis",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving practices concerns around handle, metric, technically, correct, organisationally, disputed, communication, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Document the definition and its provenance, show the calculation transparently, and involve the disputing party in reviewing the logic rather than defending the number. Disputes usually resolve into a genuine definitional difference, which is a decision to be made rather than an error to be defended.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "communication",
+   "governance",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving practices concerns around cost, dashboard, nobody, uses, governance, maintenance, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: The refresh compute, the source load, the maintenance when a schema changes, and the risk that someone eventually finds it and trusts a number nobody has validated in a year. Usage telemetry and periodic retirement are cheaper than maintaining an archive of forgotten reports.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "governance",
+   "cost",
+   "maintenance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a production incident involving practices concerns around handle, report, must, reconcile, exactly, another, system, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Agree the definition and boundaries precisely including timing and rounding, build a reconciliation report showing both figures and the difference by category, and investigate rather than adjust. Forcing agreement with an adjustment that nobody can explain later is how reconciliation becomes permanently unreliable.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "reconciliation",
+   "reporting",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving practices concerns around decide, whether, transformation, belongs, pipeline, semantic, layer, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Pipeline for anything expensive, shared across consumers, or requiring history - materialise it once. Semantic layer for business logic that changes with definitions and must be consistent across reports. Duplicating the same calculation in both is how two reports disagree about the same measure.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "architecture",
+   "semantic-layer",
+   "etl",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving practices concerns around handle, stakeholder, wants, metric, cannot, measured, accurately, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Explain what can be measured and how it relates to what they want, offer the proxy with its limitations stated, and agree how the gap will be interpreted. Providing an inaccurate number without the caveat, or refusing entirely, are both worse than an honest approximation.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "measurement",
+   "communication",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving practices concerns around handle, data, request, better, served, self, service, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Answer the immediate question, then determine whether the pattern recurs and if so build the self-service capability with the definitions embedded. Repeatedly answering ad hoc requests manually consumes analyst capacity that would be better spent removing the need.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "self-service",
+   "prioritisation",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving practices concerns around handle, report, request, underlying, data, exist, communication, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Say so clearly rather than approximating from unrelated data, explain what would be needed to capture it, and offer the closest available answer with its limitations. Producing a plausible number from data that does not measure the question is worse than no answer because it will be acted upon.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "communication",
+   "data-quality",
+   "honesty",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving practices concerns around handle, dashboard, different, teams, interpret, differently, communication, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Add the definitions to the dashboard itself, name measures unambiguously, and where two interpretations are both legitimate, show both explicitly. Ambiguity discovered in a meeting has usually already produced decisions based on the wrong reading.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "communication",
+   "definitions",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving practices concerns around handle, conflicting, requirements, reporting, accuracy, query, performance, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Establish what accuracy the decision actually requires - approximate counts and slightly stale data are frequently acceptable - and reserve exact, current figures for the cases that need them. Treating every metric as requiring exactness is what makes reporting infrastructure expensive.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "performance",
+   "requirements",
+   "trade-offs",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving practices concerns around know, whether, data, platform, serving, users, well, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: By whether people can answer their own questions without asking, whether they trust the numbers enough to act on them, and how long a new question takes to answer. Volume of dashboards and pipelines measures activity rather than value, and the two frequently diverge.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "bi",
+   "measurement",
+   "platform",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving modelling concerns around star, schema, snowflake, build, data bi, dimensional modelling, star schema, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: A **star schema** has one fact table surrounded by denormalised dimension tables - each dimension is a single flat table, even where that means repeating values. A **snowflake schema** normalises those dimensions into sub-tables, so `Product` might link to `Category`, which links to `Department`.\n\n**I would build a star schema by default,** for reasons that are practical rather than theoretical:\n\n- **Fewer joins per query.** A star query joins the fact to each dimension once; a snowflake adds a join per normalisation level. On large fact tables that difference is significant.\n- **Simpler for consumers.** Analysts and BI tools handle a flat dimension easily. Every extra hop is somewhere a report writer can get the grain wrong.\n- **Storage is not the constraint it was.** Snowflaking exists largely to avoid repeating text values, and columnar compression handles repeated values extremely well - a repeated category name costs almost nothing in a columnstore or in Parquet.\n\n**When snowflaking is justified:** a genuinely large dimension with a deep hierarchy that is maintained independently, or a many-to-many relationship that a flat table cannot express honestly. Rapidly changing sub-attributes can also be worth splitting out.\n\n**The thing that matters more than either choice** is getting the **grain** of the fact table right - stating explicitly what one row represents - and handling slowly changing dimensions deliberately. A star schema with an ambiguous grain produces wrong numbers that look plausible, which is far more damaging than an extra join.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-bi",
+   "dimensional-modelling",
+   "star-schema",
+   "warehouse",
+   "etl",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Pipelines",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving pipelines concerns around nightly, silently, produced, wrong, numbers, week, controls, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Silent wrongness is the worst failure mode a pipeline has, because a job that crashes gets fixed the next morning and a job that succeeds with bad data gets believed.\n\n**The controls I would put in, roughly in order of value:**\n\n1. **Row count and volume checks.** If today s load is 10% of yesterday s, or triple, fail rather than publish. A large share of real incidents are caught by this alone.\n2. **Reconciliation against the source.** Compare totals - row counts, and the sum of a key measure - between source and destination. If they disagree beyond a tolerance, stop.\n3. **Schema and type assertions.** An upstream column that silently changed type or started arriving null is a common cause, and it does not throw - it just produces nulls that aggregate to a smaller number.\n4. **Freshness checks.** Assert the newest record is within the expected window. A source that stopped delivering looks exactly like a source with no new data.\n5. **Uniqueness and referential checks** on keys, so a duplicated load does not double every measure.\n6. **Anomaly detection on the output** - a measure that moves more than N standard deviations from its trend gets flagged for a human.\n\n**The structural part:** load into a staging area, run the checks, and only then publish to the tables consumers read. A pipeline that writes directly into the serving tables has no point at which it can decline to publish.\n\n**And make failure loud.** A failed check must page or block, not write a warning into a log nobody reads - which is usually what \"silently\" means in these incidents.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-bi",
+   "etl",
+   "data-quality",
+   "pipelines",
+   "monitoring",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Incremental Loads",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving incremental loads concerns around load, only, changed, source, system, goes, wrong, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: The mechanism depends on what the source can give you, and each option has a failure mode worth knowing.\n\n**1. A modified timestamp column.** Load everything where `ModifiedUtc > lastWatermark`. Simple and common. The failures are real: rows updated by a process that does not set the column are missed entirely, clock skew between the source and your watermark loses records at the boundary, and **hard deletes are invisible** because a deleted row has no timestamp to find.\n\n**2. Change Data Capture.** The database records changes from the transaction log, so you get inserts, updates *and* deletes, with no dependency on application behaviour. This is the most reliable option where the source supports it. Costs are enabling it on the source, retention of the change tables, and handling schema changes.\n\n**3. A change tracking or version column** maintained by the database, which is lighter than CDC and tells you what changed but not the prior values.\n\n**4. Full comparison** - hash every row and diff against the target. Always correct, and expensive; reasonable for small dimensions, not for a large fact table.\n\n**The failures that catch people out:**\n- **Watermark boundaries.** Using `>` on a timestamp with second resolution can skip rows written in the same second as the watermark; using `>=` reprocesses. Use a high-water mark with overlap and make the load idempotent rather than trying to be exact.\n- **Late-arriving data** - a source row backdated after you have loaded that window.\n- **Deletes**, which need soft deletes, CDC, or a periodic reconciliation.\n\n**The safeguard regardless of mechanism:** make the load idempotent with a merge on a business key, so reprocessing a window is harmless.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-bi",
+   "etl",
+   "incremental-load",
+   "cdc",
+   "watermark",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving performance concerns around warehouse, query, take, minutes, takes, look, data bi, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: In a warehouse the usual causes are different from an OLTP database - it is rarely a missing index, because columnar storage works differently.\n\n**What I would check, in order:**\n\n1. **Data volume growth**, and specifically whether partition or file pruning is still effective. A query filtering on a date should read only the relevant partitions - if the filter is wrapped in a function, or the partition column is not in the predicate, it reads everything, and that only becomes painful as the table grows.\n2. **Small file proliferation.** In a lakehouse, thousands of tiny files from frequent micro-batch writes destroy read performance because the overhead is per file. Compaction - `OPTIMIZE` in Delta, or equivalent - is routine maintenance that is often not scheduled.\n3. **Statistics and clustering.** Whether the engine still has accurate metadata, and whether the physical ordering still matches the query pattern. Clustering degrades as data is appended.\n4. **A join that changed shape.** A dimension that grew, or a join key with skew so one reducer handles most of the rows - data skew is the classic distributed-query problem and it presents exactly like this.\n5. **Spill to disk.** A query that used to fit in memory no longer does, so it spills, and performance falls off a cliff rather than degrading gradually.\n6. **Concurrency.** The query may be unchanged and simply queueing behind other work on a shared warehouse.\n\n**The diagnostic to run first** is the query profile, which shows bytes scanned, partitions pruned, and where the time went. Bytes scanned rising faster than the data grew points straight at pruning having stopped working.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "data-bi",
+   "warehouse",
+   "performance",
+   "partition-pruning",
+   "skew",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied ETL",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving etl concerns around differ, etl, elt, data pipeline, warehouse, how would you define ownership, observability, and recovery for the resulting design while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: ETL (Extract, Transform, Load) pulls data from sources, transforms it (clean, join, aggregate) in a staging/processing engine, then loads it into the target (warehouse). ELT loads raw data first, then transforms inside the powerful target database/warehouse (Snowflake, Synapse). ELT suits cloud warehouses with elastic compute and large volumes; ETL suits when transformation must happen before landing or the target is less powerful.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "elt",
+   "data-pipeline",
+   "warehouse",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied ETL",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving etl concerns around incremental, loading, important, etl, incremental load, cdc, watermark, how would you validate correctness before attempting to optimize the implementation while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Incremental loading processes only new/changed records since the last run (using a watermark like a timestamp or an ID, or Change Data Capture) instead of reloading everything (full load). It dramatically reduces run time, resource usage, and load on sources—essential for large, frequently-updated datasets. Requires reliable change tracking and idempotency to handle reruns/failures without duplicating data.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "incremental-load",
+   "cdc",
+   "watermark",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied SSIS",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving ssis concerns around ssis, main, components, etl, control flow, data flow, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: SQL Server Integration Services is Microsoft's ETL platform for building data integration/transformation workflows. Key parts: Control Flow (tasks and containers orchestrating the package—precedence constraints, loops), Data Flow (source → transformations → destination for row-level processing), Connection Managers, Variables/Parameters, and Event Handlers. Packages are developed in Visual Studio (SSDT) and deployed to the SSIS Catalog (SSISDB).\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "ssis",
+   "etl",
+   "control-flow",
+   "data-flow",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied SSIS",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving ssis concerns around control, flow, data, ssis, control flow, data flow, transformations, how would you reduce risk while preserving the required behavior while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Control Flow orchestrates the overall workflow—executing tasks (Execute SQL, File System, Data Flow Task, Script) in order using precedence constraints and containers (loops). Data Flow (inside a Data Flow Task) handles the actual movement/transformation of data row-by-row from sources through transformations (Lookup, Derived Column, Merge, Conditional Split) to destinations. Control flow = 'what runs when'; data flow = 'how data is transformed'.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "ssis",
+   "control-flow",
+   "data-flow",
+   "transformations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied SSIS",
+  "difficulty": "Hard",
+  "question": "During a design review involving ssis concerns around optimize, ssis, package, performance, optimization, fast load, buffers, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Reduce data early (source queries with WHERE, only needed columns), avoid blocking/semi-blocking transforms (Sort, Aggregate)—do sorting/aggregation in SQL instead; use fast-load OLE DB destination with appropriate batch/commit sizes; tune DefaultBufferMaxRows/Size for larger buffers; use Lookup with cache mode wisely; run data flows in parallel where possible; and disable unneeded logging. Push set-based work to the database and keep the SSIS pipeline streaming.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "ssis",
+   "optimization",
+   "performance",
+   "fast-load",
+   "buffers",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving power bi concerns around power, main, components, power bi, reporting, visualization, how would you test the relevant edge cases and failure paths while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Power BI is Microsoft's business-intelligence platform for data modeling, visualization, and reporting. Components: Power BI Desktop (author reports/models), Power BI Service (cloud publishing, dashboards, sharing, scheduled refresh), Power BI Mobile, Power Query (ETL/data prep), the data model (relationships, DAX), and Power BI Gateway (connect to on-prem sources). You transform data, build a model, write DAX measures, and create interactive visuals.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "bi",
+   "reporting",
+   "visualization",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving power bi concerns around import, directquery, live, connection, modes, power bi, live connection, how would you diagnose the issue without masking it with retries or extra capacity while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Import loads data into Power BI's in-memory VertiPaq engine—fastest queries, full DAX/Power Query, but data is a snapshot needing refresh and is size-limited. DirectQuery queries the source live per interaction—always current, handles huge/real-time data, but slower and limited transformations. Live Connection connects to an existing Analysis Services/Power BI dataset model. Choose Import for performance, DirectQuery for freshness/scale, and use composite models to mix them.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "import",
+   "directquery",
+   "live-connection",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving power bi concerns around measure, calculated, column, power bi, dax, calculated column, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: DAX (Data Analysis Expressions) is Power BI's formula language for calculations. A calculated column is computed row-by-row and stored in the model (uses memory, evaluated at refresh)—good for row-level attributes used in slicers/relationships. A measure is computed at query time based on filter context (aggregations like Total Sales)—dynamic, memory-efficient, and the right choice for most aggregations. Prefer measures over calculated columns for performance.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "dax",
+   "measure",
+   "calculated-column",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Hard",
+  "question": "During a reliability review involving power bi concerns around filter, context, power bi, dax, filter context, row context, calculate, how would you decide what to measure at the component and user-facing boundaries while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Row context is the 'current row' during iteration (calculated columns, iterators like SUMX)—it knows the row's values but doesn't automatically filter. Filter context is the set of filters applied (slicers, rows/columns of a visual, WHERE-like conditions) that constrains what a measure sees. CALCULATE modifies filter context. Understanding how contexts interact (and context transition via CALCULATE) is key to correct DAX.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "dax",
+   "filter-context",
+   "row-context",
+   "calculate",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving power bi concerns around calculate, function, power bi, dax, filter context, how would you design a safe experiment that tests the most important assumption while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: CALCULATE evaluates an expression in a modified filter context—it's the most important DAX function. It applies filter arguments (adding, removing, or overriding filters) and performs context transition (turning row context into filter context). Example: CALCULATE(SUM(Sales), Region=\"US\") sums sales filtered to the US regardless of the current context. Mastering CALCULATE (with ALL, FILTER, KEEPFILTERS) unlocks advanced measures like YTD, % of total, and comparisons.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "dax",
+   "calculate",
+   "filter-context",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving power bi concerns around star, schema, recommended, power, power bi, star schema, fact, how would you explain the decision to reviewers who did not build the original system while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: A star schema has a central fact table (measures/events) surrounded by dimension tables (attributes for filtering/grouping) related one-to-many. Power BI's engine is optimized for star schemas: simpler relationships, faster queries, smaller models, and clearer DAX. Avoid snowflaking or single flat tables where possible. Design dimensions and facts deliberately for performance and correct aggregations.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "star-schema",
+   "fact",
+   "dimension",
+   "modeling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power Query",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving power query concerns around power, query, folding, power bi, power query, query folding, how would you define a rollback boundary and objective success criteria while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Power Query (M language) is the data-prep/ETL layer in Power BI/Excel for connecting, cleaning, shaping, and merging data via a step-based UI. Query folding is when Power Query translates your transformation steps into a single native source query (e.g., SQL) executed at the source—pushing work down for efficiency. Steps that break folding (certain transforms) force local processing; keep foldable steps early to maximize performance.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "power-query",
+   "m",
+   "query-folding",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Data Warehouse",
+  "difficulty": "Hard",
+  "question": "During a privacy assessment involving data warehouse concerns around slowly, changing, dimensions, types, scd, dimension, data warehouse, how would you validate correctness before attempting to optimize the implementation while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: SCDs handle changes to dimension attributes over time. Type 1 overwrites the old value (no history). Type 2 adds a new row with versioning (start/end dates, current flag) preserving full history—most common for tracking changes. Type 3 keeps limited history in extra columns (previous value). Choose based on whether historical accuracy of reporting matters (Type 2) or only current values (Type 1).\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "scd",
+   "dimension",
+   "data-warehouse",
+   "history",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving python concerns around list, tuple, dictionary, python, set, dict, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: List: ordered, mutable, allows duplicates ([]). Tuple: ordered, immutable (()), usable as dict keys. Set: unordered, mutable, unique elements ({}), fast membership tests. Dictionary: key-value mapping, mutable, keys unique and hashable ({k:v}). Choose by needs: list for ordered mutable sequences, tuple for fixed records, set for uniqueness/membership, dict for lookups by key.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "list",
+   "tuple",
+   "set",
+   "dict",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving python concerns around list, comprehension, generator, expression, python, lazy, how would you reduce risk while preserving the required behavior while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: A list comprehension builds a list concisely: [x*2 for x in items if x>0]—readable and often faster than loops. A generator expression uses parentheses (x*2 for x in items) and yields items lazily one at a time without building the whole list—memory-efficient for large/streamed data. Use list comprehensions when you need the full list; generators for large sequences or pipelines.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "comprehension",
+   "generator",
+   "lazy",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving python concerns around shallow, deep, copy, python, deepcopy, mutability, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: copy.copy() makes a shallow copy—a new object but nested objects are shared references. copy.deepcopy() recursively copies everything so the result is fully independent. Assignment (=) doesn't copy at all—both names reference the same object. Use deepcopy when you must avoid shared mutable nested state (e.g., nested lists/dicts); it's slower, so use shallow copy when nesting won't be mutated.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "copy",
+   "deepcopy",
+   "mutability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving python concerns around decorators, python, functools, cross cutting, how would you test the relevant edge cases and failure paths while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: A decorator is a callable that takes a function (or class) and returns a modified version, applied with @decorator syntax—used to add behavior (logging, timing, caching, auth) without changing the function's code. Example: @functools.lru_cache memoizes results; @staticmethod/@property modify methods. They implement cross-cutting concerns cleanly and are common in frameworks (Flask routes, pytest fixtures).\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "decorators",
+   "functools",
+   "cross-cutting",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving python concerns around pandas, dataframe, python, data analysis, how would you diagnose the issue without masking it with retries or extra capacity while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: pandas is Python's data-analysis library. A DataFrame is a 2D labeled, tabular structure (rows/columns) like an in-memory spreadsheet/SQL table, built on NumPy. It supports filtering, grouping (groupby), joining/merging, aggregation, reshaping (pivot/melt), handling missing data, and I/O (CSV, Excel, SQL). It's the workhorse for ETL/data cleaning and analysis in Python. A Series is a single labeled column.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "pandas",
+   "dataframe",
+   "data-analysis",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a security review involving python concerns around sqlalchemy, core, layers, python, orm, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: SQLAlchemy is Python's SQL toolkit and ORM. The Core layer provides a SQL expression language and connection/engine abstraction—write composable, database-agnostic queries close to SQL. The ORM layer maps Python classes to tables (models), managing objects, relationships, sessions (unit of work), and identity map. Use ORM for object-centric CRUD/domain logic and Core for fine-grained SQL control or bulk/analytics queries.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "sqlalchemy",
+   "orm",
+   "core",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Hard",
+  "question": "During a regulated-data workflow involving python concerns around python, affect, concurrency, gil, multiprocessing, how would you decide what to measure at the component and user-facing boundaries while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: The Global Interpreter Lock allows only one thread to execute Python bytecode at a time, so CPU-bound multithreading doesn't achieve true parallelism. I/O-bound work still benefits from threads/async (the GIL releases during I/O). For CPU-bound parallelism use multiprocessing (separate processes/GILs) or native extensions/NumPy that release the GIL. (Note: recent CPython is introducing an optional no-GIL build.)\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "gil",
+   "concurrency",
+   "multiprocessing",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Python",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving python concerns around python, equality, identity, how would you design a safe experiment that tests the most important assumption while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: == compares values (calls __eq__)—are the objects equal in content? 'is' compares identity—do both names reference the exact same object in memory? Use == for value comparison and 'is' only for singletons like None (x is None). Small integers/strings may be interned (cached), making 'is' accidentally true—never rely on that for value comparison.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "python",
+   "equality",
+   "identity",
+   "is",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied ETL",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving etl concerns around ensure, data, quality, pipeline, etl, data quality, validation, how would you explain the decision to reviewers who did not build the original system while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Validate at each stage: schema/type checks, null/range/format validation, referential integrity, deduplication, and reconciliation counts (source vs target). Quarantine or log bad rows rather than failing silently, add data-quality rules/tests (Great Expectations), monitor freshness and volume anomalies, make loads idempotent for safe reruns, and maintain audit columns (load date, source). Alert on threshold breaches so issues are caught before they reach reports.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "data-quality",
+   "validation",
+   "reconciliation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied ETL",
+  "difficulty": "Medium",
+  "question": "During a production incident involving etl concerns around idempotency, matter, etl, upsert, reliability, how would you define a rollback boundary and objective success criteria while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: An idempotent ETL job produces the same result whether run once or multiple times, so reruns after failures don't duplicate or corrupt data. Achieve it with upserts/merge on keys (not blind inserts), deterministic partitions (delete-then-load a date partition), and watermark tracking. It's essential because pipelines fail and get retried—idempotency makes recovery safe and simple without manual cleanup.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "etl",
+   "idempotency",
+   "upsert",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving power bi concerns around relationship, cardinality, cross, filter, direction, power, power bi, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Cardinality defines how tables relate: one-to-many (typical: dimension to fact), one-to-one, or many-to-many (needs care). Cross-filter direction controls how filters propagate: single (dimension filters fact—recommended for star schemas) or both (bidirectional—powerful but can cause ambiguity/performance issues and circular filters). Prefer single-direction one-to-many relationships in a star schema; use bidirectional sparingly for specific many-to-many needs.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "cardinality",
+   "cross-filter",
+   "relationships",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Data/BI",
+  "subcategory": "Applied Power BI",
+  "difficulty": "Medium",
+  "question": "During a design review involving power bi concerns around level, security, power, power bi, rls, dax, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: RLS restricts which rows a user can see by defining roles with DAX filter expressions (e.g., [Region] = USERPRINCIPALNAME()) applied to tables. When users view a report, they only see data permitted by their role. It's enforced in the model (static roles or dynamic based on the logged-in user). Combine with Entra ID group membership for scalable, secure data access without building separate reports per audience.\n\nFor the applied scenario, Confirm grain, lineage, freshness, late-arriving data, reconciliation rules, access controls, and how corrections propagate to reports. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "power-bi",
+   "rls",
+   "security",
+   "dax",
+   "scenario-practice",
+   "applied"
   ]
  }
 ]

@@ -424,5 +424,1204 @@
     "a": "Something is blocking that is not obviously a task: a `lock` held across an await-heavy section, a synchronous file or DNS call, a third-party SDK that is async on the surface and blocks internally, or `Task.Run` being used to wrap blocking work so it merely moves the blocking onto the pool. Async streaming over a slow client can also pin resources. A dump with stacks remains the fastest way to see it rather than guess."
    }
   ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Capacity",
+  "difficulty": "Medium",
+  "question": "A worker completes 50 jobs per second and receives 70 per second for ten minutes. What backlog forms, and how long does recovery take at 30 arrivals per second?",
+  "answer": "Ignoring an initial backlog, the queue grows by 20 jobs each second, leaving 12,000 jobs after 600 seconds. During recovery, only 20 jobs per second of capacity remains after serving new arrivals, so draining takes another 600 seconds. This assumes stable service capacity, no retries, and no expired jobs; measure those before using the estimate for an operational deadline.",
+  "tags": [
+   "performance",
+   "capacity",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Capacity",
+  "difficulty": "Medium",
+  "question": "At a stable throughput of 800 requests per second and mean response time of 125 milliseconds, how many requests are in flight on average?",
+  "answer": "Apply Little's law to a consistent system boundary: average concurrency equals throughput multiplied by mean time in the system. Here 800 times 0.125 gives 100 requests. This is an average, not a safe maximum or a tail-latency estimate. Include queueing time if the concurrency count includes queued requests, and use a sufficiently stable measurement window.",
+  "tags": [
+   "performance",
+   "capacity",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Capacity",
+  "difficulty": "Medium",
+  "question": "A CPU-bound request consumes 8 milliseconds of CPU. Can a four-core machine sustain 800 requests per second?",
+  "answer": "That rate requires 6.4 CPU-seconds of work per wall-clock second, exceeding the four CPU-seconds available from four fully usable cores. The idealized ceiling is 500 requests per second before overhead, with a lower practical operating target to preserve headroom. More asynchronous tasks cannot remove this CPU demand; reduce per-request work or add compute capacity.",
+  "tags": [
+   "performance",
+   "capacity",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Capacity",
+  "difficulty": "Medium",
+  "question": "An optimization doubles the speed of a stage responsible for 30 percent of execution time. What is the end-to-end speedup?",
+  "answer": "The unchanged portion still takes 0.70 of the original duration, while the optimized portion takes 0.30 divided by 2, or 0.15. Total duration becomes 0.85, so speedup is 1 divided by 0.85, approximately 1.176. That is about 17.6 percent higher throughput for this isolated serial workload, or 15 percent less elapsed time; the two percentages are different.",
+  "tags": [
+   "performance",
+   "capacity",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Capacity",
+  "difficulty": "Medium",
+  "question": "Can eliminating a function that consumes 5 percent of total execution time make a serial program twice as fast?",
+  "answer": "No. Even making that function free leaves 95 percent of the original duration, giving a maximum speedup of 1 divided by 0.95, approximately 1.053. A twofold improvement requires reducing other costs as well. Confirm that the profile measures representative end-to-end time; a CPU-only percentage cannot by itself describe a workload dominated by external waits.",
+  "tags": [
+   "performance",
+   "capacity",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Capacity",
+  "difficulty": "Medium",
+  "question": "A network link provides 100 megabits per second. Is transferring a 50-megabyte response in two seconds physically plausible?",
+  "answer": "Using decimal units, the payload contains 400 megabits. At 100 megabits per second the ideal transmission time is four seconds, before protocol overhead, contention, or latency. Two seconds would require compression, a faster effective path, or fewer transmitted bytes. Distinguish megabits from megabytes and application payload size from bytes actually sent.",
+  "tags": [
+   "performance",
+   "capacity",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Capacity",
+  "difficulty": "Medium",
+  "question": "Why can a service with spare average CPU capacity still have an overloaded single execution path?",
+  "answer": "Aggregate utilization can hide one saturated core, a serialized critical section, or a partition that owns most requests. Inspect per-core and per-worker utilization, queue lengths, and traffic distribution. Adding replicas helps only if work can be redistributed; a single hot key or shared lock can preserve the same bottleneck even when total compute capacity increases.",
+  "tags": [
+   "performance",
+   "capacity",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Capacity",
+  "difficulty": "Medium",
+  "question": "A batch takes ten minutes but the business needs the first result in five seconds. Which performance objective should change?",
+  "answer": "Total batch completion time and time to first result are separate objectives. Consider streaming, smaller initial batches, or scheduling an initial result ahead of bulk work. Measure first-result latency, full completion time, and resource use together, because reducing batch size may increase per-item overhead. Also define whether partial results are useful and how failures after partial delivery are represented.",
+  "tags": [
+   "performance",
+   "capacity",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Load Testing",
+  "difficulty": "Medium",
+  "question": "Why does a fixed number of load-test clients sometimes hide the worst latency during an outage?",
+  "answer": "If each client waits for its response before sending another request, slow responses reduce the offered request rate. The test then stops applying the arrival pressure that an independent stream of real users would create. Compare intended arrival times with actual send times and use an arrival-rate model when appropriate, while recording errors and generator saturation as well as completed response latency.",
+  "tags": [
+   "performance",
+   "load-testing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Load Testing",
+  "difficulty": "Medium",
+  "question": "A load generator reaches 100 percent CPU before the service does. What can you conclude from the apparent throughput plateau?",
+  "answer": "You cannot conclude that the service reached capacity. The generator may be unable to create connections, serialize requests, or process responses fast enough. Measure its resources and actual offered rate, distribute generation if necessary, and verify that response validation remains enabled. Report a client-limited result explicitly rather than treating the observed plateau as a server limit.",
+  "tags": [
+   "performance",
+   "load-testing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Load Testing",
+  "difficulty": "Medium",
+  "question": "A benchmark ignores timed-out requests and reports an improved p99 after a release. Why might that conclusion be false?",
+  "answer": "Dropping timeouts removes the slowest experiences from the reported population, so latency among successful responses can improve while reliability deteriorates. Report offered requests, successes, errors, timeouts, and the timeout threshold together. Compare equivalent request populations and preserve censored observations separately; a request timing out at ten seconds is not a successful zero-duration response.",
+  "tags": [
+   "performance",
+   "load-testing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Load Testing",
+  "difficulty": "Medium",
+  "question": "What does a soak test reveal that a ten-minute throughput test can miss?",
+  "answer": "A sustained run can expose accumulating memory, connection leaks, queue growth, periodic maintenance, cache churn, and resource exhaustion that have not appeared during a short test. Use a representative workload and monitor trends rather than only final averages. Include the system's relevant cycles, then inspect whether resources return toward baseline after load decreases.",
+  "tags": [
+   "performance",
+   "load-testing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Load Testing",
+  "difficulty": "Medium",
+  "question": "Why should a capacity test use more than one payload size?",
+  "answer": "Payload size changes serialization cost, memory allocation, network demand, and downstream processing. A single small payload may measure routing overhead while missing the actual bottleneck for large requests. Test a measured distribution and relevant upper bounds, report results by payload bucket, and verify that oversized or invalid requests receive bounded handling rather than exhausting shared resources.",
+  "tags": [
+   "performance",
+   "load-testing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Load Testing",
+  "difficulty": "Medium",
+  "question": "A test reuses one account for every request. Which production bottlenecks could it misrepresent?",
+  "answer": "One account can create unrealistic cache hits or concentrate traffic on a single lock, database row, tenant partition, or rate limit. Realistic account cardinality and skew matter as much as request count. Test both distributed traffic and deliberately hot accounts, documenting the workload so a result can be interpreted as a normal-load estimate or a hotspot stress case.",
+  "tags": [
+   "performance",
+   "load-testing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Load Testing",
+  "difficulty": "Medium",
+  "question": "Why run performance tests with realistic error responses rather than only successful requests?",
+  "answer": "Failure paths may log large exceptions, trigger retries, bypass caches, or hold resources until a timeout. A service that handles successful traffic efficiently can collapse when a dependency starts failing. Introduce controlled failures and measure recovery, resource use, and useful throughput, with retry budgets and abort conditions so the test does not produce an unbounded feedback loop.",
+  "tags": [
+   "performance",
+   "load-testing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Load Testing",
+  "difficulty": "Medium",
+  "question": "How should you compare two releases when the test database grows between runs?",
+  "answer": "The runs are confounded because data volume and distribution can change plans, index depth, cache residency, and result sizes. Use equivalent database snapshots or explicitly model size as a separate experimental variable. Record schema, statistics, configuration, and workload alongside the release identifier, then repeat enough runs to distinguish a regression from ordinary environmental variation.",
+  "tags": [
+   "performance",
+   "load-testing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Measurement",
+  "difficulty": "Medium",
+  "question": "Two equally busy servers report p99 latencies of 100 and 900 milliseconds. Is the fleet p99 necessarily 500 milliseconds?",
+  "answer": "No. Percentiles describe positions in distributions and cannot generally be averaged, even when traffic counts are equal. Combine compatible histograms or raw observations with correct request weights, then calculate the fleet percentile. Preserve route and workload dimensions as well, since a fleet-wide result can conceal a severe regression in a less common operation.",
+  "tags": [
+   "performance",
+   "measurement",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Measurement",
+  "difficulty": "Medium",
+  "question": "Can you add the p99 latency of three sequential dependencies to obtain the request p99?",
+  "answer": "Not in general. The slow observations for each dependency may occur on different requests, and correlations change the distribution of the total. Sum durations within individual traces and compute the percentile of those totals. Adding component p99 values can be a conservative planning heuristic in some cases, but it is not the measured p99 of the combined operation.",
+  "tags": [
+   "performance",
+   "measurement",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Measurement",
+  "difficulty": "Medium",
+  "question": "Why can an overall latency average improve while every customer tier becomes slower?",
+  "answer": "A change in traffic mix can place more weight on the faster tier, pulling down the aggregate even though each tier worsens. Compare per-tier distributions and request counts, and use a fixed reference mix when estimating the release effect. This prevents a change in who used the service from being mistaken for a change in how efficiently it served them.",
+  "tags": [
+   "performance",
+   "measurement",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Measurement",
+  "difficulty": "Medium",
+  "question": "How do you distinguish CPU time from elapsed time when interpreting a performance result?",
+  "answer": "Elapsed time includes waiting for scheduling, locks, storage, and remote services; CPU time measures processor execution attributed to the work. For parallel workloads, summed CPU time can exceed elapsed time. State which quantity a profiler reports, then examine waits and critical paths before deciding whether an expensive-looking operation needs computational optimization or reduced blocking.",
+  "tags": [
+   "performance",
+   "measurement",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Measurement",
+  "difficulty": "Medium",
+  "question": "A tracing sample contains only successful requests. What bias does that introduce into performance diagnosis?",
+  "answer": "It omits failures and often the longest or most disrupted executions, producing an incomplete view of the user experience. Check sampling and export behavior during overload, and compare traces with independent request counters and latency histograms. Keep representative ordinary traffic while ensuring important failures are observable, with controls on storage cost and sensitive fields.",
+  "tags": [
+   "performance",
+   "measurement",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Measurement",
+  "difficulty": "Medium",
+  "question": "Why is a monotonic clock preferable for timing an operation on one machine?",
+  "answer": "Wall-clock time can jump when the clock is adjusted, making an elapsed duration negative or inaccurate. A monotonic clock is intended for measuring intervals without those discontinuities. Use wall-clock timestamps for human correlation and monotonic differences for local durations; clocks from different machines still cannot be subtracted blindly to obtain precise network or processing time.",
+  "tags": [
+   "performance",
+   "measurement",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Measurement",
+  "difficulty": "Medium",
+  "question": "What does a wide CPU flame-graph frame tell you, and what does it not tell you?",
+  "answer": "Its width generally reflects the proportion of sampled stacks containing that frame, so inclusive cost includes descendants. It does not by itself show chronological ordering, call count, or user-visible waiting time. Inspect the profiler's event type and distinguish inclusive from self cost before rewriting a wide function that merely coordinates expensive work performed below it.",
+  "tags": [
+   "performance",
+   "measurement",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Measurement",
+  "difficulty": "Medium",
+  "question": "Why can enabling detailed diagnostic logging change the bottleneck you are trying to measure?",
+  "answer": "Formatting, synchronization, allocation, and output I/O consume resources and can change scheduling. The instrumented run may therefore be dominated by diagnostics rather than the original workload. Compare against a minimally instrumented baseline, use bounded sampling or targeted events, and quantify overhead before treating the observed profile as representative of normal production execution.",
+  "tags": [
+   "performance",
+   "measurement",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Measurement",
+  "difficulty": "Medium",
+  "question": "A benchmark runs five times and one sample is much slower. Should that sample be deleted?",
+  "answer": "Investigate rather than discarding it merely because it is inconvenient. It may reflect a relevant pause, contention, or an unrelated environmental disturbance. Record exclusion rules before analysis, retain raw observations, and report variation. If the event also occurs in production, removing it could hide the exact tail behavior the benchmark should help explain.",
+  "tags": [
+   "performance",
+   "measurement",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Measurement",
+  "difficulty": "Medium",
+  "question": "Why should a performance comparison preserve both throughput and latency instead of a single requests-per-second score?",
+  "answer": "A system can report higher throughput by allowing a much larger queue, trading capacity for poor response time. Compare latency distributions and error rate at equivalent offered load, and define an acceptable service objective. The useful capacity is the highest sustainable load that still meets those requirements, rather than the greatest number of eventual completions.",
+  "tags": [
+   "performance",
+   "measurement",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Queueing",
+  "difficulty": "Medium",
+  "question": "Why does increasing a request queue from 100 to 10000 entries fail to increase processing capacity?",
+  "answer": "A larger queue stores more waiting work but does not create faster workers. It can absorb a temporary burst, yet sustained excess arrivals still cause growth until the new limit is reached, often with much worse latency and memory use. Size queues from a waiting-time budget, apply admission control, and measure arrival and completion rates before treating buffering as a capacity fix.",
+  "tags": [
+   "performance",
+   "queueing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Queueing",
+  "difficulty": "Medium",
+  "question": "When can rejecting a request quickly improve useful throughput during overload?",
+  "answer": "If doomed work consumes scarce resources until it times out, admitting everything prevents viable requests from completing. Bounded admission can preserve resources for accepted work and expose a clear retryable failure to callers. The policy needs fairness, explicit limits, and bounded jittered retries, otherwise clients may amplify the rejected traffic and recreate the overload.",
+  "tags": [
+   "performance",
+   "queueing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Queueing",
+  "difficulty": "Medium",
+  "question": "A client deadline expires while its server job remains queued. What performance problem follows?",
+  "answer": "The server may later spend resources on a result nobody can use, extending the queue for requests that still have valid deadlines. Propagate cancellation or deadline metadata where supported and check it before expensive stages. Cancellation does not undo committed effects, so distinguish stopping unnecessary computation from rolling back completed business actions.",
+  "tags": [
+   "performance",
+   "queueing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Queueing",
+  "difficulty": "Medium",
+  "question": "Why can mixing one-second reports and one-millisecond lookups in a FIFO queue hurt lookup latency?",
+  "answer": "A short lookup can wait behind a long report even though its own service demand is small. Separate workload classes, reserve capacity, or use a fair scheduler when the business priorities justify it. Measure starvation and total utilization as well as lookup latency, because prioritizing short jobs without constraints can prevent long jobs from ever completing under continuous load.",
+  "tags": [
+   "performance",
+   "queueing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Queueing",
+  "difficulty": "Medium",
+  "question": "How can batching improve throughput while making individual requests slower?",
+  "answer": "Batching amortizes setup, network, or transaction overhead across several items, but an item waits while its batch fills and then shares the batch's processing delay. Bound both batch size and maximum wait, and test sparse as well as busy traffic. Choose the operating point from throughput requirements and latency budgets rather than assuming the largest batch is always best.",
+  "tags": [
+   "performance",
+   "queueing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Queueing",
+  "difficulty": "Medium",
+  "question": "Why can retrying every timeout immediately reduce the number of successful original requests?",
+  "answer": "Each retry adds offered work while earlier attempts may still be running. During overload this consumes more capacity, extends queues, and creates additional timeouts, forming positive feedback. Use bounded retry budgets, backoff with jitter, and idempotency where effects can repeat; distinguish transient recoverable errors from sustained overload that requires reducing demand.",
+  "tags": [
+   "performance",
+   "queueing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Queueing",
+  "difficulty": "Medium",
+  "question": "What should happen when an upstream producer is faster than a streaming consumer for an extended period?",
+  "answer": "The system needs a defined bound: slow the producer through backpressure, spill to durable storage, discard according to an explicit policy, or reject new work. An unbounded in-memory buffer only postpones failure. Measure buffer occupancy and item age, and decide whether completeness, freshness, or low latency has priority for this particular stream.",
+  "tags": [
+   "performance",
+   "queueing",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Memory",
+  "difficulty": "Medium",
+  "question": "Why can process memory remain high after a cache is cleared without proving a leak?",
+  "answer": "The runtime or allocator may retain freed capacity for future allocations instead of returning every page to the operating system. Distinguish reachable objects, managed heap size, committed memory, and resident memory. Repeated load-and-idle cycles and retention-path analysis provide stronger evidence than one process-memory reading immediately after clearing a collection.",
+  "tags": [
+   "performance",
+   "memory",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Memory",
+  "difficulty": "Medium",
+  "question": "How does retaining one small view into a large buffer cause unexpectedly high memory use?",
+  "answer": "A view can keep the underlying allocation reachable even when only a tiny range is needed. If the view outlives the processing stage, copying the small required portion may release much more memory despite the extra allocation. Inspect ownership and lifetime rather than only the visible size of the view, and measure whether retention or copying dominates the workload.",
+  "tags": [
+   "performance",
+   "memory",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Memory",
+  "difficulty": "Medium",
+  "question": "Why can object pooling increase a service's steady-state memory footprint?",
+  "answer": "The pool deliberately retains objects that could otherwise become unreachable, and peak-sized objects may stay available long after demand drops. Pool limits, reset behavior, and unusually large instances therefore matter. Compare allocation reduction against retained memory and synchronization costs; pool only resources whose measured reuse benefit outweighs those costs.",
+  "tags": [
+   "performance",
+   "memory",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Memory",
+  "difficulty": "Medium",
+  "question": "A cache achieves a 99 percent hit ratio but latency remains poor. Which additional measurements matter?",
+  "answer": "A hit ratio counts requests, not time saved. The remaining misses may dominate the tail, cached payloads may still be costly to deserialize, or cache access itself may be slow. Measure hit and miss latency separately, byte sizes, eviction churn, and downstream work avoided. Verify that the metric includes the same traffic population as the user-facing latency measurement.",
+  "tags": [
+   "performance",
+   "memory",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Memory",
+  "difficulty": "Medium",
+  "question": "Why is memory consumption per request not always equal to allocated bytes per request?",
+  "answer": "Allocated bytes describe cumulative creation; memory consumption also depends on how long those objects remain alive and how many requests overlap. A request can allocate many short-lived objects with a modest live set, while another retains a large buffer across a long wait. Measure allocation rate, object lifetime, concurrency, and retained heap separately.",
+  "tags": [
+   "performance",
+   "memory",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Experiments",
+  "difficulty": "Medium",
+  "question": "A cache change improves repeated local tests but hurts the first request after deployment. How should that be evaluated?",
+  "answer": "Measure cold and warm behavior separately and weight them against the expected workload, including rolling deployments and scale-out events. Repeated tests against an already populated cache answer only the warm-path question. Track initialization work, cache-fill contention, and time until steady state, then consider controlled warming or bounded fallback behavior if cold performance matters.",
+  "tags": [
+   "performance",
+   "experiments",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Experiments",
+  "difficulty": "Medium",
+  "question": "Why change only one major variable at a time during a performance investigation?",
+  "answer": "Simultaneously changing indexes, instance size, and caching makes it difficult to attribute any improvement or regression. Start with a measurable hypothesis, hold the workload and environment stable, and compare a controlled change against a baseline. Interaction effects can be explored deliberately afterward; preserving the experimental record makes later decisions reproducible.",
+  "tags": [
+   "performance",
+   "experiments",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Experiments",
+  "difficulty": "Medium",
+  "question": "An optimization reduces server time by 20 milliseconds but page load is unchanged. What could explain it?",
+  "answer": "That operation may not lie on the page's critical path, or network transfer, rendering, another dependency, or measurement variability may dominate. Compare an end-to-end trace before and after the change and verify that the optimized path was exercised. A local improvement is real only at its measured boundary; its user impact must be established separately.",
+  "tags": [
+   "performance",
+   "experiments",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Experiments",
+  "difficulty": "Medium",
+  "question": "How can you tell whether a claimed speedup comes from less work or from skipping required validation?",
+  "answer": "Check equivalent outputs and behavior alongside timing, including invalid inputs and failure handling. Record operations performed, data processed, and correctness invariants so both implementations have the same contract. If one omits necessary authorization, validation, durability, or response fields, it is a different workload rather than a valid optimization of the original behavior.",
+  "tags": [
+   "performance",
+   "experiments",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Experiments",
+  "difficulty": "Medium",
+  "question": "Why should a performance regression threshold account for normal run-to-run variation?",
+  "answer": "If ordinary environmental noise is larger than the threshold, a gate will fail frequently without meaningful regressions. Establish a baseline distribution under controlled conditions and choose a practical effect size and repetition strategy. Preserve sensitivity to material changes without treating every tiny fluctuation as significant, and investigate shifts in variance as well as shifts in central tendency.",
+  "tags": [
+   "performance",
+   "experiments",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Experiments",
+  "difficulty": "Medium",
+  "question": "What makes an optimization unsafe to generalize from a uniform dataset to a highly skewed production dataset?",
+  "answer": "Uniform inputs can hide hot keys, uneven partitions, repeated lock contention, or a small set of oversized records. An algorithm or layout may perform well on average while concentrating production work on one resource. Test observed skew and meaningful worst cases, document the assumed distribution, and monitor whether it changes after the optimization is deployed.",
+  "tags": [
+   "performance",
+   "experiments",
+   "interview"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "Why can opening a fresh encrypted connection for every small API call dominate total request time?",
+  "answer": "Connection establishment adds network round trips and cryptographic setup before useful application work begins. Reuse suitable connections and measure handshake time separately from server processing. Pool lifetime and endpoint changes still need attention so reuse does not trap traffic on stale destinations.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "How does the bandwidth-delay product affect a high-throughput transfer over a long-distance link?",
+  "answer": "It describes how much data must be in flight to fully utilize the path: bandwidth multiplied by round-trip time. If protocol windows or application behavior allow much less outstanding data, the sender can spend time waiting despite available bandwidth. Loss, congestion, and receiver capacity also matter.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "Why can compressing a response make a CPU-saturated API slower even while reducing transmitted bytes?",
+  "answer": "Compression exchanges computation for fewer bytes. If CPU is already the bottleneck or the payload is small or poorly compressible, the extra work can outweigh transmission savings. Compare end-to-end latency and CPU demand for representative payloads, using a sensible size threshold and compression level.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "What measurement distinguishes DNS delay from application execution delay in a slow request?",
+  "answer": "Break the request into name resolution, connection establishment, TLS negotiation, request transmission, server wait, and response transfer. A large DNS phase points to resolver or caching behavior rather than handler code. Reused connections may skip those phases, so separate new-connection and reused-connection samples.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "Why can a client observe slow downloads even when the server finishes generating responses quickly?",
+  "answer": "Server generation time excludes some buffering, network transfer, and client consumption. Large payloads, constrained bandwidth, or a slow reader can extend completion significantly. Measure time to first byte and full-body completion, and trace backpressure so early server completion is not mistaken for a fast user experience.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "When can fetching ten independent resources concurrently still be slower than expected?",
+  "answer": "Concurrency can shift the bottleneck to connection limits, shared bandwidth, server queues, or client parsing. The requests are independent logically but still compete for physical resources. Measure active transfers, queueing, and payload sizes, then cap concurrency at a useful operating point rather than assuming unlimited parallelism.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "Why can packet loss hurt a long-distance transfer more than an equally sized local transfer?",
+  "answer": "Reliable transport must recover missing data, and recovery or congestion control interacts with round-trip time. A longer feedback loop can make lost transmission opportunities more costly. Inspect retransmissions and effective throughput rather than inferring network health solely from nominal link bandwidth.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "How can a proxy's response buffering change the apparent benefit of server-side streaming?",
+  "answer": "The application may produce chunks promptly while the proxy holds them until a buffer fills or the response completes. The client then sees little early progress. Verify behavior at every hop, including compression and client rendering, before concluding that yielding chunks in application code improves user-visible latency.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "Why can a large number of tiny remote calls be slower than one moderately larger batched call?",
+  "answer": "Each call adds per-request overhead and may pay a latency round trip or queueing cost. A batch can amortize that overhead, but creates larger failure units and may delay individual results. Bound batch size and define partial-error handling instead of assuming either extreme is universally faster.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "Why does measuring ping latency not establish the response time of a production HTTPS API?",
+  "answer": "A ping probes a different protocol path and omits connection setup, proxy behavior, authentication, handler execution, and response transfer. It can help identify basic reachability or latency changes, but use representative application requests and phase timing to explain the actual user-facing operation.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "What performance risk comes from transferring fields that the client immediately discards?",
+  "answer": "Unused fields still cost database retrieval, serialization, bytes on the wire, and client parsing or allocation. Project the required fields and compare payload distributions, not just one sample. Preserve explicit API contracts so reducing payloads does not remove information relied upon by another consumer.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Network",
+  "difficulty": "Medium",
+  "question": "Why can a service's outgoing connection limit create queueing that looks like a slow dependency?",
+  "answer": "Calls can wait locally for a connection before any request reaches the dependency. Measure connection-acquisition time separately from remote service time and inspect pool occupancy. Increasing the limit may help, but can also overload the dependency, so respect both sides' capacity constraints.",
+  "tags": [
+   "performance",
+   "network"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "How can a warm operating-system page cache make repeated disk-read benchmarks misleading?",
+  "answer": "Repeated reads may be served from memory rather than the storage device, so the benchmark no longer measures the first-read path. Report cache conditions and test the workload's realistic working set. Do not discard warm results; distinguish them from cold-storage measurements and avoid unsafe cache manipulation on shared systems.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "Why can sequential I/O outperform random I/O even when both read the same total number of bytes?",
+  "answer": "Sequential access benefits from fewer positioning or coordination costs and more effective prefetching, while random small operations can be limited by per-operation latency or IOPS. The magnitude depends on the device and queue depth. Measure access pattern and operation size, not just total throughput.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "What distinguishes a storage throughput limit from an IOPS limit?",
+  "answer": "Throughput limits transferred bytes per second, while IOPS limits completed operations per second. Many small reads can hit an operation limit without using the advertised byte rate; large reads may do the reverse. Estimate both using request size and operation count, then verify actual latency under load.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "Why can increasing storage queue depth improve throughput but hurt tail latency?",
+  "answer": "More outstanding operations can keep a device busy and exploit parallelism, but each request may wait behind more work. Past saturation, extra queue depth often adds waiting without useful throughput. Tune against both completion rate and latency requirements using the target workload's read/write mix.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "Why is acknowledging a write before durable flush faster but a different contract?",
+  "answer": "It can avoid waiting for persistence, but a crash may lose acknowledged data still in volatile buffers. The timing improvement changes the failure guarantee rather than merely optimizing an equivalent operation. State the required durability boundary and compare implementations that satisfy the same contract.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "How can an index speed reads while reducing write throughput?",
+  "answer": "Writes must maintain the index in addition to the underlying data, consuming CPU, storage I/O, memory, and logging work. Additional indexes also occupy cache space. Evaluate their benefit against the actual read/write mix and remove only those shown to be unnecessary, preserving constraint enforcement.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "Why can a query returning only ten rows still read millions of rows internally?",
+  "answer": "The engine may scan or sort a large candidate set before applying the final limit, particularly without a selective access path. Inspect rows examined, intermediate operations, and the execution plan. Small result cardinality does not imply small execution cost.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "Why can a covering index improve a read even when another index already finds the matching keys?",
+  "answer": "It can supply the requested columns directly, avoiding additional lookups into the base data. The benefit depends on match count, locality, and engine behavior. Wider indexes cost storage and write maintenance, so measure the specific query rather than adding every projected column indiscriminately.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "How can outdated cardinality estimates make a database query choose an inefficient join strategy?",
+  "answer": "The optimizer uses estimated row counts to compare plan costs. A large estimation error can favor a strategy suited to a small input that is actually large, causing excessive probes or spills. Compare estimated and actual rows, then investigate statistics, skew, expressions, and parameter sensitivity.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "What does a sort spilling to temporary storage suggest about query performance?",
+  "answer": "The operation could not complete within its available memory and used temporary storage for intermediate data. Investigate input size, projection width, memory grants, and competing work before increasing memory. An index or query rewrite that reduces required sorting may provide a better improvement.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "Why can increasing a database connection pool make throughput worse?",
+  "answer": "More concurrent queries can exceed useful database parallelism, increasing lock contention, memory pressure, and queueing. The pool is an admission-control boundary as well as a reuse mechanism. Find a sustainable concurrency level and measure wait time at both the application pool and the database.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "How can a long-running read indirectly hurt write performance in some database workloads?",
+  "answer": "Depending on the engine and isolation level, it can retain snapshots or locks, prevent cleanup, or increase version-storage pressure. Identify the actual mechanism before changing isolation. Shorten unnecessary transaction lifetimes while preserving the consistency guarantees the read requires.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Storage",
+  "difficulty": "Medium",
+  "question": "Why can a database page be logically cached while an application still spends substantial time deserializing results?",
+  "answer": "Caching avoids some storage work but does not eliminate transferring columns, decoding values, materializing objects, or building the response. Profile the full data-access path. Reducing projected data or avoiding unnecessary object tracking can matter even when physical reads are low.",
+  "tags": [
+   "performance",
+   "storage"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "What is false sharing, and why can two independent counters still contend on a multicore machine?",
+  "answer": "The counters may occupy the same cache line, causing coherence traffic as different cores write it. They need not share a logical variable to interfere physically. Verify with profiling before padding or reorganizing data, since larger layouts can reduce locality and increase memory use elsewhere.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "Why can a contiguous array outperform a pointer-linked structure despite similar asymptotic traversal complexity?",
+  "answer": "Adjacent elements improve spatial locality and hardware prefetching, while following pointers can trigger dependent cache misses. Big-O notation omits those constant and memory-system costs. Benchmark the real operations and mutation patterns before selecting a structure solely from abstract complexity.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "How can unpredictable branches reduce throughput in a tight loop?",
+  "answer": "A processor may speculate along the wrong path and discard work when the branch resolves. Input distribution therefore affects the cost of the same source code. Branchless transformations can help some kernels, but may add unnecessary work or obscure code; profile and verify correctness first.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "Why can vectorizing an arithmetic loop fail to improve a memory-bandwidth-bound workload?",
+  "answer": "Vector instructions reduce computation cost, but the processor still needs input bytes delivered. If memory bandwidth already limits progress, faster arithmetic leaves that bottleneck unchanged. Reduce data movement, improve locality, or change representation before expecting compute-only changes to produce large end-to-end gains.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "What does poor NUMA locality mean for a large multithreaded service?",
+  "answer": "Threads frequently access memory attached to a different NUMA node, potentially increasing latency and interconnect traffic. Thread placement and memory allocation patterns interact. Measure the actual hardware topology and access behavior before applying affinity settings that might restrict scheduling or create imbalance.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "Why can heavy context switching consume CPU without increasing useful application work?",
+  "answer": "Scheduling transitions and disrupted caches add overhead while threads may mostly wait or contend. Inspect runnable-thread count, blocking patterns, and lock contention alongside CPU usage. Reducing unnecessary concurrency or blocking can improve throughput more than adding workers to an already oversubscribed process.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "How can lock convoying amplify a brief pause in the thread holding a popular mutex?",
+  "answer": "Other threads line up behind the holder, and repeated scheduling or handoff costs can prolong the contention beyond the original pause. Reduce critical-section duration and unnecessary sharing, and inspect wait distributions. Replacing a mutex with spinning is not automatically better under long waits or oversubscription.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "Why can a spin lock be wasteful when its owner is not currently scheduled?",
+  "answer": "Waiters burn CPU while the owner cannot run to release the lock, particularly when cores are oversubscribed. Spinning is most appropriate only for carefully bounded waits in suitable conditions. Prefer established synchronization primitives and measure contention rather than implementing busy waiting by default.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "How can a container hit a CPU quota while the host still reports idle capacity?",
+  "answer": "The container may be limited to less CPU time than the host has available. Quota throttling can pause runnable work even though other host cores are idle. Inspect the container's limits and throttling metrics alongside host utilization before attributing low throughput solely to application code.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "Why can thermal or power limits change benchmark performance during a sustained run?",
+  "answer": "Processors can change operating frequency as temperature, power budget, and workload evolve. A short burst may benefit from a state that cannot be sustained. Record environment and run duration, allow an appropriate steady state, and avoid comparing a cool short run with a long thermally constrained one.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "Why can a background maintenance task cause periodic application latency spikes?",
+  "answer": "It can compete for CPU, storage, locks, or memory bandwidth at a regular interval, even if average resource usage is moderate. Correlate spikes with maintenance schedules and traces. Reschedule, throttle, or isolate the competing work based on evidence rather than assuming every periodic pause is garbage collection.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "How can reducing allocations improve throughput without changing an algorithm's big-O complexity?",
+  "answer": "Fewer allocations can reduce allocator work, initialization, cache pressure, and garbage-collection effort. The asymptotic operation count may remain unchanged while real costs fall. Measure allocation rate and pause behavior, and avoid unsafe reuse or excessive retained memory introduced solely to reduce allocation counts.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "Why can a lower-allocation implementation still be slower than a simpler allocating version?",
+  "answer": "It may add copying, synchronization, clearing, indirection, or more expensive bookkeeping. Allocation count is an intermediate metric, not the end goal. Compare correctness, latency, throughput, and memory footprint together under representative lifetimes and concurrency before accepting the tradeoff.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "CPU",
+  "difficulty": "Medium",
+  "question": "Why can compiling the same algorithm with different optimization settings invalidate a language-performance comparison?",
+  "answer": "The result can reflect debug checks, disabled optimization, or runtime configuration rather than the language or algorithm itself. Record build settings and use comparable execution modes. Also verify outputs and workload equivalence so one version is not being optimized away or doing less required work.",
+  "tags": [
+   "performance",
+   "cpu"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "What is dead-code elimination's effect on a benchmark that never uses its computed result?",
+  "answer": "An optimizer may remove some or all of the computation, leaving the benchmark to time almost nothing. Use a harness and consumption strategy that preserves the intended work without introducing a dominant artificial cost. Inspect generated behavior when results are implausibly fast.",
+  "tags": [
+   "performance",
+   "benchmarking"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "Why can constant inputs make a microbenchmark unrepresentative of production?",
+  "answer": "Compilers or runtimes may specialize or fold work, while processors learn unusually predictable branches and caches stay warm. Use representative input distributions and verify the intended computation still runs. Avoid replacing realism with randomization so expensive that generating inputs dominates the measured operation.",
+  "tags": [
+   "performance",
+   "benchmarking"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "Why should benchmark setup usually be separated from the measured operation?",
+  "answer": "Creating fixtures, opening files, or constructing large inputs can dominate the measurement and hide the operation of interest. Put setup outside the timed region when the question concerns steady-state execution. Include it deliberately when startup or full workflow cost is the actual objective.",
+  "tags": [
+   "performance",
+   "benchmarking"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "Why can subtracting one noisy timing result from another produce an unstable overhead estimate?",
+  "answer": "Both measurements contain variation, and subtracting similar values magnifies relative error in the difference. Use paired, repeated measurements with controlled conditions and report uncertainty. If the estimated effect is smaller than the noise, improve the experiment before claiming a precise speedup.",
+  "tags": [
+   "performance",
+   "benchmarking"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "How should a benchmark avoid measuring only the fastest surviving run?",
+  "answer": "Keep a predefined sampling and reporting procedure rather than selecting a favorable observation after seeing results. Report central tendency and relevant variation, and explain exclusions. The best run can estimate a lower bound under ideal conditions, but does not describe ordinary or tail performance.",
+  "tags": [
+   "performance",
+   "benchmarking"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "Why can running two competing benchmarks simultaneously make both comparisons unreliable?",
+  "answer": "They compete for shared CPU, caches, bandwidth, storage, and thermal budget. The interference can favor one workload differently from another and change over time. Isolate runs or deliberately model concurrent load with a controlled design, documenting which question the experiment answers.",
+  "tags": [
+   "performance",
+   "benchmarking"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "Why is a geometric mean often more appropriate than an arithmetic mean for combining normalized speedup ratios?",
+  "answer": "Ratios are multiplicative and should treat reciprocal changes consistently. A geometric mean can summarize relative changes across workloads without directly averaging incompatible absolute units. It still hides individual regressions and assumes the selected workload weights are meaningful, so retain per-workload results.",
+  "tags": [
+   "performance",
+   "benchmarking"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "How can a change improve average CPU cost but worsen a latency service objective?",
+  "answer": "It might batch more work, defer processing, or create rare long pauses that reduce average cost while increasing waiting for some requests. Compare the objective's percentile or deadline-success rate explicitly. Resource efficiency and responsiveness are related but distinct outcomes.",
+  "tags": [
+   "performance",
+   "benchmarking"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "What is the benefit of alternating baseline and candidate runs instead of testing each in one long block?",
+  "answer": "Alternation helps expose or reduce bias from environmental drift such as changing load, temperature, or background activity. Randomizing order can help further. Keep the environment controlled and use enough observations, because alternation does not eliminate interference or guarantee statistical independence.",
+  "tags": [
+   "performance",
+   "benchmarking"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Benchmarking",
+  "difficulty": "Medium",
+  "question": "Why should a benchmark record error rate when comparing a faster validation implementation?",
+  "answer": "It may appear faster because it rejects more inputs, skips accepted work, or misclassifies valid requests. Compare equivalent inputs and expected outcomes alongside timing. A speedup obtained by violating the required acceptance behavior is a correctness regression, not an equivalent optimization.",
+  "tags": [
+   "performance",
+   "benchmarking"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Frontend",
+  "difficulty": "Medium",
+  "question": "Why can a browser download all JavaScript quickly but still respond slowly to clicks?",
+  "answer": "Parsing, compilation, and execution can occupy the main thread after transfer completes. Long tasks delay input handling and rendering even on a fast network. Inspect main-thread work and interaction timing, then reduce or split actual execution cost rather than focusing only on compressed bundle size.",
+  "tags": [
+   "performance",
+   "frontend"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Frontend",
+  "difficulty": "Medium",
+  "question": "How does alternating layout reads and style writes inside a browser loop hurt performance?",
+  "answer": "Writes can invalidate layout, and subsequent reads may force the browser to compute it immediately. Repeating that cycle creates avoidable layout work. Group compatible reads and writes, then verify with browser profiling because the specific properties and rendering state determine the cost.",
+  "tags": [
+   "performance",
+   "frontend"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Frontend",
+  "difficulty": "Medium",
+  "question": "Why can rendering a thousand offscreen rows degrade a table even when scrolling displays only twenty?",
+  "answer": "The browser and framework may still maintain, style, lay out, and update the hidden portion of the large document. Windowing can bound rendered rows, but must preserve accessibility, focus, and navigation behavior. Measure both rendering cost and the user interactions the table must support.",
+  "tags": [
+   "performance",
+   "frontend"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Frontend",
+  "difficulty": "Medium",
+  "question": "Why can preloading every asset worsen the loading of a page's critical content?",
+  "answer": "Noncritical downloads compete for bandwidth and processing with the resources needed immediately. Prioritize based on the actual critical path and expected use. Preloading is most useful when it advances a necessary resource that would otherwise be discovered too late, not when it indiscriminately starts all work sooner.",
+  "tags": [
+   "performance",
+   "frontend"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Frontend",
+  "difficulty": "Medium",
+  "question": "How can oversized images hurt a page even when the network response is cached?",
+  "answer": "The browser still needs to decode, store, and render image data, and decoded memory can be much larger than compressed bytes. Serve dimensions appropriate to display needs and consider deferred loading for noncritical images. Network caching does not remove all client-side processing and memory costs.",
+  "tags": [
+   "performance",
+   "frontend"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Frontend",
+  "difficulty": "Medium",
+  "question": "Why can debouncing a search field improve backend load while making the interface feel less responsive?",
+  "answer": "Debouncing waits for a quiet interval, reducing requests but adding intentional delay before results start. Choose the interval from measured usage, show appropriate feedback, and handle stale responses. It is a product tradeoff, not a free latency improvement, especially for users who type slowly.",
+  "tags": [
+   "performance",
+   "frontend"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Frontend",
+  "difficulty": "Medium",
+  "question": "Why can a service worker cache make a frontend performance test disagree with a first-time user's experience?",
+  "answer": "The test may bypass network and initialization work that a new user must perform. Record service-worker and cache state and test cold and returning-user journeys separately. A returning-user result is valuable, but must not be presented as the first-visit result.",
+  "tags": [
+   "performance",
+   "frontend"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Frontend",
+  "difficulty": "Medium",
+  "question": "How can measuring only initial page load miss a major performance regression in a single-page application?",
+  "answer": "Later route transitions, repeated interactions, and accumulated state can have different costs from startup. Exercise representative navigation and long sessions, measuring interaction latency and memory trends. A fast initial screen does not establish that the application remains responsive after sustained use.",
+  "tags": [
+   "performance",
+   "frontend"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Cost",
+  "difficulty": "Medium",
+  "question": "Why is cost per successful business operation a better optimization metric than cost per attempted request in some services?",
+  "answer": "Retries, rejected work, and duplicate attempts can increase request counts without delivering more useful outcomes. Dividing cost by attempts may therefore look better while users receive less value. Define a completed business operation and include the supporting resource costs and failure rate in the comparison.",
+  "tags": [
+   "performance",
+   "cost"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Isolation",
+  "difficulty": "Medium",
+  "question": "How can one tenant with large requests degrade response times for tenants with small requests?",
+  "answer": "They share CPU, memory, queues, or connection capacity, so expensive work can occupy resources needed by otherwise cheap requests. Measure per-tenant demand and waiting, then apply fair scheduling or bounded resource use where appropriate. Global averages can hide this unequal impact.",
+  "tags": [
+   "performance",
+   "isolation"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Load Balancing",
+  "difficulty": "Medium",
+  "question": "Why can equal request counts across replicas still produce uneven utilization?",
+  "answer": "Requests can have different CPU costs, payload sizes, and durations, and replicas can have different effective capacity. Round-robin counts alone do not equalize work. Inspect active requests and resource demand, then choose a balancing policy suited to the workload without overreacting to noisy short-term measurements.",
+  "tags": [
+   "performance",
+   "load-balancing"
+  ]
+ },
+ {
+  "category": "Performance",
+  "subcategory": "Autoscaling",
+  "difficulty": "Medium",
+  "question": "Why can adding new replicas briefly increase dependency traffic before improving service capacity?",
+  "answer": "New replicas may fill caches, initialize connections, or load configuration simultaneously, creating a burst against shared dependencies. Coordinate or bound initialization, observe dependency headroom, and distinguish readiness from process startup. Scaling application workers does not instantly scale every shared resource they depend on.",
+  "tags": [
+   "performance",
+   "autoscaling"
+  ]
  }
 ]

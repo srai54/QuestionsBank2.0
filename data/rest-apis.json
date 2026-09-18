@@ -97,16 +97,6 @@
    "pagination",
    "cursor",
    "offset"
-  ],
-  "followups": [
-   {
-    "q": "Should the response include a total count?",
-    "a": "Only if you can afford it and clients genuinely need it. A `COUNT(*)` over a large filtered set can cost more than the page, so making it unconditional taxes every request for a number most callers ignore. The usual compromises are to make it opt-in with a query parameter, return an approximate count, or expose only `hasNextPage` - which is answerable cheaply by fetching one extra row and checking whether it exists."
-   },
-   {
-    "q": "How do you keep a cursor from becoming public API you can never change?",
-    "a": "Base64-encode it so it is visibly not meant to be read, sign it so a modified cursor is rejected, and document explicitly that clients must treat it as opaque and pass it back verbatim. Without the signature, clients will eventually decode it, depend on the internal field names, and you can no longer change your sort key without breaking them - which is exactly how an implementation detail becomes a contract."
-   }
   ]
  },
  {
@@ -583,16 +573,6 @@
    "api-design",
    "pagination",
    "conventions"
-  ],
-  "followups": [
-   {
-    "q": "Why whitelist sortable and filterable fields rather than allowing any column?",
-    "a": "Because every combination you allow is a performance commitment. An unindexed sort on a large table scans and sorts the whole set, and a filter on an unindexed column does the same - so an endpoint that is fast in testing can be trivially made slow by a client sorting on a field nobody anticipated. Whitelisting also stops internal column names leaking into your public contract, which would then block any schema refactor."
-   },
-   {
-    "q": "How should filtering interact with a cursor?",
-    "a": "The cursor must be tied to the exact filter and sort it was issued for, and the server should reject it if either changed - otherwise a client that adjusts a filter mid-pagination gets a boundary computed against a different result set, which silently skips or repeats rows. Encoding a hash of the query parameters into the cursor and validating it on use is the straightforward way to enforce that."
-   }
   ]
  },
  {
@@ -1208,20 +1188,8 @@
   ],
   "followups": [
    {
-    "q": "Why is serialization taking 380 ms, and what would you do?",
-    "a": "Almost always because the response is far larger than it needs to be, often a full entity graph where the client uses four fields. Projecting to a DTO shrinks it at the source, which fixes serialization, network transfer and database IO at once. If the payload is legitimately large, enable response compression, which typically cuts JSON by 70 to 90 percent, and consider System.Text.Json source generation to remove reflection from the hot path. Reaching for a faster serialiser before shrinking the payload is optimising the wrong thing."
-   },
-   {
-    "q": "How would you stop an N+1 from coming back?",
-    "a": "Detection rather than discipline, because code review misses them. EF Core can be configured to throw on lazy loading, which turns a silent N+1 into a failing test. Logging the query count per request and asserting a threshold in integration tests catches regressions directly. And a distributed trace showing span counts makes it obvious in production. The structural fix is to disable lazy loading entirely and require explicit Include or projection, so the cost is always visible at the call site."
-   },
-   {
     "q": "Suppose the 3 seconds is one unavoidable downstream call. What then?",
     "a": "Then latency cannot be removed and the question becomes what the user experiences. Options are to return immediately with 202 and have the client poll or receive a push, which changes the API contract but is honest; to return partial data immediately and stream the rest; or to precompute the result asynchronously so the request hits a materialised view. Each trades consistency or complexity for latency, and choosing between them is a product decision as much as an engineering one."
-   },
-   {
-    "q": "What would you measure to know the fix worked?",
-    "a": "p95 and p99 latency, not the mean, because the mean hides the tail and the tail is what users complain about. Also the request count and error rate, since a change that improves latency by shedding load is not an improvement. For a caching change specifically, hit rate and the latency of the miss path both matter, because a 95 percent hit rate still leaves one request in twenty on the slow path. Measuring before and after with the same instrument is the part people skip."
    }
   ]
  },
@@ -1240,16 +1208,8 @@
   ],
   "followups": [
    {
-    "q": "Why can the client not just check whether the order exists before retrying?",
-    "a": "Because the check and the retry are two operations with a gap, so the order can be created in between - and more practically, the client often has nothing to check by, since the order id was assigned by the server and was in the response that never arrived. A search by content is unreliable because two genuinely separate identical orders are legitimate. The idempotency key solves it by giving the client a way to name the operation before it happens, which is the piece the check-then-act approach is missing."
-   },
-   {
     "q": "Is PUT inherently safe from this problem?",
     "a": "PUT is idempotent by definition, so retrying it is safe in principle - but only if it truly replaces a resource at a client-chosen URL. Many APIs use PUT for operations that are not actually idempotent, such as one that appends or increments, and the verb then guarantees nothing. Where the client can choose the identifier, PUT to /orders/{clientGeneratedId} is a clean way to get idempotency without a separate header, because the id itself is the key."
-   },
-   {
-    "q": "How long should idempotency keys be retained?",
-    "a": "Long enough to cover any retry the client might reasonably make, which means longer than their maximum backoff window - 24 hours is the common choice and covers most automated retry policies plus a manual retry by a person. Keeping them forever is unnecessary storage and makes the uniqueness index large; expiring them too soon reopens the window, because a retry after expiry is processed as a new request. Whatever you choose belongs in the API documentation, since the client's retry policy needs to fit inside it."
    }
   ]
  },
@@ -1273,10 +1233,6 @@
     "a": "That it moves the complexity rather than removing it, and the new complexity is less familiar. Arbitrary client queries mean you must implement depth and cost limiting or a single query can take down the service; HTTP caching largely stops working because everything is a POST to one endpoint; and resolvers make N+1 queries extremely easy to introduce, requiring DataLoader-style batching to be applied carefully. For a small number of known clients that is a lot of platform to adopt when an expand parameter would do."
    },
    {
-    "q": "Who should own a backend for frontend?",
-    "a": "The client team, which is the point of the pattern - it exists so the mobile team can shape their own payloads without negotiating with the API team for every screen. If the API team owns it, the coordination cost that motivated it comes straight back, and the BFF becomes another queue to wait in. The trade is that the client team now runs a service, which needs their capability to deploy, monitor and be on call for it."
-   },
-   {
     "q": "The mobile team asks you to return everything in one big payload instead. Is that better?",
     "a": "It fixes the round trips and creates over-fetching - a large payload parsed and transferred on a mobile connection where bandwidth and battery matter, most of which the screen does not use. It also couples the response to one screen's needs, so the next screen either gets its own bloated endpoint or reuses this one badly. Expansion parameters give the same round-trip saving while letting the client state what it wants, which is why they are usually the better answer than a fixed fat response."
    }
@@ -1296,10 +1252,6 @@
    "scenario"
   ],
   "followups": [
-   {
-    "q": "How do you stop an expand parameter becoming an unbounded query language?",
-    "a": "Whitelist what is expandable, cap the depth at one or two levels, and refuse combinations that are expensive to satisfy. Document the cost. Without those limits a client will eventually request an expansion that joins six tables per row, and you will discover it in production. The same discipline is what GraphQL servers implement as depth and complexity limits - you need it either way."
-   },
    {
     "q": "What role do ETags play here?",
     "a": "They turn repeat requests into cheap 304s. The client sends `If-None-Match` with the previously returned ETag; if nothing changed, the server returns 304 with no body, saving bandwidth and serialisation but not the round trip. That helps a polling client a great deal and helps a client making 50 distinct first-time calls not at all - which is why diagnosing the actual pattern comes first."
@@ -1321,10 +1273,6 @@
   ],
   "followups": [
    {
-    "q": "How do you avoid maintaining two full implementations?",
-    "a": "Keep one internal model and translate at the edges - the versioned controllers or endpoints map their own DTOs to and from a single domain representation. Then a version difference is a mapping, not a fork of the business logic. Where behaviour genuinely differs, isolate that behind a strategy resolved by version rather than branching throughout. The failure mode to avoid is copying the whole stack per version, which guarantees the two drift and bugs get fixed in only one."
-   },
-   {
     "q": "How do you decide when it is safe to switch off an old version?",
     "a": "By measuring rather than by the calendar. Log the version and the caller on every request, so you can see exactly who is still on v1 and how much traffic they send. Then contact the remaining consumers directly, and consider brownouts - deliberately returning errors for short scheduled windows - which reliably finds the integrations nobody remembered they had. Switching off on the announced date without checking traffic is how you take down a customer who never read the email."
    }
@@ -1345,13 +1293,1421 @@
   ],
   "followups": [
    {
-    "q": "Should a failed lookup be 404 or an empty 200?",
-    "a": "It depends on whether you are addressing a resource or querying a collection. `GET /orders/123` for an order that does not exist is a 404 - the resource identified by that URI is absent. `GET /orders?status=shipped` matching nothing is a 200 with an empty array - the collection exists and happens to be empty, and forcing clients to treat \"no results\" as an error is awkward. The mistake in the other direction is returning 404 for an empty search, which makes every client special-case it."
-   },
-   {
     "q": "How do you handle errors that are partially successful, such as a batch operation?",
     "a": "207 Multi-Status, or a 200 with a per-item result array, because a single status code cannot describe a batch where three of five items succeeded. The important part is that the response says explicitly which items succeeded and which failed with per-item error codes, so the client can retry only the failures. Returning a blanket failure when most items succeeded forces the client either to retry everything - duplicating work - or to reconcile, which it has no information to do."
    }
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Pagination",
+  "difficulty": "Medium",
+  "question": "Should the response include a total count?",
+  "answer": "Only if you can afford it and clients genuinely need it. A `COUNT(*)` over a large filtered set can cost more than the page, so making it unconditional taxes every request for a number most callers ignore. The usual compromises are to make it opt-in with a query parameter, return an approximate count, or expose only `hasNextPage` - which is answerable cheaply by fetching one extra row and checking whether it exists.",
+  "tags": [
+   "rest",
+   "pagination",
+   "cursor",
+   "offset",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Pagination",
+  "difficulty": "Medium",
+  "question": "How do you keep a cursor from becoming public API you can never change?",
+  "answer": "Base64-encode it so it is visibly not meant to be read, sign it so a modified cursor is rejected, and document explicitly that clients must treat it as opaque and pass it back verbatim. Without the signature, clients will eventually decode it, depend on the internal field names, and you can no longer change your sort key without breaking them - which is exactly how an implementation detail becomes a contract.",
+  "tags": [
+   "rest",
+   "pagination",
+   "cursor",
+   "offset",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Why whitelist sortable and filterable fields rather than allowing any column?",
+  "answer": "Because every combination you allow is a performance commitment. An unindexed sort on a large table scans and sorts the whole set, and a filter on an unindexed column does the same - so an endpoint that is fast in testing can be trivially made slow by a client sorting on a field nobody anticipated. Whitelisting also stops internal column names leaking into your public contract, which would then block any schema refactor.",
+  "tags": [
+   "rest",
+   "api-design",
+   "pagination",
+   "conventions",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How should filtering interact with a cursor?",
+  "answer": "The cursor must be tied to the exact filter and sort it was issued for, and the server should reject it if either changed - otherwise a client that adjusts a filter mid-pagination gets a boundary computed against a different result set, which silently skips or repeats rows. Encoding a hash of the query parameters into the cursor and validating it on use is the straightforward way to enforce that.",
+  "tags": [
+   "rest",
+   "api-design",
+   "pagination",
+   "conventions",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "Why is serialization taking 380 ms, and what would you do?",
+  "answer": "Almost always because the response is far larger than it needs to be, often a full entity graph where the client uses four fields. Projecting to a DTO shrinks it at the source, which fixes serialization, network transfer and database IO at once. If the payload is legitimately large, enable response compression, which typically cuts JSON by 70 to 90 percent, and consider System.Text.Json source generation to remove reflection from the hot path. Reaching for a faster serialiser before shrinking the payload is optimising the wrong thing.",
+  "tags": [
+   "rest-api",
+   "performance",
+   "n-plus-one",
+   "profiling",
+   "caching",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "How would you stop an N+1 from coming back?",
+  "answer": "Detection rather than discipline, because code review misses them. EF Core can be configured to throw on lazy loading, which turns a silent N+1 into a failing test. Logging the query count per request and asserting a threshold in integration tests catches regressions directly. And a distributed trace showing span counts makes it obvious in production. The structural fix is to disable lazy loading entirely and require explicit Include or projection, so the cost is always visible at the call site.",
+  "tags": [
+   "rest-api",
+   "performance",
+   "n-plus-one",
+   "profiling",
+   "caching",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "What would you measure to know the fix worked?",
+  "answer": "p95 and p99 latency, not the mean, because the mean hides the tail and the tail is what users complain about. Also the request count and error rate, since a change that improves latency by shedding load is not an improvement. For a caching change specifically, hit rate and the latency of the miss path both matter, because a 95 percent hit rate still leaves one request in twenty on the slow path. Measuring before and after with the same instrument is the part people skip.",
+  "tags": [
+   "rest-api",
+   "performance",
+   "n-plus-one",
+   "profiling",
+   "caching",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Why can the client not just check whether the order exists before retrying?",
+  "answer": "Because the check and the retry are two operations with a gap, so the order can be created in between - and more practically, the client often has nothing to check by, since the order id was assigned by the server and was in the response that never arrived. A search by content is unreliable because two genuinely separate identical orders are legitimate. The idempotency key solves it by giving the client a way to name the operation before it happens, which is the piece the check-then-act approach is missing.",
+  "tags": [
+   "rest-api",
+   "idempotency",
+   "retries",
+   "distributed-systems",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How long should idempotency keys be retained?",
+  "answer": "Long enough to cover any retry the client might reasonably make, which means longer than their maximum backoff window - 24 hours is the common choice and covers most automated retry policies plus a manual retry by a person. Keeping them forever is unnecessary storage and makes the uniqueness index large; expiring them too soon reopens the window, because a retry after expiry is processed as a new request. Whatever you choose belongs in the API documentation, since the client's retry policy needs to fit inside it.",
+  "tags": [
+   "rest-api",
+   "idempotency",
+   "retries",
+   "distributed-systems",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "Who should own a backend for frontend?",
+  "answer": "The client team, which is the point of the pattern - it exists so the mobile team can shape their own payloads without negotiating with the API team for every screen. If the API team owns it, the coordination cost that motivated it comes straight back, and the BFF becomes another queue to wait in. The trade is that the client team now runs a service, which needs their capability to deploy, monitor and be on call for it.",
+  "tags": [
+   "rest-api",
+   "bff",
+   "graphql",
+   "chattiness",
+   "api-design",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Design",
+  "difficulty": "Medium",
+  "question": "How do you stop an expand parameter becoming an unbounded query language?",
+  "answer": "Whitelist what is expandable, cap the depth at one or two levels, and refuse combinations that are expensive to satisfy. Document the cost. Without those limits a client will eventually request an expansion that joins six tables per row, and you will discover it in production. The same discipline is what GraphQL servers implement as depth and complexity limits - you need it either way.",
+  "tags": [
+   "rest-apis",
+   "api-design",
+   "n-plus-one",
+   "graphql",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Versioning",
+  "difficulty": "Medium",
+  "question": "How do you avoid maintaining two full implementations?",
+  "answer": "Keep one internal model and translate at the edges - the versioned controllers or endpoints map their own DTOs to and from a single domain representation. Then a version difference is a mapping, not a fork of the business logic. Where behaviour genuinely differs, isolate that behind a strategy resolved by version rather than branching throughout. The failure mode to avoid is copying the whole stack per version, which guarantees the two drift and bugs get fixed in only one.",
+  "tags": [
+   "rest-apis",
+   "versioning",
+   "deprecation",
+   "api-design",
+   "backwards-compatibility",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Errors",
+  "difficulty": "Medium",
+  "question": "Should a failed lookup be 404 or an empty 200?",
+  "answer": "It depends on whether you are addressing a resource or querying a collection. `GET /orders/123` for an order that does not exist is a 404 - the resource identified by that URI is absent. `GET /orders?status=shipped` matching nothing is a 200 with an empty array - the collection exists and happens to be empty, and forcing clients to treat \"no results\" as an error is awkward. The mistake in the other direction is returning 404 for an empty search, which makes every client special-case it.",
+  "tags": [
+   "rest-apis",
+   "error-handling",
+   "problem-details",
+   "status-codes",
+   "api-design",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During a production incident involving fundamentals concerns around rest, core, constraints, stateless, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: REST (Representational State Transfer) is an architectural style for networked APIs. Constraints: client-server separation, statelessness (each request self-contained), cacheability, uniform interface (resources, standard methods, representations), layered system, and optional code-on-demand. Resources are identified by URIs and manipulated via HTTP methods with representations (usually JSON).\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "constraints",
+   "stateless",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied HTTP Methods",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving http methods concerns around main, http, methods, semantics, rest, http methods, idempotent, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: GET retrieves (safe, idempotent). POST creates or triggers processing (not idempotent). PUT replaces a resource fully (idempotent). PATCH partially updates (should be idempotent). DELETE removes (idempotent). HEAD returns headers only; OPTIONS reports allowed methods (used in CORS preflight). Following these semantics keeps APIs predictable and cache/proxy-friendly.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "http-methods",
+   "idempotent",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied HTTP Methods",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving http methods concerns around idempotency, matter, apis, rest, retry, reliability, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: An idempotent operation produces the same result whether called once or many times (GET, PUT, DELETE). It matters because networks retry: clients/gateways may resend on timeout, and idempotent endpoints avoid duplicate side effects. For non-idempotent POST (e.g., payments), use an idempotency key so retries don't double-charge. Design writes to be safely retryable.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "idempotency",
+   "retry",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Status Codes",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving status codes concerns around main, http, status, code, classes, mean, rest, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: 2xx success (200 OK, 201 Created, 204 No Content). 3xx redirection (301/302, 304 Not Modified). 4xx client errors (400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422 Unprocessable, 429 Too Many Requests). 5xx server errors (500 Internal, 502 Bad Gateway, 503 Unavailable, 504 Timeout). Correct codes let clients react appropriately.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "status-codes",
+   "http",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Status Codes",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving status codes concerns around rest, 401, 403, auth, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: 401 Unauthorized means the request lacks valid authentication—the client isn't identified (missing/invalid/expired token); the client should authenticate. 403 Forbidden means the client is authenticated but not authorized to access the resource—more credentials won't help. Use 401 for 'who are you?' and 403 for 'you can't do that.'\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "401",
+   "403",
+   "auth",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a design review involving design concerns around best, practices, designing, rest, resource, uris, uri design, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Use nouns, not verbs, and plural collections (/orders, /orders/123/items). Represent hierarchy with nesting, filter/sort/paginate via query params (?status=open&page=2&sort=-date), use lowercase and hyphens, keep them stable, and version at the base (/v1). Let HTTP methods convey actions rather than encoding verbs in the path (avoid /getOrders).\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "uri-design",
+   "best-practice",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving design concerns around handle, errors, rest, error handling, problemdetails, rfc7807, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Return the correct status code plus a structured, consistent error body—ideally RFC 7807 ProblemDetails (type, title, status, detail, instance, and field errors). Don't leak stack traces/internal details. Include a correlation/trace id for support, use 400/422 for validation with per-field messages, and document error shapes. Consistency lets clients handle errors programmatically.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "error-handling",
+   "problemdetails",
+   "rfc7807",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Pagination",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving pagination concerns around pagination, strategies, rest, apis, cursor, offset, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: There are three in common use, and the right one depends on whether clients need to jump to a page and how much data sits behind the endpoint.\n\n**Offset/limit** - `GET /orders?page=3&pageSize=20`. Simple, supports arbitrary page jumps and a total count. Degrades with depth and is unstable while data changes - a row inserted between requests duplicates the boundary row, and a deletion silently skips one.\n\n**Cursor/keyset** - `GET /orders?cursor=eyJ...&limit=20`. Constant cost at any depth and stable under concurrent writes. No page numbers and no free total. The right default for feeds, infinite scroll and any large dataset.\n\n**Time/id range** - `GET /events?since=2026-09-01T00:00:00Z`. Natural for logs and event streams, and lets clients resume from where they stopped.\n\n```http\nGET /orders?limit=20 HTTP/1.1\n\nHTTP/1.1 200 OK\nLink: <https://api.example.com/orders?cursor=eyJjIjoiMjAyNi0wOS0xNSIsImkiOjg4fQ&limit=20>; rel=\"next\"\n\n{\n  \"data\": [ { \"id\": 88, \"total\": 240.00 } ],\n  \"pageInfo\": {\n    \"nextCursor\": \"eyJjIjoiMjAyNi0wOS0xNSIsImkiOjg4fQ\",\n    \"hasNextPage\": true\n  }\n}\n```\n\n**Conventions worth following whichever you choose:** cap `limit` server-side so a client cannot request 100,000 records, return the cursor as opaque and document it as opaque, use the `Link` header with `rel=\"next\"`/`rel=\"prev\"` if you want to be HTTP-idiomatic, and keep the envelope consistent across every collection endpoint so clients write one pagination helper rather than several.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "pagination",
+   "cursor",
+   "offset",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Caching",
+  "difficulty": "Hard",
+  "question": "During an on-call investigation involving caching concerns around http, caching, etags, cache, control, rest, etag, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Cache-Control directives (max-age, no-cache, private/public) tell caches how long/who can cache. ETag is a version identifier of a resource; clients send If-None-Match and the server returns 304 Not Modified if unchanged, saving bandwidth. Last-Modified/If-Modified-Since is a time-based variant. Combined, they enable conditional requests and efficient client/proxy caching.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "caching",
+   "etag",
+   "cache-control",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Concurrency",
+  "difficulty": "Hard",
+  "question": "During a reliability review involving concurrency concerns around handle, concurrent, updates, optimistic, concurrency, rest, etag, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Use ETags/version numbers: the client sends the resource's ETag in If-Match on update; if it no longer matches (someone else changed it) the server returns 412 Precondition Failed, preventing lost updates. The client then re-fetches, merges, and retries. This provides optimistic concurrency over stateless HTTP without server-side locks.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "concurrency",
+   "etag",
+   "if-match",
+   "412",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Versioning",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving versioning concerns around approaches, versioning, rest, api design, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: URI path (/v1/orders)—explicit, cache-friendly, most common. Query string (?version=1). Custom header (Api-Version: 1). Media type/content negotiation (Accept: application/vnd.company.v1+json)—purist HATEOAS style. Trade-offs are visibility vs URL cleanliness. Whatever you pick, be consistent, document it, and avoid breaking changes by adding rather than modifying.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "versioning",
+   "api-design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving design concerns around hateoas, rest, hypermedia, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: HATEOAS (Hypermedia as the Engine of Application State) is the REST constraint where responses include links to related actions/resources, so clients navigate the API dynamically via provided hypermedia rather than hardcoding URIs. It decouples clients from URL structure and enables discoverability. In practice it's rarely fully implemented; most APIs are 'pragmatic REST' without full HATEOAS.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "hateoas",
+   "hypermedia",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Comparison",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving comparison concerns around rest, graphql, grpc, comparison, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: REST: resource-based over HTTP/JSON, simple, cacheable, but can over/under-fetch. GraphQL: a single endpoint with a query language letting clients request exactly the fields they need—great for varied clients, but caching/complexity trade-offs. gRPC: high-performance binary (Protobuf) over HTTP/2 with streaming and contracts—ideal for internal service-to-service. Choose by client needs, performance, and ecosystem.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "graphql",
+   "grpc",
+   "comparison",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Security",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving security concerns around secure, rest, security, oauth, owasp, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Use HTTPS everywhere, authenticate with OAuth2/JWT (validate signature, issuer, audience, expiry), authorize with scopes/roles, validate and sanitize all input, apply rate limiting/throttling, use CORS to restrict origins, avoid exposing internal errors, add security headers, and never put secrets in URLs. Follow least privilege and the OWASP API Security Top 10.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "security",
+   "oauth",
+   "owasp",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Documentation",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving documentation concerns around openapi, swagger, rest, documentation, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: OpenAPI is a standard, language-agnostic specification (YAML/JSON) describing an API's endpoints, parameters, schemas, responses, and auth. Swagger is the tooling ecosystem (Swagger UI for interactive docs, codegen for clients/servers). In ASP.NET Core, Swashbuckle/NSwag generate the spec from code. It enables discoverability, client generation, contract testing, and consistent documentation.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "openapi",
+   "swagger",
+   "documentation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving design concerns around patch, rest, put, update, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: PUT replaces the entire resource with the payload—omitted fields are typically cleared, and it's idempotent. PATCH applies a partial update—only the provided fields change (via merge patch or JSON Patch operations). Use PUT for full replacement, PATCH for partial modifications. Both should be idempotent; ensure PATCH semantics are clearly documented (merge vs JSON Patch).\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "put",
+   "patch",
+   "update",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving design concerns around return, rest, 200, 201, 204, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: 200 OK for successful GET/most operations returning a body. 201 Created after successfully creating a resource, ideally with a Location header pointing to it and the created representation in the body. 204 No Content for success with nothing to return (e.g., DELETE or a PUT that returns no body). Correct codes improve client handling and semantics.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "200",
+   "201",
+   "204",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving performance concerns around handle, rate, limiting, client, side, rest, rate limit, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Respect 429 responses and the Retry-After header; back off with exponential delay + jitter before retrying. Read rate-limit headers (X-RateLimit-Remaining/Reset) to pace requests proactively. Batch or cache to reduce calls, use conditional requests (ETags) to avoid re-fetching, and implement a circuit breaker for repeated failures. Never hammer an API on 429.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "rate-limit",
+   "429",
+   "retry-after",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Hard",
+  "question": "During a gradual rollout involving design concerns around design, long, running, operations, rest, async, 202, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Use the async request-reply pattern: POST accepts the work and returns 202 Accepted with a status URL (Location/Operation-Location). The client polls that URL for status (pending/running/succeeded/failed) and retrieves the result when done, or use webhooks/push to notify completion. This avoids holding HTTP connections open and lets clients track progress.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "async",
+   "202",
+   "long-running",
+   "polling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Content Negotiation",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving content negotiation concerns around content, negotiation, rest, content negotiation, accept, content type, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Content negotiation lets a client specify desired response format/language via headers—Accept (media type like application/json), Accept-Language, Accept-Encoding—and the server returns the best match (or 406 Not Acceptable). The request's Content-Type header declares the body's format. This decouples resource identity from representation, allowing JSON/XML/etc. from the same URI.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "content-negotiation",
+   "accept",
+   "content-type",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a security review involving design concerns around richardson, maturity, model, rest, richardson maturity, hateoas, design, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: It rates REST API maturity in levels: Level 0 (single endpoint, RPC-style over HTTP), Level 1 (resources—separate URIs per resource), Level 2 (HTTP verbs and status codes used properly), and Level 3 (HATEOAS—hypermedia links driving state). Most 'RESTful' APIs are Level 2 (pragmatic REST). It's a useful lens to assess and improve API design, though full Level 3 is rarely implemented.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "richardson-maturity",
+   "hateoas",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving design concerns around handle, bulk, operations, rest, batch, 207, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Options: a batch endpoint accepting an array (POST /orders/batch) returning per-item results/status (207 Multi-Status style), or a dedicated bulk resource. Decide on atomicity (all-or-nothing vs partial success) and clearly report which items succeeded/failed. For very large jobs, accept the batch and process asynchronously (202 + status URL). Document idempotency and limits. Bulk endpoints reduce chattiness versus many single calls.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "bulk",
+   "batch",
+   "207",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving design concerns around design, filtering, sorting, field, selection, rest, field selection, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Use query parameters: filtering (?status=open&minPrice=10), sorting (?sort=-createdAt,name with a sign for direction), pagination (?page/size or cursor), and sparse fieldsets (?fields=id,name) to return only requested fields. Keep conventions consistent, validate/allow-list parameters, and translate them to efficient DB queries (indexes). This gives clients flexibility while you control performance. Document supported filters/sorts explicitly.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "filtering",
+   "sorting",
+   "field-selection",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Security",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving security concerns around implement, authentication, third, party, developers, rest, api key, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Issue API keys (simple, per-client, revocable) for identification/basic access, or OAuth2 client credentials for machine-to-machine with scopes, and OAuth2 authorization code for user-delegated access. Combine with rate limiting/quotas per key, HTTPS only, and least-privilege scopes. A gateway (APIM) manages keys, subscriptions, and throttling. Prefer OAuth tokens over static keys for anything sensitive; document the auth flow clearly.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "authentication",
+   "api-key",
+   "oauth",
+   "gateway",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a production incident involving design concerns around synchronous, asynchronous, rest, apis, async, 202, long running, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: A synchronous API processes the request and returns the result in the same response—simple for quick operations. An asynchronous API accepts the request (202 Accepted), returns a status/operation URL, and processes in the background; the client polls or is notified (webhook) when done. Use async for long-running or resource-intensive work to avoid holding connections and timeouts, keeping the API responsive.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "async",
+   "202",
+   "long-running",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving performance concerns around caching, improve, rest, performance, scalability, etag, cdn, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Caching serves repeated requests without recomputation/DB hits: client/CDN caching via Cache-Control/ETag reduces server load and latency; server-side/gateway response caching offloads backends; and data caching (Redis) speeds queries. Cache cacheable GETs with appropriate TTLs and validation (ETag/304), and vary by relevant headers/auth. It dramatically improves scalability for read-heavy APIs but requires careful invalidation to avoid staleness.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "caching",
+   "etag",
+   "cdn",
+   "scalability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a design review involving design concerns around status, code, return, validation, errors, rest, 400, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Use 400 Bad Request for malformed syntax/invalid requests, and 422 Unprocessable Entity for well-formed requests that fail business/semantic validation (many APIs use 400 for both). Return a structured body (ProblemDetails/RFC 7807) with per-field error messages so clients can display them. Be consistent across the API. Reserve 4xx for client errors and 5xx for server faults—don't return 200 with an error body.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "validation",
+   "400",
+   "422",
+   "problemdetails",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving design concerns around content, negotiation, accept, header, rest, content negotiation, content type, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Content negotiation lets clients request a preferred representation via the Accept header (media type: application/json, application/xml) and Accept-Language/Encoding; the server responds with the best match or 406 Not Acceptable. The Content-Type header declares the format of the request/response body. This decouples a resource's identity from its representation, allowing multiple formats/languages from the same URI. Most modern APIs default to JSON.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "content-negotiation",
+   "accept",
+   "content-type",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Hard",
+  "question": "During a reliability review involving design concerns around prevent, handle, abuse, rest, rate limiting, waf, security, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Apply rate limiting and quotas per client/IP/key (429 + Retry-After), authentication and least-privilege scopes, input validation and payload size limits, throttling of expensive operations, bot/anomaly detection, and a WAF/gateway. Monitor usage patterns and alert on spikes. Return clear errors and back-pressure. A gateway (APIM) centralizes these protections. Combine limits with authentication so abuse is attributable and controllable.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "abuse",
+   "rate-limiting",
+   "waf",
+   "security",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving practice concerns around handle, backward, compatibility, field, must, change, type, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Add a new field with the new type, populate both during a transition, migrate consumers with telemetry showing who still reads the old one, then remove it in a later version. Changing a field's type in place is a breaking change even if the old value happens to parse, because clients have typed models.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "versioning",
+   "compatibility",
+   "api-design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving practice concerns around communicate, rate, limits, clients, rest, rate limiting, api design, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Return 429 with Retry-After, and expose the limit, remaining quota and reset time in headers on every response so a well-behaved client can pace itself rather than discovering the limit by hitting it. Documenting limits per plan and per endpoint prevents the support conversation that otherwise follows every launch.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "rate-limiting",
+   "api-design",
+   "http",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a design review involving practice concerns around throttling, user, rest, rate limiting, security, api design, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Per user is fairest but requires authentication and can be evaded with multiple accounts. Per IP catches anonymous abuse but punishes shared networks and NAT. Per API key aligns with commercial plans and is the usual choice for partner APIs. Production systems layer several, with the strictest applying.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "rate-limiting",
+   "security",
+   "api-design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving practice concerns around version, data, alongside, contract, rest, versioning, compatibility, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Contract versioning handles the shape, but stored data outlives it - so persist a schema version with each record and upcast on read. Otherwise a v2 deployment cannot interpret v1 rows, and rollback becomes impossible. This is the part teams discover after the first breaking change reaches production.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "versioning",
+   "data",
+   "compatibility",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving practice concerns around documentation, include, beyond, endpoint, definitions, rest, api design, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Authentication setup with a working example, error codes and what to do about each, rate limits, pagination semantics, idempotency behaviour, versioning and deprecation policy, and a quick-start that produces a successful call in minutes. Generated schemas without those leave every consumer asking the same questions.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "documentation",
+   "api-design",
+   "developer-experience",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving practice concerns around http, caching, headers, matter, interact, rest, security, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Cache-Control sets shareability and freshness lifetime, ETag and Last-Modified enable conditional revalidation, and Vary tells caches which request headers change the response. Getting Vary wrong with authenticated responses is how one user's data is served to another from a shared cache.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "caching",
+   "http",
+   "security",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving practice concerns around handle, breaking, changes, small, number, known, consumers, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Coordinate directly: agree a window, run both versions, monitor which consumers still use the old one, and switch off only when usage is zero. With few consumers this is cheaper than formal versioning infrastructure - the failure mode is assuming you know all the consumers when an unregistered integration exists.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "versioning",
+   "integration",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving practice concerns around test, contract, without, deploying, consumer, rest, contract testing, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Contract tests generated from consumer expectations and verified against the provider in its own pipeline, plus schema validation of responses against the published specification. That catches the change that breaks a consumer at build time rather than after deployment.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "contract-testing",
+   "cicd",
+   "integration",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a security review involving practice concerns around deprecate, field, without, breaking, clients, rest, versioning, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Mark it deprecated in the specification and documentation with a removal date, keep populating it, log which consumers still read it if that is observable, and remove it only after usage stops. Silently removing a field is a breaking change even though the endpoint and status code are unchanged.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "versioning",
+   "deprecation",
+   "compatibility",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving practice concerns around belongs, rate, limiting, policy, documentation, rest, rate limiting, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: The limits per plan and per endpoint, the window and whether it is fixed or sliding, which headers report remaining quota, what status and headers a rejection returns, and the expected client behaviour on 429. Without this, clients either over-engineer or discover the limits during their launch.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "rate-limiting",
+   "documentation",
+   "api-design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving practice concerns around behave, downstream, dependency, unavailable, rest, reliability, http status, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Return 503 with Retry-After rather than 500, so clients know it is transient and when to retry, and fail fast rather than holding the connection until timeout. Where a degraded response is meaningful, return it with an indication that data is partial rather than failing the whole request.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "reliability",
+   "http-status",
+   "resilience",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving design concerns around design, resource, complex, lifecycle, rest, api design, state machine, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Expose the state explicitly as a field with a documented set of values and transitions, and model transitions as sub-resources or actions rather than allowing arbitrary state assignment. That makes invalid transitions rejectable and gives a natural place to record who changed what and when.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "api-design",
+   "state-machine",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving design concerns around expose, aggregated, computed, data, rest, api design, aggregation, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: As its own resource representing the report or summary, with parameters for the dimensions and period, rather than overloading a collection endpoint with aggregation flags. That keeps caching and authorisation coherent and avoids an endpoint whose response shape depends on its query string.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "api-design",
+   "aggregation",
+   "reporting",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Security",
+  "difficulty": "Medium",
+  "question": "During a design review involving security concerns around secure, public, endpoint, must, remain, unauthenticated, rest, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Rate limit aggressively by address and fingerprint, keep the response minimal so it has little value to abuse, add bot detection where warranted, cache heavily at the edge so origin load is bounded, and monitor for scraping patterns. Accept that anything unauthenticated will be scraped and design the data accordingly.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "security",
+   "rate-limiting",
+   "api-design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving operations concerns around monitor, public, rest, observability, monitoring, operations, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Request rate, error rate and latency per endpoint and per consumer, rate limit rejections, authentication failures, payload sizes, and the version distribution of clients. Per-consumer breakdown is what lets you distinguish one misbehaving integration from a general problem.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "observability",
+   "monitoring",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving operations concerns around roll, change, external, consumers, rest, versioning, deployment, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Announce with lead time, deploy additively so nothing breaks, monitor adoption per consumer, provide a sandbox for testing, and only then deprecate the old behaviour with a published sunset date. External consumers cannot be redeployed on your schedule, which is the fundamental constraint.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "versioning",
+   "deployment",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving practice concerns around support, both, public, internal, callers, same, service, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Separate the contracts - internal callers may use a richer or different interface - or apply the public contract to everyone and accept the constraint. What causes trouble is internal callers depending on undocumented behaviour, which then blocks changes intended to be safe for public consumers.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "api-design",
+   "architecture",
+   "versioning",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Performance",
+  "difficulty": "Hard",
+  "question": "During a gradual rollout involving performance concerns around endpoint, returns, seconds, walk, through, find, cost, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: **Approach**\n\nMeasure before changing anything. The instinct to add caching first is usually wrong, because it hides a problem rather than fixing it and introduces invalidation bugs.\n\n**Where the 3 seconds could be**\n\n```\n  client ---> [ network ] ---> API ---> [ database ]\n                                 |\n                                 +----> [ downstream service ]\n                                 |\n                                 +----> [ serialization ]\n\n  breakdown from a trace:\n  ------------------------------------------------\n  network + TLS          40 ms   ####\n  auth / middleware      15 ms   #\n  DB query 1            120 ms   ############\n  DB query 2..N       2,400 ms   ########################################  <-- here\n  serialization         380 ms   ######################\n  ------------------------------------------------\n```\n\nA distributed trace makes this immediate. Without one you are guessing.\n\n**The usual culprit: N+1 queries**\n\n```csharp\n// 1 query for orders, then one per order for its customer: 1 + N round trips.\nvar orders = await db.Orders.ToListAsync();\nforeach (var o in orders)\n    o.CustomerName = (await db.Customers.FindAsync(o.CustomerId)).Name;\n\n// One query, one round trip.\nvar orders = await db.Orders\n    .Include(o => o.Customer)\n    .Select(o => new OrderDto(o.Id, o.Total, o.Customer.Name))   // project, do not materialise\n    .ToListAsync();\n```\n\n**Fix order, cheapest first**\n\n| # | Fix | Typical win | Risk |\n|---|---|---|---|\n| 1 | Eliminate N+1 | 10–100x | None; strictly better |\n| 2 | Project to a DTO, select fewer columns | 2–5x | None |\n| 3 | Add the missing index | 10–1000x | Write cost |\n| 4 | Paginate instead of returning everything | Bounded response | API change |\n| 5 | Parallelise independent downstream calls | Sum → max | Concurrency limits |\n| 6 | Cache | Large | Invalidation complexity |\n| 7 | Move work out of the request (queue) | Latency → async | Eventual consistency |\n\n**Parallelising independent calls**\n\n```csharp\n// Sequential: 300 + 250 + 400 = 950 ms\nvar user = await GetUserAsync(id);\nvar orders = await GetOrdersAsync(id);\nvar prefs = await GetPreferencesAsync(id);\n\n// Concurrent: max(300, 250, 400) = 400 ms\nvar userTask = GetUserAsync(id);\nvar ordersTask = GetOrdersAsync(id);\nvar prefsTask = GetPreferencesAsync(id);\nawait Task.WhenAll(userTask, ordersTask, prefsTask);\n```\n\nOnly valid when the calls are genuinely independent, and it multiplies load on the downstream service, so it needs a concurrency limit.\n\n**Why caching is last**\n\nCaching does not make the endpoint faster; it makes *some* requests skip the slow path. The slow path still runs on a miss, on cache expiry, and for every new key. If the underlying query is 3 seconds, a cold cache or a deployment still exposes users to 3 seconds, and now you also own invalidation bugs.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest-api",
+   "performance",
+   "n-plus-one",
+   "profiling",
+   "caching",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving design concerns around client, reports, retrying, failed, post, created, duplicate, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: **Whose problem**\n\nBoth, but the API owns the fix. The client behaved reasonably — a 500 is ambiguous, the request may or may not have been processed, and retrying is the standard response. The API's contract gave the client no way to retry safely.\n\n**Why the ambiguity is unavoidable**\n\nA 500 means the server failed *somewhere*. It may have failed before creating the order, after creating it but before committing, or after committing but before the response reached the client. A network timeout is worse still: the client has no response at all. There is no way for the client to distinguish these from outside.\n\nSo 'do not retry' is not a solution — the client cannot know whether to.\n\n**The fix: idempotency keys**\n\nThe client generates a unique key per logical operation and sends it as a header. The server records it with the result of the first attempt. A retry with the same key returns the stored result rather than performing the operation again.\n\n```\nPOST /orders\nIdempotency-Key: 8f14e45f-ea9b-4c71-b2d7-2e5a0a1c9f33\n```\n\nThe implementation details that matter:\n\n**Store the key in the same transaction as the work**, or the same race exists one level down — a unique constraint on the key column is what makes the second attempt fail cleanly.\n\n**Store the response**, not just the fact of the key, so the retry returns the same order id rather than a bare acknowledgement.\n\n**Scope keys to the client** so two clients cannot collide, and expire them after a sensible window — 24 hours is typical.\n\n**Decide the concurrent case.** If a retry arrives while the first is still in flight, returning 409 and asking the client to retry is cleaner than attempting to wait.\n\n**What else the API should do**\n\nReturn 503 with `Retry-After` rather than 500 where the failure is known to be transient, so the client's retry behaviour can be informed rather than guessed. And ensure that whatever failed did not leave a partial write — a 500 following a committed order is a worse failure than the duplicate.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest-api",
+   "idempotency",
+   "retries",
+   "distributed-systems",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a security review involving design concerns around mobile, team, complains, requires, calls, render, screen, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: **Both are describing real constraints**\n\nThe API team is right that resource-oriented design is coherent and maintainable. The mobile team is right that six round trips on a mobile network — where latency is 100–300ms and connections are unreliable — is a poor experience. Six calls is potentially two seconds before anything renders, and six chances to fail.\n\nThe disagreement is really about where the coupling should live: a general API with clients composing it, or an API shaped for its consumers.\n\n**Options, with their costs**\n\n**1. Backend for Frontend.** A thin service per client type that composes the underlying APIs and returns exactly what the screen needs. The mobile team gets one call; the core APIs stay resource-oriented. The cost is another deployable to own, and the BFF tends to accumulate logic that belongs elsewhere.\n\n**2. GraphQL.** The client specifies what it needs in one request. Genuinely solves over- and under-fetching. Costs: query complexity and cost-limiting become a real concern, caching is harder than with HTTP verbs, and the N+1 problem moves into the resolvers where it is easy to create and hard to see.\n\n**3. Compound documents or expansion parameters.** `GET /orders/123?expand=customer,items` — a pragmatic middle path that keeps REST semantics while letting the client reduce round trips. Much cheaper than either of the above and covers most cases.\n\n**4. Just add the endpoint.** A purpose-built `GET /screens/order-summary/123`. Purists object, but if one screen is critical and stable, a dedicated endpoint is simple, cacheable and honest about what it is.\n\n**What I would actually recommend**\n\nStart with expansion parameters, because it is the smallest change that addresses the complaint and requires no new infrastructure. If several clients diverge substantially in their needs, that is the signal for a BFF. Reach for GraphQL when there are many clients with genuinely varied and evolving needs — it is a significant platform commitment to solve a problem that expansion parameters often handle.\n\n**The framing that unblocks the argument**\n\n'Correctly designed' has to include the consumers. An API nobody can use efficiently is not well designed; it is well *modelled*. Those are different things, and the mobile team is raising a legitimate design input rather than asking for a shortcut.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest-api",
+   "bff",
+   "graphql",
+   "chattiness",
+   "api-design",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving design concerns around client, says, slow, because, need, requests, render, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: I would treat it as a real design problem rather than a client complaint, because 50 requests for one screen is usually an N+1 baked into the API shape.\n\n**First I would find out the pattern.** Almost always it is one call for a collection and then one per item for details - the API exposes normalised resources and the client has to stitch them together.\n\n**The options, in roughly the order I would consider them:**\n\n1. **Allow expansion.** `GET /orders?expand=customer,lines` lets the client ask for related data in one call. It keeps the resource model clean and makes the cost explicit and opt-in. Bound what can be expanded and how deep, or you have built an accidental query language.\n2. **Add a purpose-built endpoint** for that screen - a read model shaped to the use case. This is the pragmatic answer when one screen dominates, and it is not a design failure to admit that; it is CQRS applied to the API surface.\n3. **Batch endpoint** - accept multiple ids, return multiple resources. Simple, effective, and avoids inventing per-screen endpoints for every client.\n4. **GraphQL**, if there are many clients with genuinely divergent needs. I would raise it as an option rather than a recommendation, because it moves the problem rather than removing it: you now own query cost analysis, depth limiting and the N+1 on the server side instead.\n\n**What I would push back on:** if the client is making 50 calls because they are polling or not caching, the fix is on their side, and cache headers plus ETags may solve it without any API change. So I would want to see the actual traffic before redesigning anything.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest-apis",
+   "api-design",
+   "n-plus-one",
+   "graphql",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Versioning",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving versioning concerns around version, public, actually, need, rest apis, versioning, deprecation, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: The best versioning strategy is to need it rarely, so the first question is whether the change is genuinely breaking. Additive changes - new optional fields in requests, new fields in responses - need no version if clients are contractually required to ignore unknown fields. Getting that expectation into the documentation from day one saves most versioning pain.\n\n**When a version is genuinely needed:** removing or renaming a field, changing a type or its semantics, making an optional request field required, changing error codes or status semantics, or altering default behaviour.\n\n**The mechanisms, with trade-offs:**\n- **URL path** (`/v1/orders`) - explicit, obvious in logs, trivially cacheable, easy to route at the gateway. Purists object that the resource identity should not change with representation, and they are right in principle; it remains the most common choice because it is the most operable.\n- **Header** (`Api-Version: 2` or content negotiation via `Accept`) - cleaner in theory, keeps URLs stable, but harder to test in a browser and easy to omit, and caching requires `Vary` to be right.\n- **Query string** - simple, but pollutes every URL and is easy to drop accidentally.\n\n**I would use the URL path for a public API**, because the people consuming it benefit from the obviousness more than they suffer from the impurity.\n\n**The part that matters more than the mechanism:** a deprecation policy. Announce, give a long window, use `Deprecation` and `Sunset` headers so tooling can see it, measure who is still calling the old version, and contact them. And keep the number of live versions small - every supported version multiplies testing and maintenance forever.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest-apis",
+   "versioning",
+   "deprecation",
+   "api-design",
+   "backwards-compatibility",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Errors",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving errors concerns around report, errors, clients, actually, need, rest apis, error handling, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Consistently, in a machine-readable shape, with enough information to act and nothing that helps an attacker.\n\n**What clients need:**\n1. **The right status code.** 400 for a malformed request, 401 for missing or invalid credentials, 403 for authenticated-but-not-allowed, 404 for not found, 409 for a conflict, 422 for semantically invalid, 429 for rate limited, 5xx for our fault. The distinction clients care about most is \"should I retry\" - and that is carried by the class, so returning 200 with an error body destroys it.\n2. **A stable machine-readable code**, not just a message. Clients should branch on `\"insufficient_funds\"`, not on English prose that will be reworded.\n3. **Field-level detail for validation**, so a form can highlight the right input rather than showing one generic banner.\n4. **A correlation id**, so a user can quote it and support can find the request.\n5. **`Retry-After`** on 429 and 503, so well-behaved clients back off correctly instead of guessing.\n\n**The standard shape to use is `application/problem+json`** (RFC 9457) - `type`, `title`, `status`, `detail`, `instance`, plus your own extensions. ASP.NET Core produces it natively, so it costs nothing to adopt and clients get a predictable envelope.\n\n**What must not be in there:** stack traces, SQL, internal paths, dependency names or versions. Those are reconnaissance. The correlation id is how you connect a user-facing message to the internal detail that stays in your logs.\n\n**And be consistent across every endpoint.** A client that must handle three error shapes will handle one of them badly.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest-apis",
+   "error-handling",
+   "problem-details",
+   "status-codes",
+   "api-design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During a design review involving fundamentals concerns around rest, core, constraints, stateless, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: REST (Representational State Transfer) is an architectural style for networked APIs. Constraints: client-server separation, statelessness (each request self-contained), cacheability, uniform interface (resources, standard methods, representations), layered system, and optional code-on-demand. Resources are identified by URIs and manipulated via HTTP methods with representations (usually JSON).\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "constraints",
+   "stateless",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied HTTP Methods",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving http methods concerns around main, http, methods, semantics, rest, http methods, idempotent, how would you test the relevant edge cases and failure paths while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: GET retrieves (safe, idempotent). POST creates or triggers processing (not idempotent). PUT replaces a resource fully (idempotent). PATCH partially updates (should be idempotent). DELETE removes (idempotent). HEAD returns headers only; OPTIONS reports allowed methods (used in CORS preflight). Following these semantics keeps APIs predictable and cache/proxy-friendly.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "http-methods",
+   "idempotent",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied HTTP Methods",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving http methods concerns around idempotency, matter, apis, rest, retry, reliability, how would you diagnose the issue without masking it with retries or extra capacity while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: An idempotent operation produces the same result whether called once or many times (GET, PUT, DELETE). It matters because networks retry: clients/gateways may resend on timeout, and idempotent endpoints avoid duplicate side effects. For non-idempotent POST (e.g., payments), use an idempotency key so retries don't double-charge. Design writes to be safely retryable.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "idempotency",
+   "retry",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Status Codes",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving status codes concerns around main, http, status, code, classes, mean, rest, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: 2xx success (200 OK, 201 Created, 204 No Content). 3xx redirection (301/302, 304 Not Modified). 4xx client errors (400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 422 Unprocessable, 429 Too Many Requests). 5xx server errors (500 Internal, 502 Bad Gateway, 503 Unavailable, 504 Timeout). Correct codes let clients react appropriately.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "status-codes",
+   "http",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Status Codes",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving status codes concerns around rest, 401, 403, auth, how would you decide what to measure at the component and user-facing boundaries while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: 401 Unauthorized means the request lacks valid authentication—the client isn't identified (missing/invalid/expired token); the client should authenticate. 403 Forbidden means the client is authenticated but not authorized to access the resource—more credentials won't help. Use 401 for 'who are you?' and 403 for 'you can't do that.'\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "401",
+   "403",
+   "auth",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving design concerns around best, practices, designing, rest, resource, uris, uri design, how would you design a safe experiment that tests the most important assumption while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Use nouns, not verbs, and plural collections (/orders, /orders/123/items). Represent hierarchy with nesting, filter/sort/paginate via query params (?status=open&page=2&sort=-date), use lowercase and hyphens, keep them stable, and version at the base (/v1). Let HTTP methods convey actions rather than encoding verbs in the path (avoid /getOrders).\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "uri-design",
+   "best-practice",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving design concerns around handle, errors, rest, error handling, problemdetails, rfc7807, how would you explain the decision to reviewers who did not build the original system while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Return the correct status code plus a structured, consistent error body—ideally RFC 7807 ProblemDetails (type, title, status, detail, instance, and field errors). Don't leak stack traces/internal details. Include a correlation/trace id for support, use 400/422 for validation with per-field messages, and document error shapes. Consistency lets clients handle errors programmatically.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "error-handling",
+   "problemdetails",
+   "rfc7807",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Pagination",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving pagination concerns around pagination, strategies, rest, apis, cursor, offset, how would you define a rollback boundary and objective success criteria while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: There are three in common use, and the right one depends on whether clients need to jump to a page and how much data sits behind the endpoint.\n\n**Offset/limit** - `GET /orders?page=3&pageSize=20`. Simple, supports arbitrary page jumps and a total count. Degrades with depth and is unstable while data changes - a row inserted between requests duplicates the boundary row, and a deletion silently skips one.\n\n**Cursor/keyset** - `GET /orders?cursor=eyJ...&limit=20`. Constant cost at any depth and stable under concurrent writes. No page numbers and no free total. The right default for feeds, infinite scroll and any large dataset.\n\n**Time/id range** - `GET /events?since=2026-09-01T00:00:00Z`. Natural for logs and event streams, and lets clients resume from where they stopped.\n\n```http\nGET /orders?limit=20 HTTP/1.1\n\nHTTP/1.1 200 OK\nLink: <https://api.example.com/orders?cursor=eyJjIjoiMjAyNi0wOS0xNSIsImkiOjg4fQ&limit=20>; rel=\"next\"\n\n{\n  \"data\": [ { \"id\": 88, \"total\": 240.00 } ],\n  \"pageInfo\": {\n    \"nextCursor\": \"eyJjIjoiMjAyNi0wOS0xNSIsImkiOjg4fQ\",\n    \"hasNextPage\": true\n  }\n}\n```\n\n**Conventions worth following whichever you choose:** cap `limit` server-side so a client cannot request 100,000 records, return the cursor as opaque and document it as opaque, use the `Link` header with `rel=\"next\"`/`rel=\"prev\"` if you want to be HTTP-idiomatic, and keep the envelope consistent across every collection endpoint so clients write one pagination helper rather than several.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "pagination",
+   "cursor",
+   "offset",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Caching",
+  "difficulty": "Hard",
+  "question": "During a performance regression involving caching concerns around http, caching, etags, cache, control, rest, etag, how would you define ownership, observability, and recovery for the resulting design while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Cache-Control directives (max-age, no-cache, private/public) tell caches how long/who can cache. ETag is a version identifier of a resource; clients send If-None-Match and the server returns 304 Not Modified if unchanged, saving bandwidth. Last-Modified/If-Modified-Since is a time-based variant. Combined, they enable conditional requests and efficient client/proxy caching.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "caching",
+   "etag",
+   "cache-control",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Concurrency",
+  "difficulty": "Hard",
+  "question": "During a privacy assessment involving concurrency concerns around handle, concurrent, updates, optimistic, concurrency, rest, etag, how would you validate correctness before attempting to optimize the implementation while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Use ETags/version numbers: the client sends the resource's ETag in If-Match on update; if it no longer matches (someone else changed it) the server returns 412 Precondition Failed, preventing lost updates. The client then re-fetches, merges, and retries. This provides optimistic concurrency over stateless HTTP without server-side locks.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "concurrency",
+   "etag",
+   "if-match",
+   "412",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Versioning",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving versioning concerns around approaches, versioning, rest, api design, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: URI path (/v1/orders)—explicit, cache-friendly, most common. Query string (?version=1). Custom header (Api-Version: 1). Media type/content negotiation (Accept: application/vnd.company.v1+json)—purist HATEOAS style. Trade-offs are visibility vs URL cleanliness. Whatever you pick, be consistent, document it, and avoid breaking changes by adding rather than modifying.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "versioning",
+   "api-design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving design concerns around hateoas, rest, hypermedia, how would you reduce risk while preserving the required behavior while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: HATEOAS (Hypermedia as the Engine of Application State) is the REST constraint where responses include links to related actions/resources, so clients navigate the API dynamically via provided hypermedia rather than hardcoding URIs. It decouples clients from URL structure and enables discoverability. In practice it's rarely fully implemented; most APIs are 'pragmatic REST' without full HATEOAS.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "hateoas",
+   "hypermedia",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Comparison",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving comparison concerns around rest, graphql, grpc, comparison, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: REST: resource-based over HTTP/JSON, simple, cacheable, but can over/under-fetch. GraphQL: a single endpoint with a query language letting clients request exactly the fields they need—great for varied clients, but caching/complexity trade-offs. gRPC: high-performance binary (Protobuf) over HTTP/2 with streaming and contracts—ideal for internal service-to-service. Choose by client needs, performance, and ecosystem.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "graphql",
+   "grpc",
+   "comparison",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Security",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving security concerns around secure, rest, security, oauth, owasp, how would you test the relevant edge cases and failure paths while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Use HTTPS everywhere, authenticate with OAuth2/JWT (validate signature, issuer, audience, expiry), authorize with scopes/roles, validate and sanitize all input, apply rate limiting/throttling, use CORS to restrict origins, avoid exposing internal errors, add security headers, and never put secrets in URLs. Follow least privilege and the OWASP API Security Top 10.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "security",
+   "oauth",
+   "owasp",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Documentation",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving documentation concerns around openapi, swagger, rest, documentation, how would you diagnose the issue without masking it with retries or extra capacity while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: OpenAPI is a standard, language-agnostic specification (YAML/JSON) describing an API's endpoints, parameters, schemas, responses, and auth. Swagger is the tooling ecosystem (Swagger UI for interactive docs, codegen for clients/servers). In ASP.NET Core, Swashbuckle/NSwag generate the spec from code. It enables discoverability, client generation, contract testing, and consistent documentation.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "openapi",
+   "swagger",
+   "documentation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a security review involving design concerns around patch, rest, put, update, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: PUT replaces the entire resource with the payload—omitted fields are typically cleared, and it's idempotent. PATCH applies a partial update—only the provided fields change (via merge patch or JSON Patch operations). Use PUT for full replacement, PATCH for partial modifications. Both should be idempotent; ensure PATCH semantics are clearly documented (merge vs JSON Patch).\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "put",
+   "patch",
+   "update",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving design concerns around return, rest, 200, 201, 204, how would you decide what to measure at the component and user-facing boundaries while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: 200 OK for successful GET/most operations returning a body. 201 Created after successfully creating a resource, ideally with a Location header pointing to it and the created representation in the body. 204 No Content for success with nothing to return (e.g., DELETE or a PUT that returns no body). Correct codes improve client handling and semantics.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "200",
+   "201",
+   "204",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving performance concerns around handle, rate, limiting, client, side, rest, rate limit, how would you design a safe experiment that tests the most important assumption while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Respect 429 responses and the Retry-After header; back off with exponential delay + jitter before retrying. Read rate-limit headers (X-RateLimit-Remaining/Reset) to pace requests proactively. Batch or cache to reduce calls, use conditional requests (ETags) to avoid re-fetching, and implement a circuit breaker for repeated failures. Never hammer an API on 429.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "rate-limit",
+   "429",
+   "retry-after",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Hard",
+  "question": "During a concurrency bug involving design concerns around design, long, running, operations, rest, async, 202, how would you explain the decision to reviewers who did not build the original system while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Use the async request-reply pattern: POST accepts the work and returns 202 Accepted with a status URL (Location/Operation-Location). The client polls that URL for status (pending/running/succeeded/failed) and retrieves the result when done, or use webhooks/push to notify completion. This avoids holding HTTP connections open and lets clients track progress.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "async",
+   "202",
+   "long-running",
+   "polling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Content Negotiation",
+  "difficulty": "Medium",
+  "question": "During a production incident involving content negotiation concerns around content, negotiation, rest, content negotiation, accept, content type, how would you define a rollback boundary and objective success criteria while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Content negotiation lets a client specify desired response format/language via headers—Accept (media type like application/json), Accept-Language, Accept-Encoding—and the server returns the best match (or 406 Not Acceptable). The request's Content-Type header declares the body's format. This decouples resource identity from representation, allowing JSON/XML/etc. from the same URI.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "content-negotiation",
+   "accept",
+   "content-type",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving design concerns around richardson, maturity, model, rest, richardson maturity, hateoas, design, how would you define ownership, observability, and recovery for the resulting design while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: It rates REST API maturity in levels: Level 0 (single endpoint, RPC-style over HTTP), Level 1 (resources—separate URIs per resource), Level 2 (HTTP verbs and status codes used properly), and Level 3 (HATEOAS—hypermedia links driving state). Most 'RESTful' APIs are Level 2 (pragmatic REST). It's a useful lens to assess and improve API design, though full Level 3 is rarely implemented.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "richardson-maturity",
+   "hateoas",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving design concerns around handle, bulk, operations, rest, batch, 207, how would you validate correctness before attempting to optimize the implementation while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Options: a batch endpoint accepting an array (POST /orders/batch) returning per-item results/status (207 Multi-Status style), or a dedicated bulk resource. Decide on atomicity (all-or-nothing vs partial success) and clearly report which items succeeded/failed. For very large jobs, accept the batch and process asynchronously (202 + status URL). Document idempotency and limits. Bulk endpoints reduce chattiness versus many single calls.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "bulk",
+   "batch",
+   "207",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving design concerns around design, filtering, sorting, field, selection, rest, field selection, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Use query parameters: filtering (?status=open&minPrice=10), sorting (?sort=-createdAt,name with a sign for direction), pagination (?page/size or cursor), and sparse fieldsets (?fields=id,name) to return only requested fields. Keep conventions consistent, validate/allow-list parameters, and translate them to efficient DB queries (indexes). This gives clients flexibility while you control performance. Document supported filters/sorts explicitly.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "filtering",
+   "sorting",
+   "field-selection",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Security",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving security concerns around implement, authentication, third, party, developers, rest, api key, how would you reduce risk while preserving the required behavior while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Issue API keys (simple, per-client, revocable) for identification/basic access, or OAuth2 client credentials for machine-to-machine with scopes, and OAuth2 authorization code for user-delegated access. Combine with rate limiting/quotas per key, HTTPS only, and least-privilege scopes. A gateway (APIM) manages keys, subscriptions, and throttling. Prefer OAuth tokens over static keys for anything sensitive; document the auth flow clearly.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "authentication",
+   "api-key",
+   "oauth",
+   "gateway",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a design review involving design concerns around synchronous, asynchronous, rest, apis, async, 202, long running, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: A synchronous API processes the request and returns the result in the same response—simple for quick operations. An asynchronous API accepts the request (202 Accepted), returns a status/operation URL, and processes in the background; the client polls or is notified (webhook) when done. Use async for long-running or resource-intensive work to avoid holding connections and timeouts, keeping the API responsive.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "async",
+   "202",
+   "long-running",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving performance concerns around caching, improve, rest, performance, scalability, etag, cdn, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Caching serves repeated requests without recomputation/DB hits: client/CDN caching via Cache-Control/ETag reduces server load and latency; server-side/gateway response caching offloads backends; and data caching (Redis) speeds queries. Cache cacheable GETs with appropriate TTLs and validation (ETag/304), and vary by relevant headers/auth. It dramatically improves scalability for read-heavy APIs but requires careful invalidation to avoid staleness.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "caching",
+   "etag",
+   "cdn",
+   "scalability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving practice concerns around handle, backward, compatibility, field, must, change, type, how would you diagnose the issue without masking it with retries or extra capacity while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Add a new field with the new type, populate both during a transition, migrate consumers with telemetry showing who still reads the old one, then remove it in a later version. Changing a field's type in place is a breaking change even if the old value happens to parse, because clients have typed models.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "versioning",
+   "compatibility",
+   "api-design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving practice concerns around tolerant, reader, pattern, rest, compatibility, integration, patterns, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: A client ignores fields it does not recognise and does not fail on additive changes, so the provider can evolve the contract without coordinated releases. It is one line of policy with large consequences - strict deserialisation that throws on unknown properties makes every additive change breaking.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "compatibility",
+   "integration",
+   "patterns",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "REST APIs",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving practice concerns around communicate, rate, limits, clients, rest, rate limiting, api design, how would you decide what to measure at the component and user-facing boundaries while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Return 429 with Retry-After, and expose the limit, remaining quota and reset time in headers on every response so a well-behaved client can pace itself rather than discovering the limit by hitting it. Documenting limits per plan and per endpoint prevents the support conversation that otherwise follows every launch.\n\nFor the applied scenario, Make HTTP semantics, validation, idempotency, authorization, pagination, caching, error contracts, and version compatibility explicit. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "rest",
+   "rate-limiting",
+   "api-design",
+   "http",
+   "scenario-practice",
+   "applied"
   ]
  }
 ]

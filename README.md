@@ -1,114 +1,90 @@
-# Interview Question Bank (5,004 Q&A)
+# Interview Question Bank
 
-A searchable interview-prep question bank covering .NET, Angular, React, SQL/SP optimization,
-Azure (Entra ID, APIM, Redis, Service Bus, Logic Apps, Functions, Blob, AKS, Cosmos DB), MongoDB,
-microservices, event-driven architecture, RAG/AI agents, REST, auth/security, testing, CI/CD,
-Docker/K8s, observability, Clean Architecture & SOLID, Power BI/SSIS/ETL, JS/TS, system design,
-coding problems and behavioural questions.
+**10,000 top-level Q&A across 24 categories. Target reached.**
+Nested follow-ups are not counted as additional top-level questions.
 
-## Files
+Source content lives in `data/*.json`, one JSON array per category. Source rows
+have no IDs; the build assigns IDs in file order. Rebuilding after additions
+can change IDs. The bank covers .NET, Angular, React, Azure, SQL, architecture,
+testing, security, AI, coding, and related interview topics.
 
-**Source (tracked)**
-- `questions.json` — the source of truth: a single JSON array of all questions. Edit this to add or change content.
-- `build.py` — compiles `questions.json` into the SQLite FTS5 DB and merged JSON.
-- `gen_sql.py` — generates `supabase_setup_and_seed.sql` (schema + indexes + all INSERTs).
-- `schema.sql` — schema-only migration (structure and indexes, no data).
-- `search.py` — CLI for local millisecond search over the SQLite build.
-- `tools/` — Node authoring pipeline for adding questions in bulk (see below).
+## Build and search
 
-**Generated (gitignored, rebuild with the scripts)**
-- `interview_qbank.sqlite` — SQLite DB with an FTS5 full-text index.
-- `interview_qbank.json` — the same data as a merged array with ids.
-- `supabase_setup_and_seed.sql` — the file to run in the Supabase SQL editor.
+Requires Python 3.9+ with SQLite FTS5 and Node.js 18+ for authoring tools.
+Run commands from the repository root:
 
-## Quick start
-
-```bash
-python build.py                      # rebuild the SQLite DB + merged JSON
-python gen_sql.py                    # rebuild the Supabase seed script
-python search.py "redis eviction"    # search locally (add --cat Azure, --limit 20)
+```sh
+node tools/validate.js
+node tools/coverage.js
+python build.py
+python gen_sql.py
+python search.py 'queue' --cat Performance --limit 5
 ```
 
-Requires Python 3.9+ and, for the authoring tools, Node 18+.
+`build.py` produces `interview_qbank.json` and `interview_qbank.sqlite`.
+`gen_sql.py` produces `supabase_01_schema.sql`, numbered seed files, and
+`supabase_setup_and_seed.sql`. Generated outputs are ignored by Git.
+The older tracked `supabase_setup_and_seed_1.sql` is a historical export;
+regenerate the current seed instead of relying on its contents.
 
-## Adding questions
+**The generated Supabase schema drops and recreates the questions table.**
+Use it only for an intentional full replacement after preserving needed data.
+Run the numbered files in order, or use the single file with `psql`.
+Generation alone does not modify a live database. SQL files have not been
+executed against a live PostgreSQL instance in this update.
 
-Batches are written as JSON files in `_incoming/` and merged with automatic quality checks,
-rather than edited into `questions.json` by hand.
+For CSV import, use `node tools/export-csv.js`. Company labels in existing
+content are crowdsourced associations, not verified interview records.
 
-```bash
-node tools/coverage.js                    # per-category counts against the target plan
-node tools/coverage.js "C#/.NET"          # list what a category already covers
-# write one or more batches into _incoming/*.json
-node tools/validate.js _incoming/x.json   # schema, answer length, exact duplicates
-node tools/merge.js --dry                 # preview what would be added or rejected
-node tools/merge.js                       # merge, reassign ids, clear _incoming/
-python build.py && python gen_sql.py      # regenerate artifacts
+## Authoring
+
+Write complete entries in `_incoming/*.json` with `category`, `subcategory`,
+`difficulty`, `question`, `answer`, and a nonempty `tags` array. Difficulty
+must be `Easy`, `Medium`, or `Hard`; answers must contain at least 150 characters.
+Optional `followups` entries have `q` and `a` fields; follow-up answers must
+contain at least 80 characters. Coding and selected system-design answers are
+checked for C# code fences. Structural checks do not prove factual correctness.
+
+```sh
+node tools/validate.js _incoming/my-batch.json
+node tools/merge.js --dry
+node tools/merge.js
+python build.py
+python gen_sql.py
 ```
 
-`merge.js` applies two guards before accepting a row:
+Merge validates every batch before writing. It rejects normalized exact
+duplicates and token-overlap near duplicates (0.6 within a category, 0.85
+across categories). Review dry-run output: rejected rows are not merged,
+and a successful non-dry merge clears incoming batches. Keep authoring backups.
+Semantic duplicates can still escape this heuristic.
 
-1. **Exact duplicate** — normalised question text already present.
-2. **Near duplicate** — Jaccard overlap of significant words at or above a threshold
-   (default 0.6). This is the important one: exact-text dedupe misses the same question
-   asked in different words, which is the main quality risk when adding rows in bulk.
+## Verification
 
-`tools/similar.js` runs the near-duplicate check on its own, including `--self` to audit
-`questions.json` against itself.
-
-Each entry has this shape (`id` is assigned at build time):
-
-```json
-{
-  "category": "C#/.NET",
-  "subcategory": "EF Core",
-  "difficulty": "Easy | Medium | Hard",
-  "question": "...",
-  "answer": "...",
-  "tags": ["efcore", "performance"]
-}
+```sh
+node tools/test-validation.js
+python -m unittest discover -s tests
+node tools/validate.js
+node tools/similar.js --self 0.75
 ```
 
-## Millisecond search (SQLite FTS5)
+Current full-bank validation passes with 631 warnings: 581 coding/design
+answers without C# blocks and 50 long answers. These are warnings because the
+underlying prose may still be useful, but they remain an editorial backlog.
+Existing answers and code have not all been independently reverified. See
+`PROGRESS.md` for the expansion method and current verification status.
 
-Any human or LLM can query the local build instantly:
+## Production search
+
+Use PostgreSQL full-text search through a backend API:
 
 ```sql
--- Top matches ranked by relevance (BM25):
-SELECT q.category, q.question, q.answer
-FROM questions_fts
-JOIN questions q ON q.id = questions_fts.rowid
-WHERE questions_fts MATCH 'index optimization sargable'
-ORDER BY bm25(questions_fts)
-LIMIT 10;
-
--- Search within a category:
-SELECT q.question FROM questions_fts
-JOIN questions q ON q.id = questions_fts.rowid
-WHERE questions_fts MATCH 'circuit breaker' AND q.category = 'Architecture';
+select id, category, question, answer
+from questions
+where search @@ websearch_to_tsquery('english', $1)
+order by ts_rank_cd(search, websearch_to_tsquery('english', $1)) desc
+limit 20;
 ```
 
-FTS5 uses the `porter unicode61` tokenizer (stemming), so "optimizing" matches "optimize".
-Use plain keywords rather than "x vs y" phrases for best recall.
-
-## Production search (PostgreSQL on Supabase)
-
-The intended production path is PostgreSQL full-text search with a GIN index, queried through
-a .NET API. Run `supabase_setup_and_seed.sql` in the Supabase SQL editor — it drops and
-recreates the table, so it is safe to re-run after regenerating.
-
-The .NET query **must** use the FTS operator so it hits the index:
-
-```sql
-where search @@ websearch_to_tsquery('english', @q)
-```
-
-In EF Core: `x.Search.Matches(EF.Functions.WebSearchToTsQuery("english", q))`.
-Do **not** use `LIKE '%...%'` or `.Contains()` — that bypasses the index and falls back to a
-sequential scan.
-
-## Schema
-
-`questions(id, category, subcategory, difficulty, question, answer, tags)` plus `questions_fts`
-(FTS5 over question, answer, tags, category, subcategory) locally, and a generated `tsvector`
-column with GIN and trigram indexes on PostgreSQL.
+The generated schema supplies a GIN index on `search`. Latency depends on
+hardware, load, query selectivity, and deployment; benchmark your workload.

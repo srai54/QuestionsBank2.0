@@ -2097,20 +2097,6 @@
    "performance",
    "diagnosis",
    "scenario"
-  ],
-  "followups": [
-   {
-    "q": "Why is lazy-loading the hero image counterproductive?",
-    "a": "Because lazy loading defers the fetch until the browser determines the image is near the viewport, and the hero is in the viewport immediately - so you have added a delay to the one image that must appear fastest. It also removes it from the preload scanner's early discovery. The rule is to lazy-load everything below the fold and eagerly load, ideally with fetchpriority high, the LCP candidate. Applying loading=lazy uniformly across a codebase is how this happens."
-   },
-   {
-    "q": "How do fonts delay LCP specifically?",
-    "a": "With the default font-display behaviour the browser hides text for up to three seconds while the web font loads, so if your LCP element is text it simply does not render during that block period. font-display swap renders immediately in a fallback and swaps when the font arrives, which fixes LCP at the cost of a visible reflow - and that reflow can hurt Cumulative Layout Shift, so the two metrics trade off. Preloading the font and matching the fallback metrics with size-adjust reduces both problems."
-   },
-   {
-    "q": "Lighthouse scores well in the lab but field data is poor. Why the difference?",
-    "a": "Because the lab test runs on a specific simulated device and network from one location, while field data comes from real users on real devices and connections - low-end Android phones on mobile networks, which are much slower than a throttled desktop simulation. Field data also includes cold caches, contended CPUs and third-party scripts that behave differently in the wild. Lab data is for debugging because it is reproducible; field data from the Chrome UX Report or your own RUM is what you should actually be judged on."
-   }
   ]
  },
  {
@@ -2129,16 +2115,8 @@
   ],
   "followups": [
    {
-    "q": "Why is a Content Security Policy worth adding if the content is sanitised?",
-    "a": "Because sanitisation is a filter and filters have bypasses - new DOM APIs, parser differentials and mutation XSS have all defeated sanitisers that were considered sound. CSP is a different layer: even if markup is injected, a policy without unsafe-inline prevents inline script from running, and a restrictive connect-src prevents stolen data being sent anywhere useful. Defence in depth means assuming each control will eventually fail, and the value of CSP is precisely that it does not depend on the sanitiser being perfect."
-   },
-   {
     "q": "The content is Markdown rendered to HTML. Does that make it safe?",
     "a": "No - most Markdown renderers allow raw HTML by default, because the spec permits it, so a comment containing a script tag passes straight through. Even with HTML disabled, link syntax can carry a javascript URL unless the renderer blocks that scheme. The safe configuration is HTML disabled, a URL scheme allowlist, and the output still passed through a sanitiser. Markdown is a convenience for authors, not a security boundary."
-   },
-   {
-    "q": "Where should tokens be stored if XSS can read localStorage?",
-    "a": "In an httpOnly, Secure, SameSite cookie, which JavaScript cannot read at all - so an XSS payload can still make requests as the user while the page is open, but it cannot exfiltrate a long-lived token for later use. That is a meaningful reduction even though it is not complete protection. The cookie approach brings CSRF back into scope, which SameSite and an anti-forgery token address. Storing a bearer token in localStorage is convenient and means any XSS is a full account takeover with persistence."
    }
   ]
  },
@@ -2157,10 +2135,6 @@
    "scenario"
   ],
   "followups": [
-   {
-    "q": "Why is adding role=button and tabindex=0 to a div not equivalent to a button?",
-    "a": "Because those two attributes give you focusability and an announced role, but not behaviour - a real button fires its handler on both Enter and Space, participates in form submission, and is exposed to the accessibility tree with the correct default states. With a div you must implement the key handling yourself and people routinely implement only Enter, so Space silently does nothing for screen reader users who expect it. It is a reasonable pattern when you truly cannot use a button, and it is more work than it appears."
-   },
    {
     "q": "The designer insists on styling that a native select cannot do. How do you handle that conversation?",
     "a": "By making the cost explicit rather than treating it as a styling preference: a custom control means implementing and maintaining a dozen keyboard and ARIA behaviours, testing with a screen reader, and accepting the accessibility risk. Often the design can be satisfied on the closed state, which is stylable, while the open list uses the native picker - especially on mobile, where the native picker is better than anything custom. If a custom control is genuinely needed, the answer is a tested library rather than a bespoke build, and that has a cost the design decision should own."
@@ -2184,20 +2158,6 @@
    "server-state",
    "concurrency",
    "scenario"
-  ],
-  "followups": [
-   {
-    "q": "Why is separating server state from client state such a useful distinction?",
-    "a": "Because they have different requirements and mixing them produces exactly this bug. Server state needs caching, refetching, staleness policies and error handling for something you do not control; client state needs none of that and simply needs to not be destroyed. Libraries such as React Query exist because teams kept putting server state in Redux and reimplementing caching badly. Once the two are separate, questions like 'should this refetch' have obvious answers."
-   },
-   {
-    "q": "How do you decide between warning the user and merging automatically?",
-    "a": "By whether the fields conflict. If the other edit touched different fields, a field-level merge is usually safe and invisible - which is why collaborative editors work at all. If both edited the same field, no automatic resolution is correct, because the system cannot know which intent wins. The failure mode to avoid is a blanket last-write-wins, which silently discards work and is only noticed when someone asks why their change disappeared."
-   },
-   {
-    "q": "Should the app warn before navigating away from a dirty form?",
-    "a": "Yes, and it is one of the cheapest protections available - the beforeunload event for tab closes and a router guard for in-app navigation. The caveat is that browsers deliberately limit what you can say and require a prior interaction, so it cannot be relied on absolutely. Autosaving a draft locally is the stronger version, because it survives a crash and a closed tab rather than only a deliberate navigation, and it removes the dialogue entirely."
-   }
   ]
  },
  {
@@ -2213,20 +2173,6 @@
    "caching",
    "spa",
    "scenario"
-  ],
-  "followups": [
-   {
-    "q": "Why must index.html be no-cache while the assets are cached forever?",
-    "a": "Because index.html is the only file with a stable name, so it is the one that maps the application to the current set of hashed chunks - caching it means clients keep loading the old manifest and never see a new deployment. The hashed assets can be cached immutably precisely because their names change when their content changes, so there is never a stale version of a given URL. Getting this backwards, with a cached index and no-cache assets, produces both stale applications and unnecessary bandwidth."
-   },
-   {
-    "q": "Is automatically reloading on a failed import safe?",
-    "a": "Not unconditionally - a reload discards unsaved state, so a user mid-form loses their work, and a reload loop is possible if the failure is not actually a stale-deployment problem. The safer pattern is to attempt the reload once, guarded by a flag in sessionStorage so it cannot loop, and to prompt rather than reload when there is unsaved input. Silently reloading is acceptable for a read-only view and a poor choice for an editor."
-   },
-   {
-    "q": "How long should old assets be retained?",
-    "a": "Longer than a realistic session, which for a business application usually means at least a working day and often a week - the cost is storage, which is negligible for JavaScript bundles. The constraint is any requirement to remove code containing a vulnerability, where you do want the old version gone. A reasonable default is to keep the previous few builds and clean up on a schedule, rather than deleting as part of the deployment itself, which is what creates the window."
-   }
   ]
  },
  {
@@ -2241,16 +2187,6 @@
    "core-web-vitals",
    "lcp",
    "images"
-  ],
-  "followups": [
-   {
-    "q": "How does LCP interact with client-side rendering?",
-    "a": "Badly, by default. A pure SPA ships an empty shell, so nothing meaningful can paint until the JavaScript bundle downloads, parses and executes, and then fetches data. The LCP element is often gated behind two round trips. Server-side rendering or static generation puts real content in the initial HTML so the browser can discover and paint it immediately - which is the main performance argument for SSR frameworks."
-   },
-   {
-    "q": "What is the relationship between LCP and CLS, and can fixing one hurt the other?",
-    "a": "Yes. A common LCP fix is to render text immediately with a fallback font, which then reflows when the web font loads and shifts layout, hurting CLS. Similarly, loading an image faster without reserving its space causes a shift when it arrives. The answer to both is to reserve dimensions up front - width and height attributes or `aspect-ratio` on images, and `size-adjust` on font fallbacks so the fallback occupies the same space as the final font."
-   }
   ]
  },
  {
@@ -2265,16 +2201,6 @@
    "a11y",
    "aria",
    "semantic-html"
-  ],
-  "followups": [
-   {
-    "q": "What is the most common ARIA mistake?",
-    "a": "Using it where native HTML would do, and then implementing it incompletely - `role=\"button\"` on a div without `tabindex`, without keyboard handling, and without the disabled state, which is worse than no ARIA because it promises behaviour that is not there. The related mistake is redundant roles, such as `role=\"button\"` on an actual `<button>`, which is noise. The guidance in the ARIA spec itself is that no ARIA is better than bad ARIA."
-   },
-   {
-    "q": "How do you handle accessibility for a complex custom component like a combobox?",
-    "a": "Follow the ARIA Authoring Practices pattern for that component exactly - it specifies the roles, states and the full keyboard interaction, including the cases people forget such as Escape, Home and End. Better still, use a well-tested headless library that has already implemented it, since combobox and date picker are notoriously difficult to get right. Writing one from scratch and testing it only with a mouse is how inaccessible components ship."
-   }
   ]
  },
  {
@@ -2289,16 +2215,6 @@
    "code-splitting",
    "tree-shaking",
    "performance"
-  ],
-  "followups": [
-   {
-    "q": "What limits tree-shaking from working?",
-    "a": "CommonJS modules, because the static analysis relies on ES module `import`/`export` to know what is unused - a `require` is dynamic and the bundler must keep everything. Side effects also block it: if a module does work at import time, removing it would change behaviour, so bundlers keep it unless the package declares `sideEffects: false`. That field being missing or wrong on a dependency is a common reason tree-shaking silently underperforms."
-   },
-   {
-    "q": "Is a single large bundle ever better than many small chunks?",
-    "a": "Under HTTP/1.1 yes, because of the connection limit - but under HTTP/2 and HTTP/3 multiplexing removes that penalty, so splitting is nearly always better. The remaining caveat is granularity: hundreds of tiny chunks add request overhead and hurt compression ratios, since compression works better over more content. The sensible target is a handful of route-level chunks plus a stable vendor chunk that stays cached across deployments."
-   }
   ]
  },
  {
@@ -2313,16 +2229,6 @@
    "url-state",
    "routing",
    "architecture"
-  ],
-  "followups": [
-   {
-    "q": "How do you keep URL state and component state in sync without loops?",
-    "a": "Treat the URL as the single source of truth and derive component state from it, rather than holding both and synchronising. Read the parameters with the router s hook, and update by navigating - the component then re-renders from the new URL naturally. The loop people create is storing the value in state, writing it to the URL in an effect, and reading the URL back into state in another effect, which fights itself. One direction only."
-   },
-   {
-    "q": "What are the limits of putting state in the URL?",
-    "a": "Length - browsers and servers cap URLs at a few thousand characters, so a complex filter set with many selections can exceed it, and very long URLs break when pasted into chat clients. It is also visible, so nothing sensitive belongs there, and it ends up in server logs, analytics and referrer headers. For large or private state, put an identifier in the URL and hold the rest server-side or in storage keyed by that id."
-   }
   ]
  },
  {
@@ -2337,16 +2243,1710 @@
    "cache-busting",
    "deployment",
    "service-worker"
-  ],
-  "followups": [
-   {
-    "q": "Why keep old bundles after deploying a new version?",
-    "a": "Because a user who loaded the page before the deploy has HTML referencing the old chunk names, and with code splitting they fetch those chunks lazily as they navigate. If the files are gone, the navigation fails with a chunk-load error and often a blank screen - which is a common and confusing production symptom after a deploy. Keeping a few previous versions for a day or two costs almost nothing in storage and removes it entirely, alongside handling the error by prompting a reload."
-   },
-   {
-    "q": "What is the safe way to use a service worker without trapping users on old code?",
-    "a": "Use a maintained tool rather than hand-writing it, and make updating explicit - on detecting a new service worker, either prompt the user to reload or activate the new one and reload automatically, rather than waiting for every tab to close, which may be never. Keep the HTML network-first so a new version is always discoverable, and cache-first only for hashed assets that cannot go stale. A service worker that caches the entry point cache-first is the configuration that strands users, and recovering requires shipping code that the strand prevents them from receiving."
-   }
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "Why is lazy-loading the hero image counterproductive?",
+  "answer": "Because lazy loading defers the fetch until the browser determines the image is near the viewport, and the hero is in the viewport immediately - so you have added a delay to the one image that must appear fastest. It also removes it from the preload scanner's early discovery. The rule is to lazy-load everything below the fold and eagerly load, ideally with fetchpriority high, the LCP candidate. Applying loading=lazy uniformly across a codebase is how this happens.",
+  "tags": [
+   "frontend",
+   "core-web-vitals",
+   "lcp",
+   "performance",
+   "diagnosis",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "How do fonts delay LCP specifically?",
+  "answer": "With the default font-display behaviour the browser hides text for up to three seconds while the web font loads, so if your LCP element is text it simply does not render during that block period. font-display swap renders immediately in a fallback and swaps when the font arrives, which fixes LCP at the cost of a visible reflow - and that reflow can hurt Cumulative Layout Shift, so the two metrics trade off. Preloading the font and matching the fallback metrics with size-adjust reduces both problems.",
+  "tags": [
+   "frontend",
+   "core-web-vitals",
+   "lcp",
+   "performance",
+   "diagnosis",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Performance",
+  "difficulty": "Hard",
+  "question": "Lighthouse scores well in the lab but field data is poor. Why the difference?",
+  "answer": "Because the lab test runs on a specific simulated device and network from one location, while field data comes from real users on real devices and connections - low-end Android phones on mobile networks, which are much slower than a throttled desktop simulation. Field data also includes cold caches, contended CPUs and third-party scripts that behave differently in the wild. Lab data is for debugging because it is reproducible; field data from the Chrome UX Report or your own RUM is what you should actually be judged on.",
+  "tags": [
+   "frontend",
+   "core-web-vitals",
+   "lcp",
+   "performance",
+   "diagnosis",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Security",
+  "difficulty": "Hard",
+  "question": "Why is a Content Security Policy worth adding if the content is sanitised?",
+  "answer": "Because sanitisation is a filter and filters have bypasses - new DOM APIs, parser differentials and mutation XSS have all defeated sanitisers that were considered sound. CSP is a different layer: even if markup is injected, a policy without unsafe-inline prevents inline script from running, and a restrictive connect-src prevents stolen data being sent anywhere useful. Defence in depth means assuming each control will eventually fail, and the value of CSP is precisely that it does not depend on the sanitiser being perfect.",
+  "tags": [
+   "frontend",
+   "security",
+   "xss",
+   "sanitisation",
+   "code-review",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Security",
+  "difficulty": "Hard",
+  "question": "Where should tokens be stored if XSS can read localStorage?",
+  "answer": "In an httpOnly, Secure, SameSite cookie, which JavaScript cannot read at all - so an XSS payload can still make requests as the user while the page is open, but it cannot exfiltrate a long-lived token for later use. That is a meaningful reduction even though it is not complete protection. The cookie approach brings CSRF back into scope, which SameSite and an anti-forgery token address. Storing a bearer token in localStorage is convenient and means any XSS is a full account takeover with persistence.",
+  "tags": [
+   "frontend",
+   "security",
+   "xss",
+   "sanitisation",
+   "code-review",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Accessibility",
+  "difficulty": "Medium",
+  "question": "Why is adding role=button and tabindex=0 to a div not equivalent to a button?",
+  "answer": "Because those two attributes give you focusability and an announced role, but not behaviour - a real button fires its handler on both Enter and Space, participates in form submission, and is exposed to the accessibility tree with the correct default states. With a div you must implement the key handling yourself and people routinely implement only Enter, so Space silently does nothing for screen reader users who expect it. It is a reasonable pattern when you truly cannot use a button, and it is more work than it appears.",
+  "tags": [
+   "frontend",
+   "accessibility",
+   "aria",
+   "keyboard-navigation",
+   "code-review",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "Why is separating server state from client state such a useful distinction?",
+  "answer": "Because they have different requirements and mixing them produces exactly this bug. Server state needs caching, refetching, staleness policies and error handling for something you do not control; client state needs none of that and simply needs to not be destroyed. Libraries such as React Query exist because teams kept putting server state in Redux and reimplementing caching badly. Once the two are separate, questions like 'should this refetch' have obvious answers.",
+  "tags": [
+   "frontend",
+   "state-management",
+   "forms",
+   "server-state",
+   "concurrency",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "How do you decide between warning the user and merging automatically?",
+  "answer": "By whether the fields conflict. If the other edit touched different fields, a field-level merge is usually safe and invisible - which is why collaborative editors work at all. If both edited the same field, no automatic resolution is correct, because the system cannot know which intent wins. The failure mode to avoid is a blanket last-write-wins, which silently discards work and is only noticed when someone asks why their change disappeared.",
+  "tags": [
+   "frontend",
+   "state-management",
+   "forms",
+   "server-state",
+   "concurrency",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "Should the app warn before navigating away from a dirty form?",
+  "answer": "Yes, and it is one of the cheapest protections available - the beforeunload event for tab closes and a router guard for in-app navigation. The caveat is that browsers deliberately limit what you can say and require a prior interaction, so it cannot be relied on absolutely. Autosaving a draft locally is the stronger version, because it survives a crash and a closed tab rather than only a deliberate navigation, and it removes the dialogue entirely.",
+  "tags": [
+   "frontend",
+   "state-management",
+   "forms",
+   "server-state",
+   "concurrency",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Build",
+  "difficulty": "Medium",
+  "question": "Why must index.html be no-cache while the assets are cached forever?",
+  "answer": "Because index.html is the only file with a stable name, so it is the one that maps the application to the current set of hashed chunks - caching it means clients keep loading the old manifest and never see a new deployment. The hashed assets can be cached immutably precisely because their names change when their content changes, so there is never a stale version of a given URL. Getting this backwards, with a cached index and no-cache assets, produces both stale applications and unnecessary bandwidth.",
+  "tags": [
+   "frontend",
+   "deployment",
+   "code-splitting",
+   "caching",
+   "spa",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Build",
+  "difficulty": "Medium",
+  "question": "Is automatically reloading on a failed import safe?",
+  "answer": "Not unconditionally - a reload discards unsaved state, so a user mid-form loses their work, and a reload loop is possible if the failure is not actually a stale-deployment problem. The safer pattern is to attempt the reload once, guarded by a flag in sessionStorage so it cannot loop, and to prompt rather than reload when there is unsaved input. Silently reloading is acceptable for a read-only view and a poor choice for an editor.",
+  "tags": [
+   "frontend",
+   "deployment",
+   "code-splitting",
+   "caching",
+   "spa",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Build",
+  "difficulty": "Medium",
+  "question": "How long should old assets be retained?",
+  "answer": "Longer than a realistic session, which for a business application usually means at least a working day and often a week - the cost is storage, which is negligible for JavaScript bundles. The constraint is any requirement to remove code containing a vulnerability, where you do want the old version gone. A reasonable default is to keep the previous few builds and clean up on a schedule, rather than deleting as part of the deployment itself, which is what creates the window.",
+  "tags": [
+   "frontend",
+   "deployment",
+   "code-splitting",
+   "caching",
+   "spa",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "How does LCP interact with client-side rendering?",
+  "answer": "Badly, by default. A pure SPA ships an empty shell, so nothing meaningful can paint until the JavaScript bundle downloads, parses and executes, and then fetches data. The LCP element is often gated behind two round trips. Server-side rendering or static generation puts real content in the initial HTML so the browser can discover and paint it immediately - which is the main performance argument for SSR frameworks.",
+  "tags": [
+   "frontend",
+   "performance",
+   "core-web-vitals",
+   "lcp",
+   "images",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Performance",
+  "difficulty": "Medium",
+  "question": "What is the relationship between LCP and CLS, and can fixing one hurt the other?",
+  "answer": "Yes. A common LCP fix is to render text immediately with a fallback font, which then reflows when the web font loads and shifts layout, hurting CLS. Similarly, loading an image faster without reserving its space causes a shift when it arrives. The answer to both is to reserve dimensions up front - width and height attributes or `aspect-ratio` on images, and `size-adjust` on font fallbacks so the fallback occupies the same space as the final font.",
+  "tags": [
+   "frontend",
+   "performance",
+   "core-web-vitals",
+   "lcp",
+   "images",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Accessibility",
+  "difficulty": "Medium",
+  "question": "What is the most common ARIA mistake?",
+  "answer": "Using it where native HTML would do, and then implementing it incompletely - `role=\"button\"` on a div without `tabindex`, without keyboard handling, and without the disabled state, which is worse than no ARIA because it promises behaviour that is not there. The related mistake is redundant roles, such as `role=\"button\"` on an actual `<button>`, which is noise. The guidance in the ARIA spec itself is that no ARIA is better than bad ARIA.",
+  "tags": [
+   "frontend",
+   "accessibility",
+   "a11y",
+   "aria",
+   "semantic-html",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Accessibility",
+  "difficulty": "Medium",
+  "question": "How do you handle accessibility for a complex custom component like a combobox?",
+  "answer": "Follow the ARIA Authoring Practices pattern for that component exactly - it specifies the roles, states and the full keyboard interaction, including the cases people forget such as Escape, Home and End. Better still, use a well-tested headless library that has already implemented it, since combobox and date picker are notoriously difficult to get right. Writing one from scratch and testing it only with a mouse is how inaccessible components ship.",
+  "tags": [
+   "frontend",
+   "accessibility",
+   "a11y",
+   "aria",
+   "semantic-html",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Bundling",
+  "difficulty": "Medium",
+  "question": "What limits tree-shaking from working?",
+  "answer": "CommonJS modules, because the static analysis relies on ES module `import`/`export` to know what is unused - a `require` is dynamic and the bundler must keep everything. Side effects also block it: if a module does work at import time, removing it would change behaviour, so bundlers keep it unless the package declares `sideEffects: false`. That field being missing or wrong on a dependency is a common reason tree-shaking silently underperforms.",
+  "tags": [
+   "frontend",
+   "bundling",
+   "code-splitting",
+   "tree-shaking",
+   "performance",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Bundling",
+  "difficulty": "Medium",
+  "question": "Is a single large bundle ever better than many small chunks?",
+  "answer": "Under HTTP/1.1 yes, because of the connection limit - but under HTTP/2 and HTTP/3 multiplexing removes that penalty, so splitting is nearly always better. The remaining caveat is granularity: hundreds of tiny chunks add request overhead and hurt compression ratios, since compression works better over more content. The sensible target is a handful of route-level chunks plus a stable vendor chunk that stays cached across deployments.",
+  "tags": [
+   "frontend",
+   "bundling",
+   "code-splitting",
+   "tree-shaking",
+   "performance",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "How do you keep URL state and component state in sync without loops?",
+  "answer": "Treat the URL as the single source of truth and derive component state from it, rather than holding both and synchronising. Read the parameters with the router s hook, and update by navigating - the component then re-renders from the new URL naturally. The loop people create is storing the value in state, writing it to the URL in an effect, and reading the URL back into state in another effect, which fights itself. One direction only.",
+  "tags": [
+   "frontend",
+   "state-management",
+   "url-state",
+   "routing",
+   "architecture",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "State",
+  "difficulty": "Medium",
+  "question": "What are the limits of putting state in the URL?",
+  "answer": "Length - browsers and servers cap URLs at a few thousand characters, so a complex filter set with many selections can exceed it, and very long URLs break when pasted into chat clients. It is also visible, so nothing sensitive belongs there, and it ends up in server logs, analytics and referrer headers. For large or private state, put an identifier in the URL and hold the rest server-side or in storage keyed by that id.",
+  "tags": [
+   "frontend",
+   "state-management",
+   "url-state",
+   "routing",
+   "architecture",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "Why keep old bundles after deploying a new version?",
+  "answer": "Because a user who loaded the page before the deploy has HTML referencing the old chunk names, and with code splitting they fetch those chunks lazily as they navigate. If the files are gone, the navigation fails with a chunk-load error and often a blank screen - which is a common and confusing production symptom after a deploy. Keeping a few previous versions for a day or two costs almost nothing in storage and removes it entirely, alongside handling the error by prompting a reload.",
+  "tags": [
+   "frontend",
+   "caching",
+   "cache-busting",
+   "deployment",
+   "service-worker",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Caching",
+  "difficulty": "Medium",
+  "question": "What is the safe way to use a service worker without trapping users on old code?",
+  "answer": "Use a maintained tool rather than hand-writing it, and make updating explicit - on detecting a new service worker, either prompt the user to reload or activate the new one and reload automatically, rather than waiting for every tab to close, which may be never. Keep the HTML network-first so a new version is always discoverable, and cache-first only for hashed assets that cannot go stale. A service worker that caches the entry point cache-first is the configuration that strands users, and recovering requires shipping code that the strand prevents them from receiving.",
+  "tags": [
+   "frontend",
+   "caching",
+   "cache-busting",
+   "deployment",
+   "service-worker",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied HTML",
+  "difficulty": "Medium",
+  "question": "During a production incident involving html concerns around semantic, html, matter, accessibility, seo, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Semantic HTML uses elements that describe their meaning (header, nav, main, article, section, footer, aside, button) rather than generic divs/spans. It improves accessibility (screen readers understand structure), SEO (crawlers grasp content), and maintainability. Use the right element for the job—a button for actions, headings for hierarchy—so the document is meaningful to browsers, assistive tech, and developers.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "html",
+   "semantic",
+   "accessibility",
+   "seo",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving css concerns around model, css, box model, box sizing, padding, margin, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Every element is a box composed of content, padding (inside the border), border, and margin (outside). Total size depends on box-sizing: content-box (default—width is content only, padding/border add to it) vs border-box (width includes padding and border—more predictable). Most projects set box-sizing: border-box globally so widths are intuitive. Understanding the box model is fundamental to layout and spacing.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "box-model",
+   "box-sizing",
+   "padding",
+   "margin",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving css concerns around flexbox, grid, css, layout, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Flexbox is one-dimensional—laying items along a row or column with flexible sizing/alignment—ideal for components, toolbars, and distributing space along one axis. Grid is two-dimensional—defining rows AND columns simultaneously—ideal for page/section layouts with precise placement. Use Flexbox for content flow in one direction and Grid for structured 2D layouts; they combine well (Grid for layout, Flex within cells).\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "flexbox",
+   "grid",
+   "layout",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Hard",
+  "question": "During a backward-compatibility review involving css concerns around specificity, css, selectors, cascade, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Specificity determines which conflicting rule wins, scored by selector types: inline styles (highest), then IDs, then classes/attributes/pseudo-classes, then elements/pseudo-elements. More specific selectors override less specific ones; ties are broken by source order (later wins). !important overrides normal specificity (avoid it). Keep specificity low and consistent (prefer classes, avoid deep nesting/IDs) to keep CSS maintainable and predictable.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "specificity",
+   "selectors",
+   "cascade",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving css concerns around position, relative, absolute, fixed, sticky, css, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: static is the default (normal flow). relative offsets an element from its normal position (and becomes a positioning context). absolute removes it from flow and positions it relative to the nearest positioned ancestor. fixed positions relative to the viewport (stays on scroll). sticky toggles between relative and fixed based on scroll threshold (stays until its container scrolls out). Choose by whether the element should scroll, pin, or overlay.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "position",
+   "absolute",
+   "fixed",
+   "sticky",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a design review involving css concerns around make, responsive, design, css, media queries, mobile first, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Use fluid layouts (%, fr, flex/grid), relative units (rem/em, vw/vh), max-width with responsive images (max-width:100%), CSS media queries to adjust layout at breakpoints (mobile-first: base styles then min-width queries), and modern tools (container queries, clamp() for fluid typography). Test across viewport sizes. Design mobile-first and progressively enhance for larger screens for maintainable responsiveness.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "responsive",
+   "media-queries",
+   "mobile-first",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving css concerns around custom, properties, variables, css, custom properties, theming, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: CSS custom properties (--main-color: #333; used as var(--main-color)) are native variables that cascade and can be updated at runtime (via JS or media queries), unlike preprocessor variables that are compiled away. They enable theming (light/dark), consistent design tokens, and dynamic styling. Define them on :root for globals and override in scopes/themes. They're a foundation for maintainable, themeable CSS.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "custom-properties",
+   "variables",
+   "theming",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Accessibility",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving accessibility concerns around accessibility, a11y, aria, frontend, wcag, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Accessibility ensures people with disabilities can use your site (keyboard navigation, screen readers, sufficient contrast, focus management). Use semantic HTML first (it's inherently accessible), then ARIA attributes (roles, aria-label, aria-expanded) to fill gaps for custom widgets—but only when needed ('no ARIA is better than bad ARIA'). Follow WCAG guidelines, test with keyboard and screen readers, and ensure color contrast and alt text. It's both ethical and often legally required.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "accessibility",
+   "a11y",
+   "aria",
+   "wcag",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Performance",
+  "difficulty": "Hard",
+  "question": "During an on-call investigation involving performance concerns around core, vitals, frontend, core web vitals, lcp, inp, cls, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Core Web Vitals are Google's user-centric performance metrics: LCP (Largest Contentful Paint—loading, target <2.5s), INP (Interaction to Next Paint—responsiveness, replaced FID), and CLS (Cumulative Layout Shift—visual stability, <0.1). They measure real user experience and affect SEO. Improve them by optimizing images/critical resources (LCP), minimizing main-thread blocking (INP), and reserving space for dynamic content (CLS).\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "core-web-vitals",
+   "lcp",
+   "inp",
+   "cls",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving performance concerns around optimize, frontend, load, performance, code splitting, lazy loading, cdn, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Minimize and split bundles (code splitting, lazy loading), tree-shake unused code, compress (gzip/brotli), optimize and lazy-load images (modern formats, responsive sizes), cache static assets via CDN with long cache headers, defer/async non-critical JS, inline critical CSS, preconnect/preload key resources, and reduce third-party scripts. Measure with Lighthouse. Prioritize the critical rendering path so users see content fast.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "performance",
+   "code-splitting",
+   "lazy-loading",
+   "cdn",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving javascript concerns around event, delegation, javascript, event delegation, bubbling, performance, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Event delegation attaches a single listener to a common ancestor and uses event bubbling to handle events from many child elements (checking event.target), instead of adding a listener per child. Benefits: better performance/memory for large or dynamic lists, and it automatically handles elements added later. Use it for lists, tables, and dynamic content. It leverages the capturing/bubbling event flow.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "javascript",
+   "event-delegation",
+   "bubbling",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Hard",
+  "question": "During a high-latency user journey involving javascript concerns around event, capturing, bubbling, javascript, event flow, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: When an event fires, it propagates in phases: capturing (from the root down to the target) then bubbling (from the target back up to the root). By default listeners run in the bubbling phase; pass {capture:true} to listen during capture. Bubbling enables event delegation. Use stopPropagation to halt propagation and preventDefault to cancel default behavior. Understanding the flow is key to handling nested element events.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "javascript",
+   "capturing",
+   "bubbling",
+   "event-flow",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving javascript concerns around update, efficiently, frontend, dom, reflow, repaint, performance, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: The DOM is the browser's tree representation of the page that JS can read/modify. Direct DOM manipulation is expensive (reflow/repaint), so update efficiently: batch changes (DocumentFragment), minimize layout thrashing (read then write, avoid interleaving reads/writes that force reflow), use requestAnimationFrame for visual updates, and let frameworks (React/Angular) diff and batch. Reducing reflows/repaints keeps the UI smooth.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "dom",
+   "reflow",
+   "repaint",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving javascript concerns around worker, frontend, web worker, thread, performance, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: A Web Worker runs JavaScript on a background thread separate from the main UI thread, communicating via message passing (postMessage). Use it for CPU-intensive work (parsing large data, image processing, computations) that would otherwise freeze the UI, keeping the page responsive. Workers can't access the DOM directly. For heavy client-side processing (like building a large search index), offload to a worker.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "web-worker",
+   "thread",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving javascript concerns around cors, browser, perspective, frontend, security, preflight, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Cross-Origin Resource Sharing is a browser security mechanism: by default, JS can't read responses from a different origin unless the server opts in via CORS headers (Access-Control-Allow-Origin, etc.). For non-simple requests the browser sends a preflight OPTIONS request to check permissions. CORS errors are enforced by the browser, not the server. The fix is configuring the server's CORS policy—not disabling browser security.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "cors",
+   "browser",
+   "security",
+   "preflight",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving javascript concerns around localstorage, sessionstorage, cookies, frontend, storage, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: localStorage persists data with no expiry until cleared (per origin, ~5-10MB, not sent to server). sessionStorage lasts for the tab session (cleared on tab close). Cookies (~4KB) are sent with every HTTP request to the origin, support expiry, and are used for server-side sessions/auth (with HttpOnly/Secure/SameSite flags). Use cookies for auth tokens (HttpOnly to prevent JS access), local/session storage for client-side non-sensitive state.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "localstorage",
+   "sessionstorage",
+   "cookies",
+   "storage",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving javascript concerns around progressive, frontend, pwa, service worker, offline, manifest, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: A PWA is a web app enhanced with native-like capabilities: installable (web app manifest), offline-capable and fast via a service worker (caching, background sync), push notifications, and responsive. Service workers are scriptable network proxies enabling offline and caching strategies. PWAs work across platforms from one codebase, offer app-like UX without app stores, and improve reliability on flaky networks.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "pwa",
+   "service-worker",
+   "offline",
+   "manifest",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving javascript concerns around defer, async, script, tags, frontend, performance, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Both let the HTML parser continue while downloading the script (non-blocking). async executes the script as soon as it downloads, potentially out of order and interrupting parsing—good for independent scripts (analytics). defer waits until HTML parsing completes and executes in document order—good for scripts that depend on the DOM or each other. Prefer defer for app scripts to avoid blocking rendering and preserve order.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "defer",
+   "async",
+   "script",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied TypeScript",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving typescript concerns around enums, union, literals, typescript, enum, literal union, types, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: An enum defines named constants (enum Status { Active, Inactive }) producing a runtime object. A union of string literals (type Status = 'active' | 'inactive') is compile-time only, tree-shakable, and often preferred—more flexible, no runtime overhead, and works well with discriminated unions. Use literal unions for most cases; enums when you need a runtime object or numeric values. const enums inline values but have caveats.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "typescript",
+   "enum",
+   "literal-union",
+   "types",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Hard",
+  "question": "During a security review involving javascript concerns around memoization, implement, javascript, caching, closure, performance, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Memoization caches a pure function's results keyed by arguments so repeated calls with the same inputs return the cached value instead of recomputing. Implement with a closure holding a Map: check the cache, compute on miss, store, return. Use it for expensive, deterministic computations (fibonacci, parsing). Beware unbounded cache growth (add size limits/LRU) and only memoize pure functions. React's useMemo/useCallback apply the concept to renders.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "javascript",
+   "memoization",
+   "caching",
+   "closure",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving javascript concerns around deep, shallow, equality, javascript, reference, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Shallow equality compares references for objects/arrays (=== ) and values for primitives—two structurally-identical objects are not shallow-equal. Deep equality compares nested contents recursively. React and many libraries use shallow comparison for performance (memo, dependency arrays), which is why creating new objects each render breaks memoization. Use deep comparison (lodash isEqual, structuredClone for copies) only when necessary—it's costlier.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "javascript",
+   "equality",
+   "shallow",
+   "deep",
+   "reference",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving javascript concerns around promises, chaining, error, handling, patterns, javascript, error handling, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Chain .then() to sequence async steps (each returning a value or promise), and .catch() to handle any rejection in the chain (errors propagate to the nearest catch), with .finally() for cleanup. With async/await, use try/catch/finally for the same. Always handle rejections to avoid unhandled promise rejections. For parallel independent work use Promise.all; for sequencing dependent steps, chain or await in order.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "javascript",
+   "promises",
+   "chaining",
+   "error-handling",
+   "async-await",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving css concerns around css, units, rem, viewport, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: px is an absolute pixel. em is relative to the element's own font-size (compounds with nesting). rem is relative to the root font-size (predictable, good for scalable typography/spacing). % is relative to the parent's corresponding property. vw/vh are relative to viewport width/height (responsive sizing). Prefer rem for typography/spacing (accessibility—respects user font settings) and viewport units/% for responsive layout.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "units",
+   "rem",
+   "em",
+   "viewport",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During a production incident involving javascript concerns around null, check, explicit, undefined, checks, javascript, equality, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: x == null (loose equality) is true for both null and undefined (and only those), a common idiom to check 'no value'. x === null or x === undefined check exactly one. Use x == null to handle both absence cases concisely, or optional chaining/nullish coalescing (x ?? default) for defaults. Avoid other == coercions; == null is the one broadly-accepted loose-equality use.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "javascript",
+   "null",
+   "undefined",
+   "equality",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving javascript concerns around fetch, xmlhttprequest, frontend, xhr, http, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: fetch is the modern promise-based API for HTTP requests—cleaner syntax, streaming support, and integrates with async/await. XMLHttpRequest (XHR) is the older callback/event-based API—more verbose but supports upload progress events (which fetch lacks natively) and older browser support. Use fetch for most modern code (with AbortController for cancellation/timeout); XHR mainly for progress tracking or legacy needs. Libraries (axios) wrap either with extra features.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "fetch",
+   "xhr",
+   "http",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied JavaScript",
+  "difficulty": "Hard",
+  "question": "During a design review involving javascript concerns around microtasks, macrotasks, example, frontend, microtask, macrotask, event loop, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: After each macrotask (setTimeout, I/O, event), the event loop drains ALL pending microtasks (Promise callbacks, queueMicrotask, MutationObserver) before the next macrotask or render. So Promise.resolve().then(...) runs before a setTimeout(...,0) scheduled earlier. Example: console.log('a'); setTimeout(()=>log('b')); Promise.resolve().then(()=>log('c')); log('d') prints a, d, c, b—sync first, then microtask c, then macrotask b.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "microtask",
+   "macrotask",
+   "event-loop",
+   "promise",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving css concerns around specificity, important, smell, css, maintainability, fundamentals, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Specificity ranks inline styles above ids above classes above elements, with the last matching rule winning ties. important overrides all of it, so it wins today and forces the next override to escalate, ending in an unmaintainable arms race. The fix is lowering specificity - single classes, layers, or custom properties - rather than raising it.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "specificity",
+   "maintainability",
+   "fundamentals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving css concerns around container, queries, solve, media, css, container queries, responsive, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Media queries respond to the viewport, so a component cannot know it is in a narrow sidebar on a wide screen. Container queries respond to the size of an ancestor container, letting a component adapt to the space it actually occupies. That is what makes truly reusable responsive components possible in a design system.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "container-queries",
+   "responsive",
+   "design-system",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Web",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving web concerns around wcag, levels, criteria, matter, practice, accessibility, standards, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: A, AA and AAA, with AA the usual legal and contractual target. In practice the high-impact criteria are colour contrast, keyboard operability of every interactive element, visible focus indication, form labels and error identification, and meaningful alternative text. Those cover the majority of real barriers users encounter.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "accessibility",
+   "wcag",
+   "standards",
+   "web",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Web",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving web concerns around test, accessibility, beyond, automated, scan, testing, practices, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Automated tools catch perhaps a third of issues - contrast, missing labels, invalid ARIA. The rest needs manual work: navigate the whole flow with the keyboard only, use a screen reader for the critical journey, zoom to 200 percent, and check that focus order and announcements make sense. Include users with disabilities where possible.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "accessibility",
+   "testing",
+   "practices",
+   "web",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Web",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving web concerns around causes, cumulative, layout, shift, prevent, performance, web vitals, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Images and iframes without dimensions, ads and embeds injected above content, web fonts swapping at a different size, and content inserted after load. Prevent it by reserving space with width and height or aspect-ratio, using font-display with a metric-matched fallback, and inserting dynamic content below the fold or in reserved containers.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "performance",
+   "web-vitals",
+   "cls",
+   "frontend",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Web",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving web concerns around optimise, font, loading, performance, fonts, web vitals, frontend, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Subset to the characters you need, self-host with a long cache lifetime, preload the fonts used above the fold, use font-display swap or optional, and pick a fallback whose metrics are adjusted with size-adjust so the swap does not shift layout. Loading several weights and styles unnecessarily is the most common waste.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "performance",
+   "fonts",
+   "web-vitals",
+   "frontend",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Web",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving web concerns around image, format, loading, choices, matter, performance, images, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Serve AVIF or WebP with a fallback, size images to the largest rendered dimension rather than the original, use responsive srcset with sizes, lazy-load below-the-fold images, and mark the hero image high priority so it is not delayed. Images are usually the largest share of page weight, so this outranks most JavaScript tuning.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "performance",
+   "images",
+   "web-vitals",
+   "frontend",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Web",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving web concerns around cache, browser, service, worker, performance, caching, cdn, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: A browser cache hit costs nothing and never leaves the device. A service worker hit is programmable and works offline but runs JavaScript first. A CDN hit avoids the origin but still costs a network round trip. Cache-Control, ETag and immutable asset URLs are what determine which of these you get.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "performance",
+   "caching",
+   "cdn",
+   "web",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Web",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving web concerns around cache, busting, content, hashes, solve, performance, caching, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Long cache lifetimes are only safe if the URL changes when the content does. Build tools embed a content hash in asset filenames, so a changed file gets a new URL and an unchanged one keeps its cached copy. The HTML referencing them must then be short-cached or revalidated, otherwise clients never learn about the new names.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "performance",
+   "caching",
+   "build",
+   "deployment",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a security review involving css concerns around sticky, element, sometimes, stick, css, positioning, troubleshooting, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Sticky requires a threshold such as top to be set, a scrolling ancestor, and no ancestor with overflow hidden, auto or scroll that clips it - and it sticks only within its parent's bounds, so a short parent means it stops early. Those four conditions cover nearly every reported failure.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "positioning",
+   "sticky",
+   "troubleshooting",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving css concerns around model, sizing, change, css, box model, layout, fundamentals, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Width by default applies to the content box, with padding and border added outside it, so an element with a set width plus padding is wider than declared. box-sizing border-box makes width include padding and border, which is why almost every stylesheet sets it globally.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "box-model",
+   "layout",
+   "fundamentals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving css concerns around causes, margin, collapsing, problem, css, layout, margins, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Adjacent vertical margins between block elements combine into the larger rather than summing, and a parent with no padding or border collapses with its first or last child's margin. It surprises people as unexpected space outside a container, and is avoided with padding, a border, or a flex or grid formatting context.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "layout",
+   "margins",
+   "fundamentals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a production incident involving css concerns around build, responsive, layout, without, media, queries, css, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Use intrinsic techniques - flex wrap with a basis, grid with auto-fit and minmax, clamp for fluid typography and spacing, and container queries for component-level adaptation. These respond to available space continuously rather than at fixed breakpoints, which handles cases the breakpoint set never anticipated.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "responsive",
+   "grid",
+   "layout",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a design review involving performance concerns around measure, real, user, performance, rather, web vitals, monitoring, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Collect field data with the web-vitals library reporting to your analytics, segmented by device class, connection and page type, and look at the 75th percentile rather than the mean. Lab tools give a controlled comparison and diagnostics, but only field data reflects the devices your users actually have.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "performance",
+   "web-vitals",
+   "monitoring",
+   "rum",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Browser",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving browser concerns around capture, bubble, phases, event, browser, events, dom, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: An event travels down from the root to the target in the capture phase, then back up in the bubble phase, with listeners defaulting to bubble. Capture is useful for intercepting before a child handles it - closing a menu on any outside click - and stopPropagation in either phase halts the rest of the journey.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "browser",
+   "events",
+   "dom",
+   "fundamentals",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Browser",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving browser concerns around requestanimationframe, settimeout, animation, browser, performance, apis, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: requestAnimationFrame runs before the next paint, synchronised with the display refresh, and pauses in background tabs - so animation is smooth and does not waste battery. A timer runs on its own schedule, producing dropped or doubled frames and continuing to run when nothing is visible.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "browser",
+   "animation",
+   "performance",
+   "apis",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Browser",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving browser concerns around resizeobserver, better, resize, listener, browser, observers, performance, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: It reports size changes of specific elements, including those caused by content or layout rather than window resizing, and it batches callbacks to avoid layout thrashing. A window resize listener misses element-level changes entirely and fires far more often than needed.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "browser",
+   "observers",
+   "performance",
+   "apis",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Browser",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving browser concerns around hard, refresh, normal, navigation, browser, caching, debugging, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: A navigation uses the cache normally. A refresh revalidates the main document and often subresources. A hard refresh bypasses the cache entirely. That difference is why a bug reproduces for users but not for the developer who keeps hard-refreshing, and why cache issues need testing with a normal navigation.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "browser",
+   "caching",
+   "debugging",
+   "http",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Accessibility",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving accessibility concerns around correct, hide, content, visually, keep, available, screen, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: A visually-hidden utility class that clips the element to a single pixel with overflow hidden, rather than display none or visibility hidden which remove it from the accessibility tree. It is used for skip links, field descriptions and status text that has a visual equivalent elsewhere.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "accessibility",
+   "css",
+   "screen-readers",
+   "patterns",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Accessibility",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving accessibility concerns around wcag, contrast, requirements, apply, accessibility, design, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Level AA requires 4.5 to 1 for normal text and 3 to 1 for large text and for meaningful non-text elements such as icons, focus indicators and form borders. Placeholder text, disabled controls and decorative graphics have different treatment - and the common failure is grey secondary text that fails at small sizes.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "accessibility",
+   "wcag",
+   "contrast",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Accessibility",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving accessibility concerns around keyboard, focus, handled, single, page, application, accessibility, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: After a route change, move focus to the new page's heading or main landmark and announce the change, since no page load occurs to reset it. Keep focus visible, never remove the outline without a replacement, and return focus to the trigger when a dialog closes.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "accessibility",
+   "focus",
+   "spa",
+   "routing",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Accessibility",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving accessibility concerns around make, data, table, accessible, accessibility, tables, html, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Use real table markup with header cells scoped to rows or columns, a caption describing the table, and avoid layout tables entirely. For complex tables, associate headers explicitly. Sortable columns need their state announced, and horizontally scrolling tables need a focusable container so keyboard users can scroll them.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "accessibility",
+   "tables",
+   "html",
+   "patterns",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Security",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving security concerns around subresource, integrity, security, sri, cdn, frontend, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: A hash attribute on a script or stylesheet tag so the browser refuses to execute the resource if its content does not match. It protects against a compromised CDN serving altered code. It requires updating the hash whenever the resource changes, which is why it suits pinned versions rather than floating ones.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "security",
+   "sri",
+   "cdn",
+   "frontend",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Security",
+  "difficulty": "Medium",
+  "question": "During a security review involving security concerns around target, blank, without, noopener, security, issue, links, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: The opened page can access window.opener and navigate the original tab to a phishing page. Modern browsers default to noopener for target blank, but explicitly setting rel noopener noreferrer remains correct for older browsers and for links opened programmatically.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "security",
+   "links",
+   "browser",
+   "frontend",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Security",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving security concerns around risks, come, third, party, scripts, page, security, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: They execute with full access to the DOM, cookies accessible to JavaScript, and any data on the page, so an analytics or chat widget compromise becomes your breach. Mitigate with a strict CSP, subresource integrity, sandboxed iframes where possible, and a genuine review of how many are actually needed.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "security",
+   "third-party",
+   "csp",
+   "frontend",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Tooling",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving tooling concerns around source, risks, shipping, tooling, source maps, security, debugging, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: It maps minified code back to source so stack traces and debugging are readable. Publishing it publicly exposes your original source, including comments and any embedded secrets. The common approach is to generate them and upload to the error tracker without serving them from the public site.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "tooling",
+   "source-maps",
+   "security",
+   "debugging",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Tooling",
+  "difficulty": "Medium",
+  "question": "During a production incident involving tooling concerns around differential, serving, still, worth, doing, tooling, bundling, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Shipping a modern bundle to capable browsers and a transpiled one to older ones, selected with module and nomodule attributes. It was worth significant bundle savings when older browsers were common; with modern baselines, targeting recent browsers directly is usually simpler and gives most of the benefit.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "tooling",
+   "bundling",
+   "compatibility",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Tooling",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving tooling concerns around handle, environment, configuration, static, frontend, build, tooling, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Values are inlined at build time, so a single artifact cannot be promoted across environments unless configuration is fetched at runtime from an endpoint or injected into the served HTML. Choose deliberately - build-time is simpler, runtime is what allows one image to run everywhere.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "tooling",
+   "configuration",
+   "deployment",
+   "build",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Architecture",
+  "difficulty": "Medium",
+  "question": "During a design review involving architecture concerns around frontend, terms, problem, solve, bff, architecture, api design, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: A backend dedicated to one frontend, aggregating and reshaping downstream calls so the client makes one request for a screen rather than five. It solves over-fetching, chattiness on mobile networks, and keeping credentials off the client - and it gives the frontend team a backend they can change at their own pace.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "bff",
+   "architecture",
+   "api-design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied UX",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving ux concerns around standard, loading, state, patterns, apply, frontend, design, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: A spinner for short waits, a skeleton matching the eventual layout for content that takes longer, optimistic rendering when the outcome is near-certain, and progressive display when parts arrive separately. Skeletons reduce perceived wait because the layout does not shift when content arrives.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "ux",
+   "loading",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied UX",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving ux concerns around frontend, handle, unexpected, error, error handling, observability, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Show a clear message in user terms with an action - retry, go back, contact support with a reference - rather than a stack trace or a blank screen, log it with context to an error tracker, and preserve any unsaved work. The reference identifier is what turns a support conversation into a diagnosable incident.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "error-handling",
+   "ux",
+   "observability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Build",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving build concerns around handle, dependency, only, browser, during, server, build, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Import it dynamically inside a browser-only code path, guard with an environment check before the import, or configure the bundler to externalise it for the server build. A static top-level import executes on the server and fails at the first reference to a browser global.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "ssr",
+   "bundling",
+   "build",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Testing",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving testing concerns around test, something, depends, element, size, position, frontend, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Inject the measurement so it can be stubbed in unit tests, and cover the real behaviour in a browser-based test at a fixed viewport. Mocking getBoundingClientRect in jsdom produces tests that pass while the real layout is broken, which is worse than not testing it there at all.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "testing",
+   "layout",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a security review involving performance concerns around find, blocking, main, thread, page, load, frontend, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Record a performance profile and look at the main thread flame chart for long tasks, attributing them to script evaluation, parsing, or layout. Common culprits are a large bundle evaluating, synchronous third-party scripts, and expensive initial rendering of a long list before any virtualisation applies.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "performance",
+   "profiling",
+   "diagnostics",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving performance concerns around hydration, cost, reduce, frontend, performance, ssr, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: After server-rendered HTML arrives, the client must download, parse and execute the framework and components to attach behaviour, during which the page looks ready but is unresponsive. Reduce it by shipping less client JavaScript - server components, islands, partial or progressive hydration - rather than by optimising the hydration itself.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "hydration",
+   "performance",
+   "ssr",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving performance concerns around prefetching, harm, performance, frontend, trade offs, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: When it competes with critical resources for bandwidth on a slow connection, when it prefetches paths users rarely take, or when it warms caches that are invalidated before use. Prefetch on interaction intent such as hover or viewport proximity rather than eagerly, and respect data saver preferences.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "performance",
+   "prefetching",
+   "trade-offs",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Security",
+  "difficulty": "Medium",
+  "question": "During a design review involving security concerns around risk, dynamically, constructing, urls, user, input, frontend, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Open redirects that facilitate phishing, javascript scheme injection when the value becomes an href, and SSRF if the value reaches a server-side fetch. Validate against an allow-list of paths or hosts rather than filtering known-bad patterns, and never redirect to a URL supplied in a query parameter without validation.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "security",
+   "redirects",
+   "validation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving practices concerns around manage, feature, flags, frontend, application, feature flags, architecture, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Evaluate flags server-side where possible so the client does not download code for features it cannot use, provide defaults for when the flag service is unavailable, avoid layout shift from late evaluation, and remove flags promptly - stale flags multiply the states you must test.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "feature-flags",
+   "architecture",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving practices concerns around sensible, strategy, browser, console, errors, production, frontend, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Capture them with a global handler and unhandled rejection handler, forward to an error tracker with source maps uploaded privately, group by fingerprint, and alert on new or spiking errors rather than on volume. An error console nobody watches is the same as no error handling.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "observability",
+   "error-handling",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving css concerns around grid, template, areas, explicit, line, placement, css, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Named areas make the layout readable in the stylesheet and easy to rearrange per breakpoint; line placement is more precise for irregular or dynamic layouts. Areas are usually clearer for page-level structure, and line-based placement is needed when items are positioned programmatically.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "grid",
+   "layout",
+   "readability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving css concerns around nesting, preprocessor, both, exist, css, preprocessors, tooling, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Native nesting covers the common structural case with no build step. Preprocessors still offer loops, functions and mixins, though custom properties and modern CSS features have absorbed much of that. New projects can often start with plain CSS plus custom properties and add tooling only when a genuine gap appears.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "nesting",
+   "preprocessors",
+   "tooling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Web",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving web concerns around progressive, native, practical, terms, frontend, pwa, mobile, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: A PWA installs from the web with no store review, updates instantly, and shares one codebase, but has restricted access to device capabilities and platform integrations that vary by browser. Native gives full capability and platform presence at the cost of separate codebases and release cycles.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "pwa",
+   "mobile",
+   "trade-offs",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Web",
+  "difficulty": "Medium",
+  "question": "During a security review involving web concerns around cache, http, caching, frontend, service worker, web, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: HTTP caching is managed by the browser according to headers; the Cache API is programmatic storage a service worker controls explicitly, with your own naming and eviction. The Cache API enables offline and custom strategies, at the cost of you owning invalidation entirely.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "caching",
+   "service-worker",
+   "web",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving practices concerns around handle, browser, specific, bugs, frontend, compatibility, debugging, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Reproduce with a minimal case, check whether it is a known issue with a documented workaround, apply a targeted fix behind feature detection rather than user-agent sniffing, and record why the workaround exists so it can be removed. Undocumented browser hacks outlive the bug by years.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "compatibility",
+   "debugging",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a production incident involving practices concerns around feature, detection, preferred, user, agent, sniffing, frontend, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Testing whether a capability exists rather than inferring it from the browser identity. It stays correct as browsers gain features and as user agents lie or change format, and it handles the browser you never tested. User-agent checks are a maintenance liability from the day they are written.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "compatibility",
+   "feature-detection",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Accessibility",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving accessibility concerns around skip, link, matter, accessibility, keyboard, navigation, practices, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: A link at the top of the page, usually visible only on focus, jumping to the main content so keyboard and screen reader users bypass repeated navigation. Without it, every page requires tabbing through the entire header, which is the most common complaint in keyboard accessibility reviews.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "accessibility",
+   "keyboard",
+   "navigation",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Accessibility",
+  "difficulty": "Medium",
+  "question": "During a design review involving accessibility concerns around make, error, summary, accessible, accessibility, forms, errors, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Render a summary at the top listing each error as a link to its field, move focus to it on submit, and mark it as an alert region so it is announced. That serves screen reader and keyboard users, and it also helps everyone on a long form where the first error is off-screen.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "accessibility",
+   "forms",
+   "errors",
+   "patterns",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving practices concerns around happen, shared, component, needs, variation, frontend, design system, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Ask whether the variation is general enough to belong in the system; if not, compose around the component or use its provided extension points rather than adding a prop for one consumer. Each single-use prop makes the component harder to change for everyone else.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "design-system",
+   "api-design",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied UX",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving ux concerns around form, behave, submission, fails, network, error, frontend, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Keep the entered data, show a clear retry action, distinguish a network failure from a validation rejection, and avoid disabling the form permanently. Losing a completed form to a transient network problem is among the most damaging experiences an application can produce.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "forms",
+   "error-handling",
+   "ux",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving practices concerns around handle, third, party, script, degrades, performance, frontend, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Measure its cost precisely by removing it in a test, load it after interaction or lazily where the vendor supports it, sandbox it in a worker or iframe if possible, and take the measurement to whoever owns the requirement. Vendor scripts are usually added without measurement and removed only with evidence.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "performance",
+   "third-party",
+   "stakeholders",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving css concerns around causes, flash, unstyled, incorrectly, styled, content, frontend, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Styles arriving after the first paint - render-blocking stylesheets loaded late, CSS-in-JS evaluated after hydration, or a theme applied by JavaScript. Inline the critical styles and apply the theme before paint, since correcting it after the browser has painted is visible regardless of how quickly it happens.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "css",
+   "performance",
+   "ux",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving practices concerns around handle, browser, universally, supported, frontend, compatibility, progressive enhancement, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Detect it, provide a fallback path or graceful absence of the feature, and check whether the polyfill's cost is justified for the affected share of users. Building a feature that silently does nothing on some browsers is worse than one that visibly offers an alternative.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "compatibility",
+   "progressive-enhancement",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied UX",
+  "difficulty": "Medium",
+  "question": "During a production incident involving ux concerns around decide, inline, validation, submit, frontend, forms, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Validate on blur for format errors so the user is not corrected mid-typing, on submit for cross-field rules, and immediately for irreversible or expensive fields. Validating every keystroke shows errors for input that is merely incomplete, which is the most common frustration in form design.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "forms",
+   "validation",
+   "ux",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving practices concerns around handle, browser, extensions, interfering, application, frontend, debugging, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Recognise the symptoms - unexplained DOM mutations, hydration mismatches, injected elements - and test in a clean profile to confirm. You cannot control them, so the practical responses are defensive rendering, not assuming exclusive DOM ownership, and asking users to test in a clean profile when reproducing.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "debugging",
+   "browser",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Web",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving web concerns around practical, session, storage, memory, variable, frontend, state, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Session storage survives a page refresh and is scoped to the tab; a variable does not survive either. That makes session storage right for state that should persist a reload within a task - a multi-step form's progress - and wrong for anything sensitive, since it is readable by any script on the page.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "storage",
+   "state",
+   "security",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied CSS",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving css concerns around choose, utility, class, component, css, architecture, utility css, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Utilities for one-off spacing and layout adjustments where naming would add nothing; component classes when the styling represents a reusable concept with meaning. Mixing them deliberately is normal - the failure is either naming every utility or inlining every component's styles as utilities.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "css",
+   "architecture",
+   "utility-css",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Performance",
+  "difficulty": "Hard",
+  "question": "During a capacity-planning exercise involving performance concerns around lighthouse, gives, poor, largest, contentful, paint, score, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: **What LCP actually measures**\n\nThe time until the largest element in the viewport is rendered — usually a hero image, a heading, or a block of text. Caching helps repeat visits; LCP is usually judged on the first visit, so caching may not move it at all.\n\n**What I would check, in order**\n\n**1. What the LCP element actually is.** Lighthouse names it. Optimising the wrong thing is the most common waste of effort here — if it is a heading, image optimisation is irrelevant.\n\n**2. Is it blocked by something?** A render-blocking stylesheet or a synchronous script in the head delays everything. Fonts are a frequent culprit: a web font without `font-display: swap` hides the text until the font loads.\n\n**3. Is the resource discovered late?** An image referenced from CSS, or inserted by JavaScript after hydration, cannot be fetched until that code runs. A `<link rel=preload>` or a plain `<img>` in the HTML lets the preload scanner find it immediately.\n\n**4. Is the image right for the job?** Correct dimensions, a modern format such as WebP or AVIF, `srcset` for the viewport, no lazy-loading on the LCP image — lazy-loading the hero image is a common own-goal that directly delays LCP.\n\n**5. Is the server slow to first byte?** LCP includes TTFB. If the HTML takes 800ms to arrive, nothing in the front end recovers that. This is where caching genuinely helps — a CDN in front of the document.\n\n**6. Is it client-rendered?** If the page is a blank shell until a JavaScript bundle downloads, parses and fetches data, the LCP element cannot appear until all of that finishes. Server-side rendering or static generation addresses the cause; nothing else will.\n\n**The order matters**\n\nMeasure, identify the element, find what delays it, fix that. 'Add caching' is a solution looking for a problem — worth doing for repeat visits, largely irrelevant to a first-visit LCP problem, and it would leave the actual cause in place.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "core-web-vitals",
+   "lcp",
+   "performance",
+   "diagnosis",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Security",
+  "difficulty": "Hard",
+  "question": "During an intermittent failure involving security concerns around code, review, shows, dangerouslysetinnerhtml, being, render, content, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: **Why 'it is our own backend' is not sufficient**\n\nThe question is not where the content comes from but where it *originated*. If any part of that content was ever user-supplied — a comment, a profile field, a product description, a support ticket — then the backend is relaying attacker-controlled data, and being first-party does not sanitise it.\n\nThis is stored XSS: the payload is persisted, then served to every viewer with the application's own origin. That means it runs with full access to the session, can read any token in `localStorage`, can call your API as the user, and can rewrite the page.\n\n**The specific risks with `dangerouslySetInnerHTML`**\n\nReact escapes everything by default, which is why XSS is rare in React apps. This API exists specifically to opt out of that protection, and the name is a deliberate warning.\n\n**What I would ask in the review**\n\n- Can any part of this content be influenced by a user, now or later?\n- Is it sanitised, and where — on write, on read, or not at all?\n- If it is sanitised on the server, what stops a future endpoint returning the same field unsanitised?\n\n**What I would want instead**\n\n**1. Do not render HTML if you do not need to.** Most cases only need line breaks and links, which can be handled with a Markdown renderer configured to disallow HTML, or by rendering structured data rather than markup.\n\n**2. Sanitise client-side at the point of rendering** with DOMPurify, so protection is adjacent to the danger rather than trusted from a distance.\n\n**3. Sanitise on write as well**, so the stored data is clean — but treat that as defence in depth, not as a reason to skip the render-time sanitisation.\n\n**4. Add a Content Security Policy** so that even a successful injection cannot execute inline script or exfiltrate to an arbitrary host. That is the control that limits the damage when the other layers fail.\n\n**The framing I would use**\n\nNot 'this is wrong' but 'what is the full path this data takes, and what happens if any step is compromised'. The answer determines whether the current code is acceptable — and it usually is not, because the path almost always includes a user somewhere.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "security",
+   "xss",
+   "sanitisation",
+   "code-review",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied State",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving state concerns around form, loses, user, input, background, refresh, updates, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: **The underlying issue: two sources of truth**\n\nThe form's state has diverged from the server's, and a refresh is overwriting the local edits with server values. The user's in-progress input is being treated as derived from the server data when it is actually newer and unsaved.\n\n**The distinction that matters**\n\n**Server state** is data you do not own — it lives elsewhere, can change without you, and is cached locally. It needs refresh, invalidation and staleness handling.\n\n**Client state** is data you own — the form's current contents, what is expanded, what is selected. Nothing else can change it.\n\nMost of these bugs come from managing both with the same mechanism. Once a form's in-progress values are stored in the same place as the fetched record, any refetch destroys them.\n\n**How to fix this case**\n\n**1. Keep the draft separate** from the fetched record. The form owns its own state, initialised once from the server value, and a refetch updates the cached record without touching the draft.\n\n**2. Suspend background refetching while the form is dirty.** React Query's `enabled` option, or simply not refetching a record being edited. This is the simplest correct behaviour for most forms.\n\n**3. If the underlying record genuinely changed**, tell the user rather than silently resolving it — 'this record was updated by someone else, review the changes' — and let them decide. Silently keeping either version is wrong: keeping theirs loses the other edit, keeping the server's loses theirs.\n\n**4. Detect the conflict at save time** with a version or rowversion, so even if the refresh does not happen, a concurrent edit is caught rather than overwritten.\n\n**The general principle**\n\nUnsaved user input is the most valuable state in the application — it cannot be recovered from anywhere else. Anything that can destroy it, including a well-intentioned refresh, needs to be deliberate rather than incidental. Design so that the only thing that overwrites a draft is the user.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "state-management",
+   "forms",
+   "server-state",
+   "concurrency",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Build",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving build concerns around after, deployment, users, blank, page, failed, fetch, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: **What's happening**\n\nThe user loaded the application before the deployment. Their `index.html` and its already-loaded JavaScript reference asset filenames containing content hashes — `app-a1b2c3.js`, `Dashboard-d4e5f6.js`. After the deployment those files no longer exist, because the new build produced different hashes and the old files were removed from the CDN or storage.\n\nWhen the user then navigates to a lazily-loaded route, the browser requests a chunk that has been deleted and gets a 404. The dynamic import rejects, and if nothing handles it, the route renders nothing.\n\nRefreshing fixes it because it fetches the new `index.html`, which references the new chunk names.\n\n**Why it affects only some users**\n\nOnly those with a session spanning the deployment, who then navigate to a route they had not already loaded. A user who loaded everything before the deploy, or who arrives after it, sees nothing wrong — which makes it look intermittent and hard to reproduce.\n\n**The fixes, which are complementary**\n\n**1. Keep old assets for a period.** Do not delete the previous build's chunks immediately — retain them for a day or two so in-flight sessions can still load them. This is the most effective single change and it is a deployment configuration rather than a code change.\n\n**2. Detect the failure and recover.** Catch the import rejection and reload the page, which picks up the new index. React's error boundaries or a wrapper around the lazy import:\n\n```js\nconst Dashboard = lazy(() =>\n  import('./Dashboard').catch(() => {\n    window.location.reload();\n    return new Promise(() => {});   // never resolves; the reload takes over\n  })\n);\n```\n\n**3. Tell the user a new version is available.** Poll a version endpoint or use a service worker, and prompt them to refresh. Better than a silent reload, which can lose unsaved work.\n\n**4. Cache headers.** `index.html` must be `no-cache` so it is revalidated, while hashed assets can be cached forever — they are immutable by construction. Getting this backwards produces a related and more persistent version of the same problem.\n\n**The general point**\n\nA single-page application is a long-lived client running code from a specific deployment. Deployments are not atomic from its perspective, so the client needs a story for 'the server has moved on'.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "deployment",
+   "code-splitting",
+   "caching",
+   "spa",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a security review involving performance concerns around page, scores, badly, largest, contentful, paint, likely, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: LCP measures when the largest element in the viewport finishes rendering - usually a hero image, a video poster, or a large block of text. A bad score means the user is looking at an incomplete page for too long.\n\n**I would break the time down into its four parts**, because the fix differs completely for each:\n\n1. **Time to first byte** - slow server or no CDN. Fix at the origin: caching, a faster query, edge delivery.\n2. **Resource load delay** - the browser did not *discover* the LCP resource early enough. This is the most common and most fixable cause. A hero image referenced from CSS, injected by JavaScript, or lazy-loaded is discovered late. Fixes: put it in the HTML as a plain `<img>`, add `fetchpriority=\"high\"`, preload it, and never mark the above-the-fold image `loading=\"lazy\"` - that single attribute on a hero image is a frequent own goal.\n3. **Resource load time** - the image is simply too big. Serve modern formats (AVIF, WebP), size it to the actual display dimensions with `srcset`, and compress properly.\n4. **Element render delay** - the resource arrived but rendering was blocked. Render-blocking CSS and synchronous scripts in the head, or a font swap strategy that hides text until the font loads. Inline critical CSS, defer the rest, and use `font-display: swap`.\n\n**The measurement point I would make:** optimise against field data, not only Lighthouse. Lab scores on a fast machine hide the problem; real-user monitoring shows what your actual users on mid-range phones experience, and that is what search ranking uses.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "performance",
+   "core-web-vitals",
+   "lcp",
+   "images",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Accessibility",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving accessibility concerns around client, says, site, must, accessible, actually, beyond, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Accessibility is mostly about building with the right primitives, not adding attributes afterwards. The largest wins come from things that are invisible if you get them right.\n\n**What I would actually do:**\n\n1. **Use semantic HTML.** A `<button>` is focusable, keyboard-activatable, and announced as a button. A `<div onClick>` is none of those, and reproducing them with ARIA takes several attributes and a keydown handler that people get wrong. Most ARIA in real codebases exists to patch an element that should have been native.\n2. **Make everything keyboard reachable and operable.** Tab through the whole page. Every interactive element must be focusable, in a sensible order, with a visible focus indicator - and removing focus outlines for aesthetics is a genuine accessibility regression.\n3. **Manage focus on navigation and in dialogs.** When a modal opens, focus moves into it and is trapped; when it closes, focus returns to the trigger. In an SPA, route changes must move focus and announce the new page, or a screen reader user has no idea anything happened.\n4. **Label every form control** with a real `<label>`, and associate error messages with their field so they are announced, not just coloured red.\n5. **Colour contrast** at 4.5:1 for body text, and never colour as the only signal - add an icon or text.\n6. **Announce dynamic changes** with live regions, so an async result is not silent.\n\n**How I would verify:** automated tools (axe, Lighthouse) catch perhaps a third of issues - they are a floor, not a standard. Then keyboard-only testing, then an actual screen reader. Ideally testing with disabled users, because that surfaces things no checklist contains.\n\n**And I would get it into CI**, because accessibility regressions are otherwise found at the next audit.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "accessibility",
+   "a11y",
+   "aria",
+   "semantic-html",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Frontend",
+  "subcategory": "Applied Caching",
+  "difficulty": "Medium",
+  "question": "During a production incident involving caching concerns around make, sure, users, frontend, code, after, deploy, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: With content hashing and two different caching policies for two different kinds of file, which is the part people get wrong by applying one rule to everything.\n\n**The arrangement:**\n\n1. **Hashed asset filenames.** The bundler emits `app.4f3a2b.js`, so the filename changes whenever the content does. These are served with a long `Cache-Control: max-age=31536000, immutable` - a year - because the URL can never refer to different content. That gives you maximum caching with no staleness risk.\n2. **The HTML entry point is never cached**, or cached only briefly with revalidation - `no-cache` means the browser revalidates every time rather than not caching at all. The HTML references the current hashed filenames, so fetching fresh HTML is what delivers the new version.\n\nThat combination means a deploy changes one small file that is always revalidated, and everything else is cached aggressively and correctly.\n\n**What goes wrong:**\n- **Caching the HTML**, so users keep loading an old page referencing old bundles long after the deploy.\n- **Unhashed filenames with a long cache time**, which is how you get users stuck on old code for days with no way to fix it.\n- **A service worker caching aggressively** and never updating, which is by far the hardest version of this to recover from because it persists across reloads.\n- **Deleting old bundles immediately on deploy**, so a user who loaded the old HTML then requests a chunk that no longer exists and gets a blank screen. Keep previous versions for a while.\n\n**And handle the mid-session deploy:** detect a version change and prompt the user to reload rather than letting a lazy-loaded chunk 404.\n\nFor the applied scenario, Measure the complete user journey, main-thread and network work, responsive and accessible behavior, and recovery from partial or stale data. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "frontend",
+   "caching",
+   "cache-busting",
+   "deployment",
+   "service-worker",
+   "scenario-practice",
+   "applied"
   ]
  }
 ]

@@ -661,5 +661,896 @@
     "a": "That the JVM spent more than 98% of recent time collecting while recovering less than 2% of the heap - so it is thrashing rather than failing to allocate outright. It usually means the live set has grown to just under the heap size: there is technically room, but almost nothing is collectable. It is a strong signal of a leak or an undersized heap rather than a single large allocation spike."
    }
   ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Parameters",
+  "difficulty": "Medium",
+  "question": "Is Java pass-by-reference when a method changes an object supplied by its caller?",
+  "answer": "Java passes values, including the value of an object reference. The method can mutate the referenced object, but rebinding its parameter does not rebind the caller's variable. Distinguish sharing an object from sharing the variable that holds its reference.",
+  "tags": [
+   "java",
+   "parameters"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Parameters",
+  "difficulty": "Medium",
+  "question": "Why must a local variable captured by a Java lambda be final or effectively final?",
+  "answer": "The language restricts captured local bindings so they are not reassigned after initialization. The object referenced by a captured variable may still be mutable. This restriction therefore does not make a lambda thread-safe or make its captured state deeply immutable.",
+  "tags": [
+   "java",
+   "parameters"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Parameters",
+  "difficulty": "Medium",
+  "question": "How can a Java varargs method receive an array without guaranteeing that the array is non-null?",
+  "answer": "Varargs is implemented through an array parameter, and a caller can supply an array reference directly, including null. Decide whether null is accepted and validate accordingly. Also distinguish a null array from an array containing one null element when overloading or casting affects the call.",
+  "tags": [
+   "java",
+   "parameters"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Parameters",
+  "difficulty": "Medium",
+  "question": "Why can Java method overloading choose a different method from the one suggested by an object's runtime type?",
+  "answer": "Overload resolution uses compile-time types and applicable signatures. Runtime dispatch then chooses an override of the selected instance method. Overloading and overriding are different stages, so changing a variable's declared type can change the overload even when it references the same object.",
+  "tags": [
+   "java",
+   "parameters"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Parameters",
+  "difficulty": "Medium",
+  "question": "Why can calling an overloaded Java method with null be ambiguous?",
+  "answer": "If multiple unrelated reference-type overloads are applicable and neither is more specific, the compiler cannot select one. Use a deliberate cast or redesign the overloads when the API is confusing. Null does not carry the runtime type information needed to resolve that ambiguity.",
+  "tags": [
+   "java",
+   "parameters"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Initialization",
+  "difficulty": "Medium",
+  "question": "Why is invoking an overridable Java method from a constructor risky?",
+  "answer": "Dynamic dispatch can enter subclass code before subclass fields have finished initialization. The method may observe default or incomplete state. Prefer construction paths that establish invariants before exposing overridable behavior, rather than relying on subclasses to tolerate a partially initialized object.",
+  "tags": [
+   "java",
+   "initialization"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Initialization",
+  "difficulty": "Medium",
+  "question": "How can publishing this from a Java constructor expose an incompletely constructed object?",
+  "answer": "Registering a callback or storing this in shared state can let other code access the object before construction finishes. Avoid escape during initialization and publish the completed instance through an appropriate synchronization mechanism. Constructor completion and safe publication are important parts of the object's lifecycle.",
+  "tags": [
+   "java",
+   "initialization"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Initialization",
+  "difficulty": "Medium",
+  "question": "Why does initializing a static Java field have a different lifetime from initializing an instance field?",
+  "answer": "Static state belongs to the loaded class and is shared by its instances, while instance state is created for each object. Static mutable state can therefore outlive individual requests and tests. Use it only when that ownership and concurrency model is intentional.",
+  "tags": [
+   "java",
+   "initialization"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Initialization",
+  "difficulty": "Medium",
+  "question": "What can ExceptionInInitializerError reveal about a failed Java class initialization?",
+  "answer": "It indicates that class initialization failed because of an exception in initialization code. Inspect the cause rather than only the wrapper. Heavy external work in static initialization can make recovery difficult, so prefer explicit lifecycle management for fallible resources.",
+  "tags": [
+   "java",
+   "initialization"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Numbers",
+  "difficulty": "Medium",
+  "question": "Why can multiplying two Java int values overflow even when the result is assigned to a long?",
+  "answer": "The multiplication is performed using the operand types before assignment. Promote an operand to long before multiplying when the result may exceed int range. A long can still overflow for larger values, so use exact arithmetic checks or a larger representation when required.",
+  "tags": [
+   "java",
+   "numbers"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Numbers",
+  "difficulty": "Medium",
+  "question": "How can Java detect integer overflow instead of silently wrapping during addition?",
+  "answer": "Math.addExact throws ArithmeticException when the result exceeds the target integer type's range. This is useful when wraparound would violate a domain invariant. Choose the numeric representation and error policy explicitly; detecting overflow does not by itself define a valid fallback result.",
+  "tags": [
+   "java",
+   "numbers"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Numbers",
+  "difficulty": "Medium",
+  "question": "What is the difference between Java >> and >>> for a negative int?",
+  "answer": "The signed right shift propagates the sign bit, while the unsigned right shift fills high bits with zeros. They therefore produce different values for negative operands. Specify the bit-level interpretation before using shifts as a substitute for arithmetic division.",
+  "tags": [
+   "java",
+   "numbers"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Numbers",
+  "difficulty": "Medium",
+  "question": "Why does Java integer division of -7 by 3 produce -2 rather than -3?",
+  "answer": "Integer division truncates toward zero. The remainder preserves the corresponding identity, so -7 % 3 is -1. Use floorDiv and floorMod when a floor-based convention is required, especially when implementing wrapping indexes or partition calculations.",
+  "tags": [
+   "java",
+   "numbers"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Numbers",
+  "difficulty": "Medium",
+  "question": "Why can unboxing a nullable Java Integer throw NullPointerException before any arithmetic occurs?",
+  "answer": "Unboxing needs the primitive value from the wrapper object. If that reference is null, extracting the value fails. Validate presence or choose a default explicitly, and remember that comparisons, arithmetic, and some conditional expressions can trigger unboxing implicitly.",
+  "tags": [
+   "java",
+   "numbers"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Numbers",
+  "difficulty": "Medium",
+  "question": "Why can comparing boxed Java integers with == give misleading results for small values?",
+  "answer": "The comparison tests reference identity when both operands are references. Some boxed values may be shared, making selected examples appear to compare values successfully. Use equals or intentional primitive comparison, with explicit handling for null, instead of depending on wrapper caching.",
+  "tags": [
+   "java",
+   "numbers"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Numbers",
+  "difficulty": "Medium",
+  "question": "Why can BigDecimal.equals disagree with compareTo for values such as 2.0 and 2.00?",
+  "answer": "equals considers both numeric value and scale, while compareTo treats these values as numerically equal. This affects deduplication and collection behavior. Decide whether scale is meaningful in the domain and normalize deliberately rather than assuming all equality mechanisms use the same rule.",
+  "tags": [
+   "java",
+   "numbers"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Numbers",
+  "difficulty": "Medium",
+  "question": "Why should new BigDecimal(0.1) not be assumed to represent the exact decimal fraction one tenth?",
+  "answer": "The double argument already contains a binary floating-point approximation, which the constructor represents. Construct from a decimal string when exact decimal input is intended, or use an appropriate conversion contract. Precision and rounding choices remain necessary for subsequent operations.",
+  "tags": [
+   "java",
+   "numbers"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Numbers",
+  "difficulty": "Medium",
+  "question": "Why can dividing BigDecimal.ONE by a BigDecimal representing three throw an exception?",
+  "answer": "The exact decimal expansion does not terminate, and division without a rounding or precision policy cannot represent it finitely. Supply the required scale and rounding mode or a suitable MathContext. The correct policy depends on the domain, not merely on avoiding the exception.",
+  "tags": [
+   "java",
+   "numbers"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Why does Java String.length not always equal the number of Unicode code points?",
+  "answer": "It counts UTF-16 code units, and some code points require a surrogate pair. Code-point operations can address that distinction, but user-perceived characters can still contain multiple code points. Define whether a limit concerns storage units, code points, or displayed grapheme clusters.",
+  "tags": [
+   "java",
+   "strings"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "What is the difference between String.replace and replaceAll in Java?",
+  "answer": "replace can perform literal replacement, while replaceAll interprets its first argument as a regular expression and gives the replacement string special syntax. Use the literal operation when that is the requirement, or quote pattern and replacement data appropriately when using regex APIs.",
+  "tags": [
+   "java",
+   "strings"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Why can splitting a Java string with split('.') produce unexpected fields?",
+  "answer": "The separator argument is a regular expression, where a dot matches almost any character rather than a literal period. Escape it correctly or use Pattern.quote for a literal delimiter. Also choose a limit deliberately when trailing empty fields must be retained.",
+  "tags": [
+   "java",
+   "strings"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Why should Java text conversions specify a charset at a protocol boundary?",
+  "answer": "The bytes must follow the protocol's agreed encoding, not an environmental assumption. Use an explicit charset such as StandardCharsets.UTF_8 when appropriate. A consistent encoding prevents cross-machine differences and makes malformed input handling an explicit part of the contract.",
+  "tags": [
+   "java",
+   "strings"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Why can locale-dependent lowercase conversion break a Java machine identifier comparison?",
+  "answer": "Case mappings can differ by locale, while a machine identifier often requires a locale-independent rule. Use a defined canonicalization policy, commonly Locale.ROOT where appropriate, and preserve the original when needed. Human-language matching and protocol identifier matching are different requirements.",
+  "tags": [
+   "java",
+   "strings"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Strings",
+  "difficulty": "Medium",
+  "question": "Why does String.intern not automatically solve Java string-memory problems?",
+  "answer": "Interning trades duplicate representations for a shared canonical instance, but lookup overhead and retained data can outweigh savings for high-cardinality values. Measure duplication and lifetime first. Do not use identity comparison as a replacement for normal string value equality in application logic.",
+  "tags": [
+   "java",
+   "strings"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "Why can Arrays.asList reject adding an element while still allowing an existing element to be replaced?",
+  "answer": "It returns a fixed-size list backed by the array. Element replacement is supported, but operations that change size are not. Copy into a new ArrayList when a resizable independent container is needed, and remember that copying the container does not deep-copy its elements.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "How does Collections.unmodifiableList differ from making a defensive snapshot in Java?",
+  "answer": "The wrapper prevents mutation through that view but still reflects changes made to the backing list through other references. A defensive copy separates the container's membership from later source changes. Neither approach automatically makes mutable element objects immutable.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "What does List.copyOf guarantee about later structural changes to its input collection?",
+  "answer": "The resulting unmodifiable list does not track later additions, removals, or replacements in the input. It rejects null elements, and it does not deep-copy the element objects. Callers must still decide whether mutable elements violate the intended ownership contract.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "Why can Java List<Integer>.remove(1) delete the wrong value for a caller intending to remove the integer one?",
+  "answer": "The int argument selects the index overload, removing the element at position one. Use remove(Integer.valueOf(1)) for value-based removal. This is an overload-resolution issue, so the argument's static type matters even when both interpretations look plausible.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "Why should code avoid depending on HashMap iteration order in Java?",
+  "answer": "HashMap does not promise a particular iteration order. An order observed with one set of keys or runtime may change after resizing or other changes. Choose an order-preserving or sorted map when order is part of the contract, or sort explicitly at the output boundary.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "How can changing a field used by a Java HashMap key's hashCode make the entry difficult to retrieve?",
+  "answer": "The key's stored placement was based on its earlier hash, while later lookups use the changed hash. Keep equality-relevant key state immutable or use an appropriate immutable key representation. Mutating the value associated with a stable key does not create this particular problem.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "Why can a TreeSet treat two unequal Java objects as the same set element?",
+  "answer": "It uses the ordering comparison to identify equal positions. If the comparator returns zero for objects that equals distinguishes, only one can occupy that ordering position. Design the comparator consistently with the intended set semantics and include necessary tie-breaking fields.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "Why does iterating a Java PriorityQueue not guarantee priority order?",
+  "answer": "The internal heap guarantees access to a highest-priority root under its ordering, not a fully sorted iterator traversal. Repeated polling produces priority order while consuming entries. Copy and sort if a complete ordered view is needed without changing the original queue.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "When is CopyOnWriteArrayList a poor choice for a Java workload?",
+  "answer": "Each structural write copies its backing storage, so frequent writes or large lists can be expensive. It is more suitable when traversal greatly outweighs modification and snapshot iteration is useful. Measure write volume and memory churn rather than choosing it simply because it is thread-safe.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "Why is a Java subList not an independent copy of the selected elements?",
+  "answer": "It is a view associated with the backing list, so changes can be reflected across the boundary and unsupported structural modifications can invalidate expected behavior. Copy the view into a new collection when independent membership and lifetime are required. Element objects are still shared unless separately copied.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Collections",
+  "difficulty": "Medium",
+  "question": "Why can putting null into a Java ConcurrentHashMap fail even though HashMap allows it?",
+  "answer": "ConcurrentHashMap disallows null keys and values. The APIs have different contracts, and concurrent absence checks should use the supported atomic operations. Do not infer interchangeable behavior merely because both implement Map.",
+  "tags": [
+   "java",
+   "collections"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Generics",
+  "difficulty": "Medium",
+  "question": "Why is List<Integer> not assignable to List<Number> in Java?",
+  "answer": "If that assignment were allowed, code holding List<Number> could add a Double into a list intended only for integers. Generic types are invariant here to prevent that type-safety violation. Use a suitable wildcard when the operation only needs to read compatible values.",
+  "tags": [
+   "java",
+   "generics"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Generics",
+  "difficulty": "Medium",
+  "question": "What does List<? extends Number> let Java code read, and why does it restrict insertion?",
+  "answer": "It provides values that can be treated as Number, but the actual element type could be a narrower subtype. Inserting an arbitrary Number would therefore be unsafe. Use it for a producer of numeric values, rather than assuming it is a mutable list accepting every Number.",
+  "tags": [
+   "java",
+   "generics"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Generics",
+  "difficulty": "Medium",
+  "question": "When is a Java parameter such as List<? super Integer> useful?",
+  "answer": "It can accept lists whose element type is Integer or a supertype, allowing integers to be added safely. Retrieved values are generally known only as Object. This is useful for a destination consuming integers, with the parameter type reflecting the operation's actual needs.",
+  "tags": [
+   "java",
+   "generics"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Generics",
+  "difficulty": "Medium",
+  "question": "Why does using a raw Java List undermine compile-time element checks?",
+  "answer": "The raw type discards the generic element information, allowing incompatible values to enter code that later assumes a specific type. Failure may appear as a ClassCastException far from the insertion. Use parameterized types and address unchecked warnings rather than suppressing them indiscriminately.",
+  "tags": [
+   "java",
+   "generics"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Generics",
+  "difficulty": "Medium",
+  "question": "Why can Java not generally create an array with new T[n] inside a generic method?",
+  "answer": "Arrays retain runtime component-type information, while an unconstrained type parameter does not provide that information in the same way. Use a collection, supply an array factory, or pass an explicit component type where appropriate. Avoid an unchecked cast that merely hides an incorrect array type.",
+  "tags": [
+   "java",
+   "generics"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Generics",
+  "difficulty": "Medium",
+  "question": "Why can a Java array assignment compile but a later element store throw ArrayStoreException?",
+  "answer": "Arrays are covariant, so a String[] can be referenced as Object[]. The actual array still enforces its String component type at runtime and rejects an incompatible object. Generic collections use different type rules to catch many analogous errors at compile time.",
+  "tags": [
+   "java",
+   "generics"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Generics",
+  "difficulty": "Medium",
+  "question": "What is heap pollution in Java generic code?",
+  "answer": "A variable of a parameterized type can end up referring to data inconsistent with that type, often through raw types, unchecked casts, or unsafe generic varargs. The error may surface later during retrieval. Preserve type-safe boundaries and justify any unavoidable unchecked operation narrowly.",
+  "tags": [
+   "java",
+   "generics"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Exceptions",
+  "difficulty": "Medium",
+  "question": "How does Java try-with-resources determine the order in which several resources are closed?",
+  "answer": "Resources are closed in reverse order of initialization, helping unwind dependencies safely. If construction or the body fails, already acquired resources still receive cleanup. Design resource ownership so each resource is closed exactly where its lifecycle belongs.",
+  "tags": [
+   "java",
+   "exceptions"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Exceptions",
+  "difficulty": "Medium",
+  "question": "What happens when both the body and resource closing fail in Java try-with-resources?",
+  "answer": "The body exception normally remains the primary exception, while closing failures are recorded as suppressed exceptions. Inspect suppressed exceptions during diagnosis so cleanup problems are not missed. This preserves more information than casually replacing the original error with the last cleanup failure.",
+  "tags": [
+   "java",
+   "exceptions"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Exceptions",
+  "difficulty": "Medium",
+  "question": "Why should Java cleanup code avoid returning from a finally block?",
+  "answer": "A return can override a pending return value or suppress an exception from the try block, hiding the real outcome. Keep finally focused on cleanup and let the established control flow continue. Use try-with-resources where it matches the resource ownership model.",
+  "tags": [
+   "java",
+   "exceptions"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Exceptions",
+  "difficulty": "Medium",
+  "question": "Why is catching Throwable inappropriate for most Java business-error handling?",
+  "answer": "It also catches serious errors outside ordinary recoverable application exceptions. Continuing after such failures may be unsafe or misleading. Catch errors the boundary can meaningfully handle, preserve diagnostic context, and let the platform's failure policy handle conditions beyond that recovery contract.",
+  "tags": [
+   "java",
+   "exceptions"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Exceptions",
+  "difficulty": "Medium",
+  "question": "What should Java code consider when catching InterruptedException but not rethrowing it?",
+  "answer": "Catching the exception clears the interrupted status, so silently swallowing it can prevent cooperative cancellation. Often the handler should restore the status with Thread.currentThread().interrupt() and return or propagate an appropriate failure. The policy must match the caller's shutdown and cancellation expectations.",
+  "tags": [
+   "java",
+   "exceptions"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Exceptions",
+  "difficulty": "Medium",
+  "question": "Why is logging an exception and rethrowing it at every Java layer often counterproductive?",
+  "answer": "The same failure can produce multiple noisy records that obscure the actual incident and inflate logs. Add context where it is meaningful, then log at the boundary that owns the handling decision. Preserve the cause when translating the exception rather than replacing it with message text alone.",
+  "tags": [
+   "java",
+   "exceptions"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Exceptions",
+  "difficulty": "Medium",
+  "question": "Why should Java exception messages not be the only machine-readable error contract between components?",
+  "answer": "Message wording can change for clarity, localization, or implementation reasons. Use stable exception types or explicit error codes for programmatic handling, with messages for diagnosis. Avoid parsers that make application correctness depend on incidental prose.",
+  "tags": [
+   "java",
+   "exceptions"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Streams",
+  "difficulty": "Medium",
+  "question": "Why can a Java stream pipeline produce no side effects until a terminal operation is invoked?",
+  "answer": "Intermediate operations are lazy and define a pipeline rather than necessarily traversing immediately. A terminal operation drives evaluation, subject to allowed optimizations. Do not rely on incidental intermediate side effects for required business behavior or correctness.",
+  "tags": [
+   "java",
+   "streams"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Streams",
+  "difficulty": "Medium",
+  "question": "Why is modifying a shared ArrayList from a Java parallel stream forEach unsafe?",
+  "answer": "Multiple tasks can mutate the list without coordination, corrupting results or losing elements. Use an appropriate collector or another explicitly safe aggregation strategy. Merely switching to a concurrent source collection does not make an unrelated mutable result container safe.",
+  "tags": [
+   "java",
+   "streams"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Streams",
+  "difficulty": "Medium",
+  "question": "What distinguishes findFirst from findAny in a Java stream with encounter order?",
+  "answer": "findFirst respects the first element under that order, while findAny permits any matching element and can allow more freedom in parallel execution. Choose based on the required result semantics, not only benchmark speed. If order is unspecified, first may not have the meaning the caller expects.",
+  "tags": [
+   "java",
+   "streams"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Streams",
+  "difficulty": "Medium",
+  "question": "Why must a Java parallel reduction use an associative combination operation?",
+  "answer": "The framework may partition and regroup the work, so different grouping must preserve the intended result. Non-associative operations can produce different answers when combined in another order. The identity and accumulator must also be compatible; mutable accumulation often belongs in collect instead.",
+  "tags": [
+   "java",
+   "streams"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Streams",
+  "difficulty": "Medium",
+  "question": "Why can Java Collectors.toMap fail when two elements produce the same key?",
+  "answer": "Without an explicit merge policy, duplicate keys violate that collector's expected mapping. Supply a merge function when duplicates are legitimate, or detect them as invalid input. Do not silently choose first or last unless that policy matches the domain's meaning.",
+  "tags": [
+   "java",
+   "streams"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Streams",
+  "difficulty": "Medium",
+  "question": "Why can Optional.orElse perform expensive work even when the Java Optional contains a value?",
+  "answer": "The argument expression is evaluated before orElse is called. orElseGet takes a supplier and invokes it only when needed. Choose the lazy form for expensive or effectful fallback construction, while keeping the fallback behavior deterministic and appropriate to the absence case.",
+  "tags": [
+   "java",
+   "streams"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Streams",
+  "difficulty": "Medium",
+  "question": "Why should a Java stream obtained from Files.lines be closed?",
+  "answer": "It owns an underlying file resource that is not automatically released merely because a stream object exists or a terminal operation was invoked. Use try-with-resources around the stream's lifetime. Ordinary in-memory streams do not create the same file-handle obligation.",
+  "tags": [
+   "java",
+   "streams"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "Why does declaring a Java counter volatile not make counter++ atomic?",
+  "answer": "Increment is a read-modify-write sequence, so two threads can read the same old value and overwrite each other's updates. Volatile visibility does not combine those steps into one operation. Use an atomic increment or a lock that protects the required invariant.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "When might Java LongAdder be suitable for metrics but unsuitable for generating unique sequence numbers?",
+  "answer": "It spreads updates to reduce contention, and its summed observation is not a single atomic sequence-allocation operation. That can suit approximate concurrent metrics snapshots. Use an appropriate atomic or coordinated sequence mechanism when each caller requires a unique ordered result.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "What is the ABA concern in a Java compare-and-set algorithm?",
+  "answer": "A value can change from A to B and back to A before a comparison, so observing A alone misses the intervening changes. If that history matters, include a version or stamp in the state. Compare-and-set provides an atomic comparison, not automatic correctness for every state transition protocol.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "Why must a Java wait call occur while holding the relevant object's monitor?",
+  "answer": "wait participates in that monitor's synchronization protocol: it releases the monitor while waiting and reacquires it before returning. Calling without ownership is invalid. Check the condition in a loop because waking does not guarantee the predicate is now true.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "How does Thread.sleep differ from Object.wait with respect to a held Java monitor?",
+  "answer": "sleep pauses the current thread without releasing monitors it holds. wait releases the specific monitor involved while waiting and requires that monitor's ownership. Sleeping inside a synchronized region can therefore block other threads from making progress toward the condition being awaited.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "Why can consistent lock acquisition order prevent a class of Java deadlocks?",
+  "answer": "If all code acquires multiple locks according to one shared ordering, circular wait involving those locks is avoided. The rule must cover every relevant path, including error and callback paths. It does not solve unrelated deadlocks involving external resources or unknown lock acquisition.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "What differs between CountDownLatch and CyclicBarrier in Java coordination?",
+  "answer": "A latch reaches zero as events complete and cannot be reset for another cycle. A barrier coordinates a fixed group reaching a rendezvous and can support repeated cycles. Choose according to the lifecycle, and define how failure or interruption affects waiting participants.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "Why does shutting down a Java ExecutorService not mean every submitted task has already finished?",
+  "answer": "Orderly shutdown stops accepting new tasks while allowing previously submitted work to proceed. Waiting for termination is a separate step with a chosen deadline. Forced shutdown requests interruption but cannot guarantee that uncooperative code or external side effects stop immediately.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "Why can an unbounded Java executor queue hide overload until memory or latency fails?",
+  "answer": "Tasks can arrive faster than workers complete them, accumulating without an admission limit. The system appears to accept work while the waiting time and retained task state grow. Choose a capacity and rejection or backpressure policy tied to the service's workload and deadline requirements.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "How can CompletableFuture.thenCompose avoid a nested future in Java asynchronous code?",
+  "answer": "When a continuation itself returns a future, thenCompose links its completion into one flattened future. thenApply instead transforms the value and can leave a future inside another future. Use composition to keep failure propagation and subsequent asynchronous stages attached to the intended operation.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "Why does a non-Async CompletableFuture continuation not guarantee execution on a dedicated background thread?",
+  "answer": "It can run on a thread involved in completing the prior stage, or during registration if already complete. Avoid placing unexpectedly blocking work there. When execution ownership matters, use an appropriate asynchronous variant with a deliberate executor and lifecycle policy.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "How do handle and exceptionally differ when recovering a Java CompletableFuture pipeline?",
+  "answer": "handle sees either a value or a failure and can transform both paths. exceptionally runs only for exceptional completion and supplies a recovery value. Choose recovery deliberately so a fallback does not silently turn an operation that must fail into an apparent success.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Concurrency",
+  "difficulty": "Medium",
+  "question": "Why does cancelling a Java CompletableFuture not necessarily interrupt the computation that produced it?",
+  "answer": "CompletableFuture completion state is not a universal handle to the underlying worker. Its cancellation does not inherently provide thread interruption control over arbitrary producers. Build cooperative cancellation into the actual operation and distinguish cancelling observation from stopping work or undoing effects.",
+  "tags": [
+   "java",
+   "concurrency"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "I/O",
+  "difficulty": "Medium",
+  "question": "Why can InputStream.read in Java return fewer bytes than the buffer length before end-of-file?",
+  "answer": "A read reports the bytes available from that operation, not a promise to fill the requested buffer. Loop according to the protocol or use a suitable full-read helper when an exact count is required. Treat end-of-file before the required amount as a distinct incomplete-input condition.",
+  "tags": [
+   "java",
+   "i/o"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "I/O",
+  "difficulty": "Medium",
+  "question": "Why should Java code use try-with-resources for a JDBC connection even when pooling is enabled?",
+  "answer": "Closing the logical connection normally returns it to the pool, releasing scarce capacity for other requests. Failing to close can exhaust the pool even though physical connections are intentionally reused. Keep the logical connection and transaction lifetime bounded to the work that requires them.",
+  "tags": [
+   "java",
+   "i/o"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "I/O",
+  "difficulty": "Medium",
+  "question": "Why can closing a buffered Java writer reveal an error that earlier write calls did not?",
+  "answer": "Earlier writes may have only populated memory buffers. Flushing during close can encounter a storage or I/O failure later. Handle the complete resource lifecycle and do not report durable success before the required flush and persistence guarantees have been satisfied.",
+  "tags": [
+   "java",
+   "i/o"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "I/O",
+  "difficulty": "Medium",
+  "question": "Why should Java code avoid using available() as the total length of an InputStream?",
+  "answer": "available estimates bytes readable without blocking, not the full remaining length for every stream type. It may be zero even when future reads will produce data. Read until the protocol's boundary or end-of-file, with explicit size limits where untrusted input is possible.",
+  "tags": [
+   "java",
+   "i/o"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "I/O",
+  "difficulty": "Medium",
+  "question": "Why is reading every line of a large Java file into a collection unnecessary for a sequential transformation?",
+  "answer": "It retains the whole input even when each record can be processed independently. Use a bounded streaming approach and close the underlying resource. Still enforce record-size limits and account for downstream buffering so apparent streaming does not merely move unbounded retention elsewhere.",
+  "tags": [
+   "java",
+   "i/o"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Time",
+  "difficulty": "Medium",
+  "question": "How does Java Instant differ from LocalDateTime when recording an event that occurred across regions?",
+  "answer": "Instant represents a point on the timeline, while LocalDateTime represents a date and clock reading without an offset or timezone. The latter alone may not identify a unique instant. Store enough temporal context and convert deliberately for display or local scheduling.",
+  "tags": [
+   "java",
+   "time"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Time",
+  "difficulty": "Medium",
+  "question": "Why can adding a Java Period of one day differ from adding a Duration of 24 hours to zoned time?",
+  "answer": "A Period represents calendar-based adjustment, while a Duration represents a fixed elapsed amount. A timezone transition can make the local calendar day shorter or longer than 24 hours. Select the operation from the scheduling or elapsed-time requirement rather than treating them as interchangeable.",
+  "tags": [
+   "java",
+   "time"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Time",
+  "difficulty": "Medium",
+  "question": "Why is injecting a Java Clock useful for testing expiration rules?",
+  "answer": "The test can supply a controlled instant and timezone instead of relying on the machine's changing wall clock. This makes boundary cases reproducible. Use a monotonic timing mechanism separately when measuring elapsed operation duration, since calendar time and duration measurement serve different purposes.",
+  "tags": [
+   "java",
+   "time"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Time",
+  "difficulty": "Medium",
+  "question": "Why is Java DateTimeFormatter generally easier to share safely than a mutable formatter instance?",
+  "answer": "DateTimeFormatter is immutable and designed for thread-safe use. A shared mutable formatter can require external synchronization or per-thread ownership. The chosen pattern, locale, timezone, and parsing policy still need to match the data contract; thread safety alone does not ensure correct interpretation.",
+  "tags": [
+   "java",
+   "time"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "Why can a Java unit test pass while code using a mocked transaction boundary still fails in production?",
+  "answer": "The mock may omit commit, rollback, isolation, or proxy behavior that determines real outcomes. Use focused unit tests for local logic and representative integration tests for the persistence contract. Verify the behavior the framework actually supplies rather than assuming a mocked method call establishes it.",
+  "tags": [
+   "java",
+   "testing"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "Why should a Java test compare arrays with an array-aware assertion rather than ordinary object equality?",
+  "answer": "Arrays inherit identity-based equals behavior rather than automatically comparing elements. Use the appropriate element comparison or test assertion, including deep comparison when nested arrays require it. The chosen equality must reflect the intended structure and numeric tolerance where relevant.",
+  "tags": [
+   "java",
+   "testing"
+  ]
+ },
+ {
+  "category": "Java",
+  "subcategory": "Testing",
+  "difficulty": "Medium",
+  "question": "What can a Java test miss if it always uses HashMap data in the same accidental iteration order?",
+  "answer": "It can hide an unintended dependence on an order the map does not guarantee. Construct cases that vary insertion and key patterns, or assert order-independent outcomes. If ordered output is required, make ordering explicit in production code and test that contract directly.",
+  "tags": [
+   "java",
+   "testing"
+  ]
  }
 ]

@@ -1481,16 +1481,8 @@
   ],
   "followups": [
    {
-    "q": "Why does the message template form matter rather than just passing the values?",
-    "a": "Because the template stays constant while the values vary, so the logging system can group every occurrence of that event as one class - you can count how many times 'Order {OrderId} failed' happened without the ids fragmenting it into thousands of distinct messages. Interpolating first destroys that grouping and the field extraction with it. It also avoids the formatting cost entirely when the level is disabled, since the string is never built."
-   },
-   {
     "q": "How much should be logged? The team worries about cost.",
     "a": "Enough to reconstruct what happened, which is less than logging everything. The practical approach is to log business events and errors at full fidelity, sample the high-volume informational lines since the thousandth identical success adds nothing, and put verbose diagnostic detail behind a level you can raise temporarily during an investigation. Ingestion is billed per gigabyte, so the expensive habit is logging request and response bodies by default - which is also where the personal data problems come from."
-   },
-   {
-    "q": "Where do traces and metrics fit alongside logs?",
-    "a": "They answer different questions and the mistake is using one for all three. Metrics tell you something is wrong and how widely - error rate, latency percentiles, saturation - cheaply and continuously, which is what alerts should fire on. Traces show the path of one request across services and where the time went, which is how you localise it. Logs give the detail at a point, which is how you understand it. Starting an investigation in the logs is usually starting in the wrong place."
    }
   ]
  },
@@ -1509,14 +1501,6 @@
    "scenario"
   ],
   "followups": [
-   {
-    "q": "What makes an alert actionable?",
-    "a": "That there is a specific thing a human can do about it now, and that the alert says enough to start. An alert reading 'CPU high' is not actionable because the response depends entirely on why. An alert reading 'checkout error rate is 8% against a 1% objective, burning the monthly budget in four hours' tells you the impact, the urgency and where to look. The runbook requirement is a good forcing function because writing 'what should the responder do' is impossible for alerts that should not exist."
-   },
-   {
-    "q": "How does burn-rate alerting reduce noise compared with a threshold?",
-    "a": "A fixed threshold fires on any brief excursion, which for a five-minute window is mostly noise - a single bad deploy rollback, a dependency blip, a batch job. Burn rate asks how fast the error budget is being consumed relative to the period it must last, so a thirty-second spike barely registers while a sustained 2% error rate pages. Using two windows together, a short one for severity and a longer one for confirmation, filters transients without delaying genuine incidents. The result is far fewer pages for the same coverage."
-   },
    {
     "q": "The team is nervous about deleting alerts in case something is missed. How do you handle that?",
     "a": "By moving them rather than deleting them - route the non-actionable ones to a low-priority channel or a dashboard for a month and see whether anyone misses them. That removes the fear of loss while ending the paging, and the evidence after a month usually settles the argument. It also helps to frame it as a swap: every alert kept has a cost paid by whoever is on call, and the currency is attention that will not be available for the real one."
@@ -1539,16 +1523,8 @@
   ],
   "followups": [
    {
-    "q": "Why does a message broker need special handling?",
-    "a": "Because there is no HTTP request to carry headers - the context must be written into the message's own metadata by the producer and read back by the consumer. Without that, the consumer has no idea the message relates to an earlier request and starts a fresh trace. The semantics also differ: a queued message may be processed minutes later by a different service, so the relationship is often better expressed as a span link than as a parent-child, since the producer is not waiting for it."
-   },
-   {
     "q": "How does sampling interact with this?",
     "a": "The sampling decision is normally made at the root and propagated in the traceparent flags, so all services in one trace agree - which is what you want, since a partially sampled trace is worse than none. The confusion is that a trace sampled out looks exactly like a broken trace in the UI: nothing is there. Checking the sampled flag on the incoming header tells you which you are looking at. Tail-based sampling, deciding after the fact so errors and slow traces are always kept, avoids losing the traces you most want."
-   },
-   {
-    "q": "What does Activity.Current being lost look like in practice?",
-    "a": "Spans appear as separate traces rather than as children, or the parent id is empty on the outgoing call. It typically happens where code leaves the async flow - a Task.Run, a timer callback, a custom thread, or a background queue handing work to a worker. The fix is to capture the Activity explicitly and restore it in the new context, which most background-processing libraries now do. It is worth knowing because it produces a gap that looks like a missing instrumentation problem when it is really a context-flow problem."
    }
   ]
  },
@@ -1564,16 +1540,6 @@
    "logging",
    "opentelemetry",
    "incident"
-  ],
-  "followups": [
-   {
-    "q": "What do you sample, and how, without losing the incident you care about?",
-    "a": "Head sampling at a fixed rate is cheap but throws away the rare failures you most want. Tail sampling decides after the trace completes, so you can keep 100% of errors and slow traces and 1% of the fast successful ones - which is usually what you want, at the cost of buffering traces in the collector. The pragmatic middle ground is head sampling with a rule that always keeps traces that carry an error flag."
-   },
-   {
-    "q": "What is the difference between a log, a metric and a trace, in terms of cost?",
-    "a": "Metrics are cheap and bounded - a fixed number of time series, aggregated at write time - but you cannot ask a question you did not think of in advance, and high-cardinality labels like user id will destroy your metrics backend. Logs are expensive and unbounded but arbitrary to query. Traces sit in between and are the only one that shows causality across services. Cardinality is the thing to watch: it is the usual cause of a surprise observability bill."
-   }
   ]
  },
  {
@@ -1593,10 +1559,6 @@
    {
     "q": "What is the difference between an SLI, an SLO and an error budget?",
     "a": "The SLI is the measurement - the proportion of requests served successfully under 300ms. The SLO is the target for it - 99.9% over 30 days. The error budget is what the target permits you to fail: 0.1%, which over 30 days is about 43 minutes. It turns reliability into a quantity you can spend, which is what makes the trade-off against shipping features an explicit conversation rather than an argument about whether the system is \"stable enough\"."
-   },
-   {
-    "q": "How do burn-rate alerts avoid both noise and slow detection?",
-    "a": "By alerting on multiple windows at once. A fast burn - consuming a large share of the monthly budget within an hour - pages immediately, because at that rate you breach the SLO within the day. A slow burn over days raises a ticket instead. A short window alone is noisy and a long window alone detects catastrophes far too late, so the standard approach combines a short and a long window and requires both to be burning before firing."
    }
   ]
  },
@@ -1617,10 +1579,6 @@
    {
     "q": "How do you find a cardinality problem before it takes the system down?",
     "a": "Most backends expose series counts per metric name - query for the top metrics by series count and you find the offender immediately. Set an alert on total active series so growth is visible before it is critical, since cardinality usually creeps rather than spiking. Many systems also support a per-metric series limit that drops new series rather than accepting unbounded growth, which degrades one metric instead of the whole platform."
-   },
-   {
-    "q": "What do you do when you genuinely need per-user analysis?",
-    "a": "Use exemplars or traces rather than metrics. Exemplars attach a sample trace id to a metric bucket, so you can go from \"the p99 got worse\" straight to an actual slow request without any high-cardinality label. For genuine per-user analytics, that is an analytics warehouse question, not a monitoring one - the access patterns and retention are entirely different, and trying to serve it from your metrics system is how you end up with neither working."
    }
   ]
  },
@@ -1660,16 +1618,6 @@
    "kubernetes",
    "readiness",
    "reliability"
-  ],
-  "followups": [
-   {
-    "q": "What happens if every instance fails readiness at once?",
-    "a": "You have taken yourself offline, because the load balancer has nowhere to route. This is the failure mode that makes over-eager readiness checks dangerous: a dependency that every instance shares - a database, an identity provider - fails, every instance reports not ready, and a partial outage becomes total. Some platforms have a safeguard that keeps routing when no instance is healthy, but relying on that is not a design. The safer approach is to fail readiness only for things that genuinely make this instance useless while others might still work."
-   },
-   {
-    "q": "How do you stop a health endpoint becoming a load source?",
-    "a": "Cache the result for a few seconds, so a probe every second does not mean a database query every second across every instance - with many instances and several dependencies that adds up to real traffic aimed at the thing you are worried about. Give each individual check a tight timeout so one slow dependency cannot make the endpoint hang and cause a false negative. And keep the probe interval and failure threshold sensible: probing every second with a threshold of one is asking for restarts on noise."
-   }
   ]
  },
  {
@@ -1684,16 +1632,6 @@
    "w3c-trace-context",
    "opentelemetry",
    "messaging"
-  ],
-  "followups": [
-   {
-    "q": "What is the difference between the trace id and a correlation id people add manually?",
-    "a": "The trace id is part of a standard with defined propagation and a span hierarchy, so tooling understands parent-child relationships and can render a waterfall. A hand-rolled correlation id is a flat string you pass around and log - it lets you filter logs to one request, which is genuinely useful, but it carries no structure, so you cannot see what called what or where the time went. Where a legacy correlation id already exists, the usual approach is to keep logging it as a tag on the span rather than replacing the standard mechanism."
-   },
-   {
-    "q": "How do you make sure the trace id appears in every log line?",
-    "a": "Configure the logging provider to include it from the current `Activity`, which most structured logging setups support - Serilog with an enricher, or the OpenTelemetry logging integration which attaches trace and span ids automatically. Doing it manually per call site guarantees inconsistency. The value is being able to pivot from a slow span in the trace straight to the log lines emitted during it, which is the workflow that makes tracing worth the setup."
-   }
   ]
  },
  {
@@ -1710,10 +1648,6 @@
    "logging"
   ],
   "followups": [
-   {
-    "q": "How do you decide what is safe to sample away?",
-    "a": "Ask what you would use it for. Successful, fast requests are almost never inspected individually - their value is aggregate, and metrics capture that far more cheaply than logs. Errors, slow requests and anything unusual are exactly what gets inspected, so keep those at full fidelity. Tail sampling implements this directly by deciding after the trace completes. The mistake is uniform head sampling at a low rate, which throws away rare failures in the same proportion as common successes."
-   },
    {
     "q": "What is the argument against aggressive cost cutting here?",
     "a": "That the bill is the visible cost and a longer outage is the hidden one. Observability is what turns a four-hour incident into a twenty-minute one, and the data you cut is discovered to be missing precisely when you need it. So the framing I would use is not \"spend less\" but \"spend it on what gets queried\" - keeping full fidelity for failures while sampling the routine usually cuts the bill substantially without touching the data anyone actually uses."
@@ -1732,16 +1666,6 @@
    "error-budget",
    "sli",
    "reliability"
-  ],
-  "followups": [
-   {
-    "q": "Why is 100% the wrong target?",
-    "a": "Because it leaves no room to change anything, and every change carries risk - so a 100% target means either you never deploy or you routinely breach and stop caring. It is also unachievable for reasons outside your control: the network, the cloud provider, the client s device. And it is not what users need, since they cannot distinguish 99.99% from 100% through their own flaky connections. The error budget framing makes this constructive: the gap below 100% is what you are permitted to spend on shipping."
-   },
-   {
-    "q": "What do you do when a dependency you do not control limits your achievable SLO?",
-    "a": "Measure it and make it explicit rather than absorbing it silently. Your achievable availability is bounded by your dependencies - if a required downstream offers 99.9%, you cannot promise better without redundancy or graceful degradation. So either set your SLO accordingly and document why, or invest in caching, fallbacks and circuit breaking so the dependency s failures do not become yours. That comparison is also the strongest argument for the investment, because it turns a vague reliability request into a number."
-   }
   ]
  },
  {
@@ -1758,10 +1682,6 @@
    "dotnet-trace"
   ],
   "followups": [
-   {
-    "q": "How do you profile in production without making things worse?",
-    "a": "Use a sampling profiler rather than instrumentation - it interrupts periodically to record stacks, so overhead is a few percent rather than the large multiplier tracing every call incurs. `dotnet-trace` attaches to a running process without restarting it, and `dotnet-counters` is cheaper still for a first look. Profile one instance rather than the fleet, take it out of the load balancer if the overhead is material, and keep the window short. The alternative - reproducing in a lower environment - usually fails because the data volume and traffic shape are what cause it."
-   },
    {
     "q": "What does high time in GC tell you, and what do you do about it?",
     "a": "That you are allocating heavily enough that collection is a significant share of the work - so the fix is to allocate less rather than to tune the collector. Look for per-request allocations in hot paths: string concatenation, LINQ creating intermediate collections, boxing of value types, large buffers that could come from `ArrayPool<T>`, and closures capturing more than they need. Switching to Server GC helps throughput on multi-core machines and is worth checking, but it treats the symptom; the allocation is the cause."
@@ -1785,10 +1705,6 @@
    {
     "q": "Where do events and profiles fit alongside these three?",
     "a": "Events are discrete, structured business or deployment occurrences - a release, a config change, a feature flag flip - and overlaying them on a dashboard answers \"what changed\" faster than anything else, since most incidents follow a change. Continuous profiling is the fourth signal for resource attribution: it tells you which code paths consume CPU or allocate memory in production over time, which traces cannot because they operate at the span level rather than the function level."
-   },
-   {
-    "q": "If you could only have one signal, which would you pick?",
-    "a": "Traces, because with them you can derive a good deal of what the other two give you - span durations aggregate into latency metrics, error spans give error rates, and span attributes carry much of the detail you would otherwise log. Logs alone leave you unable to see across services; metrics alone leave you knowing something is wrong and unable to find out why. That said, it is a slightly artificial question - the honest answer is that metrics for alerting plus traces for diagnosis is the minimum viable pair, and logs fill the gaps."
    }
   ]
  },
@@ -1804,16 +1720,6 @@
    "incident-response",
    "slo",
    "design"
-  ],
-  "followups": [
-   {
-    "q": "Why show absolute counts alongside percentages?",
-    "a": "Because percentages mislead at low volume in both directions - a 50% error rate from two failed requests out of four looks alarming and is usually noise, while a 0.5% error rate at high volume can be thousands of affected users and an actual incident. Showing both means the person reading it can judge significance immediately rather than doing arithmetic under pressure. It also prevents the common mistake of alerting on a rate that fires every night when traffic is low."
-   },
-   {
-    "q": "How do you keep a dashboard from going stale as the system changes?",
-    "a": "Treat it as code - defined in the repository, versioned, and deployed with the service, so a new dependency or a renamed metric is updated in the same change rather than being noticed months later when a panel has been empty. Reviewing dashboards as part of incident retrospectives is the other half: every incident where someone had to go elsewhere to answer one of the core questions is evidence of a missing panel, and every panel nobody looked at is a candidate for removal."
-   }
   ]
  },
  {
@@ -1828,16 +1734,6 @@
    "grouping",
    "triage",
    "noise"
-  ],
-  "followups": [
-   {
-    "q": "Why do interpolated exception messages cause grouping problems?",
-    "a": "Because the grouping key usually includes the message, so `Order 4471 not found` and `Order 4472 not found` become separate issues - and a common failure appears as thousands of one-off issues rather than one problem affecting thousands of users. The fix is a constant message with the variable data attached as structured properties, which most reporting tools use for detail rather than for grouping. It is the same discipline as structured logging, applied to exceptions."
-   },
-   {
-    "q": "What should you do with an error you have decided not to fix?",
-    "a": "Mark it as deliberately ignored with a reason and a review date, rather than leaving it in the active list or silently suppressing it at the source. Leaving it visible trains people to scroll past errors; suppressing it entirely means you lose the signal if its volume changes significantly, which is often the first sign that something else has broken. An explicit ignored state keeps the active list meaningful while retaining the data."
-   }
   ]
  },
  {
@@ -1855,13 +1751,1257 @@
   ],
   "followups": [
    {
-    "q": "What does a large gap between a parent span and its children usually mean?",
-    "a": "Time in your own process that nothing instrumented - most often serialisation of a large payload, mapping, or an expensive computation, but it can also be waiting for a thread-pool thread, which looks identical in a trace. That last case is worth suspecting when the gap appears under load and not in isolation. Adding an explicit span around the suspected section turns the guess into a measurement, and it is usually a few lines with `ActivitySource`."
-   },
-   {
     "q": "How do you use traces to find something that is only occasionally slow?",
     "a": "Sample deliberately rather than relying on head sampling, which keeps a fixed fraction and therefore mostly keeps fast successful requests. Tail sampling decides after completion, so you can retain every trace that was slow or errored while discarding most of the fast ones - which is exactly the data you want and a small fraction of the volume. Combined with exemplars linking a latency histogram bucket to a representative trace, you can go from \"the p99 got worse\" straight to an actual slow request rather than hunting for one."
    }
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Logging",
+  "difficulty": "Medium",
+  "question": "Why does the message template form matter rather than just passing the values?",
+  "answer": "Because the template stays constant while the values vary, so the logging system can group every occurrence of that event as one class - you can count how many times 'Order {OrderId} failed' happened without the ids fragmenting it into thousands of distinct messages. Interpolating first destroys that grouping and the field extraction with it. It also avoids the formatting cost entirely when the level is disabled, since the string is never built.",
+  "tags": [
+   "observability",
+   "structured-logging",
+   "correlation",
+   "incident-response",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Logging",
+  "difficulty": "Medium",
+  "question": "Where do traces and metrics fit alongside logs?",
+  "answer": "They answer different questions and the mistake is using one for all three. Metrics tell you something is wrong and how widely - error rate, latency percentiles, saturation - cheaply and continuously, which is what alerts should fire on. Traces show the path of one request across services and where the time went, which is how you localise it. Logs give the detail at a point, which is how you understand it. Starting an investigation in the logs is usually starting in the wrong place.",
+  "tags": [
+   "observability",
+   "structured-logging",
+   "correlation",
+   "incident-response",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Alerting",
+  "difficulty": "Hard",
+  "question": "What makes an alert actionable?",
+  "answer": "That there is a specific thing a human can do about it now, and that the alert says enough to start. An alert reading 'CPU high' is not actionable because the response depends entirely on why. An alert reading 'checkout error rate is 8% against a 1% objective, burning the monthly budget in four hours' tells you the impact, the urgency and where to look. The runbook requirement is a good forcing function because writing 'what should the responder do' is impossible for alerts that should not exist.",
+  "tags": [
+   "observability",
+   "alerting",
+   "slo",
+   "alert-fatigue",
+   "on-call",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Alerting",
+  "difficulty": "Hard",
+  "question": "How does burn-rate alerting reduce noise compared with a threshold?",
+  "answer": "A fixed threshold fires on any brief excursion, which for a five-minute window is mostly noise - a single bad deploy rollback, a dependency blip, a batch job. Burn rate asks how fast the error budget is being consumed relative to the period it must last, so a thirty-second spike barely registers while a sustained 2% error rate pages. Using two windows together, a short one for severity and a longer one for confirmation, filters transients without delaying genuine incidents. The result is far fewer pages for the same coverage.",
+  "tags": [
+   "observability",
+   "alerting",
+   "slo",
+   "alert-fatigue",
+   "on-call",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Tracing",
+  "difficulty": "Hard",
+  "question": "Why does a message broker need special handling?",
+  "answer": "Because there is no HTTP request to carry headers - the context must be written into the message's own metadata by the producer and read back by the consumer. Without that, the consumer has no idea the message relates to an earlier request and starts a fresh trace. The semantics also differ: a queued message may be processed minutes later by a different service, so the relationship is often better expressed as a span link than as a parent-child, since the producer is not waiting for it.",
+  "tags": [
+   "observability",
+   "distributed-tracing",
+   "opentelemetry",
+   "context-propagation",
+   "diagnosis",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Tracing",
+  "difficulty": "Hard",
+  "question": "What does Activity.Current being lost look like in practice?",
+  "answer": "Spans appear as separate traces rather than as children, or the parent id is empty on the outgoing call. It typically happens where code leaves the async flow - a Task.Run, a timer callback, a custom thread, or a background queue handing work to a worker. The fix is to capture the Activity explicitly and restore it in the new context, which most background-processing libraries now do. It is worth knowing because it produces a gap that looks like a missing instrumentation problem when it is really a context-flow problem.",
+  "tags": [
+   "observability",
+   "distributed-tracing",
+   "opentelemetry",
+   "context-propagation",
+   "diagnosis",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Instrumentation",
+  "difficulty": "Medium",
+  "question": "What do you sample, and how, without losing the incident you care about?",
+  "answer": "Head sampling at a fixed rate is cheap but throws away the rare failures you most want. Tail sampling decides after the trace completes, so you can keep 100% of errors and slow traces and 1% of the fast successful ones - which is usually what you want, at the cost of buffering traces in the collector. The pragmatic middle ground is head sampling with a rule that always keeps traces that carry an error flag.",
+  "tags": [
+   "observability",
+   "tracing",
+   "logging",
+   "opentelemetry",
+   "incident",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Instrumentation",
+  "difficulty": "Medium",
+  "question": "What is the difference between a log, a metric and a trace, in terms of cost?",
+  "answer": "Metrics are cheap and bounded - a fixed number of time series, aggregated at write time - but you cannot ask a question you did not think of in advance, and high-cardinality labels like user id will destroy your metrics backend. Logs are expensive and unbounded but arbitrary to query. Traces sit in between and are the only one that shows causality across services. Cardinality is the thing to watch: it is the usual cause of a surprise observability bill.",
+  "tags": [
+   "observability",
+   "tracing",
+   "logging",
+   "opentelemetry",
+   "incident",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Alerting",
+  "difficulty": "Medium",
+  "question": "How do burn-rate alerts avoid both noise and slow detection?",
+  "answer": "By alerting on multiple windows at once. A fast burn - consuming a large share of the monthly budget within an hour - pages immediately, because at that rate you breach the SLO within the day. A slow burn over days raises a ticket instead. A short window alone is noisy and a long window alone detects catastrophes far too late, so the standard approach combines a short and a long window and requires both to be burning before firing.",
+  "tags": [
+   "observability",
+   "alerting",
+   "slo",
+   "error-budget",
+   "on-call",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Metrics",
+  "difficulty": "Medium",
+  "question": "What do you do when you genuinely need per-user analysis?",
+  "answer": "Use exemplars or traces rather than metrics. Exemplars attach a sample trace id to a metric bucket, so you can go from \"the p99 got worse\" straight to an actual slow request without any high-cardinality label. For genuine per-user analytics, that is an analytics warehouse question, not a monitoring one - the access patterns and retention are entirely different, and trying to serve it from your metrics system is how you end up with neither working.",
+  "tags": [
+   "observability",
+   "metrics",
+   "cardinality",
+   "prometheus",
+   "incident",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Health",
+  "difficulty": "Medium",
+  "question": "What happens if every instance fails readiness at once?",
+  "answer": "You have taken yourself offline, because the load balancer has nowhere to route. This is the failure mode that makes over-eager readiness checks dangerous: a dependency that every instance shares - a database, an identity provider - fails, every instance reports not ready, and a partial outage becomes total. Some platforms have a safeguard that keeps routing when no instance is healthy, but relying on that is not a design. The safer approach is to fail readiness only for things that genuinely make this instance useless while others might still work.",
+  "tags": [
+   "observability",
+   "health-checks",
+   "kubernetes",
+   "readiness",
+   "reliability",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Health",
+  "difficulty": "Medium",
+  "question": "How do you stop a health endpoint becoming a load source?",
+  "answer": "Cache the result for a few seconds, so a probe every second does not mean a database query every second across every instance - with many instances and several dependencies that adds up to real traffic aimed at the thing you are worried about. Give each individual check a tight timeout so one slow dependency cannot make the endpoint hang and cause a false negative. And keep the probe interval and failure threshold sensible: probing every second with a threshold of one is asking for restarts on noise.",
+  "tags": [
+   "observability",
+   "health-checks",
+   "kubernetes",
+   "readiness",
+   "reliability",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Correlation",
+  "difficulty": "Medium",
+  "question": "What is the difference between the trace id and a correlation id people add manually?",
+  "answer": "The trace id is part of a standard with defined propagation and a span hierarchy, so tooling understands parent-child relationships and can render a waterfall. A hand-rolled correlation id is a flat string you pass around and log - it lets you filter logs to one request, which is genuinely useful, but it carries no structure, so you cannot see what called what or where the time went. Where a legacy correlation id already exists, the usual approach is to keep logging it as a tag on the span rather than replacing the standard mechanism.",
+  "tags": [
+   "observability",
+   "tracing",
+   "w3c-trace-context",
+   "opentelemetry",
+   "messaging",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Correlation",
+  "difficulty": "Medium",
+  "question": "How do you make sure the trace id appears in every log line?",
+  "answer": "Configure the logging provider to include it from the current `Activity`, which most structured logging setups support - Serilog with an enricher, or the OpenTelemetry logging integration which attaches trace and span ids automatically. Doing it manually per call site guarantees inconsistency. The value is being able to pivot from a slow span in the trace straight to the log lines emitted during it, which is the workflow that makes tracing worth the setup.",
+  "tags": [
+   "observability",
+   "tracing",
+   "w3c-trace-context",
+   "opentelemetry",
+   "messaging",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Cost",
+  "difficulty": "Medium",
+  "question": "How do you decide what is safe to sample away?",
+  "answer": "Ask what you would use it for. Successful, fast requests are almost never inspected individually - their value is aggregate, and metrics capture that far more cheaply than logs. Errors, slow requests and anything unusual are exactly what gets inspected, so keep those at full fidelity. Tail sampling implements this directly by deciding after the trace completes. The mistake is uniform head sampling at a low rate, which throws away rare failures in the same proportion as common successes.",
+  "tags": [
+   "observability",
+   "cost",
+   "sampling",
+   "retention",
+   "logging",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "SLOs",
+  "difficulty": "Hard",
+  "question": "Why is 100% the wrong target?",
+  "answer": "Because it leaves no room to change anything, and every change carries risk - so a 100% target means either you never deploy or you routinely breach and stop caring. It is also unachievable for reasons outside your control: the network, the cloud provider, the client s device. And it is not what users need, since they cannot distinguish 99.99% from 100% through their own flaky connections. The error budget framing makes this constructive: the gap below 100% is what you are permitted to spend on shipping.",
+  "tags": [
+   "observability",
+   "slo",
+   "error-budget",
+   "sli",
+   "reliability",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "SLOs",
+  "difficulty": "Hard",
+  "question": "What do you do when a dependency you do not control limits your achievable SLO?",
+  "answer": "Measure it and make it explicit rather than absorbing it silently. Your achievable availability is bounded by your dependencies - if a required downstream offers 99.9%, you cannot promise better without redundancy or graceful degradation. So either set your SLO accordingly and document why, or invest in caching, fallbacks and circuit breaking so the dependency s failures do not become yours. That comparison is also the strongest argument for the investment, because it turns a vague reliability request into a number.",
+  "tags": [
+   "observability",
+   "slo",
+   "error-budget",
+   "sli",
+   "reliability",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Profiling",
+  "difficulty": "Hard",
+  "question": "How do you profile in production without making things worse?",
+  "answer": "Use a sampling profiler rather than instrumentation - it interrupts periodically to record stacks, so overhead is a few percent rather than the large multiplier tracing every call incurs. `dotnet-trace` attaches to a running process without restarting it, and `dotnet-counters` is cheaper still for a first look. Profile one instance rather than the fleet, take it out of the load balancer if the overhead is material, and keep the window short. The alternative - reproducing in a lower environment - usually fails because the data volume and traffic shape are what cause it.",
+  "tags": [
+   "observability",
+   "profiling",
+   "cpu",
+   "gc",
+   "dotnet-trace",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Logs",
+  "difficulty": "Medium",
+  "question": "If you could only have one signal, which would you pick?",
+  "answer": "Traces, because with them you can derive a good deal of what the other two give you - span durations aggregate into latency metrics, error spans give error rates, and span attributes carry much of the detail you would otherwise log. Logs alone leave you unable to see across services; metrics alone leave you knowing something is wrong and unable to find out why. That said, it is a slightly artificial question - the honest answer is that metrics for alerting plus traces for diagnosis is the minimum viable pair, and logs fill the gaps.",
+  "tags": [
+   "observability",
+   "telemetry",
+   "logs-metrics-traces",
+   "correlation",
+   "incident",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Dashboards",
+  "difficulty": "Medium",
+  "question": "Why show absolute counts alongside percentages?",
+  "answer": "Because percentages mislead at low volume in both directions - a 50% error rate from two failed requests out of four looks alarming and is usually noise, while a 0.5% error rate at high volume can be thousands of affected users and an actual incident. Showing both means the person reading it can judge significance immediately rather than doing arithmetic under pressure. It also prevents the common mistake of alerting on a rate that fires every night when traffic is low.",
+  "tags": [
+   "observability",
+   "dashboards",
+   "incident-response",
+   "slo",
+   "design",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Dashboards",
+  "difficulty": "Medium",
+  "question": "How do you keep a dashboard from going stale as the system changes?",
+  "answer": "Treat it as code - defined in the repository, versioned, and deployed with the service, so a new dependency or a renamed metric is updated in the same change rather than being noticed months later when a panel has been empty. Reviewing dashboards as part of incident retrospectives is the other half: every incident where someone had to go elsewhere to answer one of the core questions is evidence of a missing panel, and every panel nobody looked at is a candidate for removal.",
+  "tags": [
+   "observability",
+   "dashboards",
+   "incident-response",
+   "slo",
+   "design",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Errors",
+  "difficulty": "Medium",
+  "question": "Why do interpolated exception messages cause grouping problems?",
+  "answer": "Because the grouping key usually includes the message, so `Order 4471 not found` and `Order 4472 not found` become separate issues - and a common failure appears as thousands of one-off issues rather than one problem affecting thousands of users. The fix is a constant message with the variable data attached as structured properties, which most reporting tools use for detail rather than for grouping. It is the same discipline as structured logging, applied to exceptions.",
+  "tags": [
+   "observability",
+   "error-tracking",
+   "grouping",
+   "triage",
+   "noise",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Errors",
+  "difficulty": "Medium",
+  "question": "What should you do with an error you have decided not to fix?",
+  "answer": "Mark it as deliberately ignored with a reason and a review date, rather than leaving it in the active list or silently suppressing it at the source. Leaving it visible trains people to scroll past errors; suppressing it entirely means you lose the signal if its volume changes significantly, which is often the first sign that something else has broken. An explicit ignored state keeps the active list meaningful while retaining the data.",
+  "tags": [
+   "observability",
+   "error-tracking",
+   "grouping",
+   "triage",
+   "noise",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Tracing",
+  "difficulty": "Hard",
+  "question": "What does a large gap between a parent span and its children usually mean?",
+  "answer": "Time in your own process that nothing instrumented - most often serialisation of a large payload, mapping, or an expensive computation, but it can also be waiting for a thread-pool thread, which looks identical in a trace. That last case is worth suspecting when the gap appears under load and not in isolation. Adding an explicit span around the suspected section turns the guess into a measurement, and it is usually a few lines with `ActivitySource`.",
+  "tags": [
+   "observability",
+   "tracing",
+   "latency",
+   "waterfall",
+   "sampling",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Logging",
+  "difficulty": "Medium",
+  "question": "During a production incident involving logging concerns around three, pillars, observability, logs, metrics, traces, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Logs (discrete, timestamped records of events—good for detail/debugging), Metrics (numeric time-series aggregates like CPU, request rate, latency—good for dashboards/alerts), and Traces (the path of a request across services with timing—good for latency analysis in distributed systems). Together they let you detect, diagnose, and understand system behavior, especially in microservices.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "logs",
+   "metrics",
+   "traces",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Logging",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving logging concerns around structured, logging, better, structured logging, serilog, ilogger, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Structured logging emits logs as key-value data (JSON) with named properties (UserId, OrderId, Duration) rather than plain interpolated strings. This makes logs queryable, filterable, and aggregatable in tools like Seq, ELK, or Application Insights. In .NET, Serilog/ILogger with message templates ('Order {OrderId} processed in {Ms}ms') capture both a readable message and structured fields—far more useful than string concatenation.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "logging",
+   "structured-logging",
+   "serilog",
+   "ilogger",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Logging",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving logging concerns around standard, levels, choose, logging, log levels, error, warning, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Trace (very detailed diagnostics), Debug (development detail), Information (normal flow milestones), Warning (unexpected but handled), Error (a failure in the current operation), Critical (app/system-wide failure). Log at appropriate levels, keep production at Information+ (Debug off), and avoid noisy or sensitive logging. Use levels to filter volume and focus on actionable events.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "logging",
+   "log-levels",
+   "error",
+   "warning",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Tracing",
+  "difficulty": "Hard",
+  "question": "During a backward-compatibility review involving tracing concerns around distributed, tracing, correlation, distributed tracing, correlation id, spans, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Distributed tracing follows a single request as it flows through multiple services, recording spans (units of work) with timing and parent/child relationships under one trace id—revealing where latency/errors occur. A correlation id (trace id) is propagated via headers (W3C traceparent) across service calls and included in logs so you can stitch together all activity for one request. Essential for debugging microservices.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "tracing",
+   "distributed-tracing",
+   "correlation-id",
+   "spans",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Tools",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving tools concerns around opentelemetry, otel, telemetry, instrumentation, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: OpenTelemetry (OTel) is a vendor-neutral, open standard and SDK for generating and exporting telemetry—traces, metrics, and logs—from applications. You instrument once (auto + manual) and export to any backend (Application Insights, Jaeger, Prometheus, Grafana) via the OTel Collector. It avoids vendor lock-in and is the industry-standard approach; .NET has first-class OTel support.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "opentelemetry",
+   "otel",
+   "telemetry",
+   "instrumentation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Tools",
+  "difficulty": "Medium",
+  "question": "During a design review involving tools concerns around azure, application, insights, application insights, apm, azure monitor, kql, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Application Insights is Azure Monitor's APM service that collects requests, dependencies, exceptions, traces, custom events/metrics, and live metrics from apps, with distributed tracing, an application map, and powerful querying via KQL (Log Analytics). It auto-instruments ASP.NET Core and integrates with OpenTelemetry. Use it to monitor performance, diagnose failures, set alerts, and analyze usage in production.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "application-insights",
+   "apm",
+   "azure-monitor",
+   "kql",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Metrics",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving metrics concerns around golden, signals, metrics, monitoring, golden signals, red, use, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Google's Four Golden Signals: Latency, Traffic, Errors, Saturation. RED (for request-driven services): Rate, Errors, Duration. USE (for resources): Utilization, Saturation, Errors. These frameworks focus alerting/dashboards on what matters for user experience and capacity. Track request rate, error rate, and latency percentiles (p50/p95/p99) per endpoint plus resource saturation to catch problems early.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "metrics",
+   "golden-signals",
+   "red",
+   "use",
+   "latency",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Metrics",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving metrics concerns around latency, percentiles, instead, averages, metrics, p99, tail latency, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Averages hide tail latency—a good average can mask that 5% of users have terrible experiences. Percentiles show the distribution: p95/p99 reveal the slow requests that affect real users and often correlate with timeouts/retries. Monitor and alert on high percentiles, not just the mean, to catch and fix outliers that degrade user experience and cascade in distributed systems.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "metrics",
+   "percentiles",
+   "p99",
+   "latency",
+   "tail-latency",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Alerting",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving alerting concerns around makes, good, alert, avoid, fatigue, alerting, alert fatigue, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Good alerts are actionable, tied to user impact/SLOs, and have clear ownership and runbooks. Alert on symptoms (error rate, latency, SLO burn) rather than every low-level cause, use appropriate thresholds and durations to avoid flapping, and set severity levels. Reduce fatigue by deduping, grouping, tuning noisy alerts, and deleting non-actionable ones. Every page should require human action.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "alerting",
+   "alert-fatigue",
+   "slo",
+   "runbook",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving concepts concerns around sli, slo, sla, error budget, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: SLI (Service Level Indicator): a measured metric of service behavior (e.g., % of requests under 300ms). SLO (Objective): the internal target for an SLI (e.g., 99.9% success). SLA (Agreement): a contractual commitment to customers with penalties, usually looser than the SLO. Error budgets (1 − SLO) balance reliability vs velocity. Define SLIs from the user's perspective and drive alerting/priorities from SLOs.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "sli",
+   "slo",
+   "sla",
+   "error-budget",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Logging",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving logging concerns around handle, sensitive, data, logging, pii, sensitive data, redaction, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Never log secrets, passwords, tokens, full card/PII, or health data. Redact/mask sensitive fields, use allow-lists for what to log, and apply data-classification policies. Be mindful of log retention and access controls (logs are a data store subject to compliance—GDPR/PCI). Structured logging helps by logging specific safe fields rather than dumping whole objects/requests.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "logging",
+   "pii",
+   "sensitive-data",
+   "redaction",
+   "compliance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving practices concerns around implement, health, checks, core, health checks, aspnetcore, liveness, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Use AddHealthChecks and MapHealthChecks to expose endpoints reporting app and dependency health (database, Redis, message broker) via health-check packages. Provide a liveness endpoint (is the process running?) and a readiness endpoint (are dependencies ready to serve?). Orchestrators (Kubernetes) and load balancers probe these to route traffic and restart unhealthy instances. Keep checks fast and meaningful.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "health-checks",
+   "aspnetcore",
+   "liveness",
+   "readiness",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practices",
+  "difficulty": "Hard",
+  "question": "During a disaster-recovery exercise involving practices concerns around debug, production, performance, issue, observability, tools, debugging, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Start from symptoms in dashboards (rising latency/errors), narrow by endpoint/service via metrics, then use distributed traces to find the slow span (which service/dependency), and correlated structured logs (by trace id) for detail. Check dependencies (DB, external APIs), resource saturation, and recent deploys. Reproduce with the exact trace, form a hypothesis, and validate a fix—guided by data, not guessing.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "debugging",
+   "production",
+   "tracing",
+   "metrics",
+   "logs",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving concepts concerns around aggregation, centralize, logs, log aggregation, centralized logging, elk, seq, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Log aggregation collects logs from all instances/services into a central, searchable system (ELK/Elastic, Seq, Loki, Log Analytics). In distributed/scaled systems, logs are scattered across many ephemeral containers, so centralizing enables searching, correlating (by trace id), alerting, and retention in one place. Without it, debugging across services is impractical. Ship logs asynchronously to avoid impacting app performance.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "log-aggregation",
+   "centralized-logging",
+   "elk",
+   "seq",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Concepts",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving concepts concerns around logging, monitoring, apm, observability, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Logging records event details for after-the-fact analysis. Monitoring tracks metrics/health and alerts on conditions in near real time. APM (Application Performance Monitoring) combines traces, metrics, and diagnostics to analyze application performance and pinpoint bottlenecks (App Insights, Dynatrace, New Relic). They overlap and complement each other—logs for detail, monitoring for signals, APM for end-to-end performance insight.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "logging",
+   "monitoring",
+   "apm",
+   "observability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Logging",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving logging concerns around logs, metrics, traces, practice, observability, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Logs are detailed, timestamped event records for debugging specifics ('order 123 failed: timeout'). Metrics are numeric aggregates over time for dashboards/alerts (request rate, error %, p99 latency). Traces show a single request's path across services with timing to locate bottlenecks. Use metrics to detect a problem, traces to localize it to a service/span, and logs to see the exact detail—together they diagnose issues.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "logs",
+   "metrics",
+   "traces",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Logging",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving logging concerns around correlate, logs, across, microservices, observability, correlation id, tracing, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Propagate a correlation/trace id (W3C traceparent header) through every service call and include it in all log entries and outgoing requests. Centralize logs (ELK, Seq, Log Analytics) and query by the id to see the full request journey. In .NET, ILogger scopes and Activity/OpenTelemetry automatically attach trace/span ids. This turns scattered logs into a coherent story per request—essential for distributed debugging.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "correlation-id",
+   "tracing",
+   "microservices",
+   "logging",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Metrics",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving metrics concerns around counter, gauge, histogram, observability, metrics, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: A counter only increases (or resets), counting events (requests, errors)—you compute rates from it. A gauge goes up and down, measuring a current value (memory usage, queue depth, active connections). A histogram buckets observations to compute distributions and percentiles (request duration p50/p95/p99). Choose the metric type by what you measure: totals (counter), current state (gauge), distributions (histogram).\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "counter",
+   "gauge",
+   "histogram",
+   "metrics",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Tracing",
+  "difficulty": "Hard",
+  "question": "During a gradual rollout involving tracing concerns around span, context, propagation, observability, trace, context propagation, opentelemetry, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: A span represents a single unit of work (an operation) with a start/end time, attributes, and a parent span id, forming a trace tree for a request. Context propagation carries the trace id and current span id across process boundaries via headers (W3C traceparent), so downstream services create child spans under the same trace. OpenTelemetry auto-instruments HTTP/DB and propagates context, letting you visualize end-to-end latency and failures.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "span",
+   "trace",
+   "context-propagation",
+   "opentelemetry",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving practices concerns around sampling, distributed, tracing, observability, cost, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Sampling records only a subset of traces to control data volume/cost while retaining representative visibility. Head-based sampling decides at the start (fixed % ); tail-based decides after seeing the whole trace (keep all errors/slow traces). High-value traces (errors, high latency) should be prioritized. Sampling balances observability against storage/performance overhead; tune rates so you capture problems without overwhelming the backend.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "sampling",
+   "tracing",
+   "cost",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Alerting",
+  "difficulty": "Medium",
+  "question": "During a security review involving alerting concerns around based, alert, error, budget, burn, rate, observability, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Instead of alerting on raw thresholds, SLO-based alerting fires when you're consuming your error budget (1 − SLO) too fast—a high burn rate means you'll breach the SLO soon. Multi-window burn-rate alerts (fast burn = urgent page, slow burn = ticket) reduce noise and tie alerts to user impact. This focuses on-call attention on issues that actually threaten reliability targets, avoiding alert fatigue from benign spikes.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "slo",
+   "error-budget",
+   "burn-rate",
+   "alerting",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving practices concerns around runbook, maintain, observability, incident response, on call, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: A runbook documents step-by-step procedures for operating and troubleshooting a service—how to respond to specific alerts, common failures, diagnostics, escalation, and recovery steps. Linking alerts to runbooks speeds incident response, reduces reliance on tribal knowledge, and helps on-call engineers act consistently under pressure. Keep them current and actionable; automate repetitive steps over time (moving toward self-healing).\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "runbook",
+   "incident-response",
+   "on-call",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving practices concerns around post, mortem, blameless, culture, observability, post mortem, incident, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: A post-mortem is a retrospective after an incident documenting what happened, timeline, root cause, impact, and action items to prevent recurrence. A blameless culture focuses on systemic causes (process, tooling gaps) rather than punishing individuals, so people share information honestly and the organization learns. This improves reliability over time. Good post-mortems produce concrete, tracked action items and update runbooks/monitoring.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "post-mortem",
+   "blameless",
+   "incident",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practices",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving practices concerns around cardinality, metrics, matter, observability, labels, cost, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Cardinality is the number of unique label/tag combinations for a metric. High cardinality (labeling by user id, request id, or unbounded values) explodes the number of time series, overwhelming the metrics backend's storage and query performance/cost. Keep labels bounded and meaningful (status, route, region—not unique ids). Put high-cardinality detail in logs/traces, not metric labels. Managing cardinality is key to sustainable, affordable metrics.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "cardinality",
+   "metrics",
+   "labels",
+   "cost",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practices",
+  "difficulty": "Hard",
+  "question": "During a dependency outage involving practices concerns around monitor, background, async, processing, system, observability, queue lag, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Track queue depth/lag (backlog growth signals consumers falling behind), processing rate (throughput), processing latency/age of oldest message, error/dead-letter counts, and consumer health. Alert on rising lag or DLQ growth. Use distributed tracing to follow a message through processing, and correlate logs by message id. These signals reveal whether the async system keeps up, where it fails, and when to scale consumers.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "async",
+   "queue-lag",
+   "dead-letter",
+   "monitoring",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Logging",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving logging concerns around every, line, include, observability, logging, standards, practices, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Timestamp with time zone, level, service and version, a correlation or trace id, the event name as a stable key, and the relevant identifiers as structured fields. Free-text messages without identifiers cannot be correlated, and logs without a version make it impossible to tell which deployment produced them.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "logging",
+   "standards",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Logging",
+  "difficulty": "Medium",
+  "question": "During a design review involving logging concerns around never, appear, logs, observability, logging, privacy, security, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Credentials, tokens, full card numbers, health data, and personal data beyond what is necessary and lawful. Also avoid logging entire request or response bodies by default, since they collect all of the above accidentally. Redaction should happen at the logging boundary rather than depending on every call site.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "logging",
+   "privacy",
+   "security",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Metrics",
+  "difficulty": "Hard",
+  "question": "During an on-call investigation involving metrics concerns around average, percentiles, across, instances, observability, metrics, statistics, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: A percentile is a quantile of a distribution, and the mean of two quantiles is not the quantile of the combined distribution. Aggregation requires the underlying histogram buckets, which is why metric systems store bucket counts and compute the quantile at query time. Averaging pre-computed p99s produces a number with no meaning.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "metrics",
+   "percentiles",
+   "statistics",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Metrics",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving metrics concerns around exemplars, metrics, observability, tracing, correlation, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Sample trace ids attached to metric buckets, so a spike on a latency histogram can be clicked through to an actual slow trace. They bridge the gap between aggregate metrics and individual requests, which is otherwise a manual search through traces filtered by time and hope.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "metrics",
+   "tracing",
+   "correlation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Tracing",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving tracing concerns around trace, span, context, observability, tracing, fundamentals, opentelemetry, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: A trace is the whole request journey, a span is one operation within it with start and end times and attributes, and the span context is the identifiers propagated between processes to link them. Spans nest to show causality, so a trace is a tree, not a list.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "tracing",
+   "fundamentals",
+   "opentelemetry",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Tracing",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving tracing concerns around breaks, trace, propagation, asynchronous, processing, observability, tracing, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: A queue boundary where context is not carried in message headers, a thread pool that does not flow the ambient context, batching that merges many logical operations, and fire-and-forget work started outside the request scope. Each produces traces that stop at the boundary, which is where most latency actually hides.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "tracing",
+   "async",
+   "messaging",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving practice concerns around instrument, system, write, observability, instrumentation, legacy, practices, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Start at the edges with automatic instrumentation for the web framework, HTTP client and database driver, which gives request, dependency and error signals with no code changes. Then add spans and metrics around the specific business operations that incidents keep pointing to, rather than instrumenting everything.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "instrumentation",
+   "legacy",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving practice concerns around observe, system, mostly, third, party, services, observability, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Instrument every outbound call with duration, status and retry counts, record which provider and endpoint, add synthetic probes against their APIs, and track their status pages. Your users experience the provider's failure as your failure, so their availability needs to appear on your dashboards and in your SLO calculations.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "third-party",
+   "monitoring",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving practice concerns around availability, measured, uptime, successful, requests, observability, sre, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Uptime asks whether the service was reachable, which misses partial failure where it responds with errors. Request-based availability measures the proportion of requests served successfully, which reflects user experience far better - a service can be up in every monitoring check while failing a third of requests.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "sre",
+   "availability",
+   "metrics",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving practice concerns around handle, alerting, dependency, outage, cannot, observability, dependencies, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Alert on it because your users are affected regardless of fault, route it to whoever can activate a fallback or communicate to customers, and record it against your error budget honestly. Suppressing it because it is someone else's fault leaves your team unaware of an outage its users are experiencing.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "alerting",
+   "dependencies",
+   "sre",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving practice concerns around avoid, observability, becoming, second, system, nobody, trusts, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Treat telemetry as a product with owners, validate that dashboards and alerts still reflect the system after changes, delete what is unused, keep instrumentation in code review, and test alerting periodically with game days. Stale dashboards and alerts that no longer fire are worse than none because they create false confidence.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "practices",
+   "governance",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a production incident involving practice concerns around observe, serverless, application, differently, observability, tracing, cost, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: There is no long-lived process to scrape, so telemetry must be pushed per invocation with cold-start duration recorded separately, and traces must link the invoking event to the function. Concurrency and throttling metrics matter more than CPU, and log volume can dominate cost because every invocation logs.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "serverless",
+   "tracing",
+   "cost",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving practice concerns around service, catalogue, support, operations, observability, practices, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: A registry of services with owners, on-call rota, dependencies, runbooks, SLOs and dashboards. During an incident it answers who to contact and what depends on the failing component; outside incidents it supports impact analysis for changes and identifies services with no owner - which are always the ones that fail.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "operations",
+   "catalogue",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving practice concerns around detect, slow, memory, leak, production, observability, memory leak, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Track memory used per instance over days rather than hours, comparing across deployments - a healthy process shows a sawtooth from garbage collection while a leak shows a rising floor. Alert on the trend and on restart frequency, because an orchestrator quietly restarting pods on OOM can hide a leak indefinitely.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "memory-leak",
+   "monitoring",
+   "diagnostics",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a design review involving practice concerns around instrument, message, consumer, usefully, observability, messaging, metrics, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Record messages received, processed, failed and dead-lettered, the processing duration, and the age of the message at processing time - which reveals backlog in a way queue depth alone does not. Link the trace context from the producer so a slow end-to-end flow can be attributed.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "messaging",
+   "metrics",
+   "instrumentation",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving practice concerns around observe, system, spanning, cloud, premises, components, observability, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Propagate trace context across the boundary, ship telemetry from both sides to one backend through a collector that can operate in the restricted network, and normalise service naming so a single trace reads coherently. The usual gap is the on-premises side having no instrumentation at all.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "hybrid",
+   "tracing",
+   "architecture",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving practice concerns around handle, telemetry, multi, tenant, system, observability, multitenancy, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Include the tenant identifier as a trace and log attribute so a single tenant's experience is queryable, but keep it out of high-cardinality metric labels. Ensure access controls prevent one tenant's data appearing in another's reporting, and be careful that tenant identifiers in telemetry do not become personal data.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "multitenancy",
+   "privacy",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving practice concerns around alert, fires, dashboard, shows, nothing, wrong, observability, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Check whether the alert measures something the dashboard does not, whether the time window differs, and whether the issue resolved between firing and looking. Then fix the discrepancy - either the alert is measuring noise or the dashboard is missing the signal, and both are worth correcting before the next incident.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "alerting",
+   "incident",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving practice concerns around validate, alerting, observability, testing, operations, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Trigger the condition deliberately in a controlled way and confirm the alert fires, routes to the right destination, and reaches a person - including out of hours. Alerts fail silently through misrouted action groups, muted channels and expired integrations far more often than through detection logic.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "alerting",
+   "testing",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving practice concerns around make, logs, useful, support, rather, only, engineers, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Include stable business identifiers - order number, customer reference, correlation id shown to the user in error messages - so a support query can be traced without knowing internal structure. Logs keyed only by internal database ids require an engineer for every enquiry.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "logging",
+   "support",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a security review involving practice concerns around golden, signal, batch, data, pipeline, observability, metrics, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Freshness - how old the newest processed data is - alongside volume, error rate and duration. Freshness is the one that maps to user impact, because a pipeline that runs successfully but on stale input produces confidently wrong reports without any error signal.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "data",
+   "metrics",
+   "monitoring",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving practice concerns around alert, thresholds, historical, baseline, observability, alerting, baselines, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Start with what would clearly be unacceptable to a user rather than a statistical threshold, run in a non-paging mode to observe normal behaviour, then tighten. Setting a precise threshold on unknown behaviour produces either constant noise or an alert that never fires, and both are discovered late.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "alerting",
+   "baselines",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving practice concerns around questions, able, answer, within, five, minutes, alert, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: What is the user impact and how widespread, when did it start, what changed around then, which component is responsible, and is it getting worse. If the tooling cannot answer those quickly, the gap is in observability design rather than in the responder's knowledge.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "incident",
+   "triage",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving practice concerns around error, failed, span, observability, tracing, errors, semantics, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: A span's status records whether the operation failed; an exception recorded as an event describes what went wrong. A span can complete with an error status without an exception - a 404 from a dependency - and marking every non-success as an error makes error rate dashboards meaningless.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "tracing",
+   "errors",
+   "semantics",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a design review involving practice concerns around semantic, conventions, matter, telemetry, observability, opentelemetry, standards, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Standard attribute names - http.request.method, db.system, server.address - let backends build dashboards and detect patterns automatically, and let telemetry from different services be compared. Bespoke names mean every dashboard is hand-built and cross-service queries do not work.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "opentelemetry",
+   "standards",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving practice concerns around measure, health, asynchronous, workflow, spanning, several, services, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Track the end-to-end completion rate and duration from initiation to final state, not just each service's own success rate - every step can report success while the workflow never completes because a message was dropped between them. A workflow-level identifier is what makes this measurable.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "async",
+   "workflows",
+   "metrics",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a security review involving practice concerns around telemetry, exist, before, service, considered, production, ready, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Request rate, error rate and latency at the boundary; dependency call metrics; a health endpoint; structured logs with correlation; and at least one alert tied to user impact with a runbook. Without those, the first incident is diagnosed by adding instrumentation while users are affected.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "readiness",
+   "practices",
+   "sre",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving practice concerns around handle, metric, important, expensive, collect, observability, cost, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Sample it, compute it at a lower frequency, derive it from a cheaper proxy with occasional validation, or collect it only for a subset. The alternative - not collecting it because of cost - means the question it answers is never answered, which is usually the more expensive outcome.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "cost",
+   "sampling",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving practice concerns around make, incident, timeline, useful, postmortem, observability, practices, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Capture events as they happen with timestamps - alerts, actions taken, observations, decisions - rather than reconstructing afterwards from memory and chat scrollback. The gaps between detection, diagnosis and mitigation are what the analysis needs, and they cannot be recovered later.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "incident",
+   "postmortem",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Practice",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving practice concerns around value, reviewing, alerts, fire, observability, alerting, review, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Incidents detected by customers or by chance reveal gaps that no alert covered, which is the most direct evidence of what monitoring is missing. Reviewing only the alerts that fired optimises the signals you already have while leaving the blind spots untouched.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "alerting",
+   "review",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Alerting",
+  "difficulty": "Hard",
+  "question": "During a large-data workload involving alerting concerns around team, ignores, alerts, because, false, alarms, real, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: **The problem is not the missed alert — it is the noise**\n\nAlert fatigue is a predictable outcome of alerting on things that do not require action. Once the base rate of false alarms is high, humans correctly learn to ignore them, and the real one is lost in the stream. Adding an alert for the missed outage would make it worse.\n\n**The principle: alert on symptoms, not causes**\n\nAlert on what the user experiences — requests failing, requests slow, work not completing. Do not alert on CPU at 80%, which may be entirely fine, or on a single pod restarting, which the orchestrator handled.\n\nThe test for every alert: **if this fires at 3am, is there something a human must do right now?** If not, it is a dashboard item or a ticket, not a page.\n\n**What I would do**\n\n**1. Audit every existing alert.** For each, ask: when it last fired, was action taken? Alerts that have fired twenty times with no action are deleted. This usually removes most of them and is the single highest-value step.\n\n**2. Define SLOs and alert on burn rate.** Rather than 'error rate above 1%', alert when the error budget is being consumed fast enough to matter. This naturally suppresses brief blips while catching sustained degradation, and it ties the alert to something the business agreed.\n\n**3. Alert on multi-window, multi-burn-rate conditions** — a fast burn over five minutes pages immediately; a slow burn over hours creates a ticket. That distinction removes most of the noise while keeping the coverage.\n\n**4. Require a runbook per alert.** If nobody can write what to do when it fires, it should not page. Writing the runbook frequently reveals that the alert is not actionable.\n\n**5. Track the signal-to-noise ratio** as a metric the team owns, and review it. What is not measured returns to noise within months.\n\n**On the missed outage specifically**\n\nThe question is not 'what alert would have caught it' but 'why did the symptom-level alerts not fire'. If users were affected and no alert fired, the gap is in the user-facing coverage — which is a small number of alerts, done well, rather than more alerts.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "alerting",
+   "slo",
+   "alert-fatigue",
+   "on-call",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Instrumentation",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving instrumentation concerns around incident, happened, call, engineer, tell, service, caused, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: The gap is almost always **correlation** - there were logs, but nothing tied them together across services.\n\n**The three things I would make sure exist:**\n\n1. **Distributed tracing with propagated context.** A trace id generated at the edge, passed through every hop via W3C `traceparent`, and attached to every log line. Then one request is a single view across all services, and \"which service caused it\" stops being a question. In .NET this is largely automatic with `ActivitySource` and OpenTelemetry - the manual work is making sure the id crosses the boundaries that are not HTTP, like queues.\n2. **Structured logs, not string-formatted ones.** `logger.LogInformation(\"Order {OrderId} failed after {Attempts}\", id, n)` gives queryable fields. String interpolation into the message destroys that and leaves you grepping.\n3. **RED metrics per service** - rate, errors, duration - so a dashboard shows which service s error rate moved at 3am. Metrics tell you *where*; traces tell you *why*; logs tell you *what exactly*. All three, used in that order.\n\n**What I would add beyond telemetry:** alerts that link to a runbook, and a dashboard that answers \"is it us or a dependency\" in one glance. At 3am the engineer needs the first 90 seconds to be decision-making, not archaeology.\n\n**What I would remove:** alerts that fire without being actionable. Alert fatigue is why a real incident gets missed.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "tracing",
+   "logging",
+   "opentelemetry",
+   "incident",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "Observability",
+  "subcategory": "Applied Debugging",
+  "difficulty": "Hard",
+  "question": "During a global rollout involving debugging concerns around occurs, customer, only, cannot, reproduce, approach, observability, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: If it happens for one customer and not others, something about *their* data or configuration differs - so the investigation is about finding that difference rather than about the code path.\n\n**1. Get specifics.** Exact timestamp, user, tenant, what they did. \"It does not work\" is not actionable; a trace id from their session is.\n\n**2. Find the request in telemetry.** With distributed tracing and correlation ids this is the whole game - pull their actual request and see where it went wrong. Most of the value of instrumentation is in exactly this scenario, which is worth saying because it justifies the investment.\n\n**3. Look for what is different about them.** Data volume - are they the customer with 50,000 order lines where everyone else has 50? Configuration and feature flags. Locale, timezone, currency, character set. Permissions and role. Account age, so they have data created under an older schema or an older code version. Integrations no other tenant uses.\n\n**4. Consider the client side.** Browser, extensions, network, corporate proxy, an old cached bundle. A hard refresh resolving it points straight at caching or a deployment issue.\n\n**5. Reproduce with their data, not their account.** Copy the shape of their data into a test environment - anonymised. Most \"unreproducible\" bugs reproduce immediately once you have data that looks like theirs.\n\n**The pattern I would bear in mind:** unique customers usually mean boundary conditions. The largest tenant, the oldest account, the only one in a different timezone, the only one using a legacy integration. Ask which superlative applies to them - that question alone often finds it.\n\nFor the applied scenario, Define the decision each signal supports, preserve correlation and cardinality controls, protect sensitive fields, and test telemetry during overload. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "observability",
+   "debugging",
+   "tracing",
+   "support",
+   "troubleshooting",
+   "scenario-practice",
+   "applied"
   ]
  }
 ]

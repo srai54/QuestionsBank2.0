@@ -16,7 +16,7 @@ const PLAN = {
   'Testing': 410, 'System Design': 400, 'CS Fundamentals': 370, 'JavaScript/TypeScript': 300,
   'Data/BI': 290, 'Frontend': 280, 'Databases': 250, 'Behavioral': 230,
   'Observability': 210, 'MongoDB': 200, 'REST APIs': 190, 'Python': 200,
-  'Java': 130, 'Performance': 130,
+  'Java': 130, 'Performance': 120,
 };
 
 const rows = load(SOURCE);
@@ -30,6 +30,8 @@ if (category) {
 }
 
 const have = new Map(countBy(rows, 'category'));
+const targetTotal = Object.values(PLAN).reduce((sum, n) => sum + n, 0);
+if (targetTotal !== 10000) throw new Error(`Coverage plan sums to ${targetTotal}, expected 10000`);
 let remaining = 0;
 console.log('category                       have  target  todo');
 for (const [cat, target] of Object.entries(PLAN).sort((a, b) => b[1] - a[1])) {
@@ -38,7 +40,11 @@ for (const [cat, target] of Object.entries(PLAN).sort((a, b) => b[1] - a[1])) {
   remaining += todo;
   console.log(`${cat.padEnd(28)} ${String(n).padStart(5)} ${String(target).padStart(7)} ${String(todo).padStart(5)}`);
 }
-console.log(`\ntotal ${rows.length} / 10000 - ${remaining} to write`);
+for (const [cat, n] of have) {
+  if (!(cat in PLAN)) console.log(`UNPLANNED: ${cat}: ${n}`);
+}
+console.log(`\ntotal ${rows.length} / ${targetTotal} - ${Math.max(targetTotal - rows.length, 0)} to reach total`);
+console.log(`category deficits: ${remaining}`);
 
 // Depth, not just count: how much of the bank is ready for the way an
 // interviewer actually probes - nested follow-ups, and C# code where the

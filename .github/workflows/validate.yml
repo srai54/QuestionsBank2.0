@@ -1,0 +1,22 @@
+name: Validate question bank
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: node tools/test-validation.js
+      - run: node tools/validate.js
+      - run: node tools/coverage.js
+      - run: python -m unittest discover -s tests
+      - run: python build.py
+      - run: python gen_sql.py
+      - run: python search.py 'queue' --limit 1

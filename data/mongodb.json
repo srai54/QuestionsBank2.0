@@ -788,10 +788,6 @@
   ],
   "followups": [
    {
-    "q": "Why must equality fields come before sort fields in the compound index?",
-    "a": "This is the ESR rule - Equality, Sort, Range. An equality match on a leading field narrows the index to a contiguous section, and within that section the remaining keys are already in sorted order, so the sort is free. Put the sort field first and the equality match becomes a filter applied across the whole index, which forces either a scan or an in-memory sort. Getting the order wrong is the most common reason a Mongo query is slow despite having \"an index\"."
-   },
-   {
     "q": "What about Atlas Search or the aggregation pipeline - do they change this?",
     "a": "The aggregation pipeline has the same skip problem: `$skip` discards documents, so the advice is identical - use a `$match` range on the sort key instead. Atlas Search has its own pagination via `searchAfter`, which is a proper cursor token and is the right mechanism there. Either way the principle is unchanged: never ask the server to produce rows only to throw them away."
    }
@@ -1412,11 +1408,1413 @@
    {
     "q": "How do you handle data that must be duplicated when embedding?",
     "a": "Accept the duplication and plan the update path explicitly - either a background job that fans out changes, or a design that treats the embedded copy as a point-in-time snapshot. The second is often correct and under-used: the product name on a historical order line *should* be what it was when the order was placed, not the current name. Denormalisation is a bug only when the copy is supposed to stay in sync and nothing keeps it so."
-   },
-   {
-    "q": "What is the 16MB document limit really constraining?",
-    "a": "It is a hard ceiling per document, but it is the wrong thing to design against - you want to be far below it. Well before 16MB you are paying to transfer and deserialise data you did not need on every read, and update-in-place becomes rewrite-the-document. Treat a document approaching even a couple of megabytes as a design smell rather than a limit you have room under."
    }
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Queries",
+  "difficulty": "Medium",
+  "question": "Why must equality fields come before sort fields in the compound index?",
+  "answer": "This is the ESR rule - Equality, Sort, Range. An equality match on a leading field narrows the index to a contiguous section, and within that section the remaining keys are already in sorted order, so the sort is free. Put the sort field first and the equality match becomes a filter applied across the whole index, which forces either a scan or an in-memory sort. Getting the order wrong is the most common reason a Mongo query is slow despite having \"an index\".",
+  "tags": [
+   "mongodb",
+   "pagination",
+   "performance",
+   "query",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Schema Design",
+  "difficulty": "Hard",
+  "question": "What is the 16MB document limit really constraining?",
+  "answer": "It is a hard ceiling per document, but it is the wrong thing to design against - you want to be far below it. Well before 16MB you are paying to transfer and deserialise data you did not need on every read, and update-in-place becomes rewrite-the-document. Treat a document approaching even a couple of megabytes as a design smell rather than a limit you have room under.",
+  "tags": [
+   "mongodb",
+   "schema-design",
+   "embedding",
+   "nosql",
+   "scenario",
+   "interviewer-follow-up"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During a production incident involving fundamentals concerns around mongodb, differ, relational, database, nosql, document db, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: MongoDB is a document-oriented NoSQL database storing flexible, schema-less JSON-like documents (BSON) in collections, versus relational tables with fixed schemas and rows. It favors denormalization/embedding over joins, scales horizontally via sharding, and suits evolving schemas and hierarchical data. Trade-offs: weaker multi-document transaction guarantees historically and no rigid schema enforcement (though schema validation exists).\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "nosql",
+   "document-db",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving fundamentals concerns around collections, documents, mongodb, collection, document, bson, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: A document is a set of key-value pairs stored as BSON (binary JSON), the basic record—analogous to a row but flexible and nested. A collection is a group of documents, analogous to a table but without an enforced schema. Documents in a collection can have different fields. Each document has a unique _id (ObjectId by default) acting as the primary key.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "collection",
+   "document",
+   "bson",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Data Modeling",
+  "difficulty": "Hard",
+  "question": "During a dependency outage involving data modeling concerns around embed, reference, documents, mongodb, embedding, referencing, data modeling, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Embed when data is accessed together, has a contains/one-to-few relationship, and doesn't grow unbounded—it gives single-read performance and atomicity within one document. Reference (store an id) for one-to-many/many-to-many, large or independently-updated data, or unbounded growth to avoid huge documents and duplication. The rule: model around query patterns—optimize for how you read the data, not normalization.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "embedding",
+   "referencing",
+   "data-modeling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Indexing",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving indexing concerns around indexing, mongodb, compound index, explain, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: MongoDB uses B-tree indexes; the default is on _id. You create single-field, compound (multi-field, order matters—ESR rule: Equality, Sort, Range), multikey (on array fields), text, geospatial, hashed, and partial/TTL indexes. Indexes speed queries/sorts but cost write performance and storage. Use explain() to verify index usage (IXSCAN vs COLLSCAN) and cover queries where possible.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "compound-index",
+   "explain",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Indexing",
+  "difficulty": "Hard",
+  "question": "During a data-quality incident involving indexing concerns around rule, compound, indexes, mongodb, esr, compound index, optimization, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: ESR = Equality, Sort, Range: order compound index fields so equality-match fields come first, then fields used for sorting, then range-query fields. This lets MongoDB seek efficiently, return results already sorted (avoiding an in-memory sort), and scan a bounded range. Wrong field order forces collection scans or blocking sorts. Design indexes around your query's filter/sort shape.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "esr",
+   "compound-index",
+   "optimization",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Aggregation",
+  "difficulty": "Medium",
+  "question": "During a design review involving aggregation concerns around aggregation, pipeline, mongodb, lookup, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: The aggregation pipeline processes documents through a sequence of stages, each transforming the stream: $match (filter), $group (aggregate), $project (reshape), $sort, $limit, $lookup (left join to another collection), $unwind (expand arrays), $facet, etc. It's MongoDB's powerful analytics/reporting engine. Place $match/$sort early (before $group) so indexes apply and less data flows downstream.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "pipeline",
+   "lookup",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Sharding",
+  "difficulty": "Hard",
+  "question": "During a multi-tenant service involving sharding concerns around sharding, mongodb, choose, shard, shard key, scaling, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Sharding horizontally partitions data across shards using a shard key, enabling scale-out for large datasets/throughput. A good shard key has high cardinality, even write/read distribution, and aligns with common query filters (so queries are targeted, not scatter-gather). Poor keys (monotonic like timestamp) create hotspots. Hashed sharding spreads writes; ranged sharding aids range queries. The key is hard to change later—choose carefully.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "shard-key",
+   "scaling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Replication",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving replication concerns around replica, mongodb, replica set, replication, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: A replica set is a group of mongod nodes maintaining the same data: one primary (accepts writes) and secondaries (replicate the oplog). If the primary fails, an automatic election promotes a secondary, providing high availability and failover. Secondaries can serve reads (with read preference) for scaling reads. Replication also enables backups and data redundancy across nodes/zones.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "replica-set",
+   "replication",
+   "ha",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Consistency",
+  "difficulty": "Hard",
+  "question": "During an on-call investigation involving consistency concerns around read, write, concerns, mongodb, write concern, read concern, consistency, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Write concern controls acknowledgment durability: w:1 (primary only), w:majority (majority of nodes—durable, survives failover), with optional journaling (j:true). Read concern controls consistency of reads: local, majority (only majority-committed data), linearizable. Higher levels trade latency for stronger consistency/durability. Use w:majority + readConcern majority for strong guarantees on critical data.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "write-concern",
+   "read-concern",
+   "consistency",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Transactions",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving transactions concerns around mongodb, support, transactions, acid, atomicity, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Yes—single-document operations are always atomic. Since 4.0 MongoDB supports multi-document ACID transactions across a replica set (and sharded clusters since 4.2). However transactions add overhead and locking, so the preferred design is to embed related data in a single document to get atomicity naturally. Use multi-document transactions sparingly for cases that genuinely span documents/collections.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "transactions",
+   "acid",
+   "atomicity",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a migration rehearsal involving performance concerns around diagnose, slow, mongodb, query, performance, explain, profiler, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Use explain('executionStats') to see whether it uses an index (IXSCAN) or a collection scan (COLLSCAN), documents examined vs returned (should be close), and sort stages (in-memory SORT is bad). Check the profiler (db.setProfilingLevel) for slow ops. Fix by adding/adjusting indexes (ESR), projecting only needed fields, avoiding unbounded $lookup, and ensuring queries are covered/targeted.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "performance",
+   "explain",
+   "profiler",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving fundamentals concerns around find, findone, aggregate, mongodb, query, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: find returns a cursor over all matching documents; findOne returns a single matching document. aggregate runs a multi-stage pipeline for grouping, joining ($lookup), reshaping, and computing—more powerful than find for analytics. Use find/findOne for simple retrievals and aggregate when you need transformations, grouping, or joins across collections.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "find",
+   "aggregate",
+   "query",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving fundamentals concerns around index, mongodb, ttl index, expiry, cleanup, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: A TTL (Time To Live) index automatically deletes documents after a specified number of seconds from a date field. It's ideal for expiring transient data—sessions, logs, cache entries, OTPs, or event data with retention limits—without a separate cleanup job. MongoDB's background thread removes expired documents periodically (not exactly at expiry).\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "ttl-index",
+   "expiry",
+   "cleanup",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving design concerns around common, data, modeling, patterns, mongodb, bucket, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Patterns include: bucket (group time-series/events into documents), computed (precompute aggregates), subset (embed a hot subset, reference the rest), extended reference (denormalize frequently-read fields), polymorphic (varied shapes in one collection), and outlier (handle rare large cases separately). They optimize for read patterns and document-size limits—model to serve queries efficiently rather than normalize.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "patterns",
+   "modeling",
+   "bucket",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Comparison",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving comparison concerns around choose, mongodb, server, sql, comparison, polyglot, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Choose MongoDB for flexible/evolving schemas, hierarchical or document-shaped data, rapid iteration, horizontal scale, and high write throughput with denormalized reads (catalogs, content, IoT, real-time). Choose SQL for complex relational queries/joins, strong multi-row transactional integrity, mature reporting/BI, and well-defined schemas. Often systems use both (polyglot persistence) for different workloads.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "sql",
+   "comparison",
+   "polyglot",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied CRUD",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving crud concerns around basic, crud, operations, mongodb, insert, update, delete, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: insertOne/insertMany add documents; find/findOne read with query filters and projections; updateOne/updateMany/replaceOne modify (with operators like $set, $inc, $push); deleteOne/deleteMany remove. Queries use a document-based filter syntax ({age: {$gt: 18}}). Update operators change specific fields without replacing the whole document. These map to the driver methods across languages.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "crud",
+   "insert",
+   "update",
+   "delete",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Query",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving query concerns around common, query, operators, mongodb, query operators, filter, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Comparison ($eq, $ne, $gt, $gte, $lt, $lte, $in, $nin), logical ($and, $or, $not, $nor), element ($exists, $type), evaluation ($regex, $expr), and array ($all, $elemMatch, $size). $expr allows aggregation expressions in queries. Combine them in the filter document to express complex conditions. Indexes should support the fields used in these operators for efficiency.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "query-operators",
+   "filter",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Update",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving update concerns around main, update, operators, mongodb, update operators, set, inc, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: $set (set field values), $unset (remove fields), $inc (increment numbers), $mul, $rename, $min/$max, $push/$addToSet (add to arrays), $pull/$pop (remove from arrays), $each with $push, and $ (positional) to update matched array elements. Upsert (upsert:true) inserts if no match. These enable partial, atomic, in-place document updates without rewriting the whole document.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "update-operators",
+   "set",
+   "inc",
+   "push",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Aggregation",
+  "difficulty": "Hard",
+  "question": "During a gradual rollout involving aggregation concerns around lookup, performance, considerations, mongodb, join, aggregation, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: $lookup performs a left outer join to another collection within an aggregation pipeline. It's powerful but can be expensive—it runs per input document and benefits greatly from an index on the foreign field. For high-volume joins, MongoDB's document model often prefers embedding related data to avoid $lookup entirely. Filter ($match) before $lookup to reduce inputs, and consider whether the data should be modeled together instead.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "lookup",
+   "join",
+   "aggregation",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Aggregation",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving aggregation concerns around order, stages, aggregation, pipeline, matter, mongodb, match, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Stages run in sequence, each transforming the stream. Order matters for performance and correctness: place $match and $sort early (before $group/$project) so indexes apply and less data flows downstream; $limit after $sort enables top-N optimization. $project early can reduce document size. Putting $match after $group forces processing all data first. Optimize by filtering and limiting as early as possible.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "pipeline",
+   "match",
+   "optimization",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Indexing",
+  "difficulty": "Medium",
+  "question": "During a security review involving indexing concerns around multikey, index, mongodb, multikey index, array, indexing, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: A multikey index is automatically created when you index a field that holds an array—MongoDB indexes each array element, so queries matching any element use the index. You don't declare it specially; it's inferred. Limitations: a compound index can include at most one array field (can't have two multikey fields), and covered queries on arrays are limited. It's essential for efficiently querying array contents.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "multikey-index",
+   "array",
+   "indexing",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Indexing",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving indexing concerns around text, index, search, mongodb, text index, full text search, atlas search, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: A text index enables full-text search on string fields, supporting stemming, stop-words, and relevance scoring via $text queries with $meta:'textScore' for ranking. You can index multiple fields with weights. It's convenient for basic search within MongoDB, but for advanced search (typo tolerance, faceting, complex relevance) Atlas Search (Lucene-based) or a dedicated engine is stronger. Only one text index per collection.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "text-index",
+   "full-text-search",
+   "atlas-search",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Design",
+  "difficulty": "Hard",
+  "question": "During a global rollout involving design concerns around model, many, relationship, mongodb, one to many, embedding, referencing, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Choose based on cardinality and access: embed the 'many' as an array in the parent for one-to-few, bounded, and read-together data (single-read, atomic). Reference (store parent id in children, or child ids in parent) for one-to-many/one-to-squillions or independently-accessed/large data to avoid huge documents and the 16MB limit. The extended reference pattern denormalizes a few frequently-read fields. Model around query patterns.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "one-to-many",
+   "embedding",
+   "referencing",
+   "modeling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Limits",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving limits concerns around 16mb, document, size, limit, handle, large, data, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: A single BSON document can't exceed 16MB. For larger data: reference/split into multiple documents (bucketing), or use GridFS to store large files/blobs in chunks. Unbounded arrays are a common cause of hitting the limit—model them as separate documents (the subset/bucket pattern) with references. Design to keep documents well under the limit and avoid ever-growing embedded arrays.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "document-size",
+   "16mb",
+   "gridfs",
+   "bucket",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a production incident involving performance concerns around covered, query, mean, mongodb, covered query, index, projection, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: A covered query is satisfied entirely by an index—all queried and returned fields are in the index, so MongoDB never reads the actual documents. It requires the projection to include only indexed fields (and exclude _id if not indexed). Covered queries are very fast (index-only). Design indexes with the fields your hot queries filter, sort, and return to enable covering where it matters.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "covered-query",
+   "index",
+   "projection",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Replication",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving replication concerns around read, preference, mongodb, read preference, replica set, consistency, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Read preference controls which replica-set members serve reads: primary (default, strong consistency), primaryPreferred, secondary (offload reads, may be stale), secondaryPreferred, and nearest (lowest latency). Reading from secondaries scales reads but risks stale data (replication lag). Use primary for read-your-writes/consistency-critical reads; secondaries for analytics/reporting tolerant of lag. Combine with read concern for consistency guarantees.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "read-preference",
+   "replica-set",
+   "consistency",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Aggregation",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving aggregation concerns around lookup, real, join, mongodb, aggregation, modelling, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: lookup performs a left outer join to another collection per input document. It is not a relational join: there is no join optimiser, it can be slow without an index on the foreign field, results are embedded as arrays, and it works poorly across shards. Frequent lookups usually indicate the schema should embed instead.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "lookup",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Aggregation",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving aggregation concerns around unwind, working, arrays, directly, mongodb, aggregation, performance, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: unwind produces one document per array element, which enables grouping and filtering per element but multiplies the document count and memory use. Where an array operator such as filter, map or reduce can do the job inside the document, it avoids the fan-out entirely and is far cheaper.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "arrays",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving operations concerns around change, stream, mongodb, change streams, cdc, integration, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: A change stream exposes the oplog as a resumable, ordered feed of document changes, filterable with an aggregation pipeline. It is used for cache invalidation, search index updates, event publication and audit, and it resumes from a token after disconnection - which is what makes it usable in production rather than tailing the oplog directly.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "change-streams",
+   "cdc",
+   "integration",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Queries",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving queries concerns around updateone, upsert, findoneandupdate, mongodb, updates, api, performance, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: updateOne reports what changed without returning the document; findOneAndUpdate returns the document before or after modification, which costs an extra round trip's worth of data but avoids a separate read. Both support upsert; choose based on whether the caller needs the resulting document.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "updates",
+   "api",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving modelling concerns around handle, schema, evolution, across, millions, existing, documents, how would you validate correctness before attempting to optimize the implementation while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Version each document, write the new shape going forward, read tolerantly for both, and migrate lazily on access or in a background batch job with a resumable cursor. A single updateMany over millions of documents locks resources and cannot be paused, which is why incremental migration is standard.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "migrations",
+   "schema",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Queries",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving queries concerns around perform, case, insensitive, search, efficiently, mongodb, collation, how would you decide what to measure at the component and user-facing boundaries while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Use a collation with the appropriate strength on the index and the query, so the index is usable - a regular expression with the case-insensitive flag cannot use an index unless it is anchored and case-sensitive. Alternatively store a normalised lowercase field and index that.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "collation",
+   "indexing",
+   "search",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving modelling concerns around model, counter, updated, very, frequently, mongodb, counters, how would you explain the decision to reviewers who did not build the original system while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Use an atomic increment operator rather than read-modify-write, and if one document becomes a contention point, shard the counter across several documents summed on read. A single hot document serialises every update regardless of how the rest of the cluster is scaled.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "counters",
+   "contention",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving modelling concerns around trade, storing, computed, values, document, mongodb, denormalisation, how would you choose an implementation and explain its operational tradeoffs while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: Reads become cheaper and simpler, writes must maintain the value, and the copy can drift if any write path forgets. It is worth it for values read far more than written where one code path owns the update - and it needs a periodic recomputation job to detect drift.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "denormalisation",
+   "consistency",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving operations concerns around check, before, increasing, mongodb, cluster, size, scaling, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Whether the bottleneck is actually capacity - check the working set against memory, index efficiency, and whether specific queries dominate. Scaling a cluster to fix a missing index is expensive and often ineffective, because the additional nodes each perform the same inefficient scan.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "scaling",
+   "diagnostics",
+   "cost",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Queries",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving queries concerns around avoid, unbounded, query, returning, entire, collection, mongodb, how would you diagnose the issue without masking it with retries or extra capacity while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Always apply a limit and a filter at the application layer, enforce a maximum through a wrapper or repository, and set a maxTimeMS so a runaway query is terminated. A find with no criteria is a full collection scan that also transfers everything over the network.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "query",
+   "limits",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a production incident involving modelling concerns around model, data, queried, very, different, access, patterns, how would you identify the evidence needed before choosing an approach while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Either one shape with indexes for each pattern, accepting the write cost, or separate collections maintained from a single source of truth through change streams. The second suits genuinely divergent patterns - an operational store and a reporting projection - and the first suits everything else.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "access-patterns",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Queries",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving queries concerns around update, matches, nothing, still, rather, mongodb, updates, how would you design a safe experiment that tests the most important assumption while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Because the application assumed it matched - a stale filter, a changed identifier, or a race where the document was already modified. Checking the matched and modified counts rather than only the absence of an error is what turns a silent no-op into a detectable condition.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "updates",
+   "correctness",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving modelling concerns around decide, whether, separate, collection, discriminated, single, mongodb, how would you define a rollback boundary and objective success criteria while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: One collection when the types share most fields and are queried together, separate when they differ substantially or have different access patterns and index needs. A single collection with mostly-empty fields per type wastes index space and makes schema validation nearly meaningless.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "collections",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a design review involving performance concerns around effect, compound, index, field, order, sort, performance, how would you define ownership, observability, and recovery for the resulting design while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: A sort can use the index only if it matches the index order from a prefix, including direction consistency. An index on ascending fields cannot serve a mixed-direction sort, and a sort on a field not in the prefix requires an in-memory sort that fails above the memory limit.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "sorting",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving modelling concerns around decide, whether, field, indexed, projected, away, moved, how would you separate the primary failure mechanism from secondary symptoms while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Index it if it is filtered or sorted on frequently, project it away if it is large and rarely needed, and move it to a separate document if it is large and independent of the main access pattern. The three questions are how often it is queried, how large it is, and whether it changes independently.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "indexing",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving operations concerns around approach, capacity, planning, growing, mongodb, collection, performance, how would you reduce risk while preserving the required behavior while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Project the working set including index size rather than raw data size, model growth from actual rates rather than estimates, and identify the point at which the working set exceeds memory - which is where performance changes character rather than degrading gradually.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "capacity",
+   "planning",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Schema Design",
+  "difficulty": "Hard",
+  "question": "During a migration rehearsal involving schema design concerns around embed, document, versus, reference, give, case, wrong, how would you test the relevant edge cases and failure paths while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: The rule I work from is: **embed what is read together and bounded, reference what is shared or unbounded.**\n\n**Embed when:** the child has no independent identity, it is always fetched with the parent, and the array cannot grow without limit. Order lines in an order, an address in a customer profile. You get the whole aggregate in a single read with no join, which is the main reason to use a document database at all.\n\n**Reference when:** the data is shared between parents (duplicating it means updating it in many places), the child is large or accessed independently, or the relationship is unbounded.\n\n**The way this goes wrong** is the unbounded array. Embedding comments in a post looks perfect until a post gets 100,000 comments: every read of the post loads all of them, the document approaches the 16MB limit, and updates rewrite the whole thing. Documents that grow also get moved on disk, fragmenting storage.\n\n**The pattern that fixes it** is bucketing or the outlier pattern - embed the most recent N inline for the common read, and keep the rest in a separate collection. You keep the single-read benefit for the 95% case without the unbounded growth.\n\n**The honest general point:** MongoDB schema design is driven by the *queries*, not by the data s natural shape. I would want to know the access patterns before designing anything, and if the access patterns are highly relational with lots of ad-hoc joins, that is an argument for a relational database rather than clever document modelling.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "schema-design",
+   "embedding",
+   "nosql",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving fundamentals concerns around mongodb, differ, relational, database, nosql, document db, how would you reduce risk while preserving the required behavior while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: MongoDB is a document-oriented NoSQL database storing flexible, schema-less JSON-like documents (BSON) in collections, versus relational tables with fixed schemas and rows. It favors denormalization/embedding over joins, scales horizontally via sharding, and suits evolving schemas and hierarchical data. Trade-offs: weaker multi-document transaction guarantees historically and no rigid schema enforcement (though schema validation exists).\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "nosql",
+   "document-db",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving fundamentals concerns around collections, documents, mongodb, collection, document, bson, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: A document is a set of key-value pairs stored as BSON (binary JSON), the basic record—analogous to a row but flexible and nested. A collection is a group of documents, analogous to a table but without an enforced schema. Documents in a collection can have different fields. Each document has a unique _id (ObjectId by default) acting as the primary key.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "collection",
+   "document",
+   "bson",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Data Modeling",
+  "difficulty": "Hard",
+  "question": "During a gradual rollout involving data modeling concerns around embed, reference, documents, mongodb, embedding, referencing, data modeling, how would you test the relevant edge cases and failure paths while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Embed when data is accessed together, has a contains/one-to-few relationship, and doesn't grow unbounded—it gives single-read performance and atomicity within one document. Reference (store an id) for one-to-many/many-to-many, large or independently-updated data, or unbounded growth to avoid huge documents and duplication. The rule: model around query patterns—optimize for how you read the data, not normalization.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "embedding",
+   "referencing",
+   "data-modeling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Indexing",
+  "difficulty": "Medium",
+  "question": "During a legacy-system integration involving indexing concerns around indexing, mongodb, compound index, explain, how would you diagnose the issue without masking it with retries or extra capacity while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: MongoDB uses B-tree indexes; the default is on _id. You create single-field, compound (multi-field, order matters—ESR rule: Equality, Sort, Range), multikey (on array fields), text, geospatial, hashed, and partial/TTL indexes. Indexes speed queries/sorts but cost write performance and storage. Use explain() to verify index usage (IXSCAN vs COLLSCAN) and cover queries where possible.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "compound-index",
+   "explain",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Indexing",
+  "difficulty": "Hard",
+  "question": "During a security review involving indexing concerns around rule, compound, indexes, mongodb, esr, compound index, optimization, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: ESR = Equality, Sort, Range: order compound index fields so equality-match fields come first, then fields used for sorting, then range-query fields. This lets MongoDB seek efficiently, return results already sorted (avoiding an in-memory sort), and scan a bounded range. Wrong field order forces collection scans or blocking sorts. Design indexes around your query's filter/sort shape.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "esr",
+   "compound-index",
+   "optimization",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Aggregation",
+  "difficulty": "Medium",
+  "question": "During a regulated-data workflow involving aggregation concerns around aggregation, pipeline, mongodb, lookup, how would you decide what to measure at the component and user-facing boundaries while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: The aggregation pipeline processes documents through a sequence of stages, each transforming the stream: $match (filter), $group (aggregate), $project (reshape), $sort, $limit, $lookup (left join to another collection), $unwind (expand arrays), $facet, etc. It's MongoDB's powerful analytics/reporting engine. Place $match/$sort early (before $group) so indexes apply and less data flows downstream.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "pipeline",
+   "lookup",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Sharding",
+  "difficulty": "Hard",
+  "question": "During a global rollout involving sharding concerns around sharding, mongodb, choose, shard, shard key, scaling, how would you design a safe experiment that tests the most important assumption while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Sharding horizontally partitions data across shards using a shard key, enabling scale-out for large datasets/throughput. A good shard key has high cardinality, even write/read distribution, and aligns with common query filters (so queries are targeted, not scatter-gather). Poor keys (monotonic like timestamp) create hotspots. Hashed sharding spreads writes; ranged sharding aids range queries. The key is hard to change later—choose carefully.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "shard-key",
+   "scaling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Replication",
+  "difficulty": "Medium",
+  "question": "During a concurrency bug involving replication concerns around replica, mongodb, replica set, replication, how would you explain the decision to reviewers who did not build the original system while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: A replica set is a group of mongod nodes maintaining the same data: one primary (accepts writes) and secondaries (replicate the oplog). If the primary fails, an automatic election promotes a secondary, providing high availability and failover. Secondaries can serve reads (with read preference) for scaling reads. Replication also enables backups and data redundancy across nodes/zones.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "replica-set",
+   "replication",
+   "ha",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Consistency",
+  "difficulty": "Hard",
+  "question": "During a production incident involving consistency concerns around read, write, concerns, mongodb, write concern, read concern, consistency, how would you define a rollback boundary and objective success criteria while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Write concern controls acknowledgment durability: w:1 (primary only), w:majority (majority of nodes—durable, survives failover), with optional journaling (j:true). Read concern controls consistency of reads: local, majority (only majority-committed data), linearizable. Higher levels trade latency for stronger consistency/durability. Use w:majority + readConcern majority for strong guarantees on critical data.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "write-concern",
+   "read-concern",
+   "consistency",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Transactions",
+  "difficulty": "Medium",
+  "question": "During a failed deployment involving transactions concerns around mongodb, support, transactions, acid, atomicity, how would you define ownership, observability, and recovery for the resulting design while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Yes—single-document operations are always atomic. Since 4.0 MongoDB supports multi-document ACID transactions across a replica set (and sharded clusters since 4.2). However transactions add overhead and locking, so the preferred design is to embed related data in a single document to get atomicity naturally. Use multi-document transactions sparingly for cases that genuinely span documents/collections.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "transactions",
+   "acid",
+   "atomicity",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During a dependency outage involving performance concerns around diagnose, slow, mongodb, query, performance, explain, profiler, how would you validate correctness before attempting to optimize the implementation while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Use explain('executionStats') to see whether it uses an index (IXSCAN) or a collection scan (COLLSCAN), documents examined vs returned (should be close), and sort stages (in-memory SORT is bad). Check the profiler (db.setProfilingLevel) for slow ops. Fix by adding/adjusting indexes (ESR), projecting only needed fields, avoiding unbounded $lookup, and ensuring queries are covered/targeted.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "performance",
+   "explain",
+   "profiler",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving fundamentals concerns around find, findone, aggregate, mongodb, query, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: find returns a cursor over all matching documents; findOne returns a single matching document. aggregate runs a multi-stage pipeline for grouping, joining ($lookup), reshaping, and computing—more powerful than find for analytics. Use find/findOne for simple retrievals and aggregate when you need transformations, grouping, or joins across collections.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "find",
+   "aggregate",
+   "query",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During a data-quality incident involving fundamentals concerns around index, mongodb, ttl index, expiry, cleanup, how would you reduce risk while preserving the required behavior while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: A TTL (Time To Live) index automatically deletes documents after a specified number of seconds from a date field. It's ideal for expiring transient data—sessions, logs, cache entries, OTPs, or event data with retention limits—without a separate cleanup job. MongoDB's background thread removes expired documents periodically (not exactly at expiry).\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "ttl-index",
+   "expiry",
+   "cleanup",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Design",
+  "difficulty": "Medium",
+  "question": "During a design review involving design concerns around common, data, modeling, patterns, mongodb, bucket, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Patterns include: bucket (group time-series/events into documents), computed (precompute aggregates), subset (embed a hot subset, reference the rest), extended reference (denormalize frequently-read fields), polymorphic (varied shapes in one collection), and outlier (handle rare large cases separately). They optimize for read patterns and document-size limits—model to serve queries efficiently rather than normalize.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "patterns",
+   "modeling",
+   "bucket",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Comparison",
+  "difficulty": "Medium",
+  "question": "During a multi-tenant service involving comparison concerns around choose, mongodb, server, sql, comparison, polyglot, how would you test the relevant edge cases and failure paths while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Choose MongoDB for flexible/evolving schemas, hierarchical or document-shaped data, rapid iteration, horizontal scale, and high write throughput with denormalized reads (catalogs, content, IoT, real-time). Choose SQL for complex relational queries/joins, strong multi-row transactional integrity, mature reporting/BI, and well-defined schemas. Often systems use both (polyglot persistence) for different workloads.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "sql",
+   "comparison",
+   "polyglot",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied CRUD",
+  "difficulty": "Medium",
+  "question": "During a cost-reduction review involving crud concerns around basic, crud, operations, mongodb, insert, update, delete, how would you diagnose the issue without masking it with retries or extra capacity while avoiding hidden shared state?",
+  "answer": "Start with the underlying technical principle: insertOne/insertMany add documents; find/findOne read with query filters and projections; updateOne/updateMany/replaceOne modify (with operators like $set, $inc, $push); deleteOne/deleteMany remove. Queries use a document-based filter syntax ({age: {$gt: 18}}). Update operators change specific fields without replacing the whole document. These map to the driver methods across languages.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Avoiding hidden shared state should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "crud",
+   "insert",
+   "update",
+   "delete",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Query",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving query concerns around common, query, operators, mongodb, query operators, filter, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: Comparison ($eq, $ne, $gt, $gte, $lt, $lte, $in, $nin), logical ($and, $or, $not, $nor), element ($exists, $type), evaluation ($regex, $expr), and array ($all, $elemMatch, $size). $expr allows aggregation expressions in queries. Combine them in the filter document to express complex conditions. Indexes should support the fields used in these operators for efficiency.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "query-operators",
+   "filter",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Update",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving update concerns around main, update, operators, mongodb, update operators, set, inc, how would you decide what to measure at the component and user-facing boundaries while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: $set (set field values), $unset (remove fields), $inc (increment numbers), $mul, $rename, $min/$max, $push/$addToSet (add to arrays), $pull/$pop (remove from arrays), $each with $push, and $ (positional) to update matched array elements. Upsert (upsert:true) inserts if no match. These enable partial, atomic, in-place document updates without rewriting the whole document.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "update-operators",
+   "set",
+   "inc",
+   "push",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Aggregation",
+  "difficulty": "Hard",
+  "question": "During a migration rehearsal involving aggregation concerns around lookup, performance, considerations, mongodb, join, aggregation, how would you design a safe experiment that tests the most important assumption while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: $lookup performs a left outer join to another collection within an aggregation pipeline. It's powerful but can be expensive—it runs per input document and benefits greatly from an index on the foreign field. For high-volume joins, MongoDB's document model often prefers embedding related data to avoid $lookup entirely. Filter ($match) before $lookup to reduce inputs, and consider whether the data should be modeled together instead.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "lookup",
+   "join",
+   "aggregation",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Aggregation",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving aggregation concerns around order, stages, aggregation, pipeline, matter, mongodb, match, how would you explain the decision to reviewers who did not build the original system while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: Stages run in sequence, each transforming the stream. Order matters for performance and correctness: place $match and $sort early (before $group/$project) so indexes apply and less data flows downstream; $limit after $sort enables top-N optimization. $project early can reduce document size. Putting $match after $group forces processing all data first. Optimize by filtering and limiting as early as possible.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "pipeline",
+   "match",
+   "optimization",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Indexing",
+  "difficulty": "Medium",
+  "question": "During a disaster-recovery exercise involving indexing concerns around multikey, index, mongodb, multikey index, array, indexing, how would you define a rollback boundary and objective success criteria while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: A multikey index is automatically created when you index a field that holds an array—MongoDB indexes each array element, so queries matching any element use the index. You don't declare it specially; it's inferred. Limitations: a compound index can include at most one array field (can't have two multikey fields), and covered queries on arrays are limited. It's essential for efficiently querying array contents.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "multikey-index",
+   "array",
+   "indexing",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Indexing",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving indexing concerns around text, index, search, mongodb, text index, full text search, atlas search, how would you define ownership, observability, and recovery for the resulting design while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: A text index enables full-text search on string fields, supporting stemming, stop-words, and relevance scoring via $text queries with $meta:'textScore' for ranking. You can index multiple fields with weights. It's convenient for basic search within MongoDB, but for advanced search (typo tolerance, faceting, complex relevance) Atlas Search (Lucene-based) or a dedicated engine is stronger. Only one text index per collection.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "text-index",
+   "full-text-search",
+   "atlas-search",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Design",
+  "difficulty": "Hard",
+  "question": "During a privacy assessment involving design concerns around model, many, relationship, mongodb, one to many, embedding, referencing, how would you validate correctness before attempting to optimize the implementation while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Choose based on cardinality and access: embed the 'many' as an array in the parent for one-to-few, bounded, and read-together data (single-read, atomic). Reference (store parent id in children, or child ids in parent) for one-to-many/one-to-squillions or independently-accessed/large data to avoid huge documents and the 16MB limit. The extended reference pattern denormalizes a few frequently-read fields. Model around query patterns.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "one-to-many",
+   "embedding",
+   "referencing",
+   "modeling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Limits",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving limits concerns around 16mb, document, size, limit, handle, large, data, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: A single BSON document can't exceed 16MB. For larger data: reference/split into multiple documents (bucketing), or use GridFS to store large files/blobs in chunks. Unbounded arrays are a common cause of hitting the limit—model them as separate documents (the subset/bucket pattern) with references. Design to keep documents well under the limit and avoid ever-growing embedded arrays.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "document-size",
+   "16mb",
+   "gridfs",
+   "bucket",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Performance",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving performance concerns around covered, query, mean, mongodb, covered query, index, projection, how would you reduce risk while preserving the required behavior while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: A covered query is satisfied entirely by an index—all queried and returned fields are in the index, so MongoDB never reads the actual documents. It requires the projection to include only indexed fields (and exclude _id if not indexed). Covered queries are very fast (index-only). Design indexes with the fields your hot queries filter, sort, and return to enable covering where it matters.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "covered-query",
+   "index",
+   "projection",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Sharding",
+  "difficulty": "Hard",
+  "question": "During a large-data workload involving sharding concerns around ranged, hashed, sharding, mongodb, shard key, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Ranged sharding partitions by contiguous key ranges—good for range queries (targeted to few shards) but risks hotspots if the key is monotonically increasing (all writes hit one shard). Hashed sharding hashes the key to distribute writes evenly across shards—great write distribution but range queries become scatter-gather. Choose ranged for range-heavy access with a well-distributed key; hashed for even write load without range-query needs.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "ranged",
+   "hashed",
+   "shard-key",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Replication",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving replication concerns around read, preference, mongodb, read preference, replica set, consistency, how would you test the relevant edge cases and failure paths while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Read preference controls which replica-set members serve reads: primary (default, strong consistency), primaryPreferred, secondary (offload reads, may be stale), secondaryPreferred, and nearest (lowest latency). Reading from secondaries scales reads but risks stale data (replication lag). Use primary for read-your-writes/consistency-critical reads; secondaries for analytics/reporting tolerant of lag. Combine with read concern for consistency guarantees.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "read-preference",
+   "replica-set",
+   "consistency",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a backward-compatibility review involving modelling concerns around document, size, limit, shape, schema, design, mongodb, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: A BSON document cannot exceed 16 MB, which makes unbounded embedded arrays a design failure waiting to happen - comments on a popular post, events on a long-lived entity. The pattern is to cap embedded arrays and overflow into a separate collection, or reference from the start when growth is unbounded.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "limits",
+   "modelling",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Aggregation",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving aggregation concerns around unwind, working, arrays, directly, mongodb, aggregation, performance, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: unwind produces one document per array element, which enables grouping and filtering per element but multiplies the document count and memory use. Where an array operator such as filter, map or reduce can do the job inside the document, it avoids the fan-out entirely and is far cheaper.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "arrays",
+   "performance",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During a large-data workload involving operations concerns around replica, election, mongodb, replication, high availability, operations, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: A primary takes writes and secondaries replicate the oplog. If the primary becomes unreachable, remaining members with a majority elect a new primary. A majority is required, which is why an even number of members plus an arbiter, or a two-member set, cannot survive the loss of one node cleanly.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "replication",
+   "high-availability",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During a security review involving operations concerns around change, stream, mongodb, change streams, cdc, integration, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: A change stream exposes the oplog as a resumable, ordered feed of document changes, filterable with an aggregation pipeline. It is used for cache invalidation, search index updates, event publication and audit, and it resumes from a token after disconnection - which is what makes it usable in production rather than tailing the oplog directly.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "change-streams",
+   "cdc",
+   "integration",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a global rollout involving modelling concerns around handle, schema, evolution, across, millions, existing, documents, how would you design a safe experiment that tests the most important assumption while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: Version each document, write the new shape going forward, read tolerantly for both, and migrate lazily on access or in a background batch job with a resumable cursor. A single updateMany over millions of documents locks resources and cannot be paused, which is why incremental migration is standard.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "migrations",
+   "schema",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Queries",
+  "difficulty": "Medium",
+  "question": "During a design review involving queries concerns around perform, case, insensitive, search, efficiently, mongodb, collation, how would you choose an implementation and explain its operational tradeoffs while maintaining backward compatibility?",
+  "answer": "Start with the underlying technical principle: Use a collation with the appropriate strength on the index and the query, so the index is usable - a regular expression with the case-insensitive flag cannot use an index unless it is anchored and case-sensitive. Alternatively store a normalised lowercase field and index that.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Maintaining backward compatibility should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "collation",
+   "indexing",
+   "search",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving operations concerns around handle, mongodb, query, must, scan, large, collection, how would you decide what to measure at the component and user-facing boundaries while protecting tail latency?",
+  "answer": "Start with the underlying technical principle: Run it against a secondary with a read preference so the primary is unaffected, use an aggregation with allowDiskUse if it must sort large results, and consider a materialised summary refreshed on a schedule. Reporting queries against the primary are a common cause of production latency spikes.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Protecting tail latency should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "reporting",
+   "performance",
+   "operations",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving modelling concerns around trade, storing, computed, values, document, mongodb, denormalisation, how would you define ownership, observability, and recovery for the resulting design while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: Reads become cheaper and simpler, writes must maintain the value, and the copy can drift if any write path forgets. It is worth it for values read far more than written where one code path owns the update - and it needs a periodic recomputation job to detect drift.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "denormalisation",
+   "consistency",
+   "modelling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Operations",
+  "difficulty": "Medium",
+  "question": "During a privacy assessment involving operations concerns around check, before, increasing, mongodb, cluster, size, scaling, how would you validate correctness before attempting to optimize the implementation while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: Whether the bottleneck is actually capacity - check the working set against memory, index efficiency, and whether specific queries dominate. Scaling a cluster to fix a missing index is expensive and often ineffective, because the additional nodes each perform the same inefficient scan.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "scaling",
+   "diagnostics",
+   "cost",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Queries",
+  "difficulty": "Medium",
+  "question": "During a capacity-planning exercise involving queries concerns around avoid, unbounded, query, returning, entire, collection, mongodb, how would you separate the primary failure mechanism from secondary symptoms while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: Always apply a limit and a filter at the application layer, enforce a maximum through a wrapper or repository, and set a maxTimeMS so a runaway query is terminated. A find with no criteria is a full collection scan that also transfers everything over the network.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "query",
+   "limits",
+   "reliability",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During an intermittent failure involving modelling concerns around model, data, queried, very, different, access, patterns, how would you reduce risk while preserving the required behavior while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Either one shape with indexes for each pattern, accepting the write cost, or separate collections maintained from a single source of truth through change streams. The second suits genuinely divergent patterns - an operational store and a reporting projection - and the first suits everything else.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "access-patterns",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Queries",
+  "difficulty": "Medium",
+  "question": "During a gradual rollout involving queries concerns around update, matches, nothing, still, rather, mongodb, updates, how would you test the relevant edge cases and failure paths while limiting blast radius?",
+  "answer": "Start with the underlying technical principle: Because the application assumed it matched - a stale filter, a changed identifier, or a race where the document was already modified. Checking the matched and modified counts rather than only the absence of an error is what turns a silent no-op into a detectable condition.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Limiting blast radius should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "updates",
+   "correctness",
+   "practices",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Modelling",
+  "difficulty": "Medium",
+  "question": "During a security review involving modelling concerns around decide, whether, separate, collection, discriminated, single, mongodb, how would you identify the evidence needed before choosing an approach while preserving data integrity?",
+  "answer": "Start with the underlying technical principle: One collection when the types share most fields and are queried together, separate when they differ substantially or have different access patterns and index needs. A single collection with mostly-empty fields per type wastes index space and makes schema validation nearly meaningless.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preserving data integrity should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "modelling",
+   "collections",
+   "design",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Schema Design",
+  "difficulty": "Hard",
+  "question": "During a dependency outage involving schema design concerns around embed, document, versus, reference, give, case, wrong, how would you validate correctness before attempting to optimize the implementation while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: The rule I work from is: **embed what is read together and bounded, reference what is shared or unbounded.**\n\n**Embed when:** the child has no independent identity, it is always fetched with the parent, and the array cannot grow without limit. Order lines in an order, an address in a customer profile. You get the whole aggregate in a single read with no join, which is the main reason to use a document database at all.\n\n**Reference when:** the data is shared between parents (duplicating it means updating it in many places), the child is large or accessed independently, or the relationship is unbounded.\n\n**The way this goes wrong** is the unbounded array. Embedding comments in a post looks perfect until a post gets 100,000 comments: every read of the post loads all of them, the document approaches the 16MB limit, and updates rewrite the whole thing. Documents that grow also get moved on disk, fragmenting storage.\n\n**The pattern that fixes it** is bucketing or the outlier pattern - embed the most recent N inline for the common read, and keep the rest in a separate collection. You keep the single-read benefit for the 95% case without the unbounded growth.\n\n**The honest general point:** MongoDB schema design is driven by the *queries*, not by the data s natural shape. I would want to know the access patterns before designing anything, and if the access patterns are highly relational with lots of ad-hoc joins, that is an argument for a relational database rather than clever document modelling.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "schema-design",
+   "embedding",
+   "nosql",
+   "scenario",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During an on-call investigation involving fundamentals concerns around mongodb, differ, relational, database, nosql, document db, how would you define a rollback boundary and objective success criteria while keeping the change reversible?",
+  "answer": "Start with the underlying technical principle: MongoDB is a document-oriented NoSQL database storing flexible, schema-less JSON-like documents (BSON) in collections, versus relational tables with fixed schemas and rows. It favors denormalization/embedding over joins, scales horizontally via sharding, and suits evolving schemas and hierarchical data. Trade-offs: weaker multi-document transaction guarantees historically and no rigid schema enforcement (though schema validation exists).\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping the change reversible should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "nosql",
+   "document-db",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Fundamentals",
+  "difficulty": "Medium",
+  "question": "During a reliability review involving fundamentals concerns around collections, documents, mongodb, collection, document, bson, how would you define ownership, observability, and recovery for the resulting design while making the result independently testable?",
+  "answer": "Start with the underlying technical principle: A document is a set of key-value pairs stored as BSON (binary JSON), the basic record—analogous to a row but flexible and nested. A collection is a group of documents, analogous to a table but without an enforced schema. Documents in a collection can have different fields. Each document has a unique _id (ObjectId by default) acting as the primary key.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Making the result independently testable should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "collection",
+   "document",
+   "bson",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Data Modeling",
+  "difficulty": "Hard",
+  "question": "During a migration rehearsal involving data modeling concerns around embed, reference, documents, mongodb, embedding, referencing, data modeling, how would you validate correctness before attempting to optimize the implementation while handling retries and duplicate delivery?",
+  "answer": "Start with the underlying technical principle: Embed when data is accessed together, has a contains/one-to-few relationship, and doesn't grow unbounded—it gives single-read performance and atomicity within one document. Reference (store an id) for one-to-many/many-to-many, large or independently-updated data, or unbounded growth to avoid huge documents and duplication. The rule: model around query patterns—optimize for how you read the data, not normalization.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Handling retries and duplicate delivery should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "embedding",
+   "referencing",
+   "data-modeling",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Indexing",
+  "difficulty": "Medium",
+  "question": "During a high-latency user journey involving indexing concerns around indexing, mongodb, compound index, explain, how would you separate the primary failure mechanism from secondary symptoms while keeping behavior deterministic?",
+  "answer": "Start with the underlying technical principle: MongoDB uses B-tree indexes; the default is on _id. You create single-field, compound (multi-field, order matters—ESR rule: Equality, Sort, Range), multikey (on array fields), text, geospatial, hashed, and partial/TTL indexes. Indexes speed queries/sorts but cost write performance and storage. Use explain() to verify index usage (IXSCAN vs COLLSCAN) and cover queries where possible.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Keeping behavior deterministic should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "indexing",
+   "compound-index",
+   "explain",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Indexing",
+  "difficulty": "Hard",
+  "question": "During a disaster-recovery exercise involving indexing concerns around rule, compound, indexes, mongodb, esr, compound index, optimization, how would you reduce risk while preserving the required behavior while preventing sensitive-data exposure?",
+  "answer": "Start with the underlying technical principle: ESR = Equality, Sort, Range: order compound index fields so equality-match fields come first, then fields used for sorting, then range-query fields. This lets MongoDB seek efficiently, return results already sorted (avoiding an in-memory sort), and scan a bounded range. Wrong field order forces collection scans or blocking sorts. Design indexes around your query's filter/sort shape.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Preventing sensitive-data exposure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "esr",
+   "compound-index",
+   "optimization",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Aggregation",
+  "difficulty": "Medium",
+  "question": "During a performance regression involving aggregation concerns around aggregation, pipeline, mongodb, lookup, how would you choose an implementation and explain its operational tradeoffs while supporting partial failure?",
+  "answer": "Start with the underlying technical principle: The aggregation pipeline processes documents through a sequence of stages, each transforming the stream: $match (filter), $group (aggregate), $project (reshape), $sort, $limit, $lookup (left join to another collection), $unwind (expand arrays), $facet, etc. It's MongoDB's powerful analytics/reporting engine. Place $match/$sort early (before $group) so indexes apply and less data flows downstream.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Supporting partial failure should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "aggregation",
+   "pipeline",
+   "lookup",
+   "scenario-practice",
+   "applied"
+  ]
+ },
+ {
+  "category": "MongoDB",
+  "subcategory": "Applied Sharding",
+  "difficulty": "Hard",
+  "question": "During a privacy assessment involving sharding concerns around sharding, mongodb, choose, shard, shard key, scaling, how would you test the relevant edge cases and failure paths while respecting a fixed resource budget?",
+  "answer": "Start with the underlying technical principle: Sharding horizontally partitions data across shards using a shard key, enabling scale-out for large datasets/throughput. A good shard key has high cardinality, even write/read distribution, and aligns with common query filters (so queries are targeted, not scatter-gather). Poor keys (monotonic like timestamp) create hotspots. Hashed sharding spreads writes; ranged sharding aids range queries. The key is hard to change later—choose carefully.\n\nFor the applied scenario, Use real document shapes and query plans, check index selectivity and shard targeting, and define consistency, retry, and schema-evolution behavior. Respecting a fixed resource budget should be an explicit acceptance criterion. Record the assumptions, test a representative failure path, and compare the result with a baseline before making the change broadly available.",
+  "tags": [
+   "mongodb",
+   "sharding",
+   "shard-key",
+   "scaling",
+   "scenario-practice",
+   "applied"
   ]
  }
 ]
