@@ -1,10 +1,12 @@
 # Interview Question Bank
 
-**New question list: 500 / 10,000 questions written.**
+**New question list: 1,500 / 10,000 questions written.**
 
-Read [batch 001: questions 1–500](question-list/batch-001.md).
-The user-requested restart is delivered in batches of 500, committed and pushed
-separately. This is currently a question-only list; answers are not included.
+Read [batch 001: questions 1–500](question-list/batch-001.md),
+[batch 002: questions 501–1,000](question-list/batch-002.md), and
+[batch 003: questions 1,001–1,500](question-list/batch-003.md).
+The user-requested restart is stored in numbered files of 500 questions and
+pushed after checks. This is currently a question-only list; answers are not included.
 Run `node tools/check-question-list.js` to verify numbering, batch size, and
 normalized exact duplicates.
 

@@ -2,8 +2,8 @@
 
 > Correction, September 21, 2026: this is a historical record of a generated
 > expansion, not evidence of 10,000 independently authored questions. The user
-> rejected that result. The restarted question-only list is at 500 / 10,000:
-> see `question-list/README.md` and `question-list/batch-001.md`.
+> rejected that result. The restarted question-only list is at 1,500 / 10,000:
+> see `question-list/README.md` and batches 001–003 in `question-list/`.
 
 The bank contains exactly **10,000 top-level questions** across 24 categories.
 Every category matches the target in `tools/coverage.js`.
