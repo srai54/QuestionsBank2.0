@@ -1,5 +1,10 @@
 # 10,000-question completion — September 18, 2026
 
+> Correction, September 21, 2026: this is a historical record of a generated
+> expansion, not evidence of 10,000 independently authored questions. The user
+> rejected that result. The restarted question-only list is at 500 / 10,000:
+> see `question-list/README.md` and `question-list/batch-001.md`.
+
 The bank contains exactly **10,000 top-level questions** across 24 categories.
 Every category matches the target in `tools/coverage.js`.
 

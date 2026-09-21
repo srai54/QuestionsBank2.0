@@ -1,7 +1,18 @@
 # Interview Question Bank
 
-**10,000 top-level Q&A across 24 categories. Target reached.**
-Nested follow-ups are not counted as additional top-level questions.
+**New question list: 500 / 10,000 questions written.**
+
+Read [batch 001: questions 1–500](question-list/batch-001.md).
+The user-requested restart is delivered in batches of 500, committed and pushed
+separately. This is currently a question-only list; answers are not included.
+Run `node tools/check-question-list.js` to verify numbering, batch size, and
+normalized exact duplicates.
+
+The legacy `data/*.json` contains 10,000 records, including 2,693 generated
+scenario variants and 1,178 promoted follow-ups. That record count does **not**
+establish 10,000 independently authored, distinct interview Q&A. The earlier
+completion claim was misleading. Legacy data is retained for reference and is
+not counted toward the restarted list. See [question-list progress](question-list/README.md).
 
 Source content lives in `data/*.json`, one JSON array per category. Source rows
 have no IDs; the build assigns IDs in file order. Rebuilding after additions
